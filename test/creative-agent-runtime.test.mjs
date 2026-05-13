@@ -312,16 +312,29 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
     videoTargetResolution: 720
   });
 
-  assert.equal(plan.input.steps[0].toolName, 'sogni_generate_image');
+  assert.equal(plan.input.steps[0].toolName, 'generate_image');
   assert.equal(plan.input.steps[0].arguments.model, 'gpt-image-2');
+  assert.equal(plan.input.steps[0].arguments.numberOfVariations, 1);
+  assert.equal(plan.input.steps[0].arguments.gptImageQuality, 'high');
+  assert.equal(plan.input.steps[0].arguments.outputFormat, 'png');
   assert.match(plan.input.steps[0].arguments.prompt, /Create exactly 2 sequential video storyboard frames/);
   assert.match(plan.input.steps[0].arguments.prompt, /Overall storyboard canvas: 2560x1440 pixels \(16:9\)/);
-  assert.equal(plan.input.steps[1].toolName, 'sogni_generate_video');
-  assert.equal(plan.input.steps[1].arguments.model, 'seedance2');
+  assert.equal(plan.input.steps[1].toolName, 'generate_video');
+  assert.equal(plan.input.steps[1].arguments.videoModel, 'seedance2');
   assert.equal(plan.input.steps[1].arguments.width, 720);
   assert.equal(plan.input.steps[1].arguments.height, 1280);
-  assert.equal(plan.input.steps[1].arguments.expand_prompt, false);
+  assert.equal(plan.input.steps[1].arguments.numberOfVariations, 1);
+  assert.equal(plan.input.steps[1].arguments.generateAudio, true);
+  assert.equal(plan.input.steps[1].arguments.expandPrompt, false);
   assert.match(plan.input.steps[1].arguments.prompt, /@Image1: approved GPT Image 2 storyboard board/);
+  assert.deepEqual(plan.input.steps[1].dependsOn, [{
+    sourceStepId: 'storyboard_image',
+    sourceArtifactIndex: 0,
+    targetArgument: 'referenceImageIndices',
+    mediaType: 'image',
+    transform: 'image_index',
+    required: true
+  }]);
 
   const plan480 = buildStoryboardVideoHostedToolSequenceInput({
     storyline: plan.storyline,

@@ -683,7 +683,7 @@ test('--last-seed is ignored for non-generation utility commands', () => {
   assert.doesNotMatch(stderr, /Using seed from last render|No previous render|Using .* seed/);
 });
 
-test('--api-chat posts to /v1/chat/completions with rich creative-agent tools', async () => {
+test('--api-chat posts to /v1/chat/completions with creative-agent tools', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
       '--api-chat',
@@ -1068,26 +1068,28 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.equal(requests[1].body.input.title, 'Neon bakery storyboard');
 
     const [imageStep, videoStep] = requests[1].body.input.steps;
-    assert.equal(imageStep.toolName, 'sogni_generate_image');
+    assert.equal(imageStep.toolName, 'generate_image');
     assert.equal(imageStep.arguments.model, 'gpt-image-2');
-    assert.equal(imageStep.arguments.gpt_image_quality, 'low');
-    assert.equal(imageStep.arguments.output_format, 'png');
+    assert.equal(imageStep.arguments.gptImageQuality, 'low');
+    assert.equal(imageStep.arguments.outputFormat, 'png');
+    assert.equal(imageStep.arguments.numberOfVariations, 1);
     assert.match(imageStep.arguments.prompt, /Create exactly 3 sequential video storyboard frames/);
     assert.match(imageStep.arguments.prompt, /Overall storyboard canvas: 2560x1440 pixels \(16:9\)/);
     assert.match(imageStep.arguments.prompt, /Target final video aspect ratio: 9:16/);
 
-    assert.equal(videoStep.toolName, 'sogni_generate_video');
-    assert.equal(videoStep.arguments.model, 'seedance2');
-    assert.equal(videoStep.arguments.expand_prompt, false);
-    assert.equal(videoStep.arguments.generate_audio, true);
+    assert.equal(videoStep.toolName, 'generate_video');
+    assert.equal(videoStep.arguments.videoModel, 'seedance2');
+    assert.equal(videoStep.arguments.expandPrompt, false);
+    assert.equal(videoStep.arguments.generateAudio, true);
+    assert.equal(videoStep.arguments.numberOfVariations, 1);
     assert.match(videoStep.arguments.prompt, /@Image1: approved GPT Image 2 storyboard board/);
     assert.match(videoStep.arguments.prompt, /not as a collage, split-screen, grid/);
     assert.deepEqual(videoStep.dependsOn, [{
       sourceStepId: 'storyboard_image',
       sourceArtifactIndex: 0,
-      targetArgument: 'reference_image_url',
+      targetArgument: 'referenceImageIndices',
       mediaType: 'image',
-      transform: 'artifact_url',
+      transform: 'image_index',
       required: true
     }]);
   });

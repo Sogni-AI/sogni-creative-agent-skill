@@ -328,8 +328,9 @@ function normalizeSeedStrategy(value) {
 
 function normalizeApiToolMode(value) {
   const normalized = String(value || 'creative-agent').toLowerCase();
-  if (normalized === 'creative-agent' || normalized === 'rich') return 'creative-agent';
-  if (normalized === 'hosted' || normalized === 'true') return true;
+  if (normalized === 'creative-agent') return 'creative-agent';
+  if (normalized === 'creative-tools') return 'creative-tools';
+  if (normalized === 'true') return true;
   if (normalized === 'none' || normalized === 'false') return false;
   return null;
 }
@@ -1898,8 +1899,8 @@ Video Options:
   --last-image          Use last generated image as reference
 
 Hosted API Modes:
-  --api-chat            Use /v1/chat/completions with rich creative-agent tools
-  --api-tools <mode>    creative-agent|rich|hosted|none (default: creative-agent)
+  --api-chat            Use /v1/chat/completions with Sogni creative-agent tools
+  --api-tools <mode>    creative-agent|creative-tools|none (default: creative-agent)
   --no-api-tool-execution  Ask for tool calls/plans but do not execute Sogni tools
   --llm-model <id>      LLM model for --api-chat (default: ${DEFAULT_LLM_MODEL})
   --system <text>       System prompt for --api-chat
@@ -2143,7 +2144,7 @@ if (options.tokenType) {
 
 const normalizedApiToolMode = normalizeApiToolMode(options.apiTools);
 if (normalizedApiToolMode === null) {
-  fatalCliError('--api-tools must be "creative-agent", "rich", "hosted", or "none".', {
+  fatalCliError('--api-tools must be "creative-agent", "creative-tools", or "none".', {
     code: 'INVALID_ARGUMENT',
     details: { flag: '--api-tools', value: options.apiTools }
   });

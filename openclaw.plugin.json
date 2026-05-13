@@ -75,7 +75,7 @@
       },
       "defaultApiToolMode": {
         "type": "string",
-        "enum": ["creative-agent", "rich", "hosted", "none"],
+        "enum": ["creative-agent", "creative-tools", "none"],
         "default": "creative-agent",
         "description": "Default Sogni tool family injected into --api-chat requests."
       },

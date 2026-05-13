@@ -165,7 +165,7 @@ node sogni-agent.mjs --music --duration 30 \
 node sogni-agent.mjs --music --lyrics "Rise with the morning light" --bpm 128 \
   --keyscale "C major" --output-format mp3 "bright indie pop chorus"
 
-# Hosted API chat: natural-language rich creative-agent tool execution
+# Hosted API chat: natural-language creative-agent tool execution
 node sogni-agent.mjs --api-chat "Create a 4-shot product video concept for a red sneaker"
 
 # Hosted API chat with image vision and media-reference metadata
@@ -314,8 +314,8 @@ positions.
 | `--concat-audio <path>` | Optional audio track to mux over `--concat-videos` output | - |
 | `--concat-audio-start <sec>` | Start offset into `--concat-audio` | - |
 | `--list-media [type]` | List recent inbound media (images\|audio\|all) | images |
-| `--api-chat` | Call `/v1/chat/completions` with rich creative-agent tool injection | - |
-| `--api-tools <mode>` | API tool mode: creative-agent\|rich\|hosted\|none | creative-agent |
+| `--api-chat` | Call `/v1/chat/completions` with Sogni creative-agent tool injection | - |
+| `--api-tools <mode>` | API tool mode: creative-agent\|creative-tools\|none | creative-agent |
 | `--no-api-tool-execution` | Plan/tool-call via API chat without executing Sogni tools | - |
 | `--llm-model <id>` | LLM model for `--api-chat` | qwen3.6-35b-a3b-gguf-iq4xs |
 | `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|creative-plan\|storyboard-video | - |

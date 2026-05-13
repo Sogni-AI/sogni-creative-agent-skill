@@ -262,7 +262,7 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 \
 sogni-agent --video --reference-audio-identity voice.webm \
   'NARRATOR: "This is my voice."'
 
-# Hosted chat with rich creative-agent tools (/v1/chat/completions)
+# Hosted chat with Sogni creative-agent tools (/v1/chat/completions)
 sogni-agent --api-chat \
   "Create a 4-shot product video concept for a red sneaker"
 
@@ -488,7 +488,7 @@ Stored at `~/.config/sogni/personality.txt`.
 
 Hosted API modes require `SOGNI_API_KEY`.
 
-- **`--api-chat`** targets `/v1/chat/completions` with rich creative-agent tools — best for text-first natural-language workflows. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|rich|hosted|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
+- **`--api-chat`** targets `/v1/chat/completions` with Sogni creative-agent tools — best for text-first natural-language workflows. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|creative-tools|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Supported kinds: `image-to-video`, `hosted-tool-sequence`, `creative-plan`, and `storyboard-video`.
 - **`--api-workflow creative-plan`** forwards a shared `CreativeWorkflowPlan` JSON object (`{ title?, steps: [...] }`) to the API as `kind: "creative_plan"`. Compilation, hosted-tool argument validation, and persistence happen in `../sogni-api` through `@sogni/creative-agent`; the public skill does not duplicate that compiler. Use this when you need exact shared-plan behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single GPT Image 2 storyboard sheet, then passes that artifact into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low/medium/high quality for that storyboard sheet.

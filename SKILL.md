@@ -377,7 +377,7 @@ When installed as an OpenClaw plugin, Sogni Creative Agent Skill will read defau
           "defaultWorkflowConfirmCost": false,
           "seedStrategy": "prompt-hash",
           "modelDefaults": {
-            "flux1-schnell-fp8": { "steps": 4, "guidance": 3.5 },
+            "flux1-schnell-fp8": { "steps": 4, "guidance": 1.0 },
             "flux2_dev_fp8": { "steps": 20, "guidance": 7.5 }
           },
           "defaultWidth": 768,

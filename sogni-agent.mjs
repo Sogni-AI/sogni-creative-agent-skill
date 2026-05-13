@@ -91,6 +91,7 @@ const DEFAULT_SAFE_API_HOSTS = Object.freeze(['api.sogni.ai']);
 const LOOPBACK_API_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1']);
 const DEFAULT_LLM_MODEL = 'qwen3.6-35b-a3b-gguf-iq4xs';
 const SOGNI_APP_SOURCE = 'sogni-creative-agent-skill';
+const DEFAULT_FETCH_TIMEOUT_MS = 30000;
 const OPENCLAW_CONFIG_PATH = getEnv('OPENCLAW_CONFIG_PATH') || DEFAULT_OPENCLAW_CONFIG_PATH;
 const IS_OPENCLAW_INVOCATION = Boolean(getEnv('OPENCLAW_PLUGIN_CONFIG'));
 const RAW_ARGS = process.argv.slice(2);
@@ -521,6 +522,15 @@ function requireFlagValue(argv, index, flagName) {
     fatalCliError(`${flagName} requires a value.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: flagName }
+    });
+  }
+  // Reject flag-like values to prevent silent misconfiguration
+  // (e.g. `-m --json` treating --json as the model value)
+  if (value.startsWith('-')) {
+    fatalCliError(`The value for ${flagName} starts with '-', which looks like another flag.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: flagName, value },
+      hint: `If the value is genuinely a flag-like string, use '=' syntax (${flagName}=${value}).`
     });
   }
   return value;
@@ -3057,26 +3067,31 @@ async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, he
   const init = {
     method,
     headers: apiRequestHeaders(apiKey, headers),
+    signal: controller.signal,
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   };
 
-  const response = await fetch(url, init);
-  const text = await response.text();
-  let payload = {};
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { message: text };
+  try {
+    const response = await fetch(url, init);
+    const text = await response.text();
+    let payload = {};
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = { message: text };
+      }
     }
+    if (!response.ok) {
+      const err = new Error(payload?.message || payload?.error?.message || response.statusText || 'Sogni API request failed');
+      err.code = 'API_REQUEST_FAILED';
+      err.details = { url, status: response.status, payload };
+      throw err;
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  if (!response.ok) {
-    const err = new Error(payload?.message || payload?.error?.message || response.statusText || 'Sogni API request failed');
-    err.code = 'API_REQUEST_FAILED';
-    err.details = { url, status: response.status, payload };
-    throw err;
-  }
-  return payload;
 }
 
 function getApiModeMediaReferences() {
@@ -3521,7 +3536,7 @@ async function streamApiWorkflowEvents(apiKey, workflowId) {
   const response = await fetch(url, {
     method: 'GET',
     headers: apiRequestHeaders(apiKey, { Accept: 'text/event-stream' })
-  });
+  }, { timeout: DEFAULT_FETCH_TIMEOUT_MS * 10 }); // SSE needs longer timeout
   if (!response.ok) {
     const err = new Error(`Workflow stream failed (${response.status} ${response.statusText})`);
     err.code = 'API_STREAM_FAILED';
@@ -3551,7 +3566,7 @@ async function streamApiWorkflowEvents(apiKey, workflowId) {
       printWorkflowSseFrames(buffer);
     }
   } finally {
-    try { reader.releaseLock(); } catch {}
+    try { reader.releaseLock(); } catch (e) { /* ignore */ }
   }
 }
 
@@ -3690,6 +3705,17 @@ async function runApiWorkflow() {
   }
 }
 
+// Fetch with timeout helper to prevent hanging on slow CDNs
+async function fetchWithTimeout(url, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Memory system — persistent user preferences on disk
 // ---------------------------------------------------------------------------
@@ -3698,7 +3724,11 @@ const MEMORIES_PATH = getEnv('SOGNI_MEMORIES_PATH') || DEFAULT_MEMORIES_PATH;
 function loadMemories() {
   try {
     if (existsSync(MEMORIES_PATH)) return JSON.parse(readFileSync(MEMORIES_PATH, 'utf8'));
-  } catch {}
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`Warning: Failed to parse memories file (${err.message}). Starting with empty memories.`);
+    }
+  }
   return [];
 }
 
@@ -3734,7 +3764,11 @@ const PERSONALITY_PATH = getEnv('SOGNI_PERSONALITY_PATH') || DEFAULT_PERSONALITY
 function loadPersonality() {
   try {
     if (existsSync(PERSONALITY_PATH)) return readFileSync(PERSONALITY_PATH, 'utf8').trim();
-  } catch {}
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`Warning: Failed to read personality file: ${err.message}`);
+    }
+  }
   return null;
 }
 
@@ -3745,7 +3779,13 @@ function savePersonality(text) {
 }
 
 function clearPersonality() {
-  try { if (existsSync(PERSONALITY_PATH)) unlinkSync(PERSONALITY_PATH); } catch {}
+  try {
+    if (existsSync(PERSONALITY_PATH)) unlinkSync(PERSONALITY_PATH);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`Warning: Failed to clear personality: ${err.message}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3757,10 +3797,13 @@ const PERSONAS_INDEX_PATH = join(PERSONAS_DIR, 'index.json');
 function loadPersonas() {
   try {
     if (existsSync(PERSONAS_INDEX_PATH)) return JSON.parse(readFileSync(PERSONAS_INDEX_PATH, 'utf8'));
-  } catch {}
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error(`Warning: Failed to parse personas index file (${err.message}). Starting with empty persona list.`);
+    }
+  }
   return [];
 }
-
 function savePersonasIndex(personas) {
   if (!existsSync(PERSONAS_DIR)) mkdirSync(PERSONAS_DIR, { recursive: true });
   writeFileSync(PERSONAS_INDEX_PATH, JSON.stringify(personas, null, 2));
@@ -3833,7 +3876,9 @@ function removePersona(name) {
       }
       rmdirSync(personaDir);
     }
-  } catch {}
+  } catch (err) {
+    console.error(`Warning: Failed to remove persona directory: ${err.message}`);
+  }
   personas.splice(idx, 1);
   savePersonasIndex(personas);
   return true;
@@ -3913,14 +3958,25 @@ function applyPersonaAndVoiceReferences() {
 async function fetchMediaBuffer(pathOrUrl) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
     await assertSafeUrl(pathOrUrl);
-    const response = await fetch(pathOrUrl);
-    if (!response.ok) {
-      const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
-      err.code = 'FETCH_FAILED';
-      err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
-      throw err;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(pathOrUrl, { signal: controller.signal });
+      if (!response.ok) {
+        const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
+        err.code = 'FETCH_FAILED';
+        err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
+        throw err;
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      // Cap at 200MB to prevent OOM on large video refs
+      if (buffer.length > 200 * 1024 * 1024) {
+        throw new Error(`Media file too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Maximum size is 200MB.`);
+      }
+      return buffer;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return Buffer.from(await response.arrayBuffer());
   }
   try {
     return readFileSync(pathOrUrl);
@@ -3936,16 +3992,22 @@ async function fetchMediaBuffer(pathOrUrl) {
 async function fetchMediaBlob(pathOrUrl, fallbackMimeType = 'application/octet-stream') {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
     await assertSafeUrl(pathOrUrl);
-    const response = await fetch(pathOrUrl);
-    if (!response.ok) {
-      const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
-      err.code = 'FETCH_FAILED';
-      err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
-      throw err;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetch(pathOrUrl, { signal: controller.signal });
+      if (!response.ok) {
+        const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
+        err.code = 'FETCH_FAILED';
+        err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
+        throw err;
+      }
+      const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
+      const mimeType = contentType || mimeTypeForPath(pathOrUrl, fallbackMimeType);
+      return new Blob([await response.arrayBuffer()], { type: mimeType });
+    } finally {
+      clearTimeout(timeoutId);
     }
-    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
-    const mimeType = contentType || mimeTypeForPath(pathOrUrl, fallbackMimeType);
-    return new Blob([await response.arrayBuffer()], { type: mimeType });
   }
 
   const buffer = await fetchMediaBuffer(pathOrUrl);
@@ -4116,12 +4178,18 @@ function resolveMultiAngleOutputConfig(outputPath, outputFormat) {
 }
 
 async function downloadUrlToFile(url, filePath) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download image: ${response.statusText}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.statusText}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(filePath, buffer);
+  } finally {
+    clearTimeout(timeoutId);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(filePath, buffer);
 }
 
 function removeClientListener(client, event, handler) {
@@ -5811,7 +5879,7 @@ async function main() {
       
       // Save to file if requested
       if (options.output && urls[0]) {
-        const response = await fetch(urls[0]);
+        const response = await fetchWithTimeout(urls[0]);
         const buffer = Buffer.from(await response.arrayBuffer());
 
         const dir = dirname(options.output);
@@ -5827,109 +5895,126 @@ async function main() {
           const lastFramePath = join(tempDir, 'last-frame.png');
           const clip2Path = join(tempDir, 'clip2.mp4');
 
-          writeFileSync(clip1Path, buffer);
-          log('Extracting last frame...');
-          await extractLastFrameFromVideo(clip1Path, lastFramePath);
+          try {
+            writeFileSync(clip1Path, buffer);
+            log('Extracting last frame...');
+            await extractLastFrameFromVideo(clip1Path, lastFramePath);
 
-          // Generate second clip (last frame → original image)
-          log('Generating return clip (B→A)...');
+            // Generate second clip (last frame → original image)
+            log('Generating return clip (B→A)...');
 
-          // Get model defaults for steps and guidance
-          const modelDefaults2 = getModelDefaults(options.model, openclawConfig);
-          const steps2 = resolveVideoSteps(options.model, modelDefaults2, options.steps);
-          const guidance2 = options.guidance ?? modelDefaults2?.guidance;
+            // Get model defaults for steps and guidance
+            const modelDefaults2 = getModelDefaults(options.model, openclawConfig);
+            const steps2 = resolveVideoSteps(options.model, modelDefaults2, options.steps);
+            const guidance2 = options.guidance ?? modelDefaults2?.guidance;
 
-          const projectConfig2 = {
-            modelId: options.model,
-            positivePrompt: options.prompt,
-            negativePrompt: '',
-            stylePrompt: '',
-            numberOfMedia: 1,
-            referenceImage: readFileSync(lastFramePath),
-            referenceImageEnd: loopingStartImageBuffer,
-            fps: options.fps,
-            width: options.width,
-            height: options.height,
-            tokenType: options.tokenType || 'spark',
-            waitForCompletion: false,
-            disableNSFWFilter: options.noFilter === true
-          };
+            const projectConfig2 = {
+              modelId: options.model,
+              positivePrompt: options.prompt,
+              negativePrompt: '',
+              stylePrompt: '',
+              numberOfMedia: 1,
+              referenceImage: readFileSync(lastFramePath),
+              referenceImageEnd: buffer, // Use first clip buffer as ref to close the loop
+              fps: options.fps,
+              width: options.width,
+              height: options.height,
+              tokenType: options.tokenType || 'spark',
+              waitForCompletion: false,
+              disableNSFWFilter: options.noFilter === true
+            };
 
-          if (options.frames) projectConfig2.frames = options.frames;
-          else if (options.duration) projectConfig2.duration = options.duration;
-          if (Number.isFinite(steps2)) projectConfig2.steps = steps2;
-          if (guidance2 !== null && guidance2 !== undefined) projectConfig2.guidance = guidance2;
+            if (options.frames) projectConfig2.frames = options.frames;
+            else if (options.duration) projectConfig2.duration = options.duration;
+            if (Number.isFinite(steps2)) projectConfig2.steps = steps2;
+            if (guidance2 !== null && guidance2 !== undefined) projectConfig2.guidance = guidance2;
 
-          // Create a new client for second clip to avoid event conflicts
-          const creds = loadCredentials();
-          const client2 = new SogniClientWrapper({
-            appSource: SOGNI_APP_SOURCE,
-            network: openclawConfig?.defaultNetwork || 'fast',
-            autoConnect: false,
-            apiKey: creds.SOGNI_API_KEY,
-            authType: 'apiKey'
-          });
-          await client2.connect();
-          await disableLiveModelAvailabilityEvents(client2);
+            // Create a new client for second clip to avoid event conflicts
+            const creds = loadCredentials();
+            const client2 = new SogniClientWrapper({
+              appSource: SOGNI_APP_SOURCE,
+              network: openclawConfig?.defaultNetwork || 'fast',
+              autoConnect: false,
+              apiKey: creds.SOGNI_API_KEY,
+              authType: 'apiKey'
+            });
+            await client2.connect();
+            await disableLiveModelAvailabilityEvents(client2);
 
-          // Create second clip and wait for completion via events
-          const clip2Promise = new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error('Second clip generation timed out'));
-            }, options.timeout);
+            const clip2Promise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Second clip generation timed out'));
+              }, options.timeout);
 
-            client2.on(ClientEvent.JOB_COMPLETED, async (data) => {
-              try {
-                clearTimeout(timeout);
-                const clip2Url = data.resultUrl || data.videoUrl;
-                if (!clip2Url) {
-                  reject(new Error('No video URL returned for second clip.'));
-                  return;
+              client2.on(ClientEvent.JOB_COMPLETED, async (data) => {
+                try {
+                  clearTimeout(timeout);
+                  const clip2Url = data.resultUrl || data.videoUrl;
+                  if (!clip2Url) {
+                    reject(new Error('No video URL returned for second clip.'));
+                    return;
+                  }
+
+                  // Download second clip with timeout
+                  const controller = new AbortController();
+                  const dlTimeout = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS);
+                  try {
+                    const response2 = await fetch(clip2Url, { signal: controller.signal });
+                    const buffer2 = Buffer.from(await response2.arrayBuffer());
+                    writeFileSync(clip2Path, buffer2);
+                    await client2.disconnect();
+                    resolve();
+                  } finally {
+                    clearTimeout(dlTimeout);
+                  }
+                } catch (err) {
+                  clearTimeout(timeout);
+                  await client2.disconnect();
+                  reject(err);
                 }
+              });
 
-                // Download second clip
-                const response2 = await fetch(clip2Url);
-                const buffer2 = Buffer.from(await response2.arrayBuffer());
-                writeFileSync(clip2Path, buffer2);
-
-                await client2.disconnect();
-                resolve();
-              } catch (err) {
+              client2.on(ClientEvent.JOB_FAILED, async (data) => {
                 clearTimeout(timeout);
-                reject(err);
-              }
+                try { await client2.disconnect(); } catch (e) {}
+                reject(new Error(data.error || 'Second clip generation failed'));
+              });
+
+              client2.on(ClientEvent.PROJECT_FAILED, async (data) => {
+                clearTimeout(timeout);
+                try { await client2.disconnect(); } catch (e) {}
+                reject(new Error(data?.message || 'Second clip project failed'));
+              });
+
+              // Show progress for second clip
+              client2.on(ClientEvent.PROJECT_PROGRESS, (data) => {
+                if (data.percentage && data.percentage > 0) {
+                  log(`Progress: ${Math.round(data.percentage)}%`);
+                }
+              });
             });
 
-            client2.on(ClientEvent.JOB_FAILED, (data) => {
-              clearTimeout(timeout);
-              reject(new Error(data.error || 'Second clip generation failed'));
-            });
+            const clip2Result = await client2.createVideoProject(projectConfig2);
 
-            client2.on(ClientEvent.PROJECT_FAILED, (data) => {
-              clearTimeout(timeout);
-              reject(new Error(data?.message || 'Second clip project failed'));
-            });
+            // Check for errors in the response (e.g., insufficient tokens)
+            if (clip2Result?.error || clip2Result?.message) {
+              throw new Error(clip2Result.error || clip2Result.message);
+            }
 
-            // Show progress for second clip
-            client2.on(ClientEvent.PROJECT_PROGRESS, (data) => {
-              if (data.percentage && data.percentage > 0) {
-                log(`Progress: ${Math.round(data.percentage)}%`);
-              }
-            });
-          });
+            await clip2Promise;
 
-          const clip2Result = await client2.createVideoProject(projectConfig2);
-
-          // Check for errors in the response (e.g., insufficient tokens)
-          if (clip2Result?.error || clip2Result?.message) {
-            throw new Error(clip2Result.error || clip2Result.message);
+            log('Concatenating clips...');
+            await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
+            log(`Saved looping video to ${options.output}`);
+          } finally {
+            // Clean up temp directory
+            try {
+              if (existsSync(clip1Path)) unlinkSync(clip1Path);
+              if (existsSync(clip2Path)) unlinkSync(clip2Path);
+              if (existsSync(lastFramePath)) unlinkSync(lastFramePath);
+              if (existsSync(tempDir)) rmdirSync(tempDir);
+            } catch (e) {}
           }
-
-          await clip2Promise;
-
-          log('Concatenating clips...');
-          await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
-          log(`Saved looping video to ${options.output}`);
         } else {
           writeFileSync(options.output, buffer);
           log(`Saved to ${options.output}`);

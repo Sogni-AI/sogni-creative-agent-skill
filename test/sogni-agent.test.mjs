@@ -248,6 +248,17 @@ async function withTestApiServer(fn) {
         res.end('id: evt_1\nevent: workflow.status\ndata: {"status":"completed"}\n\n');
         return;
       }
+      if (req.url === '/v1/creative-agent/workflows/wf_test/resume' && req.method === 'POST') {
+        res.statusCode = 202;
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            resumed: true,
+            workflow: { workflowId: 'wf_test', kind: 'hosted_tool_sequence', status: 'running', artifacts: [] }
+          }
+        }));
+        return;
+      }
       res.statusCode = 404;
       res.end(JSON.stringify({ status: 'error', message: 'Not found' }));
     });
@@ -929,6 +940,46 @@ test('--api-chat forwards audio and video references in API metadata and prompt 
   });
 });
 
+test('--api-chat forwards local audio and video references as data URIs without base64 prompt leakage', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-api-media-'));
+  const audioPath = join(tempDir, 'music.mp3');
+  const videoPath = join(tempDir, 'source.mp4');
+  writeFileSync(audioPath, Buffer.from('fake mp3 bytes'));
+  writeFileSync(videoPath, Buffer.from('fake mp4 bytes'));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref-audio', audioPath,
+      '--ref-video', videoPath,
+      'make a music video'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const mediaRefs = requests[0].body.api_media_references;
+    assert.equal(mediaRefs.length, 2);
+    assert.equal(mediaRefs[0].kind, 'audio');
+    assert.equal(mediaRefs[0].filename, 'music.mp3');
+    assert.match(mediaRefs[0].dataUri, /^data:audio\/mpeg;base64,/);
+    assert.equal(mediaRefs[1].kind, 'video');
+    assert.equal(mediaRefs[1].filename, 'source.mp4');
+    assert.match(mediaRefs[1].dataUri, /^data:video\/mp4;base64,/);
+    assert.equal(mediaRefs[0].url, undefined);
+    assert.match(requests[0].body.messages[1].content, /music\.mp3/);
+    assert.match(requests[0].body.messages[1].content, /source\.mp4/);
+    assert.doesNotMatch(requests[0].body.messages[1].content, /base64/);
+  });
+});
+
 test('--api-chat accepts media-only planning requests for non-image references', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -1167,6 +1218,45 @@ test('--api-workflow forwards CLI media references and cost controls', async () 
   });
 });
 
+test('--api-workflow forwards local non-image media references as data URIs', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-api-workflow-media-'));
+  const audioPath = join(tempDir, 'music.mp3');
+  const videoPath = join(tempDir, 'source.mp4');
+  writeFileSync(audioPath, Buffer.from('fake mp3 bytes'));
+  writeFileSync(videoPath, Buffer.from('fake mp4 bytes'));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow', 'hosted-tool-sequence',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref-audio', audioPath,
+      '--ref-video', videoPath,
+      '--workflow-input', JSON.stringify({
+        steps: [{
+          toolName: 'sound_to_video',
+          arguments: { prompt: 'music visualizer', duration: 5 }
+        }]
+      })
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const mediaRefs = requests[0].body.api_media_references;
+    assert.equal(mediaRefs.length, 2);
+    assert.match(mediaRefs[0].dataUri, /^data:audio\/mpeg;base64,/);
+    assert.match(mediaRefs[1].dataUri, /^data:video\/mp4;base64,/);
+    assert.equal(mediaRefs[0].url, undefined);
+    assert.equal(requests[0].body.media_references[1].filename, 'source.mp4');
+  });
+});
+
 test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -1289,6 +1379,23 @@ test('--stream-workflow parses hosted workflow SSE frames without wrapper parser
 
     assert.equal(exitCode, 0);
     assert.match(stdout, /\[evt_1\] workflow\.status completed/);
+  });
+});
+
+test('--resume-workflow posts the durable workflow resume endpoint', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--resume-workflow', 'wf_test',
+      '--api-base-url', apiBaseUrl
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /wf_test/);
+    assert.equal(requests.at(-1).url, '/v1/creative-agent/workflows/wf_test/resume');
+    assert.equal(requests.at(-1).method, 'POST');
   });
 });
 

@@ -5,6 +5,148 @@ function isLtxWorkflow(workflow) {
     return workflow === 't2v' || workflow === 'i2v' || workflow === 'ia2v' || workflow === 'a2v' || workflow === 'v2v';
 }
 export const SKILL_RUNTIME_VERSION = '2026-05-13.1';
+export function createPublicSkillContractRuntime(input = {}) {
+    return {
+        policies: [...(input.policies ?? [])],
+        promptContracts: [...(input.promptContracts ?? [])],
+        repairRecipes: [...(input.repairRecipes ?? [])],
+    };
+}
+function publicSkillSignalSourcesByKind(signals) {
+    const sourcesByKind = new Map();
+    for (const signal of signals) {
+        const sources = sourcesByKind.get(signal.kind) ?? new Set();
+        sources.add(signal.source);
+        sourcesByKind.set(signal.kind, sources);
+    }
+    return sourcesByKind;
+}
+function publicSkillSignalMatchesSourceConstraint(sourcesByKind, kind, allowed) {
+    const sources = sourcesByKind.get(kind);
+    if (!sources)
+        return false;
+    if (!allowed)
+        return true;
+    const allowedSources = Array.isArray(allowed) ? allowed : [allowed];
+    return allowedSources.some((source) => sources.has(source));
+}
+function publicSkillSessionSignals(sessionState) {
+    if (!sessionState)
+        return [];
+    const signalNames = [
+        ['hasUploadedImage', 'has_uploaded_image'],
+        ['hasUploadedVideo', 'has_uploaded_video'],
+        ['hasUploadedAudio', 'has_uploaded_audio'],
+        ['hasGeneratedImage', 'has_generated_image'],
+        ['hasGeneratedVideo', 'has_generated_video'],
+        ['hasGeneratedAudio', 'has_generated_audio'],
+        ['hasActivePersona', 'has_active_persona'],
+        ['awaitingImageSelection', 'awaiting_image_selection'],
+        ['pendingStitchAfterBatch', 'pending_stitch_after_batch'],
+        ['completedWorkflow', 'completed_workflow'],
+    ];
+    return signalNames
+        .filter(([key]) => sessionState[key] === true)
+        .map(([, kind]) => ({ kind, source: 'session_state' }));
+}
+export function classifyPublicSkillTurn(input) {
+    const signals = [
+        ...(input.signals ?? []),
+        ...publicSkillSessionSignals(input.sessionState),
+    ];
+    const sourcesByKind = publicSkillSignalSourcesByKind(signals);
+    const forbidden = new Set();
+    const required = new Set();
+    const appliedPolicies = [];
+    const rationales = [];
+    const policies = input.policies ?? input.runtime?.policies ?? [];
+    for (const policy of policies) {
+        const allOfMatch = policy.trigger.allOf.every((kind) => publicSkillSignalMatchesSourceConstraint(sourcesByKind, kind, policy.trigger.sources?.[kind]));
+        const noneOfMatch = !policy.trigger.noneOf
+            || policy.trigger.noneOf.every((kind) => !sourcesByKind.has(kind));
+        if (!allOfMatch || !noneOfMatch)
+            continue;
+        appliedPolicies.push(policy.policyId);
+        if (policy.rationale)
+            rationales.push(policy.rationale);
+        for (const tool of policy.effect.forbid)
+            forbidden.add(tool);
+        for (const tool of policy.effect.require ?? [])
+            required.add(tool);
+    }
+    return {
+        visibleTools: input.availableTools.filter((tool) => !forbidden.has(tool)),
+        forbiddenTools: [...forbidden],
+        requiredTools: [...required],
+        appliedPolicies,
+        signals,
+        rationale: rationales.join(' '),
+    };
+}
+export function compilePublicSkillToolSurface(input) {
+    const availableTools = input.tools.map((tool) => tool.function.name);
+    const turnPolicy = input.turnPolicy ?? classifyPublicSkillTurn({
+        availableTools,
+        signals: input.signals,
+        sessionState: input.sessionState,
+        policies: input.policies,
+        runtime: input.runtime,
+    });
+    const promptContracts = input.promptContracts ?? input.runtime?.promptContracts ?? [];
+    const contractsByTool = new Map();
+    for (const contract of promptContracts) {
+        const fragments = contractsByTool.get(contract.toolName) ?? [];
+        fragments.push(contract.fragment.trim());
+        contractsByTool.set(contract.toolName, fragments);
+    }
+    const visible = new Set(turnPolicy.visibleTools);
+    const tools = input.tools
+        .filter((tool) => visible.has(tool.function.name))
+        .map((tool) => {
+        const fragments = contractsByTool.get(tool.function.name)?.filter(Boolean) ?? [];
+        if (fragments.length === 0)
+            return tool;
+        return {
+            ...tool,
+            function: {
+                ...tool.function,
+                description: [tool.function.description, ...fragments].filter(Boolean).join('\n\n'),
+            },
+        };
+    });
+    const contextLines = [
+        turnPolicy.forbiddenTools.length ? `Forbidden tools: ${turnPolicy.forbiddenTools.join(', ')}` : '',
+        turnPolicy.requiredTools.length ? `Required tools: ${turnPolicy.requiredTools.join(', ')}` : '',
+        turnPolicy.rationale,
+    ].filter(Boolean);
+    return {
+        tools,
+        contextBlock: contextLines.join('\n'),
+        turnPolicy,
+    };
+}
+export function dispatchPublicSkillToolCall(input) {
+    if (input.turnPolicy?.forbiddenTools.includes(input.toolName)) {
+        return {
+            allowed: false,
+            mode: 'reject',
+            reason: `Tool ${input.toolName} is forbidden by the current turn policy.`,
+        };
+    }
+    const recipes = input.repairRecipes ?? input.runtime?.repairRecipes ?? [];
+    const recipe = input.errorCode
+        ? recipes.find((candidate) => candidate.toolName === input.toolName && candidate.errorCode === input.errorCode)
+        : undefined;
+    if (!recipe)
+        return { allowed: true, mode: 'passthrough' };
+    return {
+        allowed: recipe.mode !== 'reject',
+        mode: recipe.mode,
+        reason: recipe.message,
+        repairRecipe: recipe,
+        suggestedArgs: recipe.suggestedArgs,
+    };
+}
 function skillErrorMessage(error) {
     if (!error)
         return 'Unknown error';

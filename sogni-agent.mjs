@@ -88,6 +88,7 @@ const DEFAULT_MEMORIES_PATH = join(homedir(), '.config', 'sogni', 'memories.json
 const DEFAULT_PERSONALITY_PATH = join(homedir(), '.config', 'sogni', 'personality.txt');
 const DEFAULT_PERSONAS_DIR = join(homedir(), '.config', 'sogni', 'personas');
 const DEFAULT_PERSONAS_INDEX_PATH = join(homedir(), '.config', 'sogni', 'personas', 'index.json');
+const DEFAULT_API_MEDIA_REFERENCE_MAX_BYTES = 100 * 1024 * 1024;
 const DEFAULT_API_BASE_URL = 'https://api.sogni.ai';
 const DEFAULT_SAFE_API_HOSTS = Object.freeze(['api.sogni.ai']);
 const LOOPBACK_API_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1']);
@@ -1144,7 +1145,7 @@ const options = {
   apiReplayId: null,
   apiReplayInput: null,
   apiReplayLimit: 50,
-  apiWorkflowAction: null, // start|list|get|events|stream|cancel
+  apiWorkflowAction: null, // start|list|get|events|stream|cancel|resume
   apiWorkflowKind: null, // image_to_video|hosted_tool_sequence|creative_plan|storyboard_video
   apiWorkflowInput: null,
   apiWorkflowTitle: null,
@@ -1778,6 +1779,11 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.apiWorkflowAction = 'cancel';
     options.apiWorkflowId = raw;
+  } else if (arg === '--resume-workflow') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiWorkflowAction = 'resume';
+    options.apiWorkflowId = raw;
   // --- Memory commands ---
   } else if (arg === '--memory-set') {
     options.memoryAction = 'set';
@@ -1983,6 +1989,7 @@ Hosted API Modes:
   --workflow-events <id> Fetch workflow event history
   --stream-workflow <id> Stream workflow events over SSE
   --cancel-workflow <id> Cancel a running workflow
+  --resume-workflow <id> Resume a failed, partial, waiting, or running durable workflow
   --api-base-url <url>  Sogni API base URL (default: ${DEFAULT_API_BASE_URL})
 
 General:
@@ -3203,21 +3210,100 @@ function formatApiMediaFlags(refs) {
   return [...new Set(refs.map(ref => ref.flag))].join(', ');
 }
 
-function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences()) {
-  return refs.map((ref, index) => ({
+function apiMediaReferenceMaxBytes() {
+  const configured = Number(getEnv('SOGNI_API_MEDIA_REFERENCE_MAX_BYTES') || '');
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_API_MEDIA_REFERENCE_MAX_BYTES;
+}
+
+function isRemoteApiMediaReference(value) {
+  return /^https?:\/\//i.test(String(value || ''));
+}
+
+function isInlineApiMediaReference(value) {
+  return /^data:[^,]+,/i.test(String(value || ''));
+}
+
+function mimeTypeForMediaReference(ref) {
+  const value = String(ref.value || '');
+  const clean = value.split('?')[0].toLowerCase();
+  if (ref.kind === 'video') {
+    if (clean.endsWith('.webm')) return 'video/webm';
+    if (clean.endsWith('.m4v')) return 'video/mp4';
+  }
+  if (ref.kind === 'audio' && clean.endsWith('.webm')) return 'audio/webm';
+  return mimeTypeForPath(value, `${ref.kind}/unknown`);
+}
+
+function localApiMediaReferenceDataUri(ref) {
+  const filePath = sanitizePath(String(ref.value || ''), `${ref.flag} media reference`);
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    const err = new Error(`${ref.flag} must point to a file when using local API media references.`);
+    err.code = 'INVALID_MEDIA_REFERENCE';
+    throw err;
+  }
+  const maxBytes = apiMediaReferenceMaxBytes();
+  if (stat.size > maxBytes) {
+    const err = new Error(`${ref.flag} media reference is ${stat.size} bytes, above the ${maxBytes} byte API inline limit.`);
+    err.code = 'MEDIA_REFERENCE_TOO_LARGE';
+    throw err;
+  }
+  const mimeType = mimeTypeForMediaReference(ref);
+  const buffer = readFileSync(filePath);
+  return {
+    dataUri: `data:${mimeType};base64,${buffer.toString('base64')}`,
+    filename: basename(filePath),
+    byteLength: stat.size,
+    mimeType,
+  };
+}
+
+function buildApiMediaReferencePayloadItem(ref, index) {
+  const mimeType = mimeTypeForMediaReference(ref);
+  const base = {
     id: `media_ref_${index + 1}`,
     source: 'cli',
     flag: ref.flag,
     kind: ref.kind,
-    url: ref.value,
-    mime_type: mimeTypeForPath(ref.value, `${ref.kind}/unknown`)
-  }));
+    mime_type: mimeType,
+  };
+  if (isInlineApiMediaReference(ref.value)) {
+    return {
+      ...base,
+      dataUri: ref.value,
+      filename: `inline-${base.id}`,
+      prompt_label: `inline-${base.id}`,
+    };
+  }
+  if (isRemoteApiMediaReference(ref.value)) {
+    return {
+      ...base,
+      url: ref.value,
+      prompt_label: ref.value,
+    };
+  }
+  const local = localApiMediaReferenceDataUri(ref);
+  return {
+    ...base,
+    dataUri: local.dataUri,
+    filename: local.filename,
+    byte_length: local.byteLength,
+    mime_type: local.mimeType,
+    prompt_label: local.filename,
+  };
+}
+
+function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences()) {
+  return refs.map((ref, index) => buildApiMediaReferencePayloadItem(ref, index));
 }
 
 function formatApiMediaReferencesForPrompt(mediaReferences) {
   if (!mediaReferences.length) return '';
   const lines = mediaReferences.map(ref => {
-    return `- ${ref.id} ${ref.kind} (${ref.flag}): ${ref.url}`;
+    const label = ref.prompt_label || ref.url || ref.filename || ref.id;
+    return `- ${ref.id} ${ref.kind} (${ref.flag}): ${label}`;
   });
   return `API media references:\n${lines.join('\n')}`;
 }
@@ -3808,7 +3894,13 @@ async function runApiWorkflow() {
     return;
   }
 
-  if (options.apiWorkflowAction === 'get' || options.apiWorkflowAction === 'events' || options.apiWorkflowAction === 'stream' || options.apiWorkflowAction === 'cancel') {
+  if (
+    options.apiWorkflowAction === 'get'
+    || options.apiWorkflowAction === 'events'
+    || options.apiWorkflowAction === 'stream'
+    || options.apiWorkflowAction === 'cancel'
+    || options.apiWorkflowAction === 'resume'
+  ) {
     const id = options.apiWorkflowId;
     if (!id) {
       const err = new Error('Workflow id is required.');
@@ -3826,10 +3918,12 @@ async function runApiWorkflow() {
       ? `/v1/creative-agent/workflows/${encodeURIComponent(id)}/events`
       : options.apiWorkflowAction === 'cancel'
         ? `/v1/creative-agent/workflows/${encodeURIComponent(id)}/cancel`
-        : `/v1/creative-agent/workflows/${encodeURIComponent(id)}`;
+        : options.apiWorkflowAction === 'resume'
+          ? `/v1/creative-agent/workflows/${encodeURIComponent(id)}/resume`
+          : `/v1/creative-agent/workflows/${encodeURIComponent(id)}`;
     payload = await fetchApiJson(path, {
       apiKey,
-      method: options.apiWorkflowAction === 'cancel' ? 'POST' : 'GET'
+      method: options.apiWorkflowAction === 'cancel' || options.apiWorkflowAction === 'resume' ? 'POST' : 'GET'
     });
     if (options.apiWorkflowAction === 'events') {
       const events = eventsFromPayload(payload);

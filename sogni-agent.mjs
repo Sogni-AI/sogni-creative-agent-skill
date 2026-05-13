@@ -358,7 +358,7 @@ function isLoopbackApiUrl(parsed) {
 
 async function buildSafeApiUrl(path) {
   const url = appendApiPath(getApiBaseUrl(), path);
-  if (allowUnsafeApiBaseUrl()) return url;
+  const unsafeAllowed = allowUnsafeApiBaseUrl();
 
   let parsed;
   try {
@@ -369,13 +369,24 @@ async function buildSafeApiUrl(path) {
     throw err;
   }
 
+  if (parsed.username || parsed.password) {
+    const err = new Error('Sogni API base URL must not contain credentials.');
+    err.code = 'UNSAFE_API_BASE_URL';
+    throw err;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const err = new Error(`Sogni API URL protocol ${parsed.protocol} is not allowed.`);
+    err.code = 'UNSAFE_API_BASE_URL';
+    throw err;
+  }
+
+  if (unsafeAllowed) return url;
+
   if (isLoopbackApiUrl(parsed)) {
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      const err = new Error(`Sogni API URL protocol ${parsed.protocol} is not allowed for local development.`);
-      err.code = 'UNSAFE_API_BASE_URL';
-      throw err;
-    }
-    return url;
+    const err = new Error('Loopback Sogni API base URLs require SOGNI_ALLOW_UNSAFE_API_BASE_URL=1 for isolated local testing.');
+    err.code = 'UNSAFE_API_BASE_URL';
+    throw err;
   }
 
   try {

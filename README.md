@@ -480,6 +480,9 @@ Hosted API modes require `SOGNI_API_KEY`.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, and `--cancel-workflow`. Use `--workflow-input` to provide exact hosted workflow JSON.
 
 Override the API origin with `--api-base-url`, `SOGNI_API_BASE_URL`, or `SOGNI_REST_ENDPOINT`.
+Hosted API credentials are only sent to `https://api.sogni.ai` by default. Add trusted custom
+hosts with `SOGNI_API_ALLOWED_HOSTS`; loopback or non-HTTPS local testing requires
+`SOGNI_ALLOW_UNSAFE_API_BASE_URL=1`.
 
 > Uploaded local media still uses the direct CLI path because hosted API modes do not accept CLI `--ref*` media flags for server-side tool execution.
 

@@ -693,7 +693,8 @@ test('--api-chat posts to /v1/chat/completions with rich creative-agent tools', 
     ], {
       SOGNI_USERNAME: '',
       SOGNI_PASSWORD: '',
-      SOGNI_API_KEY: 'test-api-key'
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
 
     assert.equal(exitCode, 0);
@@ -713,6 +714,45 @@ test('--api-chat posts to /v1/chat/completions with rich creative-agent tools', 
     assert.equal(request.body.appSource, 'sogni-creative-agent-skill');
     assert.equal(request.body.messages[1].content, 'Create a 4-shot product video concept for a red sneaker');
   });
+});
+
+test('--api-chat rejects loopback api base without explicit unsafe opt-in before sending credentials', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      'Create a product video concept'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key'
+    });
+
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, 'UNSAFE_API_BASE_URL');
+    assert.match(payload.error, /SOGNI_ALLOW_UNSAFE_API_BASE_URL/);
+    assert.equal(requests.length, 0, 'credentials must not be sent to an unsafe API base URL');
+  });
+});
+
+test('--api-chat rejects api base URLs containing credentials', () => {
+  const { exitCode, stdout } = runCli([
+    '--api-chat',
+    '--api-base-url', 'https://user:pass@api.sogni.ai',
+    '--json',
+    'Create a product video concept'
+  ], {
+    SOGNI_USERNAME: '',
+    SOGNI_PASSWORD: '',
+    SOGNI_API_KEY: 'test-api-key'
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'UNSAFE_API_BASE_URL');
+  assert.match(payload.error, /must not contain credentials/);
 });
 
 test('--api-chat rejects uploaded-media server-side execution and points to direct CLI path', () => {
@@ -760,7 +800,8 @@ test('--api-workflow starts durable image-to-video workflow through /v1/creative
     ], {
       SOGNI_USERNAME: '',
       SOGNI_PASSWORD: '',
-      SOGNI_API_KEY: 'test-api-key'
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
 
     assert.equal(exitCode, 0);
@@ -829,7 +870,8 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     ], {
       SOGNI_USERNAME: '',
       SOGNI_PASSWORD: '',
-      SOGNI_API_KEY: 'test-api-key'
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
 
     assert.equal(exitCode, 0);
@@ -888,7 +930,8 @@ test('--stream-workflow parses hosted workflow SSE frames without wrapper parser
     ], {
       SOGNI_USERNAME: '',
       SOGNI_PASSWORD: '',
-      SOGNI_API_KEY: 'test-api-key'
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
 
     assert.equal(exitCode, 0);

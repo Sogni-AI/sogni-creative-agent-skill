@@ -300,7 +300,7 @@ positions.
 | `--expand-prompt`, `--no-expand-prompt` | Toggle prompt expansion for durable image-to-video | - |
 | `--watch-workflow` | Stream durable workflow events after start | - |
 | `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>` | Durable workflow management helpers | - |
-| `--api-base-url <url>` | Sogni API base for hosted API modes | https://api.sogni.ai |
+| `--api-base-url <url>` | Sogni API base for hosted API modes. Credentials are only sent to `https://api.sogni.ai` by default; use `SOGNI_API_ALLOWED_HOSTS` for trusted custom hosts or `SOGNI_ALLOW_UNSAFE_API_BASE_URL=1` for isolated local testing. | https://api.sogni.ai |
 | `--no-filter` | Disable NSFW content filter | - |
 | `--memory-set <key> <value>` | Save a user preference | - |
 | `--memory-get <key>` | Get a specific memory | - |

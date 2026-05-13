@@ -3790,6 +3790,9 @@ export function buildStoryboardProject(options) {
     const sourceSections = splitStoryboardSections(sourceText);
     const approvedSectionsHaveExplicitTiming = storyboardSectionsHavePreservableExplicitTiming(approvedSections);
     const sourceSectionsHaveExplicitTiming = storyboardSectionsHavePreservableExplicitTiming(sourceSections);
+    const exactRequestedFrameCount = inferExplicitStoryboardFrameCountFromText(userIntentText);
+    const assistantMustHonorExactFrameCount = options.promptAuthorship === 'assistant'
+        && exactRequestedFrameCount === options.frameCount;
     const assistantApprovedDraftUndercounted = options.promptAuthorship === 'assistant'
         && approvedSections.length > 0
         && approvedSections.length < options.frameCount
@@ -3808,7 +3811,7 @@ export function buildStoryboardProject(options) {
     const equalDuration = durationSec && sceneCountForTiming > 0
         ? Math.round((durationSec / sceneCountForTiming) * 100) / 100
         : null;
-    const scenes = sections.length > 0
+    const parsedScenes = sections.length > 0
         ? sections.map((section, index) => {
             const fallbackTiming = equalDuration !== null
                 ? {
@@ -3825,6 +3828,16 @@ export function buildStoryboardProject(options) {
         })
         : buildFallbackScenes(options.frameCount, durationSec, sourceText)
             .map((scene, index) => applyStoryboardScenePlanningContract(scene, storyboardScenePlanningContractForIndex(options.planningContract, index + 1)));
+    const scenes = assistantMustHonorExactFrameCount && parsedScenes.length !== options.frameCount
+        ? parsedScenes.length < options.frameCount
+            ? [
+                ...parsedScenes,
+                ...buildFallbackScenes(options.frameCount, durationSec, sourceText)
+                    .map((scene, index) => applyStoryboardScenePlanningContract(scene, storyboardScenePlanningContractForIndex(options.planningContract, index + 1)))
+                    .slice(parsedScenes.length),
+            ]
+            : parsedScenes.slice(0, options.frameCount)
+        : parsedScenes;
     const timingNormalizedScenes = normalizeAssistantStoryboardSceneTiming(scenes, durationSec, options.promptAuthorship);
     const dialogueAlignment = alignAssistantStoryboardDialogueWithUserSource(timingNormalizedScenes, userIntentText, options.promptAuthorship);
     const normalizedScenes = dialogueAlignment.shouldRetime

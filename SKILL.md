@@ -193,21 +193,28 @@ node sogni-agent.mjs --api-workflow storyboard-video --storyboard-frames 6 --dur
 ```
 
 Use `--api-chat` for text-first natural-language workflows that should go through
-Sogni API's OpenAI-compatible `/v1/chat/completions` tool loop. Use
-`--api-workflow` when the caller already knows it wants an async durable workflow
-record under `/v1/creative-agent/workflows`. Use `--api-workflow creative-plan`
-when the caller already has a shared `CreativeWorkflowPlan`; the skill forwards
-it as `kind: "creative_plan"` and lets Sogni API compile, validate, and persist
-it through `@sogni/creative-agent`. Use `--api-workflow storyboard-video`
+Sogni API's OpenAI-compatible `/v1/chat/completions` tool loop. This path
+sanitizes prompt-injection markers before forwarding messages and uses the
+current hosted creative-agent tool surface. Use `--api-workflow` when the caller
+already knows it wants an async durable workflow record under
+`/v1/creative-agent/workflows`. Use `--api-workflow creative-plan` when the
+caller already has a shared `CreativeWorkflowPlan`; the skill forwards it as
+`kind: "creative_plan"` and lets Sogni API compile, validate, and persist it
+through `@sogni/creative-agent`. This is the preferred hosted path for exact
+multi-step plans, including repeated `replace_video_segment` operations with
+`replacementStartSeconds` / `replacementEndSeconds` when interleaving existing
+video slices. Use `--api-workflow storyboard-video`
 when the caller wants the hosted sequence to generate a storyline, create one GPT
 Image 2 storyboard sheet, and feed that image artifact into Seedance as the video
 reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low|medium|high
 quality for the storyboard sheet. Hosted API requests forward media references
 from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
 `--reference-audio-identity`, and `--ref-video` as `media_references`
-metadata; API chat also attaches image refs as vision inputs. Prefer public
-HTTPS URLs for durable hosted workflows because the backend must retrieve
-non-inline media; use the direct CLI path for private or large local media.
+metadata; workflow JSON can bind them into step arguments with
+`sourceStepId: "$input_media"`, and API chat also attaches image refs as vision
+inputs. Prefer public HTTPS URLs for durable hosted workflows because the backend
+must retrieve non-inline media; use the direct CLI path for private or large
+local media.
 Use `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to
 forward explicit workflow cost policy.
 Hosted API modes require `SOGNI_API_KEY`; username/password credentials are only
@@ -902,6 +909,9 @@ On error (with `--json`), the script returns a single JSON object like:
   "success": false,
   "error": "Reference image 2314x1200 would resize to 512x266, but both dimensions must be divisible by 16.",
   "errorCode": "INVALID_VIDEO_SIZE",
+  "errorType": "PARAMETER_INVALID",
+  "errorCategory": "schema_validation",
+  "retryable": false,
   "hint": "Try: --width 1296 --height 672 (or omit --strict-size)"
 }
 ```

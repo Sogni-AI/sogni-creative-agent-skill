@@ -63,15 +63,18 @@ chmod 600 ~/.config/sogni/credentials
 You can also export `SOGNI_API_KEY` instead of writing the file.
 
 Hosted API modes require `SOGNI_API_KEY`: use `sogni-agent --api-chat "prompt"`
-for `/v1/chat/completions` with rich creative-agent tools, or
+for `/v1/chat/completions` with rich creative-agent tools and sanitized
+message forwarding, or
 `sogni-agent --api-workflow image-to-video --video-prompt "motion" "image prompt"`
 for durable `/v1/creative-agent/workflows` execution.
 Hosted API modes forward media references from `-c`, `--ref`, `--ref-end`,
 `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
 `media_references`; API chat also attaches image refs as vision inputs. Prefer
 public HTTPS URLs for durable hosted workflows because the backend must retrieve
-non-inline media. Use `--workflow-max-cost`, `--confirm-cost`, or
-`--no-confirm-cost` for durable workflow cost policy.
+non-inline media. Workflow JSON can bind those refs with
+`sourceStepId: "$input_media"`. Use `--workflow-max-cost`, `--confirm-cost`,
+or `--no-confirm-cost` for durable workflow cost policy. JSON errors include
+canonical `errorType`, `errorCategory`, and retryability when classified.
 
 Reusable hosted workflow behavior belongs in `../sogni-creative-agent` before it
 is synced into this public skill. Use typed planner/runtime contracts for media

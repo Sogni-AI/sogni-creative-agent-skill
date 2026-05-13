@@ -755,35 +755,90 @@ test('--api-chat rejects api base URLs containing credentials', () => {
   assert.match(payload.error, /must not contain credentials/);
 });
 
-test('--api-chat rejects uploaded-media server-side execution and points to direct CLI path', () => {
-  const { exitCode, stderr } = runCli([
-    '--api-chat',
-    '--ref', SCREENSHOT_FIXTURE,
-    'edit this image into a poster'
-  ], {
-    SOGNI_USERNAME: '',
-    SOGNI_PASSWORD: '',
-    SOGNI_API_KEY: 'test-api-key'
-  });
+test('--api-chat forwards image references with server-side tool execution enabled', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref', SCREENSHOT_FIXTURE,
+      'edit this image into a poster'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
 
-  assert.equal(exitCode, 1);
-  assert.ok(stderr.includes('does not currently support image references'));
-  assert.ok(stderr.includes('Use the direct CLI path'));
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.body.sogni_tool_execution, true);
+    assert.equal(request.body.api_media_references[0].flag, '--ref');
+    assert.equal(request.body.api_media_references[0].kind, 'image');
+    assert.equal(request.body.messages[1].content[0].type, 'text');
+    assert.equal(request.body.messages[1].content[1].type, 'image_url');
+    assert.match(request.body.messages[1].content[1].image_url.url, /^data:image\/jpeg;base64,/);
+  });
 });
 
-test('--api-chat rejects audio and video references instead of silently dropping them', () => {
-  const { exitCode, stderr } = runCli([
-    '--api-chat',
-    '--ref-audio', SCREENSHOT_FIXTURE,
-    'make a music video'
-  ], {
-    SOGNI_USERNAME: '',
-    SOGNI_PASSWORD: '',
-    SOGNI_API_KEY: 'test-api-key'
-  });
+test('--api-chat forwards audio and video references in API metadata and prompt context', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref-audio', 'https://cdn.sogni.ai/music.mp3',
+      '--ref-video', 'https://cdn.sogni.ai/source.mp4',
+      'make a music video'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
 
-  assert.equal(exitCode, 1);
-  assert.ok(stderr.includes('--api-chat does not support --ref-audio'));
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.body.api_media_references.length, 2);
+    assert.equal(request.body.api_media_references[0].kind, 'audio');
+    assert.equal(request.body.api_media_references[1].kind, 'video');
+    assert.match(request.body.messages[1].content, /API media references:/);
+    assert.match(request.body.messages[1].content, /music\.mp3/);
+    assert.match(request.body.messages[1].content, /source\.mp4/);
+  });
+});
+
+test('--api-chat accepts media-only planning requests for non-image references', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref-video', 'https://cdn.sogni.ai/source.mp4'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.api_media_references[0].kind, 'video');
+    assert.match(requests[0].body.messages[1].content, /Describe the attached media/);
+    assert.match(requests[0].body.messages[1].content, /source\.mp4/);
+  });
 });
 
 test('--api-workflow starts durable image-to-video workflow through /v1/creative-agent/workflows', async () => {
@@ -892,20 +947,36 @@ test('--api-workflow creative-plan forwards shared plan for API compilation', as
   });
 });
 
-test('--api-workflow rejects CLI media flags instead of silently dropping them', () => {
-  const { exitCode, stderr } = runCli([
-    '--api-workflow', 'image-to-video',
-    '--ref', SCREENSHOT_FIXTURE,
-    'animate this image'
-  ], {
-    SOGNI_USERNAME: '',
-    SOGNI_PASSWORD: '',
-    SOGNI_API_KEY: 'test-api-key'
-  });
+test('--api-workflow forwards CLI media references and cost controls', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow', 'image-to-video',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref', SCREENSHOT_FIXTURE,
+      '--workflow-max-cost', '25',
+      '--confirm-cost',
+      'animate this image'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
 
-  assert.equal(exitCode, 1);
-  assert.ok(stderr.includes('Hosted workflow API modes do not accept CLI media reference flags'));
-  assert.ok(stderr.includes('--ref'));
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.url, '/v1/creative-agent/workflows');
+    assert.equal(request.body.api_media_references[0].flag, '--ref');
+    assert.equal(request.body.api_media_references[0].kind, 'image');
+    assert.equal(request.body.max_estimated_capacity_units, 25);
+    assert.equal(request.body.cost_ceiling, 25);
+    assert.equal(request.body.confirm_cost, true);
+  });
 });
 
 test('--api-workflow image-to-video rejects unsupported workflow title flag', () => {

@@ -1125,6 +1125,8 @@ const options = {
   apiWorkflowIdempotencyKey: null,
   apiWorkflowId: null,
   apiWorkflowWatch: false,
+  apiWorkflowMaxCost: null,
+  apiWorkflowConfirmCost: null,
   apiVideoPrompt: null,
   apiNegativePrompt: null,
   apiGenerateAudio: null,
@@ -1204,6 +1206,8 @@ const cliSet = {
   apiWorkflowInput: false,
   apiWorkflowTitle: false,
   apiWorkflowIdempotencyKey: false,
+  apiWorkflowMaxCost: false,
+  apiWorkflowConfirmCost: false,
   apiVideoPrompt: false,
   apiNegativePrompt: false,
   apiGenerateAudio: false,
@@ -1643,6 +1647,17 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.apiWorkflowIdempotencyKey = raw;
     cliSet.apiWorkflowIdempotencyKey = true;
+  } else if (arg === '--workflow-max-cost' || arg === '--max-workflow-cost') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiWorkflowMaxCost = parseNonNegativeNumberValue(raw, arg);
+    cliSet.apiWorkflowMaxCost = true;
+  } else if (arg === '--confirm-cost') {
+    options.apiWorkflowConfirmCost = true;
+    cliSet.apiWorkflowConfirmCost = true;
+  } else if (arg === '--no-confirm-cost') {
+    options.apiWorkflowConfirmCost = false;
+    cliSet.apiWorkflowConfirmCost = true;
   } else if (arg === '--storyboard-frames') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1878,6 +1893,8 @@ Hosted API Modes:
   --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/creative-plan/custom image-to-video/storyboard-video
   --workflow-title <text> Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input
   --workflow-idempotency-key <key> Reuse safely when retrying a workflow start request
+  --workflow-max-cost <n> Reject the workflow if estimated capacity units exceed n
+  --confirm-cost, --no-confirm-cost  Forward explicit workflow cost confirmation
   --storyboard-frames <n> Frame/beat count for --api-workflow storyboard-video
   --video-prompt <text> Motion prompt for --api-workflow image-to-video
   --negative-prompt <text> Negative prompt for --api-workflow image-to-video
@@ -2596,31 +2613,10 @@ if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWork
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
-if (options.apiChat && !options.prompt && options.contextImages.length === 0 && !options.refImage && !options.refImageEnd) {
-  fatalCliError('--api-chat requires a prompt or an image reference for vision-only planning.', { code: 'INVALID_ARGUMENT' });
+if (options.apiChat && !options.prompt && getApiModeMediaReferences().length === 0) {
+  fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
 }
 
-const apiMediaRefs = getApiModeMediaReferences();
-const apiImageRefs = apiMediaRefs.filter(ref => ref.kind === 'image');
-const apiNonImageRefs = apiMediaRefs.filter(ref => ref.kind !== 'image');
-if (options.apiChat && apiNonImageRefs.length > 0) {
-  fatalCliError(
-    `--api-chat does not support ${formatApiMediaFlags(apiNonImageRefs)}. Use the direct CLI path for audio/video media workflows.`,
-    { code: 'UNSUPPORTED_API_MEDIA_REFERENCE' }
-  );
-}
-if (options.apiChat && options.apiToolExecution && apiImageRefs.length > 0) {
-  fatalCliError(
-    '--api-chat with server-side tool execution does not currently support image references. Use the direct CLI path for uploaded-media workflows, or pass --no-api-tool-execution for vision-only chat/planning.',
-    { code: 'UNSUPPORTED_API_UPLOAD_EXECUTION' }
-  );
-}
-if (options.apiWorkflowAction && apiMediaRefs.length > 0) {
-  fatalCliError(
-    `Hosted workflow API modes do not accept CLI media reference flags (${formatApiMediaFlags(apiMediaRefs)}). Use --workflow-input JSON for hosted workflow inputs, or use the direct CLI path for local media workflows.`,
-    { code: 'UNSUPPORTED_API_MEDIA_REFERENCE' }
-  );
-}
 if (options.apiWorkflowAction === 'start' && options.apiWorkflowKind === 'image_to_video' && options.apiWorkflowTitle) {
   fatalCliError('--workflow-title is currently only supported with --api-workflow hosted-tool-sequence, creative-plan, or storyboard-video.', {
     code: 'INVALID_ARGUMENT',
@@ -3088,6 +3084,25 @@ function formatApiMediaFlags(refs) {
   return [...new Set(refs.map(ref => ref.flag))].join(', ');
 }
 
+function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences()) {
+  return refs.map((ref, index) => ({
+    id: `media_ref_${index + 1}`,
+    source: 'cli',
+    flag: ref.flag,
+    kind: ref.kind,
+    url: ref.value,
+    mime_type: mimeTypeForPath(ref.value, `${ref.kind}/unknown`)
+  }));
+}
+
+function formatApiMediaReferencesForPrompt(mediaReferences) {
+  if (!mediaReferences.length) return '';
+  const lines = mediaReferences.map(ref => {
+    return `- ${ref.id} ${ref.kind} (${ref.flag}): ${ref.url}`;
+  });
+  return `API media references:\n${lines.join('\n')}`;
+}
+
 function extractApiEnvelopeData(payload) {
   return payload?.data && typeof payload.data === 'object' ? payload.data : payload;
 }
@@ -3131,30 +3146,24 @@ async function imageDataUriFromPathOrUrl(pathOrUrl) {
 async function buildApiChatMessages() {
   const system = options.apiSystemPrompt ||
     'You are a concise creative production assistant. Use Sogni creative tools when they help produce concrete media.';
-  const imageRefs = [
-    ...options.contextImages,
-    options.refImage,
-    options.refImageEnd
-  ].filter(Boolean);
+  const apiMediaRefs = getApiModeMediaReferences();
+  const apiMediaReferences = buildApiMediaReferencesPayload(apiMediaRefs);
+  const imageRefs = apiMediaRefs.filter(ref => ref.kind === 'image');
+  const nonImageRefs = apiMediaReferences.filter(ref => ref.kind !== 'image');
+  const promptText = [
+    options.prompt || 'Describe the attached media.',
+    formatApiMediaReferencesForPrompt(nonImageRefs)
+  ].filter(Boolean).join('\n\n');
 
   const messages = [{ role: 'system', content: system }];
   if (imageRefs.length === 0) {
-    messages.push({ role: 'user', content: options.prompt });
+    messages.push({ role: 'user', content: promptText });
     return messages;
   }
 
-  if (options.apiToolExecution) {
-    const err = new Error(
-      '--api-chat with server-side tool execution does not currently support image references. ' +
-      'Use the direct CLI path for uploaded-media workflows, or pass --no-api-tool-execution for vision-only chat/planning.'
-    );
-    err.code = 'UNSUPPORTED_API_UPLOAD_EXECUTION';
-    throw err;
-  }
-
-  const content = [{ type: 'text', text: options.prompt || 'Describe the attached media.' }];
+  const content = [{ type: 'text', text: promptText }];
   for (const ref of imageRefs) {
-    content.push({ type: 'image_url', image_url: { url: await imageDataUriFromPathOrUrl(ref) } });
+    content.push({ type: 'image_url', image_url: { url: await imageDataUriFromPathOrUrl(ref.value) } });
   }
   messages.push({ role: 'user', content });
   return messages;
@@ -3163,6 +3172,7 @@ async function buildApiChatMessages() {
 async function runApiChat(log) {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-chat');
+  const apiMediaReferences = buildApiMediaReferencesPayload();
   const body = {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages: await buildApiChatMessages(),
@@ -3172,7 +3182,11 @@ async function runApiChat(log) {
     app_source: SOGNI_APP_SOURCE,
     appSource: SOGNI_APP_SOURCE,
     sogni_tools: options.apiTools,
-    sogni_tool_execution: options.apiToolExecution
+    sogni_tool_execution: options.apiToolExecution,
+    ...(apiMediaReferences.length > 0 ? {
+      api_media_references: apiMediaReferences,
+      media_references: apiMediaReferences,
+    } : {})
   };
   const payload = await fetchApiJson('/v1/chat/completions', {
     apiKey,
@@ -3533,6 +3547,7 @@ async function runApiWorkflow() {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-workflow');
   const tokenType = options.tokenType || 'spark';
+  const apiMediaReferences = buildApiMediaReferencesPayload();
   let payload;
   let type = 'api-workflow';
 
@@ -3614,6 +3629,15 @@ async function runApiWorkflow() {
       kind,
       input,
       ...(options.apiWorkflowIdempotencyKey ? { idempotency_key: options.apiWorkflowIdempotencyKey } : {}),
+      ...(apiMediaReferences.length > 0 ? {
+        api_media_references: apiMediaReferences,
+        media_references: apiMediaReferences,
+      } : {}),
+      ...(options.apiWorkflowMaxCost !== null ? {
+        max_estimated_capacity_units: options.apiWorkflowMaxCost,
+        cost_ceiling: options.apiWorkflowMaxCost,
+      } : {}),
+      ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
       token_type: tokenType,
       app_source: SOGNI_APP_SOURCE,
       appSource: SOGNI_APP_SOURCE

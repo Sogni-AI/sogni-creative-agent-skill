@@ -183,7 +183,7 @@ async function withTestApiServer(fn) {
         res.end(JSON.stringify({
           status: 'success',
           data: {
-            workflow: { workflowId: 'wf_test', kind: 'image_to_video', status: 'queued', artifacts: [] }
+            workflow: { workflowId: 'wf_test', kind: parsedBody?.kind || 'image_to_video', status: 'queued', artifacts: [] }
           }
         }));
         return;
@@ -822,6 +822,73 @@ test('--api-workflow starts durable image-to-video workflow through /v1/creative
     assert.equal(request.body.input.width, 1024);
     assert.equal(request.body.input.height, 576);
     assert.equal(request.body.input.duration, 5);
+  });
+});
+
+test('--api-workflow creative-plan forwards shared plan for API compilation', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const plan = {
+      title: 'Two-step product workflow',
+      steps: [
+        {
+          id: 'hero_image',
+          toolName: 'generate_image',
+          arguments: {
+            prompt: 'A red sneaker hero product photo on a clean studio plinth',
+            width: 1024,
+            height: 1024
+          }
+        },
+        {
+          id: 'hero_video',
+          toolName: 'generate_video',
+          arguments: {
+            prompt: 'A slow push-in on the red sneaker hero product photo',
+            duration: 5
+          },
+          dependsOn: [{
+            sourceStepId: 'hero_image',
+            sourceArtifactIndex: 0,
+            targetArgument: 'reference_image_url',
+            mediaType: 'image',
+            transform: 'artifact_url',
+            required: true
+          }]
+        }
+      ]
+    };
+
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow', 'creative-plan',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--workflow-input', JSON.stringify(plan)
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.workflowKind, 'creative_plan');
+    assert.equal(payload.workflow.kind, 'creative_plan');
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.url, '/v1/creative-agent/workflows');
+    assert.equal(request.method, 'POST');
+    assert.equal(request.body.kind, 'creative_plan');
+    assert.equal(request.body.token_type, 'spark');
+    assert.equal(request.body.appSource, 'sogni-creative-agent-skill');
+    assert.deepEqual(request.body.input, plan);
+    assert.equal(
+      request.body.input.steps[0].toolName,
+      'generate_image',
+      'skill should forward the shared plan and let the API compile hosted tool names'
+    );
   });
 });
 

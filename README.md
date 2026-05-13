@@ -271,6 +271,9 @@ sogni-agent --api-workflow image-to-video \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
   "A graphite robot sketch on a drafting table"
 
+# Shared CreativeWorkflowPlan -> API compiles to hosted sequence
+sogni-agent --api-workflow creative-plan --workflow-input @plan.json
+
 # Storyline -> GPT Image 2 storyboard sheet -> Seedance video sequence
 sogni-agent --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
   "Create a 9:16 bakery launch video with a neon street-window reveal"
@@ -311,7 +314,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio |
 | `--workflow <type>` | Force `t2v`, `i2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--api-chat` | Use `/v1/chat/completions` with Sogni creative-agent tools |
-| `--api-workflow <kind>` | Start a `/v1/creative-agent/workflows` durable workflow: `image-to-video`, `hosted-tool-sequence`, or `storyboard-video` |
+| `--api-workflow <kind>` | Start a `/v1/creative-agent/workflows` durable workflow: `image-to-video`, `hosted-tool-sequence`, `creative-plan`, or `storyboard-video` |
 | `--workflow-input <json\|path\|@path>` | Explicit hosted workflow input JSON |
 | `--storyboard-frames <n>` | Beat count for `--api-workflow storyboard-video` |
 | `--video-prompt`, `--negative-prompt`, `--generate-audio`, `--expand-prompt` | Durable image-to-video workflow inputs |
@@ -475,7 +478,8 @@ Stored at `~/.config/sogni/personality.txt`.
 Hosted API modes require `SOGNI_API_KEY`.
 
 - **`--api-chat`** targets `/v1/chat/completions` with rich creative-agent tools — best for text-first natural-language workflows. Tune with `--api-tools creative-agent|rich|hosted|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
-- **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Supported kinds: `image-to-video`, `hosted-tool-sequence`, and `storyboard-video`.
+- **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Supported kinds: `image-to-video`, `hosted-tool-sequence`, `creative-plan`, and `storyboard-video`.
+- **`--api-workflow creative-plan`** forwards a shared `CreativeWorkflowPlan` JSON object (`{ title?, steps: [...] }`) to the API as `kind: "creative_plan"`. Compilation, hosted-tool argument validation, and persistence happen in `../sogni-api` through `@sogni/creative-agent`; the public skill does not duplicate that compiler.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single GPT Image 2 storyboard sheet, then passes that artifact into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low/medium/high quality for that storyboard sheet.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, and `--cancel-workflow`. Use `--workflow-input` to provide exact hosted workflow JSON.
 

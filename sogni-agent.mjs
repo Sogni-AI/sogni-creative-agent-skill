@@ -324,6 +324,7 @@ function normalizeApiWorkflowKind(value) {
   const normalized = String(value || '').toLowerCase().replace(/-/g, '_');
   if (normalized === 'image_to_video' || normalized === 'i2v') return 'image_to_video';
   if (normalized === 'hosted_tool_sequence' || normalized === 'tool_sequence') return 'hosted_tool_sequence';
+  if (normalized === 'creative_plan' || normalized === 'plan') return 'creative_plan';
   if (normalized === 'storyboard_video' || normalized === 'storyboard_to_video' || normalized === 'gpt_image_2_seedance' || normalized === 'gpt_image_seedance') {
     return 'storyboard_video';
   }
@@ -1118,7 +1119,7 @@ const options = {
   apiToolExecution: true,
   apiSystemPrompt: null,
   apiWorkflowAction: null, // start|list|get|events|stream|cancel
-  apiWorkflowKind: null, // image_to_video|hosted_tool_sequence
+  apiWorkflowKind: null, // image_to_video|hosted_tool_sequence|creative_plan|storyboard_video
   apiWorkflowInput: null,
   apiWorkflowTitle: null,
   apiWorkflowIdempotencyKey: null,
@@ -1873,9 +1874,9 @@ Hosted API Modes:
   --no-api-tool-execution  Ask for tool calls/plans but do not execute Sogni tools
   --llm-model <id>      LLM model for --api-chat (default: ${DEFAULT_LLM_MODEL})
   --system <text>       System prompt for --api-chat
-  --api-workflow <kind> Start /v1/creative-agent/workflows: image-to-video|hosted-tool-sequence|storyboard-video
-  --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/custom image-to-video/storyboard-video
-  --workflow-title <text> Title for hosted-tool-sequence or storyboard-video workflow input
+  --api-workflow <kind> Start /v1/creative-agent/workflows: image-to-video|hosted-tool-sequence|creative-plan|storyboard-video
+  --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/creative-plan/custom image-to-video/storyboard-video
+  --workflow-title <text> Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input
   --workflow-idempotency-key <key> Reuse safely when retrying a workflow start request
   --storyboard-frames <n> Frame/beat count for --api-workflow storyboard-video
   --video-prompt <text> Motion prompt for --api-workflow image-to-video
@@ -1991,6 +1992,7 @@ Examples:
   sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
   sogni-agent --api-chat "Create a 4-shot product video concept for a red sneaker"
   sogni-agent --api-workflow image-to-video --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
+  sogni-agent --api-workflow creative-plan --workflow-input @plan.json
   sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2 and Seedance"
   sogni-agent --video -m ltx23-22b-fp8_t2v_distilled --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
@@ -2108,7 +2110,7 @@ options.apiTools = normalizedApiToolMode;
 if (options.apiWorkflowKind) {
   const normalized = normalizeApiWorkflowKind(options.apiWorkflowKind);
   if (!normalized) {
-    fatalCliError('--api-workflow must be "image-to-video", "hosted-tool-sequence", or "storyboard-video".', {
+    fatalCliError('--api-workflow must be "image-to-video", "hosted-tool-sequence", "creative-plan", or "storyboard-video".', {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--api-workflow', value: options.apiWorkflowKind }
     });
@@ -2584,6 +2586,9 @@ if (apiWorkflowStartAction && options.apiWorkflowKind === 'image_to_video' && !o
 if (apiWorkflowStartAction && options.apiWorkflowKind === 'hosted_tool_sequence' && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow hosted-tool-sequence requires --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
+if (apiWorkflowStartAction && options.apiWorkflowKind === 'creative_plan' && !apiWorkflowStartHasExternalInput) {
+  fatalCliError('--api-workflow creative-plan requires --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
+}
 if (apiWorkflowStartAction && options.apiWorkflowKind === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
@@ -2617,7 +2622,7 @@ if (options.apiWorkflowAction && apiMediaRefs.length > 0) {
   );
 }
 if (options.apiWorkflowAction === 'start' && options.apiWorkflowKind === 'image_to_video' && options.apiWorkflowTitle) {
-  fatalCliError('--workflow-title is currently only supported with --api-workflow hosted-tool-sequence or storyboard-video.', {
+  fatalCliError('--workflow-title is currently only supported with --api-workflow hosted-tool-sequence, creative-plan, or storyboard-video.', {
     code: 'INVALID_ARGUMENT',
     details: { flag: '--workflow-title', workflow: options.apiWorkflowKind }
   });
@@ -3257,6 +3262,14 @@ function buildHostedToolSequenceWorkflowInput() {
   return parsed;
 }
 
+function buildCreativePlanWorkflowInput() {
+  const parsed = parseWorkflowInput(options.apiWorkflowInput);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && options.apiWorkflowTitle && !parsed.title) {
+    parsed.title = options.apiWorkflowTitle;
+  }
+  return parsed;
+}
+
 function storyboardWorkflowImageQualityFromCli() {
   if (!cliSet.quality || !options.quality) return undefined;
   if (options.quality === 'pro') return 'high';
@@ -3586,7 +3599,9 @@ async function runApiWorkflow() {
   } else {
     input = requestedKind === 'hosted_tool_sequence'
       ? buildHostedToolSequenceWorkflowInput()
-      : buildImageToVideoWorkflowInput();
+      : requestedKind === 'creative_plan'
+        ? buildCreativePlanWorkflowInput()
+        : buildImageToVideoWorkflowInput();
   }
 
   payload = await fetchApiJson('/v1/creative-agent/workflows', {

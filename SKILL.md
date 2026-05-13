@@ -173,6 +173,9 @@ node sogni-agent.mjs --api-workflow image-to-video \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
   "A graphite robot sketch on a drafting table"
 
+# Shared CreativeWorkflowPlan: API compiles and validates through @sogni/creative-agent
+node sogni-agent.mjs --api-workflow creative-plan --workflow-input @plan.json
+
 # Durable storyboard-video workflow: storyline -> GPT Image 2 storyboard -> Seedance
 node sogni-agent.mjs --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
   "Create a 9:16 bakery launch video with a neon street-window reveal"
@@ -181,7 +184,10 @@ node sogni-agent.mjs --api-workflow storyboard-video --storyboard-frames 6 --dur
 Use `--api-chat` for text-first natural-language workflows that should go through
 Sogni API's OpenAI-compatible `/v1/chat/completions` tool loop. Use
 `--api-workflow` when the caller already knows it wants an async durable workflow
-record under `/v1/creative-agent/workflows`. Use `--api-workflow storyboard-video`
+record under `/v1/creative-agent/workflows`. Use `--api-workflow creative-plan`
+when the caller already has a shared `CreativeWorkflowPlan`; the skill forwards
+it as `kind: "creative_plan"` and lets Sogni API compile, validate, and persist
+it through `@sogni/creative-agent`. Use `--api-workflow storyboard-video`
 when the caller wants the hosted sequence to generate a storyline, create one GPT
 Image 2 storyboard sheet, and feed that image artifact into Seedance as the video
 reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low|medium|high
@@ -290,9 +296,9 @@ positions.
 | `--api-tools <mode>` | API tool mode: creative-agent\|rich\|hosted\|none | creative-agent |
 | `--no-api-tool-execution` | Plan/tool-call via API chat without executing Sogni tools | - |
 | `--llm-model <id>` | LLM model for `--api-chat` | qwen3.6-35b-a3b-gguf-iq4xs |
-| `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|storyboard-video | - |
+| `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|creative-plan\|storyboard-video | - |
 | `--workflow-input <json\|path\|@path>` | Workflow input JSON for hosted tool sequences/custom starts | - |
-| `--workflow-title <text>` | Title for hosted-tool-sequence workflow input | - |
+| `--workflow-title <text>` | Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input | - |
 | `--storyboard-frames <n>` | Beat count for storyboard-video workflow | - |
 | `--video-prompt <text>` | Motion prompt for durable image-to-video workflow | - |
 | `--negative-prompt <text>` | Negative prompt for durable image-to-video workflow | - |

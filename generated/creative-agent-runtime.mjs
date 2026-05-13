@@ -212,28 +212,246 @@ export function isToolResultOk(result) {
 export function isToolResultErr(result) {
     return result.ok === false;
 }
-// ---------------------------------------------------------------------------
-// Storyboard adapter prompt-guidance composer (wraps the per-adapter strings)
-// ---------------------------------------------------------------------------
-/**
- * Returns the concatenated per-adapter system-prompt guidance block.
- * Public-skill consumers append this to their chat system prompt so the
- * model sees the same per-model rules the chat product injects. The
- * adapter `compile()` runtime is intentionally not bundled here — public
- * skill callers that need real per-model prompt compilation should
- * import directly from `@sogni/creative-agent` rather than the
- * single-file runtime bundle.
- *
- * NOTE: The rich adapter `compile()` logic (Seedance / GPT Image 2 /
- * LTX-2.3 / WAN) is not inlined into this bundle yet. Pull it in from
- * `@sogni/creative-agent/storyboard` when a downstream consumer needs
- * `compileForModel()` to do real prompt compilation.
- */
-export function composeAdapterPromptGuidance() {
-    // The hand-curated bundle currently exposes adapter stubs only, so the
-    // composer returns an empty block. Real compile() + getSystemPromptGuidance
-    // for each adapter lives in `@sogni/creative-agent/storyboard/adapters`.
-    return '';
+export class StoryboardAdapterUnsupportedStageError extends Error {
+    modelId;
+    stage;
+    constructor(modelId, stage) {
+        super(`Adapter "${modelId}" does not support stage "${stage}".`);
+        this.modelId = modelId;
+        this.stage = stage;
+        this.name = 'StoryboardAdapterUnsupportedStageError';
+    }
+}
+function requireStoryboardScene(adapterId, input) {
+    if (!input.scene)
+        throw new Error(`${adapterId} ${input.stage} requires a scene argument.`);
+    return input.scene;
+}
+function compileStoryboardImagePromptFromProject(project) {
+    const frameCount = project.scenes.length || 1;
+    const layout = storyboardLayoutSpecFromProject(project, frameCount);
+    const boardSizeLine = layout.boardDimensions
+        ? `Overall storyboard canvas: ${layout.boardDimensions} pixels (${layout.boardAspectRatio}).`
+        : `Overall storyboard canvas aspect ratio: ${layout.boardAspectRatio}.`;
+    return [
+        'CREATE:',
+        `Create exactly ${frameCount} sequential video storyboard frames as one composite storyboard image.`,
+        `Project title: ${project.title}.`,
+        project.durationSec !== null ? `Target duration: ${project.durationSec} seconds.` : 'Target duration: unspecified in source brief.',
+        '',
+        ...compileStoryboardCountContractSection(project, layout),
+        '',
+        ...compileStoryboardReferenceSection(project),
+        '',
+        'CANVAS / LAYOUT:',
+        boardSizeLine,
+        `Individual scene-cell/frame aspect ratio: ${layout.cellAspectRatio}.`,
+        `Target final video aspect ratio: ${layout.targetVideoAspectRatio}.`,
+        `Layout preset: ${layout.layoutKind} - ${layout.layoutDescription}.`,
+        '',
+        ...compileStoryboardStoryContinuitySection(project),
+        '',
+        'GLOBAL STYLE:',
+        project.creativeBrief.visualQualityBar,
+        '',
+        'CRITICAL REQUIREMENTS:',
+        ...compileStoryboardCriticalRequirements().map((item, index) => `${index + 1}. ${item}`),
+        '',
+        ...compileStoryboardTimingValidationSection(project),
+        '',
+        ...compileStoryboardScenesSection(project),
+        'TEXT RENDERING:',
+        'Keep production labels outside video-frame artwork. Only user-required diegetic or brand text belongs inside a frame.',
+        ...project.endCard.requiredText.map(text => `Required exact visible text: "${text}".`),
+        '',
+        'NEGATIVE / AVOID:',
+        ...compileStoryboardAvoidSection(project.creativeBrief.concept).map(item => `- ${item}`),
+    ].join('\n');
+}
+function scenePromptText(scene) {
+    return [
+        scene.visual,
+        scene.action,
+        scene.camera,
+        scene.lighting,
+    ].filter((value) => typeof value === 'string' && value.trim().length > 0).join(' — ');
+}
+function compileStoryboardKeyframePrompt(project, scene) {
+    return [
+        `Create a cinematic keyframe for scene "${scene.title}" in project "${project.title}".`,
+        `Visual: ${scenePromptText(scene) || scene.purpose || scene.id}.`,
+        scene.referenceUsage.length > 0 ? `Reference usage: ${scene.referenceUsage.join('; ')}.` : '',
+        scene.textInImage.length > 0 ? `Visible text: ${scene.textInImage.join('; ')}.` : 'Visible text: none.',
+        `Style: ${project.creativeBrief.visualQualityBar}.`,
+        'Do not include storyboard panel labels, timecodes, production notes, or metadata labels inside the frame.',
+    ].filter(Boolean).join('\n');
+}
+function compileSeedanceSceneClipPromptFromProject(project, scene, referenceTag) {
+    return [
+        `Create a full-screen cinematic video clip from ${referenceTag}.`,
+        `Project: ${project.title}.`,
+        `Scene: ${scene.title}.`,
+        `Purpose: ${scene.purpose || 'Advance the approved story spine.'}`,
+        `Visual/action/camera: ${scenePromptText(scene) || scene.id}.`,
+        scene.transitionIn || scene.transitionOut ? `Transition: ${[scene.transitionIn, scene.transitionOut].filter(Boolean).join('; ')}.` : '',
+        scene.dialogue ? `Dialogue/VO: ${scene.dialogue}.` : '',
+        scene.audioSfx.length > 0 ? `Audio/SFX: ${scene.audioSfx.join(', ')}.` : '',
+        scene.music ? `Music: ${scene.music}.` : '',
+        scene.textInImage.length > 0 ? `Required visible text: ${scene.textInImage.join('; ')}.` : 'Visible text: none.',
+        `Style: ${project.creativeBrief.visualQualityBar}.`,
+        'Use the reference as identity and composition guidance. Do not render storyboard labels, panel numbers, timecodes, or metadata.',
+    ].filter(Boolean).join('\n');
+}
+function compactSceneVideoPrompt(project, scene, referenceTag) {
+    const lines = [];
+    lines.push(`[VISUAL] ${scenePromptText(scene) || scene.purpose || scene.id}`);
+    if (scene.audioSfx.length > 0)
+        lines.push(`[SOUNDS] ${scene.audioSfx.join(', ')}`);
+    if (scene.music)
+        lines.push(`[MUSIC] ${scene.music}`);
+    if (scene.dialogue)
+        lines.push(`[SPEECH] ${scene.dialogue}`);
+    lines.push(`Reference: ${referenceTag} (use as keyframe identity).`);
+    if (project.creativeBrief.visualQualityBar)
+        lines.push(`Style: ${project.creativeBrief.visualQualityBar}`);
+    return lines.join('\n');
+}
+const PUBLIC_SEEDANCE_ADAPTER = {
+    modelId: 'seedance',
+    name: 'Seedance 2.x',
+    supportedStages: ['storyboard_image', 'scene_clip'],
+    compile(storyboard, input) {
+        if (input.stage === 'storyboard_image') {
+            return {
+                stage: 'storyboard_image',
+                prompt: compileStoryboardImagePromptFromProject(storyboard),
+                args: {
+                    videoModel: 'seedance2-fast',
+                    aspectRatio: storyboard.targetVideoAspectRatio,
+                    skipPromptProcessing: true,
+                    expandPrompt: false,
+                },
+            };
+        }
+        if (input.stage === 'scene_clip') {
+            const scene = requireStoryboardScene('SEEDANCE_ADAPTER', input);
+            const referenceTag = input.primaryReferenceTag ?? formatModelRef('seedance', 1, 'image');
+            const duration = clampSeedanceStoryboardDuration(scene.durationSec ?? 5);
+            return {
+                stage: 'scene_clip',
+                prompt: compileSeedanceSceneClipPromptFromProject(storyboard, scene, referenceTag),
+                args: {
+                    videoModel: 'seedance2-fast',
+                    duration,
+                    aspectRatio: storyboard.targetVideoAspectRatio,
+                    skipPromptProcessing: true,
+                    expandPrompt: false,
+                },
+            };
+        }
+        throw new StoryboardAdapterUnsupportedStageError('seedance', input.stage);
+    },
+    getSystemPromptGuidance() {
+        return `SEEDANCE STORYBOARD REFERENCES: If exactly one uploaded image is an ordered storyboard/sequence sheet and the user asks for a Seedance video with only a sparse/casual prompt, use generate_video with referenceImageIndices=[-1], prompt="${SEEDANCE_STORYBOARD_REFERENCE_PROMPT}", videoModel="seedance2", skipPromptProcessing=true, and expandPrompt=false. Also use videoModel="seedance2" when a generated storyboard image becomes the Seedance reference, regardless of requested resolution, unless the user explicitly asks for a draft or the Seedance fast model/version. Do not use this fallback when the user provides a literal prompt, their own script, shot list, timecoded beats, VO/SFX notes, or other substantive video instructions.`;
+    },
+};
+const PUBLIC_GPT_IMAGE_2_ADAPTER = {
+    modelId: 'gpt-image-2',
+    name: 'GPT Image 2',
+    supportedStages: ['storyboard_image', 'keyframe'],
+    compile(storyboard, input) {
+        if (input.stage === 'storyboard_image') {
+            return {
+                stage: 'storyboard_image',
+                prompt: compileStoryboardImagePromptFromProject(storyboard),
+                args: {
+                    model: 'gpt-image-2',
+                    ...buildStoryboardCanvasArgs(storyboard.outputAspectRatio, true),
+                    numberOfVariations: 1,
+                },
+            };
+        }
+        if (input.stage === 'keyframe') {
+            const scene = input.scene ?? storyboard.scenes[0];
+            if (!scene)
+                throw new Error('GPT_IMAGE_2_ADAPTER keyframe requires at least one storyboard scene.');
+            return {
+                stage: 'keyframe',
+                prompt: compileStoryboardKeyframePrompt(storyboard, scene),
+                args: {
+                    model: 'gpt-image-2',
+                    aspectRatio: storyboard.frameAspectRatio,
+                    numberOfVariations: 1,
+                    sceneId: scene.id,
+                },
+            };
+        }
+        throw new StoryboardAdapterUnsupportedStageError('gpt-image-2', input.stage);
+    },
+    getSystemPromptGuidance() {
+        return 'GPT IMAGE 2 ROUTING: When the user asks for a ChatGPT, OpenAI, GPT, GPT-2, GPT Image, or gpt-image-2 image/model, use model="gpt-image-2". Use generate_image for text-to-image requests. If uploaded/reference/persona images must guide identity, likeness, composition, style, or objects, use edit_image with model="gpt-image-2" instead of forcing generate_image.';
+    },
+};
+const PUBLIC_LTX23_ADAPTER = {
+    modelId: 'ltx23',
+    name: 'LTX-2.3',
+    supportedStages: ['scene_clip'],
+    compile(storyboard, input) {
+        if (input.stage !== 'scene_clip')
+            throw new StoryboardAdapterUnsupportedStageError('ltx23', input.stage);
+        const scene = requireStoryboardScene('LTX23_ADAPTER', input);
+        const referenceTag = input.primaryReferenceTag ?? 'context_image_0';
+        return {
+            stage: 'scene_clip',
+            prompt: compactSceneVideoPrompt(storyboard, scene, referenceTag),
+            args: {
+                videoModel: 'ltx23',
+                duration: clampSeedanceStoryboardDuration(scene.durationSec ?? 5),
+                aspectRatio: storyboard.targetVideoAspectRatio,
+            },
+        };
+    },
+    getSystemPromptGuidance() {
+        return 'LTX-2.3 VIDEO PROMPTING: For image-to-video, describe only motion, action, camera, and sound that are not already obvious in the reference frame. Keep recurring character names and visual anchors stable across scenes.';
+    },
+};
+const PUBLIC_WAN_ADAPTER = {
+    modelId: 'wan',
+    name: 'WAN 2.x',
+    supportedStages: ['scene_clip'],
+    compile(storyboard, input) {
+        if (input.stage !== 'scene_clip')
+            throw new StoryboardAdapterUnsupportedStageError('wan', input.stage);
+        const scene = requireStoryboardScene('WAN_ADAPTER', input);
+        const referenceTag = input.primaryReferenceTag ?? 'context_image_0';
+        return {
+            stage: 'scene_clip',
+            prompt: [
+                `[VISUAL] ${scenePromptText(scene) || scene.purpose || scene.id}`,
+                `Reference: ${referenceTag} (use as the visual identity/keyframe anchor).`,
+                scene.dialogue ? '[PERFORMANCE] Show implied speaking beats through expression and body motion; WAN does not render audio.' : '',
+                storyboard.creativeBrief.visualQualityBar ? `Style: ${storyboard.creativeBrief.visualQualityBar}` : '',
+            ].filter(Boolean).join('\n'),
+            args: {
+                videoModel: 'wan22',
+                duration: clampSeedanceStoryboardDuration(scene.durationSec ?? 5),
+                aspectRatio: storyboard.targetVideoAspectRatio,
+            },
+        };
+    },
+};
+const PUBLIC_STORYBOARD_ADAPTERS = [
+    PUBLIC_SEEDANCE_ADAPTER,
+    PUBLIC_GPT_IMAGE_2_ADAPTER,
+    PUBLIC_LTX23_ADAPTER,
+    PUBLIC_WAN_ADAPTER,
+];
+export function composeAdapterPromptGuidance(adapters = PUBLIC_STORYBOARD_ADAPTERS) {
+    return adapters
+        .map(adapter => adapter.getSystemPromptGuidance?.())
+        .filter((guidance) => typeof guidance === 'string' && guidance.trim().length > 0)
+        .map(guidance => guidance.trim())
+        .join('\n\n');
 }
 export class SkillRegistry {
     manifests = new Map();
@@ -273,23 +491,28 @@ export class SkillRegistry {
 export const storyboardAdapterRegistry = {
     getAdapter(modelId) {
         const trimmed = modelId.trim().toLowerCase();
+        const exact = PUBLIC_STORYBOARD_ADAPTERS.find(adapter => adapter.modelId === trimmed);
+        if (exact)
+            return exact;
         if (trimmed.startsWith('seedance'))
-            return { modelId: 'seedance' };
+            return PUBLIC_SEEDANCE_ADAPTER;
         if (trimmed.startsWith('gpt-image'))
-            return { modelId: 'gpt-image-2' };
+            return PUBLIC_GPT_IMAGE_2_ADAPTER;
         if (trimmed.startsWith('ltx'))
-            return { modelId: 'ltx23' };
+            return PUBLIC_LTX23_ADAPTER;
         if (trimmed.startsWith('wan'))
-            return { modelId: 'wan' };
+            return PUBLIC_WAN_ADAPTER;
         return null;
     },
+    list() {
+        return [...PUBLIC_STORYBOARD_ADAPTERS];
+    },
 };
-export function compileForModel(modelId) {
+export function compileForModel(modelId, storyboard, input) {
     const adapter = storyboardAdapterRegistry.getAdapter(modelId);
     if (!adapter)
         throw new Error(`No storyboard adapter registered for model_id "${modelId}".`);
-    throw new Error(`Storyboard adapter "${adapter.modelId}" is not bundled in the public skill runtime. `
-        + 'Import compileForModel from @sogni/creative-agent/storyboard or submit a hosted storyboard workflow instead.');
+    return adapter.compile(storyboard, input);
 }
 const PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF = formatModelRef('seedance', 1, 'image');
 export const SEEDANCE_STORYBOARD_REFERENCE_PROMPT = `Create a full-screen cinematic video from the storyboard in ${PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF}. Treat ${PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF} as the controlling source for shot order and intent, and as a source layout reference: use the thumbnails, timing, Dialogue/VO, Audio/SFX, timecodes, camera/motion notes, transitions, and scene order as instructions, not as a visual board to reproduce. Do not display the storyboard grid, borders, caption bars, storyboard title/footer text, panel numbers, section labels, slide titles, headings, or transcribed narration. Convert the ordered thumbnails into full-screen chronological beats; do not reuse only one or two motifs while skipping panels. When the board has panel titles, captions, section numbers, slide titles, or headings but no formal Dialogue/VO labels, treat those labels as short audio-only narration/voiceover or key-message beats in order unless they are clearly visual-only metadata. Voice each label as its own brief phrase with a pause; do not concatenate labels into run-on sentences and do not speak panel numbers. Show storyboard labels as visible text only when the user explicitly asks for visible text, subtitles, a title card, lower third, signage, or CTA. Preserve the story spine, character/product/reference continuity, and cause-and-effect progression between beats. Treat transitions as motion instructions, not unrelated hard cuts unless the storyboard explicitly asks for hard cuts. Use brand color, lighting, product imagery, and composition instead of invented typography. Keep visible text limited to exact copy the user or storyboard explicitly marks as on-screen text, CTA, signage, or end-card text. Use a music/SFX arc that follows the storyboard audio notes and lands the final brand/CTA hit. Keep unrelated UI, extra logos, microtext, subtitles, and extra scenes out of the frame.`;
@@ -1420,6 +1643,21 @@ export function textRequestsProfessionalCharacterSheetImage(text) {
         || new RegExp(String.raw `\b${sheetArtifact}\b[\s\S]{0,120}\b(?:image|illustration|artwork|render|board|layout)\b`, 'i').test(normalized)
         || new RegExp(String.raw `\b(?:need|want|would\s+like|looking\s+for|please|can\s+you|could\s+you)\b[\s\S]{0,120}\b${sheetArtifact}\b`, 'i').test(normalized);
 }
+function textRequestsDirectVideoOutput(text) {
+    const videoGenerationVerbs = String.raw `(?:generate|create|make|render|produce|turn|animate|convert|transform)`;
+    const videoOutputNouns = String.raw `(?:videos?|clips?|animations?|movies?|films?)`;
+    return new RegExp(String.raw `\b${videoGenerationVerbs}\b[\s\S]{0,140}\b${videoOutputNouns}\b`, 'i').test(text)
+        || new RegExp(String.raw `\b${videoOutputNouns}\b[\s\S]{0,140}\b${videoGenerationVerbs}\b`, 'i').test(text);
+}
+function textHasExplicitStoryboardPlanningWorkflow(text) {
+    const planningNoun = String.raw `(?:script|screenplay|story\s*board|storyboard|shot\s*list|beat\s*sheet|treatment|story\s+beats?|video\s+plan|creative\s+brief)`;
+    const planningVerb = String.raw `(?:write|draft|develop|outline|plan|map\s*out|break\s*down)`;
+    return new RegExp(String.raw `\b${planningVerb}\b[\s\S]{0,140}\b${planningNoun}\b`, 'i').test(text)
+        || new RegExp(String.raw `\b${planningNoun}\b[\s\S]{0,120}\b(?:to\s+develop|for\s+review|for\s+approval|before|first|then|next|subsequent|subsequently|later)\b`, 'i').test(text)
+        || /\bnew\s+script\s+to\s+develop\b/i.test(text)
+        || /\b(?:construct|build|develop|map\s*out|plan)\b[\s\S]{0,100}\b(?:using|with)\s+(?:\d{1,2}|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:beats?|scenes?|panels?)\b/i.test(text)
+        || /\b(?:video\s+story\s*board|video\s+storyboard|story\s*board\s+sequence|storyboard\s+sequence)\b[\s\S]{0,140}\b(?:model[-\s]?ready|prompt[-\s]?ready|production[-\s]?ready|enough\s+details?|generate\s+the\s+entire\s+video|story\s+spine|for\s+the\s+model|script|plan|breakdown)\b/i.test(text);
+}
 export function textRequestsSingleCompositeImageOutput(text) {
     const normalized = text
         .replace(/[“”]/g, '"')
@@ -1429,9 +1667,7 @@ export function textRequestsSingleCompositeImageOutput(text) {
     if (!normalized)
         return false;
     const generationVerbs = String.raw `(?:generate|create|make|render|produce|design|build|develop|draw)`;
-    const videoGenerationVerbs = String.raw `(?:generate|create|make|render|produce|turn|animate|convert|transform)`;
     const imageOutputNouns = String.raw `(?:images?|photos?|pictures?|portraits?|posters?|artwork|illustrations?)`;
-    const videoOutputNouns = String.raw `(?:videos?|clips?|animations?|movies?|films?)`;
     const compositeNouns = String.raw `(?:story\s*board|storyboard|collage|contact\s+sheet|mood\s*board|moodboard|grid|board)`;
     const adCreativeNouns = String.raw `(?:ads?|advertisements?|banners?|flyers?|posters?|social\s+posts?|campaign\s+creative|marketing\s+(?:creative|graphic)|promo\s+graphic|product\s+graphic)`;
     const characterSheetImageStage = textRequestsProfessionalCharacterSheetImage(normalized);
@@ -1454,8 +1690,7 @@ export function textRequestsSingleCompositeImageOutput(text) {
         && !/\b(?:story\s*board|storyboard)\b[\s\S]{0,60}\bfirst\b/i.test(normalized)) {
         return false;
     }
-    const directVideoOutput = new RegExp(String.raw `\b${videoGenerationVerbs}\b[\s\S]{0,140}\b${videoOutputNouns}\b`, 'i').test(normalized)
-        || new RegExp(String.raw `\b${videoOutputNouns}\b[\s\S]{0,140}\b${videoGenerationVerbs}\b`, 'i').test(normalized);
+    const directVideoOutput = textRequestsDirectVideoOutput(normalized);
     const rejectsStoryboardPanelOutput = /\b(?:no|without)\s+(?:extra\s+|random\s+|visible\s+|generated\s+|output\s+)?(?:story\s*board|storyboard)\s+panels?\b/i.test(normalized)
         || /\b(?:avoid|exclude|never|don't|do\s+not)\b[\s\S]{0,80}\b(?:story\s*board|storyboard)\s+panels?\b/i.test(normalized)
         || /\bnot\s+(?:a\s+|the\s+|as\s+)?(?:story\s*board|storyboard)\s+panels?\b/i.test(normalized)
@@ -1472,6 +1707,13 @@ export function textRequestsSingleCompositeImageOutput(text) {
     const referenceGuidedAdCreative = new RegExp(String.raw `\b${generationVerbs}\b[\s\S]{0,140}\b${adCreativeNouns}\b`, 'i').test(normalized)
         && /\b(?:referenc(?:e|es|ed|ing)|use|using|include|incorporate|based\s+on|guided\s+by|with)\b[\s\S]{0,120}\b(?:uploaded|attached|provided|reference|source|input|assets?|images?|photos?|pictures?)\b/i.test(normalized)
         && !/\b(?:videos?|clips?|animations?|movies?|films?|commercials?)\b/i.test(normalized);
+    if (directVideoOutput
+        && !explicitStoryboardImageOrSheetRequest
+        && !textHasExplicitStoryboardPlanningWorkflow(normalized)
+        && !referenceGuidedAdCreative
+        && !characterSheetImageStage) {
+        return false;
+    }
     const storyboardImageMentionIsCaptionSource = standaloneCompositeImageMention
         && /\b(?:voice\s*over|voiceover|captions?|text|copy|dialogue|lines?)\b[\s\S]{0,180}\b(?:read|shown|displayed|under|below|from|in|on)\b[\s\S]{0,120}\b(?:story\s*board|storyboard)\s+images?\b/i.test(normalized);
     if (directVideoOutput
@@ -1549,6 +1791,9 @@ export function textRequestsPreproductionScriptStage(text) {
         || /\bnew\s+script\s+to\s+develop\b/i.test(normalized);
     if (!asksForPlanning)
         return false;
+    if (textRequestsDirectVideoOutput(normalized) && !textHasExplicitStoryboardPlanningWorkflow(normalized)) {
+        return false;
+    }
     const downstreamMediaContext = /\b(?:video|clip|animation|movie|film|seedance|ltx|image|keyframe|storyboard\s+image|storyboard\s+sheet|model|generation|generate|render|animate)\b/i.test(normalized)
         || /\b(?:used\s+by|enough\s+details?|production\s+ready|prompt-ready|model-ready)\b/i.test(normalized);
     return downstreamMediaContext;

@@ -4635,6 +4635,7 @@ function compileStoryboardCriticalRequirements() {
         'When a product, feature, brand, capability, or CTA is part of the brief, keep its scene-level purpose legible in the non-frame notes without inventing unsupported product claims.',
         'Use explicit transition logic between adjacent beats: object motion, light/color handoff, match cut, camera move, wipe, reaction, or another concrete edit idea.',
         'Use shaped pacing when timings are flexible: fast hook, escalating middle, readable reveal, and a final CTA/end card held long enough for critical text/logo recognition.',
+        'If the storyboard count was inferred from the final video duration, treat that count only as keyframe density for the still sheet. Do not force every storyboard cell to last 2 seconds or use uniform slices unless the source explicitly requires equal-duration panels. Cell timing must be driven by the underlying story timeline, important visual keyframes, dialogue/VO pacing, transitions, and readable CTA/end-card holds.',
         'Divide each scene cell into a clean video-frame artwork area plus a clearly associated note/header/footer area. Put Time, scene/frame numbers, Visual/Action, Camera/Motion, Lighting/Style, Dialogue/VO, and Audio/SFX outside the video frame artwork, never overlaid on top of the cinematic frame.',
         'Every cinematic video-frame artwork area must preserve the requested Individual scene-cell/frame aspect ratio. Keep all frame artwork areas locked to the same W:H unless the source explicitly requests mixed ratios; do not make individual stills square or let one or two cells drift to a different crop.',
         'Use concise readable storyboard labels in the non-frame note areas. Do not place long paragraphs of production notes inside every cell.',
@@ -4688,6 +4689,7 @@ function compileStoryboardCountContractSection(project, layout) {
     return [
         'COUNT / GRID CONTRACT:',
         `Required scene count: exactly ${project.scenes.length} numbered storyboard scene slots; do not render fewer slots and do not add extra scene slots.`,
+        'Scene count does not imply equal duration per slot. Use each slot for the next important visual keyframe in the story and preserve any source time ranges, dialogue pacing, transition needs, and readable end-card/CTA holds.',
         `Allocate the full ${project.scenes.length}-slot storyboard grid before drawing details. Fill slots in reading order, left-to-right then top-to-bottom: ${sceneSlots}.`,
         `Each allocated scene slot gets one distinct ${layout.cellAspectRatio} cinematic video-frame rectangle plus its own compact notes outside that rectangle. Do not merge adjacent scenes, combine two beats into one slot, duplicate slots, or place thumbnail/inset panels inside a slot.`,
         `Use the layout preset exactly: ${layout.layoutKind} - ${layout.layoutDescription}. The final sheet should be visibly countable as ${project.scenes.length} numbered scene slots at a glance.`,

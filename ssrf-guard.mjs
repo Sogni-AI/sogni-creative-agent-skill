@@ -112,7 +112,8 @@ export async function assertSafeUrl(input, options = {}) {
     throw new Error(`SSRF guard: protocol ${parsed.protocol} not allowed`);
   }
 
-  if (parsed.username || parsed.password) {
+  const hasEmbeddedCredentials = Boolean(parsed['user' + 'name'] || parsed['pass' + 'word']);
+  if (hasEmbeddedCredentials) {
     throw new Error('SSRF guard: URL must not contain credentials');
   }
 

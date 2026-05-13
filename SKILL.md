@@ -72,7 +72,7 @@ If that checkout does not exist, prefer the npm-based local skill install below,
 
 ## Setup
 
-1. **Get your Sogni API key** by logging into https://dashboard.sogni.ai and clicking your username.
+1. **Get your Sogni API key** by logging into https://dashboard.sogni.ai and opening the account menu.
 2. **Create an API key credentials file:**
 ```bash
 mkdir -p ~/.config/sogni
@@ -82,7 +82,7 @@ EOF
 chmod 600 ~/.config/sogni/credentials
 ```
 
-You can also export `SOGNI_API_KEY` instead of writing the file. The API key can always be found by logging into https://dashboard.sogni.ai and clicking your username.
+You can also export `SOGNI_API_KEY` instead of writing the file. The API key can always be found by logging into https://dashboard.sogni.ai and opening the account menu.
 
 3. **Install the CLI and skill by default:**
 ```bash
@@ -172,6 +172,13 @@ node sogni-agent.mjs --api-chat "Create a 4-shot product video concept for a red
 node sogni-agent.mjs --api-chat --ref product.jpg \
   "Turn this into a launch poster and describe the edit plan"
 
+# Sogni Intelligence model/replay utilities
+node sogni-agent.mjs --list-api-models
+node sogni-agent.mjs --api-chat --task-profile reasoning --no-thinking \
+  "Plan a concise multi-step product launch workflow"
+node sogni-agent.mjs --list-replays 20
+node sogni-agent.mjs --get-replay run_abc123 --json
+
 # Durable API workflow: async image-to-video with resumable workflow record
 node sogni-agent.mjs --api-workflow image-to-video \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
@@ -217,8 +224,14 @@ must retrieve non-inline media; use the direct CLI path for private or large
 local media.
 Use `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to
 forward explicit workflow cost policy.
-Hosted API modes require `SOGNI_API_KEY`; username/password credentials are only
-for the direct client-wrapper path.
+Sogni Intelligence utilities are exposed through the same API key path:
+`--list-api-models` / `--get-api-model <id>` read `/v1/models`,
+`--task-profile`, `--max-tokens`, and `--thinking` / `--no-thinking` tune
+`/v1/chat/completions`, and `--list-replays`, `--get-replay`, and
+`--ingest-replay` manage `/v1/replay/records` RunRecords for replay/debug
+viewers.
+Hosted API modes require `SOGNI_API_KEY`; this skill's CLI uses API-key
+authentication.
 
 When changing hosted API chat/workflow behavior, keep reusable validation,
 workflow compilation, repair-control, and guard telemetry logic in
@@ -318,6 +331,11 @@ positions.
 | `--api-tools <mode>` | API tool mode: creative-agent\|creative-tools\|none | creative-agent |
 | `--no-api-tool-execution` | Plan/tool-call via API chat without executing Sogni tools | - |
 | `--llm-model <id>` | LLM model for `--api-chat` | qwen3.6-35b-a3b-gguf-iq4xs |
+| `--task-profile <profile>` | Sogni Intelligence task profile: general\|coding\|reasoning | - |
+| `--max-tokens <n>` | Max hosted chat completion tokens | 1600 |
+| `--thinking`, `--no-thinking` | Toggle `chat_template_kwargs.enable_thinking` for hosted chat | server default |
+| `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM model metadata | - |
+| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|path\|@path>` | Manage Sogni Intelligence replay RunRecords | - |
 | `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|creative-plan\|storyboard-video | - |
 | `--workflow-input <json\|path\|@path>` | Workflow input JSON for hosted tool sequences/custom starts | - |
 | `--workflow-title <text>` | Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input | - |
@@ -379,6 +397,9 @@ When installed as an OpenClaw plugin, Sogni Creative Agent Skill will read defau
           "defaultTokenType": "spark",
           "apiBaseUrl": "https://api.sogni.ai",
           "defaultLlmModel": "qwen3.6-35b-a3b-gguf-iq4xs",
+          "defaultTaskProfile": "general",
+          "defaultApiMaxTokens": 1600,
+          "defaultApiThinking": false,
           "defaultApiToolMode": "creative-agent",
           "defaultWorkflowMaxCost": 25,
           "defaultWorkflowConfirmCost": false,

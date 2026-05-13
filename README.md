@@ -68,7 +68,7 @@ With this skill, an agent can:
 
 ## Quick Start
 
-1. Get a Sogni API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (click your username) and save it — see [Setup](#setup-sogni-api-key).
+1. Get a Sogni API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu) and save it — see [Setup](#setup-sogni-api-key).
 2. Install the CLI:
 
    ```bash
@@ -147,7 +147,7 @@ The generated `.openclaw-link/` directory is only for OpenClaw; Hermes, Manus, a
 
 #### OpenClaw configuration
 
-When loaded through OpenClaw, this skill reads plugin defaults from OpenClaw config; CLI flags always override them. The supported config schema is defined in [`openclaw.plugin.json`](./openclaw.plugin.json) and includes default models, video workflow models, hosted API defaults (`apiBaseUrl`, `defaultLlmModel`, `defaultApiToolMode`, workflow cost defaults), token type, seed strategy, timeouts, and media paths. If your OpenClaw config lives elsewhere, set `OPENCLAW_CONFIG_PATH`.
+When loaded through OpenClaw, this skill reads plugin defaults from OpenClaw config; CLI flags always override them. The supported config schema is defined in [`openclaw.plugin.json`](./openclaw.plugin.json) and includes default models, video workflow models, hosted API defaults (`apiBaseUrl`, `defaultLlmModel`, `defaultTaskProfile`, `defaultApiMaxTokens`, `defaultApiThinking`, `defaultApiToolMode`, workflow cost defaults), token type, seed strategy, timeouts, and media paths. If your OpenClaw config lives elsewhere, set `OPENCLAW_CONFIG_PATH`.
 
 ### Hermes Agent / Manus / other frameworks
 
@@ -186,7 +186,7 @@ If the checkout is missing, use the npm install path above or explicitly approve
 
 ## Setup (Sogni API key)
 
-1. Get your API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (click your username).
+1. Get your API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu).
 2. Save it to a credentials file:
 
    ```bash
@@ -270,6 +270,11 @@ sogni-agent --api-chat \
 sogni-agent --api-chat --ref product.jpg \
   "Turn this into a launch poster and describe the edit plan"
 
+# Hosted chat controls and model discovery
+sogni-agent --api-chat --task-profile reasoning --no-thinking \
+  "Plan a concise multi-step product launch workflow"
+sogni-agent --list-api-models
+
 # Durable hosted workflow (/v1/creative-agent/workflows)
 sogni-agent --api-workflow image-to-video \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
@@ -287,6 +292,10 @@ sogni-agent --api-workflow creative-plan --workflow-input @plan.json
 # Storyline -> GPT Image 2 storyboard sheet -> Seedance video sequence
 sogni-agent --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
   "Create a 9:16 bakery launch video with a neon street-window reveal"
+
+# Sogni Intelligence replay records
+sogni-agent --list-replays 20
+sogni-agent --get-replay run_abc123 --json
 
 # Local segment + concat with external soundtrack
 sogni-agent --video --workflow v2v --ref-video dance.mp4 \
@@ -330,7 +339,9 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--storyboard-frames <n>` | Beat count for `--api-workflow storyboard-video` |
 | `--video-prompt`, `--negative-prompt`, `--generate-audio`, `--expand-prompt` | Durable image-to-video workflow inputs |
 | `--watch-workflow`, `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>` | Manage durable workflows |
-| `--api-tools <mode>`, `--no-api-tool-execution`, `--llm-model <id>`, `--api-base-url <url>` | Tune hosted API requests |
+| `--api-tools <mode>`, `--no-api-tool-execution`, `--llm-model <id>`, `--task-profile <profile>`, `--max-tokens <n>`, `--thinking` / `--no-thinking`, `--api-base-url <url>` | Tune hosted API requests |
+| `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM models |
+| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|path\|@path>` | Manage Sogni Intelligence replay records |
 | `--persona <name>` | Use a saved persona |
 | `--concat-videos <out> <clips...>` | Stitch clips locally with FFmpeg |
 | `--last`, `--last-image` | Inspect last render / reuse last image as context or video reference |
@@ -489,12 +500,14 @@ Stored at `~/.config/sogni/personality.txt`.
 Hosted API modes require `SOGNI_API_KEY`.
 
 - **`--api-chat`** targets `/v1/chat/completions` with Sogni creative-agent tools — best for text-first natural-language workflows. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|creative-tools|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
+- **Sogni Intelligence controls** include `--task-profile general|coding|reasoning`, `--max-tokens`, and `--thinking` / `--no-thinking`, which forward to `/v1/chat/completions` as `task_profile`, `max_tokens`, and `chat_template_kwargs.enable_thinking`. Use `--list-api-models` or `--get-api-model <id>` to inspect `/v1/models`.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Supported kinds: `image-to-video`, `hosted-tool-sequence`, `creative-plan`, and `storyboard-video`.
 - **`--api-workflow creative-plan`** forwards a shared `CreativeWorkflowPlan` JSON object (`{ title?, steps: [...] }`) to the API as `kind: "creative_plan"`. Compilation, hosted-tool argument validation, and persistence happen in `../sogni-api` through `@sogni/creative-agent`; the public skill does not duplicate that compiler. Use this when you need exact shared-plan behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single GPT Image 2 storyboard sheet, then passes that artifact into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low/medium/high quality for that storyboard sheet.
 - **Media references** from `-c`, `--ref`, `--ref-end`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests. API chat also attaches image refs as vision inputs. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Prefer public HTTPS URLs for durable hosted workflows because the backend must be able to retrieve non-inline media; use the direct CLI path for private or large local media.
 - **Cost controls** use `--workflow-max-cost <n>` to reject workflow starts above a capacity-unit ceiling, and `--confirm-cost` / `--no-confirm-cost` to forward explicit billing confirmation.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, and `--cancel-workflow`. Use `--workflow-input` to provide exact hosted workflow JSON.
+- **Replay records** use `/v1/replay/records`: `--list-replays [limit]`, `--get-replay <runId>`, and `--ingest-replay <json|path|@path>` expose redacted RunRecord storage for Sogni Intelligence replay/debug viewers.
 
 Override the API origin with `--api-base-url`, `SOGNI_API_BASE_URL`, or `SOGNI_REST_ENDPOINT`.
 Hosted API credentials are only sent to `https://api.sogni.ai` by default. Add trusted custom

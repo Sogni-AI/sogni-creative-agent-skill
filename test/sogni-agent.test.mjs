@@ -178,6 +178,60 @@ async function withTestApiServer(fn) {
         }));
         return;
       }
+      if (req.url === '/v1/models' && req.method === 'GET') {
+        res.end(JSON.stringify({
+          object: 'list',
+          data: [
+            { id: 'qwen3.6-35b-a3b-gguf-iq4xs', object: 'model', owned_by: 'sogni' },
+            { id: 'qwen3.6-35b-a3b-gguf-q4km', object: 'model', owned_by: 'sogni' }
+          ]
+        }));
+        return;
+      }
+      if (req.url === '/v1/models/qwen3.6-35b-a3b-gguf-iq4xs' && req.method === 'GET') {
+        res.end(JSON.stringify({
+          id: 'qwen3.6-35b-a3b-gguf-iq4xs',
+          object: 'model',
+          owned_by: 'sogni'
+        }));
+        return;
+      }
+      if (req.url === '/v1/replay/records?limit=7' && req.method === 'GET') {
+        res.end(JSON.stringify({
+          records: [{
+            runId: 'run_test',
+            schemaVersion: 1,
+            userRequest: 'generate a poster',
+            finalResponse: 'done',
+            modelId: 'qwen3.6-35b-a3b-gguf-iq4xs',
+            rounds: 2
+          }]
+        }));
+        return;
+      }
+      if (req.url === '/v1/replay/records/run_test' && req.method === 'GET') {
+        res.end(JSON.stringify({
+          record: {
+            schemaVersion: 1,
+            run_id: 'run_test',
+            user_request: 'generate a poster',
+            rounds: []
+          },
+          createTime: '2026-05-13T00:00:00.000Z'
+        }));
+        return;
+      }
+      if (req.url === '/v1/replay/records' && req.method === 'POST') {
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          runId: parsedBody?.run_id || 'run_ingested',
+          schemaVersion: parsedBody?.schemaVersion || 1,
+          redacted: true,
+          createTime: '2026-05-13T00:00:00.000Z',
+          updateTime: '2026-05-13T00:00:00.000Z'
+        }));
+        return;
+      }
       if (req.url === '/v1/creative-agent/workflows' && req.method === 'POST') {
         res.statusCode = 201;
         res.end(JSON.stringify({
@@ -691,8 +745,6 @@ test('--api-chat posts to /v1/chat/completions with creative-agent tools', async
       '--json',
       'Create a 4-shot product video concept for a red sneaker'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -716,6 +768,75 @@ test('--api-chat posts to /v1/chat/completions with creative-agent tools', async
   });
 });
 
+test('--api-chat forwards Sogni Intelligence chat controls', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--task-profile', 'reasoning',
+      '--max-tokens', '123',
+      '--no-thinking',
+      'Plan a product video'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.body.task_profile, 'reasoning');
+    assert.equal(request.body.max_tokens, 123);
+    assert.deepEqual(request.body.chat_template_kwargs, { enable_thinking: false });
+  });
+});
+
+test('--list-api-models fetches hosted LLM models', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--list-api-models',
+      '--api-base-url', apiBaseUrl,
+      '--json'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.type, 'api-models');
+    assert.equal(payload.models[0].id, 'qwen3.6-35b-a3b-gguf-iq4xs');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/v1/models');
+  });
+});
+
+test('--get-api-model fetches one hosted LLM model descriptor', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--get-api-model', 'qwen3.6-35b-a3b-gguf-iq4xs',
+      '--api-base-url', apiBaseUrl,
+      '--json'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.action, 'get');
+    assert.equal(payload.model.id, 'qwen3.6-35b-a3b-gguf-iq4xs');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/v1/models/qwen3.6-35b-a3b-gguf-iq4xs');
+  });
+});
+
 test('--api-chat rejects loopback api base without explicit unsafe opt-in before sending credentials', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -724,8 +845,6 @@ test('--api-chat rejects loopback api base without explicit unsafe opt-in before
       '--json',
       'Create a product video concept'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key'
     });
 
@@ -744,8 +863,6 @@ test('--api-chat rejects api base URLs containing credentials', () => {
     '--json',
     'Create a product video concept'
   ], {
-    SOGNI_USERNAME: '',
-    SOGNI_PASSWORD: '',
     SOGNI_API_KEY: 'test-api-key'
   });
 
@@ -764,8 +881,6 @@ test('--api-chat forwards image references with server-side tool execution enabl
       '--ref', SCREENSHOT_FIXTURE,
       'edit this image into a poster'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -795,8 +910,6 @@ test('--api-chat forwards audio and video references in API metadata and prompt 
       '--ref-video', 'https://cdn.sogni.ai/source.mp4',
       'make a music video'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -824,8 +937,6 @@ test('--api-chat accepts media-only planning requests for non-image references',
       '--json',
       '--ref-video', 'https://cdn.sogni.ai/source.mp4'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -853,8 +964,6 @@ test('--api-workflow starts durable image-to-video workflow through /v1/creative
       '--duration', '5',
       'A graphite robot sketch on a drafting table'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -878,6 +987,89 @@ test('--api-workflow starts durable image-to-video workflow through /v1/creative
     assert.equal(request.body.input.height, 576);
     assert.equal(request.body.input.duration, 5);
   });
+});
+
+test('--list-replays lists Sogni Intelligence replay records', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--list-replays', '7',
+      '--api-base-url', apiBaseUrl,
+      '--json'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.type, 'api-replay');
+    assert.equal(payload.records[0].runId, 'run_test');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/v1/replay/records?limit=7');
+  });
+});
+
+test('--get-replay fetches one replay RunRecord', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--get-replay', 'run_test',
+      '--api-base-url', apiBaseUrl,
+      '--json'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.record.run_id, 'run_test');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/v1/replay/records/run_test');
+  });
+});
+
+test('--ingest-replay posts a replay RunRecord', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const record = {
+      schemaVersion: 1,
+      run_id: 'run_ingested',
+      user_request: 'generate a poster',
+      rounds: []
+    };
+    const { exitCode, stdout } = await runCliAsync([
+      '--ingest-replay', JSON.stringify(record),
+      '--api-base-url', apiBaseUrl,
+      '--json'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+    assert.equal(payload.result.runId, 'run_ingested');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/v1/replay/records');
+    assert.deepEqual(requests[0].body, record);
+  });
+});
+
+test('--ingest-replay reports structured errors for unreadable input files', () => {
+  const missingPath = join(tmpdir(), `sogni-missing-replay-${Date.now()}.json`);
+  const { exitCode, stdout } = runCli([
+    '--ingest-replay', `@${missingPath}`,
+    '--json'
+  ], {
+    SOGNI_API_KEY: 'test-api-key'
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INVALID_REPLAY_INPUT');
+  assert.match(payload.error, /Unable to read --ingest-replay file/);
 });
 
 test('--api-workflow creative-plan forwards shared plan for API compilation', async () => {
@@ -919,8 +1111,6 @@ test('--api-workflow creative-plan forwards shared plan for API compilation', as
       '--json',
       '--workflow-input', JSON.stringify(plan)
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -958,8 +1148,6 @@ test('--api-workflow forwards CLI media references and cost controls', async () 
       '--confirm-cost',
       'animate this image'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -987,8 +1175,6 @@ test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', as
       '--json',
       'animate this image'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
       OPENCLAW_PLUGIN_CONFIG: JSON.stringify({
@@ -1015,8 +1201,6 @@ test('--api-workflow image-to-video rejects unsupported workflow title flag', ()
     '--workflow-title', 'Launch sketch',
     'A graphite robot sketch on a drafting table'
   ], {
-    SOGNI_USERNAME: '',
-    SOGNI_PASSWORD: '',
     SOGNI_API_KEY: 'test-api-key'
   });
 
@@ -1037,8 +1221,6 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
       '--workflow-idempotency-key', 'idem-storyboard-123',
       'Create a 12 second 9:16 bakery launch video with GPT Image 2 and Seedance.'
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -1101,8 +1283,6 @@ test('--stream-workflow parses hosted workflow SSE frames without wrapper parser
       '--stream-workflow', 'wf_test',
       '--api-base-url', apiBaseUrl
     ], {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
@@ -1302,12 +1482,10 @@ test('LTX 2.3 i2v forwards first frame and audio identity together', () => {
   assert.ok(state.lastVideoProject.positivePrompt.includes('[SPEECH]'));
 });
 
-test('api key auth is accepted when username/password are absent', () => {
+test('api key auth is accepted', () => {
   const { exitCode, state } = runCli(
     ['a cat wearing a hat'],
     {
-      SOGNI_USERNAME: '',
-      SOGNI_PASSWORD: '',
       SOGNI_API_KEY: 'test-api-key'
     }
   );
@@ -1326,13 +1504,11 @@ test('socket model availability events are disabled after connect', () => {
   ]);
 });
 
-test('username/password auth is not accepted without an api key', () => {
+test('missing API key is rejected', () => {
   const { exitCode, stdout } = runCli(
     ['--json', 'a cat wearing a hat'],
     {
       SOGNI_API_KEY: '',
-      SOGNI_USERNAME: 'test-user',
-      SOGNI_PASSWORD: 'test-pass'
     }
   );
   assert.equal(exitCode, 1);
@@ -1341,8 +1517,10 @@ test('username/password auth is not accepted without an api key', () => {
   assert.equal(payload.errorType, 'PERMISSION_REQUIRED');
   assert.equal(payload.errorCategory, 'permission_required');
   assert.equal(payload.retryable, false);
-  assert.match(payload.hint, /SOGNI_API_KEY/);
-  assert.doesNotMatch(payload.hint, /SOGNI_USERNAME|SOGNI_PASSWORD/);
+  assert.equal(
+    payload.hint,
+    'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.'
+  );
 });
 
 test('json error: i2v rejects mismatched explicit size and suggests a compatible 16-multiple aspect', () => {

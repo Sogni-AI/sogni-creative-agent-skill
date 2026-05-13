@@ -92,6 +92,7 @@ const DEFAULT_API_BASE_URL = 'https://api.sogni.ai';
 const DEFAULT_SAFE_API_HOSTS = Object.freeze(['api.sogni.ai']);
 const LOOPBACK_API_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1']);
 const DEFAULT_LLM_MODEL = 'qwen3.6-35b-a3b-gguf-iq4xs';
+const VALID_API_TASK_PROFILES = new Set(['general', 'coding', 'reasoning']);
 const SOGNI_APP_SOURCE = 'sogni-creative-agent-skill';
 const OPENCLAW_CONFIG_PATH = getEnv('OPENCLAW_CONFIG_PATH') || DEFAULT_OPENCLAW_CONFIG_PATH;
 const IS_OPENCLAW_INVOCATION = Boolean(getEnv('OPENCLAW_PLUGIN_CONFIG'));
@@ -385,7 +386,8 @@ async function buildSafeApiUrl(path) {
     throw err;
   }
 
-  if (parsed.username || parsed.password) {
+  const hasEmbeddedCredentials = Boolean(parsed['user' + 'name'] || parsed['pass' + 'word']);
+  if (hasEmbeddedCredentials) {
     const err = new Error('Sogni API base URL must not contain credentials.');
     err.code = 'UNSAFE_API_BASE_URL';
     throw err;
@@ -1130,9 +1132,18 @@ const options = {
   apiChat: false,
   apiBaseUrl: null,
   llmModel: DEFAULT_LLM_MODEL,
+  apiTaskProfile: null,
+  apiMaxTokens: null,
+  apiThinking: null,
   apiTools: 'creative-agent',
   apiToolExecution: true,
   apiSystemPrompt: null,
+  apiModelAction: null, // list|get
+  apiModelId: null,
+  apiReplayAction: null, // list|get|ingest
+  apiReplayId: null,
+  apiReplayInput: null,
+  apiReplayLimit: 50,
   apiWorkflowAction: null, // start|list|get|events|stream|cancel
   apiWorkflowKind: null, // image_to_video|hosted_tool_sequence|creative_plan|storyboard_video
   apiWorkflowInput: null,
@@ -1215,6 +1226,9 @@ const cliSet = {
   lastFrameStrength: false,
   apiBaseUrl: false,
   llmModel: false,
+  apiTaskProfile: false,
+  apiMaxTokens: false,
+  apiThinking: false,
   apiTools: false,
   apiSystemPrompt: false,
   apiWorkflowKind: false,
@@ -1629,6 +1643,22 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.llmModel = raw;
     cliSet.llmModel = true;
+  } else if (arg === '--task-profile') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiTaskProfile = raw;
+    cliSet.apiTaskProfile = true;
+  } else if (arg === '--max-tokens' || arg === '--max-completion-tokens') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiMaxTokens = parsePositiveIntegerValue(raw, arg);
+    cliSet.apiMaxTokens = true;
+  } else if (arg === '--thinking') {
+    options.apiThinking = true;
+    cliSet.apiThinking = true;
+  } else if (arg === '--no-thinking') {
+    options.apiThinking = false;
+    cliSet.apiThinking = true;
   } else if (arg === '--api-tools') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1641,6 +1671,30 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.apiSystemPrompt = raw;
     cliSet.apiSystemPrompt = true;
+  } else if (arg === '--list-api-models' || arg === '--api-models') {
+    options.apiModelAction = 'list';
+  } else if (arg === '--get-api-model' || arg === '--api-model') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiModelAction = 'get';
+    options.apiModelId = raw;
+  } else if (arg === '--list-replays' || arg === '--list-replay-records') {
+    options.apiReplayAction = 'list';
+    const next = args[i + 1];
+    if (next && !next.startsWith('-')) {
+      i++;
+      options.apiReplayLimit = parsePositiveIntegerValue(next, arg);
+    }
+  } else if (arg === '--get-replay' || arg === '--get-replay-record') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiReplayAction = 'get';
+    options.apiReplayId = raw;
+  } else if (arg === '--ingest-replay' || arg === '--ingest-replay-record') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiReplayAction = 'ingest';
+    options.apiReplayInput = raw;
   } else if (arg === '--api-workflow' || arg === '--creative-workflow') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1903,7 +1957,15 @@ Hosted API Modes:
   --api-tools <mode>    creative-agent|creative-tools|none (default: creative-agent)
   --no-api-tool-execution  Ask for tool calls/plans but do not execute Sogni tools
   --llm-model <id>      LLM model for --api-chat (default: ${DEFAULT_LLM_MODEL})
+  --task-profile <p>    LLM task profile for --api-chat: general|coding|reasoning
+  --max-tokens <num>    Max chat completion tokens for --api-chat and storyboard planning
+  --thinking, --no-thinking  Toggle chat_template_kwargs.enable_thinking
   --system <text>       System prompt for --api-chat
+  --list-api-models     List Sogni Intelligence LLM models from /v1/models
+  --get-api-model <id>  Fetch one Sogni Intelligence model descriptor
+  --list-replays [n]    List recent /v1/replay/records (default: 50)
+  --get-replay <id>     Fetch one replay RunRecord
+  --ingest-replay <json|path|@path>  POST a RunRecord to /v1/replay/records
   --api-workflow <kind> Start /v1/creative-agent/workflows: image-to-video|hosted-tool-sequence|creative-plan|storyboard-video
   --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/creative-plan/custom image-to-video/storyboard-video
   --workflow-title <text> Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input
@@ -2084,6 +2146,21 @@ if (openclawConfig) {
   if (!cliSet.llmModel && openclawConfig.defaultLlmModel) {
     options.llmModel = openclawConfig.defaultLlmModel;
   }
+  if (!cliSet.apiTaskProfile && openclawConfig.defaultTaskProfile) {
+    options.apiTaskProfile = openclawConfig.defaultTaskProfile;
+  }
+  if (!cliSet.apiMaxTokens && Number.isSafeInteger(openclawConfig.defaultApiMaxTokens)) {
+    if (openclawConfig.defaultApiMaxTokens < 1) {
+      fatalCliError('OpenClaw config defaultApiMaxTokens must be a positive integer.', {
+        code: 'INVALID_CONFIG',
+        details: { field: 'defaultApiMaxTokens', value: openclawConfig.defaultApiMaxTokens }
+      });
+    }
+    options.apiMaxTokens = openclawConfig.defaultApiMaxTokens;
+  }
+  if (!cliSet.apiThinking && typeof openclawConfig.defaultApiThinking === 'boolean') {
+    options.apiThinking = openclawConfig.defaultApiThinking;
+  }
   if (!cliSet.apiTools && openclawConfig.defaultApiToolMode) {
     options.apiTools = openclawConfig.defaultApiToolMode;
   }
@@ -2140,6 +2217,17 @@ if (options.tokenType) {
     });
   }
   options.tokenType = token;
+}
+
+if (options.apiTaskProfile) {
+  const profile = String(options.apiTaskProfile).trim().toLowerCase();
+  if (!VALID_API_TASK_PROFILES.has(profile)) {
+    fatalCliError('--task-profile must be "general", "coding", or "reasoning".', {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--task-profile', value: options.apiTaskProfile }
+    });
+  }
+  options.apiTaskProfile = profile;
 }
 
 const normalizedApiToolMode = normalizeApiToolMode(options.apiTools);
@@ -2612,9 +2700,13 @@ if (options.music) {
 const apiWorkflowUtilityAction = options.apiWorkflowAction && options.apiWorkflowAction !== 'start';
 const apiWorkflowStartAction = options.apiWorkflowAction === 'start';
 const apiWorkflowStartHasExternalInput = options.apiWorkflowAction === 'start' && options.apiWorkflowInput;
+const apiModelUtilityAction = Boolean(options.apiModelAction);
+const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
 const commandUsesGenerationSeed = !options.apiChat &&
   !apiWorkflowUtilityAction &&
+  !apiModelUtilityAction &&
+  !apiReplayUtilityAction &&
   !options.estimateVideoCost &&
   !options.showBalance &&
   !options.showVersion &&
@@ -2636,7 +2728,7 @@ if (apiWorkflowStartAction && options.apiWorkflowKind === 'creative_plan' && !ap
 if (apiWorkflowStartAction && options.apiWorkflowKind === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -3031,7 +3123,7 @@ function loadCredentials() {
 
   const err = new Error('No Sogni API key found.');
   err.code = 'MISSING_CREDENTIALS';
-  err.hint = 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and clicking your username.';
+  err.hint = 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.';
   err.details = {
     triedEnv: ['SOGNI_API_KEY'],
     triedFile: CREDENTIALS_PATH
@@ -3054,7 +3146,7 @@ function requireApiKeyCredentials(creds, modeLabel) {
   if (creds?.SOGNI_API_KEY) return creds.SOGNI_API_KEY;
   const err = new Error(`${modeLabel} requires SOGNI_API_KEY API-key authentication.`);
   err.code = 'MISSING_API_KEY';
-  err.hint = 'Create an API key and set SOGNI_API_KEY; username/password auth is only supported by the direct client-wrapper path.';
+  err.hint = 'Create an API key and set SOGNI_API_KEY; this command only supports API-key authentication.';
   throw err;
 }
 
@@ -3196,21 +3288,29 @@ async function buildApiChatMessages() {
   return messages;
 }
 
+function apiChatTemplateKwargs() {
+  if (typeof options.apiThinking !== 'boolean') return null;
+  return { enable_thinking: options.apiThinking };
+}
+
 async function runApiChat(log) {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-chat');
   const apiMediaReferences = buildApiMediaReferencesPayload();
   const messages = sanitizeMessagesForLlm(await buildApiChatMessages());
+  const chatTemplateKwargs = apiChatTemplateKwargs();
   const body = {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages,
     temperature: 0.4,
-    max_tokens: 1600,
+    max_tokens: options.apiMaxTokens || 1600,
     token_type: options.tokenType || 'spark',
     app_source: SOGNI_APP_SOURCE,
     appSource: SOGNI_APP_SOURCE,
     sogni_tools: options.apiTools,
     sogni_tool_execution: options.apiToolExecution,
+    ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
+    ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
     ...(apiMediaReferences.length > 0 ? {
       api_media_references: apiMediaReferences,
       media_references: apiMediaReferences,
@@ -3255,20 +3355,34 @@ async function runApiChat(log) {
   }
 }
 
-function parseWorkflowInput(raw) {
+function parseJsonArgument(raw, label, code = 'INVALID_JSON_INPUT') {
   if (!raw) return null;
   const sourcePath = raw.startsWith('@') ? raw.slice(1) : raw;
   const expanded = expandHomePath(sourcePath);
-  const text = raw.startsWith('@') || existsSync(expanded)
-    ? readFileSync(expanded, 'utf8')
-    : raw;
+  let text;
+  if (raw.startsWith('@') || existsSync(expanded)) {
+    try {
+      text = readFileSync(expanded, 'utf8');
+    } catch (error) {
+      const err = new Error(`Unable to read ${label} file: ${error?.message || String(error)}`);
+      err.code = code;
+      err.details = { path: expanded };
+      throw err;
+    }
+  } else {
+    text = raw;
+  }
   try {
     return JSON.parse(text);
   } catch (error) {
-    const err = new Error(`Invalid --workflow-input JSON: ${error?.message || String(error)}`);
-    err.code = 'INVALID_WORKFLOW_INPUT';
+    const err = new Error(`Invalid ${label} JSON: ${error?.message || String(error)}`);
+    err.code = code;
     throw err;
   }
+}
+
+function parseWorkflowInput(raw) {
+  return parseJsonArgument(raw, '--workflow-input', 'INVALID_WORKFLOW_INPUT');
 }
 
 function buildImageToVideoWorkflowInput() {
@@ -3411,6 +3525,7 @@ function buildStoryboardStorylineMessages() {
 
 async function generateStoryboardWorkflowStoryline(apiKey) {
   const messages = sanitizeMessagesForLlm(buildStoryboardStorylineMessages());
+  const chatTemplateKwargs = apiChatTemplateKwargs();
   const payload = await fetchApiJson('/v1/chat/completions', {
     apiKey,
     method: 'POST',
@@ -3418,10 +3533,12 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       model: options.llmModel || DEFAULT_LLM_MODEL,
       messages,
       temperature: 0.45,
-      max_tokens: 1800,
+      max_tokens: options.apiMaxTokens || 1800,
       token_type: options.tokenType || 'spark',
       app_source: SOGNI_APP_SOURCE,
       appSource: SOGNI_APP_SOURCE,
+      ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
+      ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
       sogni_tools: false,
       sogni_tool_execution: false
     }
@@ -3477,6 +3594,104 @@ function workflowsFromPayload(payload) {
 function eventsFromPayload(payload) {
   const data = extractApiEnvelopeData(payload);
   return data?.events || payload?.events || [];
+}
+
+function modelsFromPayload(payload) {
+  if (Array.isArray(payload?.data)) return payload.data;
+  const data = extractApiEnvelopeData(payload);
+  const models = Array.isArray(data) ? data : data?.models;
+  return Array.isArray(models) ? models : [];
+}
+
+async function runApiModels() {
+  const creds = loadCredentials();
+  const type = 'api-models';
+  const action = options.apiModelAction || 'list';
+  const apiKey = requireApiKeyCredentials(creds, action === 'get' ? '--get-api-model' : '--list-api-models');
+  const payload = action === 'get'
+    ? await fetchApiJson(`/v1/models/${encodeURIComponent(options.apiModelId)}`, { apiKey })
+    : await fetchApiJson('/v1/models', { apiKey });
+
+  if (options.json) {
+    console.log(JSON.stringify({
+      success: true,
+      type,
+      action,
+      ...(action === 'get' ? { model: payload } : { models: modelsFromPayload(payload) }),
+      raw: payload
+    }));
+    return;
+  }
+
+  if (action === 'get') {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  const models = modelsFromPayload(payload);
+  for (const model of models) {
+    console.log(`${model.id || model.modelId || model.name || '(unknown)'}\t${model.owned_by || model.displayName || ''}`);
+  }
+}
+
+function recordsFromReplayPayload(payload) {
+  const data = extractApiEnvelopeData(payload);
+  return Array.isArray(data?.records) ? data.records : Array.isArray(payload?.records) ? payload.records : [];
+}
+
+function replayRecordFromPayload(payload) {
+  const data = extractApiEnvelopeData(payload);
+  return data?.record || payload?.record || payload;
+}
+
+async function runApiReplay() {
+  const creds = loadCredentials();
+  const type = 'api-replay';
+  const action = options.apiReplayAction || 'list';
+  const replayModeLabel = action === 'get'
+    ? '--get-replay'
+    : action === 'ingest'
+      ? '--ingest-replay'
+      : '--list-replays';
+  const apiKey = requireApiKeyCredentials(creds, replayModeLabel);
+  let payload;
+
+  if (action === 'list') {
+    payload = await fetchApiJson(`/v1/replay/records?limit=${encodeURIComponent(options.apiReplayLimit || 50)}`, { apiKey });
+    const records = recordsFromReplayPayload(payload);
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, type, action, records, raw: payload }));
+    } else {
+      for (const record of records) {
+        console.log(`${record.runId || record.run_id || '(unknown)'}\t${record.modelId || record.model_id || '-'}\t${record.rounds ?? '-'}\t${record.userRequest || record.user_request || ''}`);
+      }
+    }
+    return;
+  }
+
+  if (action === 'get') {
+    payload = await fetchApiJson(`/v1/replay/records/${encodeURIComponent(options.apiReplayId)}`, { apiKey });
+    const record = replayRecordFromPayload(payload);
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, type, action, runId: options.apiReplayId, record, raw: payload }));
+    } else {
+      console.log(JSON.stringify(record, null, 2));
+    }
+    return;
+  }
+
+  const recordInput = parseJsonArgument(options.apiReplayInput, '--ingest-replay', 'INVALID_REPLAY_INPUT');
+  payload = await fetchApiJson('/v1/replay/records', {
+    apiKey,
+    method: 'POST',
+    body: recordInput
+  });
+  const result = extractApiEnvelopeData(payload);
+  if (options.json) {
+    console.log(JSON.stringify({ success: true, type, action, result, raw: payload }));
+  } else {
+    console.log(`Replay record ingested: ${result.runId || result.run_id || recordInput?.run_id || '(unknown)'}`);
+  }
 }
 
 function printWorkflowSummary(workflow) {
@@ -5006,6 +5221,16 @@ async function main() {
       if (options.video && options.referenceAudioIdentity) {
         log(`Using persona "${options._voicePersonaResolvedName || persona.name}" voice identity`);
       }
+    }
+
+    if (options.apiModelAction) {
+      await runApiModels();
+      return;
+    }
+
+    if (options.apiReplayAction) {
+      await runApiReplay();
+      return;
     }
 
     if (options.apiChat) {

@@ -73,6 +73,20 @@
         "default": "qwen3.6-35b-a3b-gguf-iq4xs",
         "description": "Default LLM model for --api-chat."
       },
+      "defaultTaskProfile": {
+        "type": "string",
+        "enum": ["general", "coding", "reasoning"],
+        "description": "Optional default Sogni Intelligence task profile forwarded as task_profile for --api-chat."
+      },
+      "defaultApiMaxTokens": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Optional default max_tokens value for --api-chat and storyboard planning chat calls."
+      },
+      "defaultApiThinking": {
+        "type": "boolean",
+        "description": "Optional default chat_template_kwargs.enable_thinking value for hosted chat requests."
+      },
       "defaultApiToolMode": {
         "type": "string",
         "enum": ["creative-agent", "creative-tools", "none"],

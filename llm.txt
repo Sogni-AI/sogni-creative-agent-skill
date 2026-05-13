@@ -50,7 +50,7 @@ ask before cloning.
 Once-only setup, used by every integration above:
 
 The API key can always be found by logging into https://dashboard.sogni.ai and
-clicking your username.
+opening the account menu.
 
 ```bash
 mkdir -p ~/.config/sogni
@@ -67,6 +67,10 @@ for `/v1/chat/completions` with rich creative-agent tools and sanitized
 message forwarding, or
 `sogni-agent --api-workflow image-to-video --video-prompt "motion" "image prompt"`
 for durable `/v1/creative-agent/workflows` execution.
+Sogni Intelligence utilities are available with `--list-api-models`,
+`--get-api-model <id>`, `--task-profile general|coding|reasoning`,
+`--max-tokens <n>`, `--thinking` / `--no-thinking`, `--list-replays [n]`,
+`--get-replay <id>`, and `--ingest-replay <json|path|@path>`.
 Hosted API modes forward media references from `-c`, `--ref`, `--ref-end`,
 `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
 `media_references`; API chat also attaches image refs as vision inputs. Prefer

@@ -227,8 +227,7 @@ export function isToolResultErr(result) {
  * NOTE: The rich adapter `compile()` logic (Seedance / GPT Image 2 /
  * LTX-2.3 / WAN) is not inlined into this bundle yet. Pull it in from
  * `@sogni/creative-agent/storyboard` when a downstream consumer needs
- * `compileForModel()` to do real prompt compilation rather than the
- * registry stub above.
+ * `compileForModel()` to do real prompt compilation.
  */
 export function composeAdapterPromptGuidance() {
     // The hand-curated bundle currently exposes adapter stubs only, so the
@@ -289,7 +288,8 @@ export function compileForModel(modelId) {
     const adapter = storyboardAdapterRegistry.getAdapter(modelId);
     if (!adapter)
         throw new Error(`No storyboard adapter registered for model_id "${modelId}".`);
-    return { adapterModelId: adapter.modelId };
+    throw new Error(`Storyboard adapter "${adapter.modelId}" is not bundled in the public skill runtime. `
+        + 'Import compileForModel from @sogni/creative-agent/storyboard or submit a hosted storyboard workflow instead.');
 }
 const PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF = formatModelRef('seedance', 1, 'image');
 export const SEEDANCE_STORYBOARD_REFERENCE_PROMPT = `Create a full-screen cinematic video from the storyboard in ${PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF}. Treat ${PUBLIC_SEEDANCE_PRIMARY_IMAGE_REF} as the controlling source for shot order and intent, and as a source layout reference: use the thumbnails, timing, Dialogue/VO, Audio/SFX, timecodes, camera/motion notes, transitions, and scene order as instructions, not as a visual board to reproduce. Do not display the storyboard grid, borders, caption bars, storyboard title/footer text, panel numbers, section labels, slide titles, headings, or transcribed narration. Convert the ordered thumbnails into full-screen chronological beats; do not reuse only one or two motifs while skipping panels. When the board has panel titles, captions, section numbers, slide titles, or headings but no formal Dialogue/VO labels, treat those labels as short audio-only narration/voiceover or key-message beats in order unless they are clearly visual-only metadata. Voice each label as its own brief phrase with a pause; do not concatenate labels into run-on sentences and do not speak panel numbers. Show storyboard labels as visible text only when the user explicitly asks for visible text, subtitles, a title card, lower third, signage, or CTA. Preserve the story spine, character/product/reference continuity, and cause-and-effect progression between beats. Treat transitions as motion instructions, not unrelated hard cuts unless the storyboard explicitly asks for hard cuts. Use brand color, lighting, product imagery, and composition instead of invented typography. Keep visible text limited to exact copy the user or storyboard explicitly marks as on-screen text, CTA, signage, or end-card text. Use a music/SFX arc that follows the storyboard audio notes and lands the final brand/CTA hit. Keep unrelated UI, extra logos, microtext, subtitles, and extra scenes out of the frame.`;

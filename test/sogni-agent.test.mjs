@@ -866,6 +866,7 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
       '--quality', 'fast',
       '--duration', '12',
       '--workflow-title', 'Neon bakery storyboard',
+      '--workflow-idempotency-key', 'idem-storyboard-123',
       'Create a 12 second 9:16 bakery launch video with GPT Image 2 and Seedance.'
     ], {
       SOGNI_USERNAME: '',
@@ -893,7 +894,9 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.match(requests[0].body.messages[0].content, /SCENE NN - Title block/);
     assert.match(requests[0].body.messages[0].content, /DIALOGUE\/VO: \[no dialogue\]/);
     assert.equal(requests[1].url, '/v1/creative-agent/workflows');
+    assert.equal(requests[1].headers['idempotency-key'], 'idem-storyboard-123');
     assert.equal(requests[1].body.kind, 'hosted_tool_sequence');
+    assert.equal(requests[1].body.idempotency_key, 'idem-storyboard-123');
     assert.equal(requests[1].body.input.title, 'Neon bakery storyboard');
 
     const [imageStep, videoStep] = requests[1].body.input.steps;

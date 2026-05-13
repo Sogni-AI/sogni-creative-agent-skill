@@ -1121,6 +1121,7 @@ const options = {
   apiWorkflowKind: null, // image_to_video|hosted_tool_sequence
   apiWorkflowInput: null,
   apiWorkflowTitle: null,
+  apiWorkflowIdempotencyKey: null,
   apiWorkflowId: null,
   apiWorkflowWatch: false,
   apiVideoPrompt: null,
@@ -1201,6 +1202,7 @@ const cliSet = {
   apiWorkflowKind: false,
   apiWorkflowInput: false,
   apiWorkflowTitle: false,
+  apiWorkflowIdempotencyKey: false,
   apiVideoPrompt: false,
   apiNegativePrompt: false,
   apiGenerateAudio: false,
@@ -1635,6 +1637,11 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.apiWorkflowTitle = raw;
     cliSet.apiWorkflowTitle = true;
+  } else if (arg === '--workflow-idempotency-key' || arg === '--idempotency-key') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.apiWorkflowIdempotencyKey = raw;
+    cliSet.apiWorkflowIdempotencyKey = true;
   } else if (arg === '--storyboard-frames') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1869,6 +1876,7 @@ Hosted API Modes:
   --api-workflow <kind> Start /v1/creative-agent/workflows: image-to-video|hosted-tool-sequence|storyboard-video
   --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/custom image-to-video/storyboard-video
   --workflow-title <text> Title for hosted-tool-sequence or storyboard-video workflow input
+  --workflow-idempotency-key <key> Reuse safely when retrying a workflow start request
   --storyboard-frames <n> Frame/beat count for --api-workflow storyboard-video
   --video-prompt <text> Motion prompt for --api-workflow image-to-video
   --negative-prompt <text> Negative prompt for --api-workflow image-to-video
@@ -3584,9 +3592,13 @@ async function runApiWorkflow() {
   payload = await fetchApiJson('/v1/creative-agent/workflows', {
     apiKey,
     method: 'POST',
+    headers: options.apiWorkflowIdempotencyKey
+      ? { 'Idempotency-Key': options.apiWorkflowIdempotencyKey }
+      : {},
     body: {
       kind,
       input,
+      ...(options.apiWorkflowIdempotencyKey ? { idempotency_key: options.apiWorkflowIdempotencyKey } : {}),
       token_type: tokenType,
       app_source: SOGNI_APP_SOURCE,
       appSource: SOGNI_APP_SOURCE

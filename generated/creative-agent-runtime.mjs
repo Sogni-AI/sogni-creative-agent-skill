@@ -3963,23 +3963,14 @@ function applyStoryboardScenePlanningContract(scene, planningContract) {
         metadataLabels,
     };
 }
-function buildFallbackScenes(frameCount, durationSec, sourceText) {
-    const sceneDuration = durationSec && frameCount > 0
-        ? Math.round((durationSec / frameCount) * 100) / 100
-        : null;
+function buildFallbackScenes(frameCount, _durationSec, sourceText) {
     return Array.from({ length: frameCount }, (_, index) => {
-        const startSec = sceneDuration !== null ? Math.round(index * sceneDuration * 100) / 100 : null;
-        const endSec = sceneDuration !== null
-            ? index === frameCount - 1 && durationSec !== null
-                ? durationSec
-                : Math.round(((index + 1) * sceneDuration) * 100) / 100
-            : null;
         return {
             id: `scene_${String(index + 1).padStart(2, '0')}`,
             title: `Frame ${String(index + 1).padStart(2, '0')}`,
-            startSec,
-            endSec,
-            durationSec: startSec !== null && endSec !== null ? Math.round((endSec - startSec) * 100) / 100 : null,
+            startSec: null,
+            endSec: null,
+            durationSec: null,
             purpose: index === 0
                 ? 'Establish the hook and the first clear story beat from the source brief.'
                 : 'Advance the same story spine with a distinct sequential beat.',
@@ -4419,24 +4410,9 @@ export function buildStoryboardProject(options) {
         : assistantDraftUndercounted || assistantApprovedDraftUndercounted
             ? []
             : sourceSections;
-    const sceneCountForTiming = sections.length > 0 ? sections.length : options.frameCount;
-    const equalDuration = durationSec && sceneCountForTiming > 0
-        ? Math.round((durationSec / sceneCountForTiming) * 100) / 100
-        : null;
     const parsedScenes = sections.length > 0
-        ? sections.map((section, index) => {
-            const fallbackTiming = equalDuration !== null
-                ? {
-                    startSec: Math.round(index * equalDuration * 100) / 100,
-                    endSec: index === sceneCountForTiming - 1 && durationSec !== null
-                        ? durationSec
-                        : Math.round((index + 1) * equalDuration * 100) / 100,
-                    durationSec: index === sceneCountForTiming - 1 && durationSec !== null
-                        ? Math.round((durationSec - index * equalDuration) * 100) / 100
-                        : equalDuration,
-                }
-                : null;
-            return buildSceneFromSection(section, references, fallbackTiming, storyboardScenePlanningContractForIndex(options.planningContract, section.number));
+        ? sections.map((section) => {
+            return buildSceneFromSection(section, references, null, storyboardScenePlanningContractForIndex(options.planningContract, section.number));
         })
         : buildFallbackScenes(options.frameCount, durationSec, sourceText)
             .map((scene, index) => applyStoryboardScenePlanningContract(scene, storyboardScenePlanningContractForIndex(options.planningContract, index + 1)));
@@ -4772,7 +4748,9 @@ function compileStoryboardScenesSection(project) {
     for (const scene of project.scenes) {
         const timing = scene.startSec !== null && scene.endSec !== null
             ? `${formatStoryboardSeconds(scene.startSec)}-${formatStoryboardSeconds(scene.endSec)}`
-            : 'timing unspecified';
+            : project.durationSec !== null
+                ? `timing flexible within ${project.durationSec} seconds total; set from story/dialogue pacing, not equal-duration slots`
+                : 'timing flexible; set from story/dialogue pacing, not equal-duration slots';
         lines.push(`${scene.id.toUpperCase()} - ${scene.title} - ${timing}`);
         if (scene.purpose)
             lines.push(`Scene purpose: ${scene.purpose}`);

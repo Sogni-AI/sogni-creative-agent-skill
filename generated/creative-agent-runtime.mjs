@@ -4,7 +4,229 @@
 function isLtxWorkflow(workflow) {
     return workflow === 't2v' || workflow === 'i2v' || workflow === 'ia2v' || workflow === 'a2v' || workflow === 'v2v';
 }
-export const SKILL_RUNTIME_VERSION = '2026-05-12.1';
+export const SKILL_RUNTIME_VERSION = '2026-05-13.1';
+function skillErrorMessage(error) {
+    if (!error)
+        return 'Unknown error';
+    if (error instanceof Error)
+        return error.message || 'Unknown error';
+    if (typeof error === 'string')
+        return error;
+    if (typeof error === 'object' && error !== null) {
+        const record = error;
+        if (typeof record.message === 'string')
+            return record.message;
+        if (typeof record.error === 'string')
+            return record.error;
+    }
+    return String(error);
+}
+function skillErrorCode(error) {
+    if (typeof error !== 'object' || error === null)
+        return undefined;
+    const record = error;
+    const code = record.code ?? record.errorCode ?? record.status ?? record.statusCode;
+    if (typeof code === 'string' || typeof code === 'number')
+        return code;
+    return undefined;
+}
+function codeEquals(code, expected) {
+    if (code === undefined)
+        return false;
+    return String(code).toLowerCase() === String(expected).toLowerCase();
+}
+/**
+ * Map public skill / CLI failures onto the canonical `ToolErrorCode`
+ * taxonomy used by the shared creative-agent runtime. This intentionally
+ * accepts only broad producer-owned fields (`message`, `error`, `code`,
+ * `errorCode`, HTTP status) and otherwise keeps unknown payloads opaque.
+ */
+export function classifySkillError(error) {
+    const message = skillErrorMessage(error);
+    const lower = message.toLowerCase();
+    const code = skillErrorCode(error);
+    if (codeEquals(code, 4024)
+        || codeEquals(code, 'INSUFFICIENT_BALANCE')
+        || lower.includes('insufficient balance')
+        || lower.includes('insufficient credits')
+        || lower.includes('insufficient_credits')) {
+        return { error_type: 'COST_LIMIT_EXCEEDED', category: 'insufficient_credits', message, retryable: true };
+    }
+    if (codeEquals(code, 'USER_CANCELLED')
+        || codeEquals(code, 'CANCELLED')
+        || codeEquals(code, 'ABORT_ERR')
+        || lower.includes('cancelled')
+        || lower.includes('canceled')
+        || lower.includes('aborted')) {
+        return { error_type: 'USER_CANCELLED', category: 'cancelled', message, retryable: false };
+    }
+    if (codeEquals(code, 408)
+        || codeEquals(code, 'ETIMEDOUT')
+        || lower.includes('timed out')
+        || lower.includes('timeout')
+        || lower.includes('no events received')
+        || lower.includes('no activity')
+        || lower.includes('inactivity')) {
+        return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message, retryable: true };
+    }
+    if (codeEquals(code, 401)
+        || codeEquals(code, 403)
+        || codeEquals(code, 'MISSING_CREDENTIALS')
+        || codeEquals(code, 'UNSAFE_API_BASE_URL')
+        || lower.includes('api key')
+        || lower.includes('credentials')
+        || lower.includes('permission')
+        || lower.includes('unauthorized')
+        || lower.includes('forbidden')) {
+        return { error_type: 'PERMISSION_REQUIRED', category: 'permission_required', message, retryable: false };
+    }
+    if (codeEquals(code, 'MODEL_UNAVAILABLE')
+        || lower.includes('model unavailable')
+        || lower.includes('model not available')
+        || lower.includes('no worker')
+        || lower.includes('no gpu worker')) {
+        return { error_type: 'MODEL_UNAVAILABLE', category: 'model_unavailable', message, retryable: true };
+    }
+    if (codeEquals(code, 'ASSET_NOT_FOUND')
+        || codeEquals(code, 'FILE_NOT_FOUND')
+        || lower.includes('file not found')
+        || lower.includes('asset not found')
+        || lower.includes('missing asset')) {
+        return { error_type: 'ASSET_NOT_FOUND', category: 'asset_not_found', message, retryable: false };
+    }
+    if (codeEquals(code, 'WORKFLOW_VALIDATION_FAILED')
+        || codeEquals(code, 'INVALID_WORKFLOW_INPUT')
+        || lower.includes('workflow validation')
+        || lower.includes('invalid workflow')) {
+        return { error_type: 'WORKFLOW_VALIDATION_FAILED', category: 'workflow_validation', message, retryable: false };
+    }
+    if (codeEquals(code, 'USER_INPUT_INCOMPLETE')
+        || codeEquals(code, 'MISSING_WORKFLOW_INPUT')
+        || lower.includes('requires a prompt')
+        || lower.includes('requires --')
+        || lower.includes('missing required input')) {
+        return { error_type: 'USER_INPUT_INCOMPLETE', category: 'user_input_incomplete', message, retryable: false };
+    }
+    if (codeEquals(code, 'PARAMETER_INVALID')
+        || codeEquals(code, 'INVALID_ARGUMENT')
+        || codeEquals(code, 'INVALID_VIDEO_SIZE')
+        || codeEquals(code, 'INVALID_PATH')
+        || lower.includes('parse')
+        || lower.includes('malformed')
+        || lower.includes('missing required')
+        || lower.includes('must be')
+        || lower.includes('invalid ')) {
+        return { error_type: 'PARAMETER_INVALID', category: 'schema_validation', message, retryable: false };
+    }
+    if (codeEquals(code, 'SAFETY_REJECTED')
+        || lower.includes('content policy')
+        || lower.includes('sensitive content')
+        || lower.includes('sensitivecontent')
+        || lower.includes('nsfw')
+        || lower.includes('refused')
+        || lower.includes('not appropriate')
+        || lower.includes('safety')) {
+        return { error_type: 'SAFETY_REJECTED', category: 'content_refused', message, retryable: false };
+    }
+    if (codeEquals(code, 502)
+        || codeEquals(code, 503)
+        || codeEquals(code, 504)
+        || codeEquals(code, 'ECONNRESET')
+        || codeEquals(code, 'ECONNREFUSED')
+        || lower.includes('network')
+        || lower.includes('failed to fetch')
+        || lower.includes('websocket')
+        || lower.includes('econnreset')
+        || lower.includes('econnrefused')
+        || lower.includes('socket hang up')
+        || lower.includes('server restarting')
+        || lower.includes('worker disconnected')) {
+        return { error_type: 'GPU_WORKER_FAILED', category: 'transient_failure', message, retryable: true };
+    }
+    return { error_type: 'UNKNOWN_ERROR', category: 'permanent_failure', message, retryable: false };
+}
+const TOOL_RESULT_BEGIN = '[[TOOL_RESULT_BEGIN]]';
+const TOOL_RESULT_END = '[[TOOL_RESULT_END]]';
+const HARD_STRIP_PATTERNS = [
+    /<\|im_start\|>/gi,
+    /<\|im_end\|>/gi,
+    /<\|user\|>/gi,
+    /<\|system\|>/gi,
+    /<\|assistant\|>/gi,
+    /<\|tool\|>/gi,
+    /<\|tool_call\|>/gi,
+    /<\|begin\u2581of\u2581sentence\|>/gi,
+    /<\|end\u2581of\u2581sentence\|>/gi,
+    /\[INST\]/gi,
+    /\[\/INST\]/gi,
+    /<<SYS>>/gi,
+    /<<\/SYS>>/gi,
+    /<system>[\s\S]*?<\/system>/gi,
+    /<tool_call>[\s\S]*?<\/tool_call>/gi,
+    /<\/?(?:user|assistant|tool)>/gi,
+];
+const SUSPICIOUS_PHRASE_PATTERNS = [
+    /\bignore\s+(?:all\s+)?(?:previous|prior|the\s+above)\s+instructions?\b/gi,
+    /\bdisregard\s+(?:all\s+)?(?:previous|prior|the\s+above)\b/gi,
+    /\bforget\s+(?:your|the)\s+(?:role|instructions?|rules?|system)\b/gi,
+    /\byou\s+are\s+now\s+(?:a|an)\s+/gi,
+    /\b(?:override|bypass)\s+(?:safety|content|filter)/gi,
+];
+export function sanitizeToolMessageContent(input) {
+    if (!input)
+        return { cleaned: input, flagged: false, signals: [] };
+    let cleaned = input;
+    const signals = [];
+    for (const pattern of HARD_STRIP_PATTERNS) {
+        if (pattern.test(cleaned)) {
+            pattern.lastIndex = 0;
+            cleaned = cleaned.replace(pattern, ' ');
+            signals.push(`stripped:${pattern.source.replace(/\\\|/g, '|').slice(0, 40)}`);
+        }
+        pattern.lastIndex = 0;
+    }
+    for (const pattern of SUSPICIOUS_PHRASE_PATTERNS) {
+        if (pattern.test(cleaned)) {
+            signals.push(`flagged:${pattern.source.slice(0, 40)}`);
+        }
+        pattern.lastIndex = 0;
+    }
+    cleaned = cleaned.replace(/[ \t]{2,}/g, ' ');
+    return {
+        cleaned,
+        flagged: signals.length > 0,
+        signals,
+    };
+}
+export function wrapToolResultForLlm(content) {
+    if (content.startsWith(TOOL_RESULT_BEGIN))
+        return content;
+    return `${TOOL_RESULT_BEGIN}\n${content}\n${TOOL_RESULT_END}`;
+}
+export function sanitizeMessagesForLlm(messages, onSignal) {
+    return messages.map((message) => {
+        if (message.role !== 'tool')
+            return message;
+        const raw = message.content;
+        if (typeof raw !== 'string' || raw.length === 0)
+            return message;
+        const { cleaned, flagged, signals } = sanitizeToolMessageContent(raw);
+        if (flagged && onSignal) {
+            onSignal({
+                tool_call_id: message.tool_call_id,
+                signals,
+            });
+        }
+        return {
+            ...message,
+            content: wrapToolResultForLlm(cleaned),
+        };
+    });
+}
+export const TOOL_RESULT_DELIMITERS = {
+    begin: TOOL_RESULT_BEGIN,
+    end: TOOL_RESULT_END,
+};
 const SEEDANCE_MODEL_REF_FORMAT = {
     format(index, type) {
         if (type === 'video')
@@ -1789,9 +2011,14 @@ export function textRequestsPreproductionScriptStage(text) {
     const asksForPlanning = new RegExp(String.raw `\b${planningVerb}\b[\s\S]{0,140}\b${planningNoun}\b`, 'i').test(normalized)
         || new RegExp(String.raw `\b${planningNoun}\b[\s\S]{0,120}\b(?:to\s+develop|for\s+review|for\s+approval|before|first|then|next|subsequent|subsequently|later)\b`, 'i').test(normalized)
         || /\bnew\s+script\s+to\s+develop\b/i.test(normalized);
-    if (!asksForPlanning)
+    const creativeStoryTerm = String.raw `(?:storyline|monologue|dialogue|script|skit|comedy|jokes?|punchline|payoff|twist|beats?)`;
+    const asksForCreativeStoryDevelopment = new RegExp(String.raw `\b(?:story\s*board|storyboard)\b[\s\S]{0,220}\b${creativeStoryTerm}\b`, 'i').test(normalized)
+        || new RegExp(String.raw `\b${creativeStoryTerm}\b[\s\S]{0,220}\b(?:story\s*board|storyboard)\b`, 'i').test(normalized);
+    if (!asksForPlanning && !asksForCreativeStoryDevelopment)
         return false;
-    if (textRequestsDirectVideoOutput(normalized) && !textHasExplicitStoryboardPlanningWorkflow(normalized)) {
+    if (textRequestsDirectVideoOutput(normalized)
+        && !textHasExplicitStoryboardPlanningWorkflow(normalized)
+        && !asksForCreativeStoryDevelopment) {
         return false;
     }
     const downstreamMediaContext = /\b(?:video|clip|animation|movie|film|seedance|ltx|image|keyframe|storyboard\s+image|storyboard\s+sheet|model|generation|generate|render|animate)\b/i.test(normalized)

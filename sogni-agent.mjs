@@ -21,6 +21,7 @@ import {
   SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS,
   VIDEO_WORKFLOW_DEFAULT_MODELS,
   buildStoryboardVideoHostedToolSequenceInput,
+  classifySkillError,
   detectReferenceAudioFormat,
   dimensionsForAspectRatio,
   dimensionsWithShortSide,
@@ -36,6 +37,7 @@ import {
   resolveVideoControlNetStrength,
   resolveVideoModelAlias,
   resolveVideoSteps,
+  sanitizeMessagesForLlm,
   sanitizeBatchPrompt,
   selectDefaultVideoModel,
   shouldTrimSeedanceV2VSourceVideo,
@@ -160,9 +162,13 @@ function isPathWithinBase(basePath, targetPath) {
 }
 
 function buildCliErrorPayload({ message, code, details, hint, prompt }) {
+  const classified = classifySkillError({ message, code });
   const payload = {
     success: false,
     error: message || 'Unknown error',
+    errorType: classified.error_type,
+    errorCategory: classified.category,
+    retryable: classified.retryable,
     prompt: prompt ?? null
   };
   if (code) payload.errorCode = code;
@@ -172,6 +178,14 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   payload.node = process.versions.node;
   payload.cwd = process.cwd();
   if (IS_OPENCLAW_INVOCATION) payload.openclaw = true;
+  return payload;
+}
+
+function addCanonicalErrorFields(payload, error) {
+  const classified = classifySkillError(error);
+  payload.errorType = classified.error_type;
+  payload.errorCategory = classified.category;
+  payload.retryable = classified.retryable;
   return payload;
 }
 
@@ -3185,9 +3199,10 @@ async function runApiChat(log) {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-chat');
   const apiMediaReferences = buildApiMediaReferencesPayload();
+  const messages = sanitizeMessagesForLlm(await buildApiChatMessages());
   const body = {
     model: options.llmModel || DEFAULT_LLM_MODEL,
-    messages: await buildApiChatMessages(),
+    messages,
     temperature: 0.4,
     max_tokens: 1600,
     token_type: options.tokenType || 'spark',
@@ -3394,12 +3409,13 @@ function buildStoryboardStorylineMessages() {
 }
 
 async function generateStoryboardWorkflowStoryline(apiKey) {
+  const messages = sanitizeMessagesForLlm(buildStoryboardStorylineMessages());
   const payload = await fetchApiJson('/v1/chat/completions', {
     apiKey,
     method: 'POST',
     body: {
       model: options.llmModel || DEFAULT_LLM_MODEL,
-      messages: buildStoryboardStorylineMessages(),
+      messages,
       temperature: 0.45,
       max_tokens: 1800,
       token_type: options.tokenType || 'spark',
@@ -6070,11 +6086,11 @@ async function main() {
     exitCode = 1;
     const shouldJson = options.json || IS_OPENCLAW_INVOCATION;
     if (shouldJson) {
-      const payload = {
+      const payload = addCanonicalErrorFields({
         success: false,
         error: error.message,
         prompt: options.prompt ?? null
-      };
+      }, error);
       if (error.code) payload.errorCode = error.code;
       if (error.details) payload.errorDetails = error.details;
       if (error.hint) payload.hint = error.hint;

@@ -1336,6 +1336,9 @@ test('username/password auth is not accepted without an api key', () => {
   assert.equal(exitCode, 1);
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.errorCode, 'MISSING_CREDENTIALS');
+  assert.equal(payload.errorType, 'PERMISSION_REQUIRED');
+  assert.equal(payload.errorCategory, 'permission_required');
+  assert.equal(payload.retryable, false);
   assert.match(payload.hint, /SOGNI_API_KEY/);
   assert.doesNotMatch(payload.hint, /SOGNI_USERNAME|SOGNI_PASSWORD/);
 });
@@ -1355,6 +1358,9 @@ test('json error: i2v rejects mismatched explicit size and suggests a compatible
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.success, false);
   assert.equal(payload.errorCode, 'INVALID_VIDEO_SIZE');
+  assert.equal(payload.errorType, 'PARAMETER_INVALID');
+  assert.equal(payload.errorCategory, 'schema_validation');
+  assert.equal(payload.retryable, false);
   assert.ok(String(payload.hint || '').includes('--width 1296 --height 672'));
 });
 

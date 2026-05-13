@@ -979,6 +979,36 @@ test('--api-workflow forwards CLI media references and cost controls', async () 
   });
 });
 
+test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow', 'image-to-video',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      'animate this image'
+    ], {
+      SOGNI_USERNAME: '',
+      SOGNI_PASSWORD: '',
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      OPENCLAW_PLUGIN_CONFIG: JSON.stringify({
+        defaultWorkflowMaxCost: 13,
+        defaultWorkflowConfirmCost: false
+      })
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    assert.equal(requests.length, 1);
+    const request = requests[0];
+    assert.equal(request.body.max_estimated_capacity_units, 13);
+    assert.equal(request.body.cost_ceiling, 13);
+    assert.equal(request.body.confirm_cost, false);
+  });
+});
+
 test('--api-workflow image-to-video rejects unsupported workflow title flag', () => {
   const { exitCode, stderr } = runCli([
     '--api-workflow', 'image-to-video',

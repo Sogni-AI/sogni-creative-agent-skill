@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 
 import {
   SEEDANCE_STORYBOARD_REFERENCE_PROMPT,
+  SESSION_CONTROL_SKILL,
+  SkillRegistry,
+  buildStoryboardProject,
   buildStoryboardVideoHostedToolSequenceInput,
+  compileForModel,
   compileVideoStoryboardImagePrompt,
+  composeAdapterPromptGuidance,
   detectReferenceAudioFormat,
+  formatModelRef,
   getVideoPromptGuardrailPlan,
   inferExplicitPixelDimensionsFromText,
   inferNamedVideoResolutionShortSideFromText,
@@ -18,12 +24,56 @@ import {
   sanitizeBatchPrompt,
   selectDefaultVideoModel,
   shouldTrimSeedanceV2VSourceVideo,
+  storyboardAdapterRegistry,
   textTreatsAudioAsLooseReference
 } from '../generated/creative-agent-runtime.mjs';
 
 test('runtime resolves public video model aliases by workflow', () => {
   assert.equal(resolveVideoModelAlias('seedance2', 'v2v'), 'seedance-2-0');
   assert.equal(resolveVideoModelAlias('ltx23', 'ia2v'), 'ltx23-22b-fp8_ia2v_distilled');
+});
+
+test('runtime exposes public storyboard adapters and skill manifests', () => {
+  assert.equal(formatModelRef('seedance', 1, 'image'), '@Image1');
+  assert.equal(formatModelRef('gpt-image-2', 1, 'image'), 'Image 1');
+  assert.equal(formatModelRef('ltx23', 1, 'image'), 'context_image_0');
+  assert.ok(SESSION_CONTROL_SKILL.toolNames.includes('finalize_response'));
+
+  const registry = new SkillRegistry();
+  registry.register(SESSION_CONTROL_SKILL);
+  assert.ok(registry.getActiveToolNames().includes('ask_clarifying_question'));
+
+  assert.deepEqual(storyboardAdapterRegistry.list().map((adapter) => adapter.modelId).sort(), [
+    'gpt-image-2',
+    'ltx23',
+    'seedance',
+    'wan'
+  ]);
+  assert.equal(storyboardAdapterRegistry.getAdapter('wan22')?.modelId, 'wan');
+  assert.equal(storyboardAdapterRegistry.getAdapter('flux-schnell'), null);
+  assert.match(composeAdapterPromptGuidance(), /SEEDANCE STORYBOARD REFERENCES/);
+  assert.match(composeAdapterPromptGuidance(), /GPT IMAGE 2 ROUTING/);
+
+  const project = buildStoryboardProject({
+    prompt: [
+      'SCENE 01 - Product reveal',
+      'VISUAL: A red sneaker rotates on a clean plinth.',
+      'ACTION: Light sweeps across the sole.',
+      'CAMERA: Slow push-in.',
+      'AUDIO/SFX: soft studio hum.'
+    ].join('\n'),
+    userIntentText: 'Create a one-frame 16:9 product storyboard video.',
+    frameCount: 1,
+    promptAuthorship: 'assistant'
+  });
+  const compiled = compileForModel('seedance2', project, {
+    stage: 'scene_clip',
+    scene: project.scenes[0]
+  });
+  assert.equal(compiled.stage, 'scene_clip');
+  assert.match(compiled.prompt, /red sneaker|Product reveal/i);
+  assert.equal(compiled.args.videoModel, 'seedance2-fast');
+  assert.equal(compiled.args.expandPrompt, false);
 });
 
 test('runtime batch prompt sanitizer preserves dynamic groups and aspect ratios', () => {

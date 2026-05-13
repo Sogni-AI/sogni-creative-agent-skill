@@ -79,6 +79,15 @@
         "default": "creative-agent",
         "description": "Default Sogni tool family injected into --api-chat requests."
       },
+      "defaultWorkflowMaxCost": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Optional default capacity-unit ceiling forwarded to --api-workflow requests unless --workflow-max-cost is provided."
+      },
+      "defaultWorkflowConfirmCost": {
+        "type": "boolean",
+        "description": "Optional default explicit cost confirmation forwarded to --api-workflow requests unless --confirm-cost or --no-confirm-cost is provided."
+      },
       "seedStrategy": {
         "type": "string",
         "enum": ["random", "prompt-hash"],

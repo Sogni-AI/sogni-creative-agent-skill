@@ -2072,6 +2072,18 @@ if (openclawConfig) {
   if (!cliSet.apiTools && openclawConfig.defaultApiToolMode) {
     options.apiTools = openclawConfig.defaultApiToolMode;
   }
+  if (!cliSet.apiWorkflowMaxCost && isNumber(openclawConfig.defaultWorkflowMaxCost)) {
+    if (openclawConfig.defaultWorkflowMaxCost < 0) {
+      fatalCliError('OpenClaw config defaultWorkflowMaxCost must be a non-negative number.', {
+        code: 'INVALID_CONFIG',
+        details: { field: 'defaultWorkflowMaxCost', value: openclawConfig.defaultWorkflowMaxCost }
+      });
+    }
+    options.apiWorkflowMaxCost = openclawConfig.defaultWorkflowMaxCost;
+  }
+  if (!cliSet.apiWorkflowConfirmCost && typeof openclawConfig.defaultWorkflowConfirmCost === 'boolean') {
+    options.apiWorkflowConfirmCost = openclawConfig.defaultWorkflowConfirmCost;
+  }
   if (!cliSet.seedStrategy && openclawConfig.seedStrategy) {
     options.seedStrategy = openclawConfig.seedStrategy;
   }

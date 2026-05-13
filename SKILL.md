@@ -168,10 +168,21 @@ node sogni-agent.mjs --music --lyrics "Rise with the morning light" --bpm 128 \
 # Hosted API chat: natural-language rich creative-agent tool execution
 node sogni-agent.mjs --api-chat "Create a 4-shot product video concept for a red sneaker"
 
+# Hosted API chat with image vision and media-reference metadata
+node sogni-agent.mjs --api-chat --ref product.jpg \
+  "Turn this into a launch poster and describe the edit plan"
+
 # Durable API workflow: async image-to-video with resumable workflow record
 node sogni-agent.mjs --api-workflow image-to-video \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
   "A graphite robot sketch on a drafting table"
+
+# Durable API workflow with media reference and cost controls
+node sogni-agent.mjs --api-workflow image-to-video \
+  --ref https://cdn.example.com/sketch.png \
+  --workflow-max-cost 25 --confirm-cost \
+  --video-prompt "The camera slowly pushes in as the sketch comes alive" \
+  "Animate the referenced sketch"
 
 # Shared CreativeWorkflowPlan: API compiles and validates through @sogni/creative-agent
 node sogni-agent.mjs --api-workflow creative-plan --workflow-input @plan.json
@@ -191,10 +202,14 @@ it through `@sogni/creative-agent`. Use `--api-workflow storyboard-video`
 when the caller wants the hosted sequence to generate a storyline, create one GPT
 Image 2 storyboard sheet, and feed that image artifact into Seedance as the video
 reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low|medium|high
-quality for the storyboard sheet. Uploaded-media execution still
-belongs on the direct CLI path (`-c`, `--ref`, `--ref-audio`, `--ref-video`)
-until the hosted rich API and durable workflow endpoint support uploaded
-negative-index media references through CLI media flags.
+quality for the storyboard sheet. Hosted API requests forward media references
+from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
+`--reference-audio-identity`, and `--ref-video` as `media_references`
+metadata; API chat also attaches image refs as vision inputs. Prefer public
+HTTPS URLs for durable hosted workflows because the backend must retrieve
+non-inline media; use the direct CLI path for private or large local media.
+Use `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to
+forward explicit workflow cost policy.
 Hosted API modes require `SOGNI_API_KEY`; username/password credentials are only
 for the direct client-wrapper path.
 
@@ -299,6 +314,8 @@ positions.
 | `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|creative-plan\|storyboard-video | - |
 | `--workflow-input <json\|path\|@path>` | Workflow input JSON for hosted tool sequences/custom starts | - |
 | `--workflow-title <text>` | Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input | - |
+| `--workflow-max-cost <n>` | Reject hosted workflow starts above this estimated capacity-unit ceiling | - |
+| `--confirm-cost`, `--no-confirm-cost` | Forward explicit hosted workflow cost confirmation | - |
 | `--storyboard-frames <n>` | Beat count for storyboard-video workflow | - |
 | `--video-prompt <text>` | Motion prompt for durable image-to-video workflow | - |
 | `--negative-prompt <text>` | Negative prompt for durable image-to-video workflow | - |
@@ -356,6 +373,8 @@ When installed as an OpenClaw plugin, Sogni Creative Agent Skill will read defau
           "apiBaseUrl": "https://api.sogni.ai",
           "defaultLlmModel": "qwen3.6-35b-a3b-gguf-iq4xs",
           "defaultApiToolMode": "creative-agent",
+          "defaultWorkflowMaxCost": 25,
+          "defaultWorkflowConfirmCost": false,
           "seedStrategy": "prompt-hash",
           "modelDefaults": {
             "flux1-schnell-fp8": { "steps": 4, "guidance": 3.5 },

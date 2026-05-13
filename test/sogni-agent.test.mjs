@@ -5,7 +5,11 @@ import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SEEDANCE_STORYBOARD_REFERENCE_PROMPT } from '../generated/creative-agent-runtime.mjs';
+import {
+  CROSS_SURFACE_PARITY_FIXTURES,
+  CROSS_SURFACE_PARITY_SURFACES,
+  SEEDANCE_STORYBOARD_REFERENCE_PROMPT,
+} from '../generated/creative-agent-runtime.mjs';
 
 const MIN_NODE_VERSION = [22, 11, 0];
 
@@ -1255,6 +1259,25 @@ test('--api-workflow forwards local non-image media references as data URIs', as
     assert.equal(mediaRefs[0].url, undefined);
     assert.equal(requests[0].body.media_references[1].filename, 'source.mp4');
   });
+});
+
+test('shared cross-surface parity fixtures include public skill media-reference cases', () => {
+  for (const fixture of CROSS_SURFACE_PARITY_FIXTURES) {
+    assert.deepEqual(
+      new Set(fixture.expectations.map((expectation) => expectation.surface)),
+      new Set(CROSS_SURFACE_PARITY_SURFACES)
+    );
+  }
+
+  const mediaRefsFixture = CROSS_SURFACE_PARITY_FIXTURES.find((fixture) => fixture.focus === 'skill_media_refs');
+  assert.ok(mediaRefsFixture);
+  const skillExpectation = mediaRefsFixture.expectations.find((expectation) => expectation.surface === 'public_skill');
+  assert.ok(skillExpectation);
+  assert.match(skillExpectation.entrypoint, /--api-chat/);
+  assert.deepEqual(
+    mediaRefsFixture.mediaReferences.map((ref) => ref.kind),
+    ['audio', 'video']
+  );
 });
 
 test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', async () => {

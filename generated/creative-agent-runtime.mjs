@@ -2446,8 +2446,8 @@ export function buildStoryboardPlanningResponseFormat(name = 'preproduction_stor
         },
     };
 }
-export const STORYBOARD_DEFAULT_MIN_FRAMES = 4;
-export const STORYBOARD_DEFAULT_MAX_FRAMES = 12;
+export const STORYBOARD_DEFAULT_MIN_FRAMES = 6;
+export const STORYBOARD_DEFAULT_MAX_FRAMES = 16;
 const STORYBOARD_COUNT_WORDS = {
     one: 1,
     two: 2,
@@ -2764,6 +2764,9 @@ export function inferStoryboardLayoutSpec(userIntentText, frameCount, planningCo
 function clampStoryboardDefaultFrameCount(value) {
     return Math.max(STORYBOARD_DEFAULT_MIN_FRAMES, Math.min(STORYBOARD_DEFAULT_MAX_FRAMES, Math.round(value)));
 }
+function defaultStoryboardFrameCountForDuration(durationSeconds) {
+    return clampStoryboardDefaultFrameCount(Math.ceil(durationSeconds / 2));
+}
 function normalizeStoryboardCountToken(value) {
     if (!value)
         return null;
@@ -2853,20 +2856,13 @@ export function inferDefaultStoryboardFrameCountFromText(text) {
     if (scriptCount)
         return clampStoryboardDefaultFrameCount(scriptCount);
     const duration = inferRequestedTotalVideoDurationSeconds(canonicalText);
+    const durationFrameFloor = duration !== null
+        ? defaultStoryboardFrameCountForDuration(duration)
+        : null;
     const words = storyboardWordCount(canonicalText);
     const complexity = storyboardComplexityScore(canonicalText);
-    let count = duration !== null
-        ? duration <= 8
-            ? 4
-            : duration <= 15
-                ? 5
-                : duration <= 20
-                    ? 6
-                    : duration <= 30
-                        ? 8
-                        : duration <= 45
-                            ? 10
-                            : 12
+    let count = durationFrameFloor !== null
+        ? durationFrameFloor
         : words <= 28
             ? 4
             : words <= 70
@@ -2882,6 +2878,8 @@ export function inferDefaultStoryboardFrameCountFromText(text) {
     }
     if (duration === null && words > 180)
         count += 1;
+    if (durationFrameFloor !== null)
+        count = Math.max(count, durationFrameFloor);
     return clampStoryboardDefaultFrameCount(count);
 }
 function inferReferencedStoryboardImageCount(text) {
@@ -5495,3 +5493,141 @@ export function sanitizeBatchPrompt(prompt) {
     }
     return result;
 }
+export const CROSS_SURFACE_PARITY_SURFACES = [
+    'chat',
+    'api_chat_completions',
+    'api_creative_agent_workflows',
+    'public_skill',
+];
+export const CROSS_SURFACE_PARITY_FIXTURES = [
+    {
+        id: 'uploaded-video-subtitles',
+        focus: 'subtitles',
+        description: 'Quoted subtitle lines burn into the uploaded video instead of regenerating it.',
+        userText: 'Add subtitles to this uploaded clip: "Fresh coffee." "Ready when you are."',
+        mediaReferences: [{ kind: 'video', filename: 'cafe.mp4' }],
+        expectations: [
+            {
+                surface: 'chat',
+                entrypoint: 'workflow fixture subtitles-on-uploaded-video',
+                expectedTools: ['add_subtitles'],
+                expectedBehavior: ['sourceVideoIndex uses the uploaded video'],
+            },
+            {
+                surface: 'api_chat_completions',
+                entrypoint: '/v1/chat/completions',
+                expectedTools: ['add_subtitles'],
+                expectedRequest: { sogni_tools: 'creative-agent', api_media_references: true },
+            },
+            {
+                surface: 'api_creative_agent_workflows',
+                entrypoint: '/v1/creative-agent/workflows',
+                expectedTools: ['add_subtitles'],
+                expectedRequest: { kind: 'hosted_tool_sequence' },
+            },
+            {
+                surface: 'public_skill',
+                entrypoint: '--api-chat and --api-workflow hosted-tool-sequence',
+                expectedTools: ['add_subtitles'],
+                expectedBehavior: ['forwards video refs as api_media_references without prompt base64 leakage'],
+            },
+        ],
+    },
+    {
+        id: 'uploaded-video-logo-overlay',
+        focus: 'overlay',
+        description: 'A static logo/image overlay targets the uploaded base video.',
+        userText: 'Put this logo in the top left of the uploaded video as a small watermark.',
+        mediaReferences: [
+            { kind: 'video', filename: 'source.mp4' },
+            { kind: 'image', filename: 'logo.png' },
+        ],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture uploaded-video-logo-static-overlay', expectedTools: ['overlay_video'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['overlay_video'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['overlay_video'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['overlay_video'] },
+        ],
+    },
+    {
+        id: 'uploaded-video-segment-replace',
+        focus: 'uploaded_video_edits',
+        description: 'A bounded uploaded-video window routes to replace_video_segment.',
+        userText: 'Regenerate the 2s-4s window of this uploaded video and keep the original audio.',
+        mediaReferences: [{ kind: 'video', filename: 'source.mp4' }],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture replace-video-segment-uploaded', expectedTools: ['replace_video_segment'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['replace_video_segment'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['replace_video_segment'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['replace_video_segment'] },
+        ],
+    },
+    {
+        id: 'asset-manifest-model-map-sequence',
+        focus: 'asset_manifest_sequence',
+        description: 'Generated assets are labeled, mapped for the target model, and validated through the shared manifest tools.',
+        userText: 'Create a product hero, label it as hero product, map it for Seedance, then validate the reference.',
+        expectations: [
+            {
+                surface: 'chat',
+                entrypoint: 'asset manifest workflow',
+                expectedTools: ['create_asset_manifest', 'label_asset', 'map_assets_for_model', 'validate_asset_references'],
+            },
+            {
+                surface: 'api_chat_completions',
+                entrypoint: '/v1/chat/completions',
+                expectedTools: ['create_asset_manifest', 'label_asset', 'map_assets_for_model', 'validate_asset_references'],
+            },
+            {
+                surface: 'api_creative_agent_workflows',
+                entrypoint: '/v1/creative-agent/workflows',
+                expectedTools: ['create_asset_manifest', 'label_asset', 'map_assets_for_model', 'validate_asset_references'],
+            },
+            {
+                surface: 'public_skill',
+                entrypoint: 'generated creative-agent runtime',
+                expectedTools: ['create_asset_manifest', 'label_asset', 'map_assets_for_model', 'validate_asset_references'],
+            },
+        ],
+    },
+    {
+        id: 'durable-workflow-cancel',
+        focus: 'cancellation',
+        description: 'Cancellation is exposed as the same durable workflow state transition across clients.',
+        userText: 'Cancel workflow wf_test.',
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow status controls', expectedBehavior: ['cancelled workflow is terminal'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions tool execution', expectedBehavior: ['USER_CANCELLED maps to cancelled'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows/:id/cancel', expectedBehavior: ['idempotent cancel response'] },
+            { surface: 'public_skill', entrypoint: '--cancel-workflow', expectedBehavior: ['posts to durable cancel endpoint'] },
+        ],
+    },
+    {
+        id: 'durable-workflow-duplicate-start',
+        focus: 'duplicate_start',
+        description: 'Repeated workflow starts with an idempotency key return the existing run instead of launching a duplicate.',
+        userText: 'Start the same durable workflow twice with idempotency key idem_123.',
+        expectations: [
+            { surface: 'chat', entrypoint: 'hosted tool workflow tracking', expectedBehavior: ['workflowId remains stable for duplicate start'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedBehavior: ['hosted tool workflow tracking keeps one parent run'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedRequest: { idempotency_key: 'idem_123' } },
+            { surface: 'public_skill', entrypoint: '--api-workflow', expectedBehavior: ['forwards workflow idempotency metadata when provided'] },
+        ],
+    },
+    {
+        id: 'skill-audio-video-media-refs',
+        focus: 'skill_media_refs',
+        description: 'Public skill forwards local audio and video refs as media references instead of embedding base64 in prompts.',
+        userText: 'Make a music video from this audio and source video.',
+        mediaReferences: [
+            { kind: 'audio', filename: 'music.mp3' },
+            { kind: 'video', filename: 'source.mp4' },
+        ],
+        expectations: [
+            { surface: 'chat', entrypoint: 'uploaded file context', expectedBehavior: ['audio and video are distinct uploaded media refs'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedRequest: { api_media_references: true } },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedRequest: { api_media_references: true } },
+            { surface: 'public_skill', entrypoint: '--api-chat and --api-workflow', expectedBehavior: ['data URIs live in api_media_references only'] },
+        ],
+    },
+];

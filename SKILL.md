@@ -179,20 +179,20 @@ node sogni-agent.mjs --api-chat --task-profile reasoning --no-thinking \
 node sogni-agent.mjs --list-replays 20
 node sogni-agent.mjs --get-replay run_abc123 --json
 
-# Durable API workflow: async image-to-video with resumable workflow record
-node sogni-agent.mjs --api-workflow image-to-video \
+# Durable API workflow: generated keyframe to video with resumable workflow record
+node sogni-agent.mjs --api-workflow \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
   "A graphite robot sketch on a drafting table"
 
 # Durable API workflow with media reference and cost controls
-node sogni-agent.mjs --api-workflow image-to-video \
+node sogni-agent.mjs --api-workflow \
   --ref https://cdn.example.com/sketch.png \
   --workflow-max-cost 25 --confirm-cost \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
   "Animate the referenced sketch"
 
-# Shared CreativeWorkflowPlan: API compiles and validates through @sogni/creative-agent
-node sogni-agent.mjs --api-workflow creative-plan --workflow-input @plan.json
+# Exact durable workflow input with explicit steps
+node sogni-agent.mjs --api-workflow --workflow-input @workflow.json
 
 # Durable storyboard-video workflow: storyline -> GPT Image 2 storyboard -> Seedance
 node sogni-agent.mjs --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
@@ -204,13 +204,12 @@ Sogni API's OpenAI-compatible `/v1/chat/completions` tool loop. This path
 sanitizes prompt-injection markers before forwarding messages and uses the
 current hosted creative-agent tool surface. Use `--api-workflow` when the caller
 already knows it wants an async durable workflow record under
-`/v1/creative-agent/workflows`. Use `--api-workflow creative-plan` when the
-caller already has a shared `CreativeWorkflowPlan`; the skill forwards it as
-`kind: "creative_plan"` and lets Sogni API compile, validate, and persist it
-through `@sogni/creative-agent`. This is the preferred hosted path for exact
-multi-step plans, including repeated `replace_video_segment` operations with
-`replacementStartSeconds` / `replacementEndSeconds` when interleaving existing
-video slices. Use `--api-workflow storyboard-video`
+`/v1/creative-agent/workflows`. Use `--workflow-input @workflow.json` when the
+caller already has exact durable workflow input with `steps`; the skill forwards
+that body to the API as-is. This is the preferred hosted path for
+exact multi-step plans, including repeated `replace_video_segment` operations
+with `replacementStartSeconds` / `replacementEndSeconds` when interleaving
+existing video slices. Use `--api-workflow storyboard-video`
 when the caller wants the hosted sequence to generate a storyline, create one GPT
 Image 2 storyboard sheet, and feed that image artifact into Seedance as the video
 reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low|medium|high
@@ -335,17 +334,17 @@ positions.
 | `--max-tokens <n>` | Max hosted chat completion tokens | 1600 |
 | `--thinking`, `--no-thinking` | Toggle `chat_template_kwargs.enable_thinking` for hosted chat | server default |
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM model metadata | - |
-| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|path\|@path>` | Manage Sogni Intelligence replay RunRecords | - |
-| `--api-workflow <kind>` | Start durable workflow: image-to-video\|hosted-tool-sequence\|creative-plan\|storyboard-video | - |
-| `--workflow-input <json\|path\|@path>` | Workflow input JSON for hosted tool sequences/custom starts | - |
-| `--workflow-title <text>` | Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input | - |
+| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay RunRecords (use `@path` to load JSON from a file) | - |
+| `--api-workflow` | Start a durable workflow with explicit `input.steps`; optional `storyboard-video` preset | - |
+| `--workflow-input <json\|@path>` | Durable workflow input JSON. Use `@path` to load from a file. | - |
+| `--workflow-title <text>` | Title for generated or storyboard durable workflow input | - |
 | `--workflow-max-cost <n>` | Reject hosted workflow starts above this estimated capacity-unit ceiling | - |
 | `--confirm-cost`, `--no-confirm-cost` | Forward explicit hosted workflow cost confirmation | - |
 | `--storyboard-frames <n>` | Beat count for storyboard-video workflow | - |
-| `--video-prompt <text>` | Motion prompt for durable image-to-video workflow | - |
-| `--negative-prompt <text>` | Negative prompt for durable image-to-video workflow | - |
-| `--generate-audio`, `--no-generate-audio` | Toggle audio generation for durable image-to-video | - |
-| `--expand-prompt`, `--no-expand-prompt` | Toggle prompt expansion for durable image-to-video | - |
+| `--video-prompt <text>` | Motion prompt for generated-keyframe durable workflow | - |
+| `--negative-prompt <text>` | Negative prompt for generated-keyframe durable workflow | - |
+| `--generate-audio`, `--no-generate-audio` | Toggle audio generation for generated video steps | - |
+| `--expand-prompt`, `--no-expand-prompt` | Toggle prompt expansion for generated video steps | - |
 | `--watch-workflow` | Stream durable workflow events after start | - |
 | `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>` | Durable workflow management helpers | - |
 | `--api-base-url <url>` | Sogni API base for hosted API modes. Credentials are only sent to `https://api.sogni.ai` by default; use `SOGNI_API_ALLOWED_HOSTS` for trusted custom hosts or `SOGNI_ALLOW_UNSAFE_API_BASE_URL=1` for isolated local testing. | https://api.sogni.ai |

@@ -65,12 +65,12 @@ You can also export `SOGNI_API_KEY` instead of writing the file.
 Hosted API modes require `SOGNI_API_KEY`: use `sogni-agent --api-chat "prompt"`
 for `/v1/chat/completions` with rich creative-agent tools and sanitized
 message forwarding, or
-`sogni-agent --api-workflow image-to-video --video-prompt "motion" "image prompt"`
+`sogni-agent --api-workflow --video-prompt "motion" "image prompt"`
 for durable `/v1/creative-agent/workflows` execution.
 Sogni Intelligence utilities are available with `--list-api-models`,
 `--get-api-model <id>`, `--task-profile general|coding|reasoning`,
 `--max-tokens <n>`, `--thinking` / `--no-thinking`, `--list-replays [n]`,
-`--get-replay <id>`, and `--ingest-replay <json|path|@path>`.
+`--get-replay <id>`, and `--ingest-replay <json|@path>` (use `@path` to load JSON from a file).
 Hosted API modes forward media references from `-c`, `--ref`, `--ref-end`,
 `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
 `media_references`; API chat also attaches image refs as vision inputs. Local

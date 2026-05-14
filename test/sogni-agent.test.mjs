@@ -274,7 +274,7 @@ async function withTestApiServer(fn) {
         res.end(JSON.stringify({
           status: 'success',
           data: {
-            workflow: { workflowId: 'wf_test', kind: parsedBody?.kind || 'image_to_video', status: 'queued', artifacts: [] }
+            workflow: { workflowId: 'wf_test', status: 'queued', artifacts: [] }
           }
         }));
         return;
@@ -291,7 +291,7 @@ async function withTestApiServer(fn) {
           status: 'success',
           data: {
             resumed: true,
-            workflow: { workflowId: 'wf_test', kind: 'hosted_tool_sequence', status: 'running', artifacts: [] }
+            workflow: { workflowId: 'wf_test', status: 'running', artifacts: [] }
           }
         }));
         return;
@@ -811,7 +811,8 @@ test('--api-chat posts to /v1/chat/completions with creative-agent tools', async
     assert.equal(request.body.sogni_tools, 'creative-agent');
     assert.equal(request.body.sogni_tool_execution, true);
     assert.equal(request.body.token_type, 'spark');
-    assert.equal(request.body.appSource, 'sogni-creative-agent-skill');
+    assert.equal(request.body.app_source, 'sogni-creative-agent-skill');
+    assert.equal(Object.hasOwn(request.body, 'appSource'), false);
     assert.equal(request.body.messages[1].content, 'Create a 4-shot product video concept for a red sneaker');
   });
 });
@@ -940,9 +941,10 @@ test('--api-chat forwards image references with server-side tool execution enabl
     const request = requests.find(item => item.url === '/v1/chat/completions');
     assert.ok(request);
     assert.equal(request.body.sogni_tool_execution, true);
-    assert.equal(request.body.api_media_references[0].flag, '--ref');
-    assert.equal(request.body.api_media_references[0].kind, 'image');
-    assert.match(request.body.api_media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
+    assert.equal(request.body.media_references[0].flag, '--ref');
+    assert.equal(request.body.media_references[0].kind, 'image');
+    assert.match(request.body.media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
+    assert.equal(Object.hasOwn(request.body, 'api_media_references'), false);
     assert.equal(request.body.messages[1].content[0].type, 'text');
     assert.equal(request.body.messages[1].content[1].type, 'image_url');
     assert.match(request.body.messages[1].content[1].image_url.url, /^data:image\/jpeg;base64,/);
@@ -969,9 +971,9 @@ test('--api-chat forwards audio and video references in API metadata and prompt 
 
     assert.equal(requests.length, 1);
     const request = requests[0];
-    assert.equal(request.body.api_media_references.length, 2);
-    assert.equal(request.body.api_media_references[0].kind, 'audio');
-    assert.equal(request.body.api_media_references[1].kind, 'video');
+    assert.equal(request.body.media_references.length, 2);
+    assert.equal(request.body.media_references[0].kind, 'audio');
+    assert.equal(request.body.media_references[1].kind, 'video');
     assert.match(request.body.messages[1].content, /API media references:/);
     assert.match(request.body.messages[1].content, /music\.mp3/);
     assert.match(request.body.messages[1].content, /source\.mp4/);
@@ -1004,7 +1006,7 @@ test('--api-chat uploads local audio and video references before hosted executio
 
     const request = requests.find(item => item.url === '/v1/chat/completions');
     assert.ok(request);
-    const mediaRefs = request.body.api_media_references;
+    const mediaRefs = request.body.media_references;
     assert.equal(mediaRefs.length, 2);
     assert.equal(mediaRefs[0].kind, 'audio');
     assert.equal(mediaRefs[0].filename, 'music.mp3');
@@ -1017,7 +1019,7 @@ test('--api-chat uploads local audio and video references before hosted executio
     assert.equal(requests.filter(item => item.url.startsWith('/v1/media/uploadUrl')).length, 2);
     assert.equal(requests.filter(item => item.url.startsWith('/test-upload/')).length, 2);
     assert.equal(requests.filter(item => item.url.startsWith('/v1/media/downloadUrl')).length, 2);
-    assert.equal(request.body.public_skill_contract_runtime.contract_counts.prompt_contracts > 20, true);
+    assert.equal(Object.hasOwn(request.body, 'public_skill_contract_runtime'), false);
     assert.match(request.body.messages[1].content, /music\.mp3/);
     assert.match(request.body.messages[1].content, /source\.mp4/);
     assert.doesNotMatch(request.body.messages[1].content, /base64/);
@@ -1041,16 +1043,16 @@ test('--api-chat accepts media-only planning requests for non-image references',
     assert.equal(payload.success, true);
 
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].body.api_media_references[0].kind, 'video');
+    assert.equal(requests[0].body.media_references[0].kind, 'video');
     assert.match(requests[0].body.messages[1].content, /Describe the attached media/);
     assert.match(requests[0].body.messages[1].content, /source\.mp4/);
   });
 });
 
-test('--api-workflow starts durable image-to-video workflow through /v1/creative-agent/workflows', async () => {
+test('--api-workflow starts an explicit durable generated-keyframe workflow', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
-      '--api-workflow', 'image-to-video',
+      '--api-workflow',
       '--api-base-url', apiBaseUrl,
       '--json',
       '--video-prompt', 'The camera slowly pushes in as the sketch comes alive',
@@ -1073,14 +1075,28 @@ test('--api-workflow starts durable image-to-video workflow through /v1/creative
     const request = requests[0];
     assert.equal(request.url, '/v1/creative-agent/workflows');
     assert.equal(request.method, 'POST');
-    assert.equal(request.body.kind, 'image_to_video');
+    assert.equal(Object.hasOwn(request.body, 'kind'), false);
     assert.equal(request.body.token_type, 'spark');
-    assert.equal(request.body.appSource, 'sogni-creative-agent-skill');
-    assert.equal(request.body.input.prompt, 'A graphite robot sketch on a drafting table');
-    assert.equal(request.body.input.videoPrompt, 'The camera slowly pushes in as the sketch comes alive');
-    assert.equal(request.body.input.width, 1024);
-    assert.equal(request.body.input.height, 576);
-    assert.equal(request.body.input.duration, 5);
+    assert.equal(request.body.app_source, 'sogni-creative-agent-skill');
+    assert.equal(request.body.input.title, 'Generated keyframe to video');
+    const [imageStep, videoStep] = request.body.input.steps;
+    assert.equal(imageStep.toolName, 'generate_image');
+    assert.equal(imageStep.arguments.prompt, 'A graphite robot sketch on a drafting table');
+    assert.equal(imageStep.arguments.width, 1024);
+    assert.equal(imageStep.arguments.height, 576);
+    assert.equal(videoStep.toolName, 'generate_video');
+    assert.equal(videoStep.arguments.prompt, 'The camera slowly pushes in as the sketch comes alive');
+    assert.equal(videoStep.arguments.width, 1024);
+    assert.equal(videoStep.arguments.height, 576);
+    assert.equal(videoStep.arguments.duration, 5);
+    assert.deepEqual(videoStep.dependsOn, [{
+      sourceStepId: 'keyframe',
+      sourceArtifactIndex: 0,
+      targetArgument: 'referenceImageIndices',
+      mediaType: 'image',
+      transform: 'image_index',
+      required: true
+    }]);
   });
 });
 
@@ -1167,9 +1183,9 @@ test('--ingest-replay reports structured errors for unreadable input files', () 
   assert.match(payload.error, /Unable to read --ingest-replay file/);
 });
 
-test('--api-workflow creative-plan forwards shared plan for API compilation', async () => {
+test('--api-workflow forwards explicit durable workflow input', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
-    const plan = {
+    const input = {
       title: 'Two-step product workflow',
       steps: [
         {
@@ -1201,10 +1217,10 @@ test('--api-workflow creative-plan forwards shared plan for API compilation', as
     };
 
     const { exitCode, stdout } = await runCliAsync([
-      '--api-workflow', 'creative-plan',
+      '--api-workflow',
       '--api-base-url', apiBaseUrl,
       '--json',
-      '--workflow-input', JSON.stringify(plan)
+      '--workflow-input', JSON.stringify(input)
     ], {
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
@@ -1213,21 +1229,19 @@ test('--api-workflow creative-plan forwards shared plan for API compilation', as
     assert.equal(exitCode, 0);
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
-    assert.equal(payload.workflowKind, 'creative_plan');
-    assert.equal(payload.workflow.kind, 'creative_plan');
 
     assert.equal(requests.length, 1);
     const request = requests[0];
     assert.equal(request.url, '/v1/creative-agent/workflows');
     assert.equal(request.method, 'POST');
-    assert.equal(request.body.kind, 'creative_plan');
+    assert.equal(Object.hasOwn(request.body, 'kind'), false);
     assert.equal(request.body.token_type, 'spark');
-    assert.equal(request.body.appSource, 'sogni-creative-agent-skill');
-    assert.deepEqual(request.body.input, plan);
+    assert.equal(request.body.app_source, 'sogni-creative-agent-skill');
+    assert.deepEqual(request.body.input, input);
     assert.equal(
       request.body.input.steps[0].toolName,
       'generate_image',
-      'skill should forward the shared plan and let the API compile hosted tool names'
+      'skill should forward durable tool names without an API-side start kind'
     );
   });
 });
@@ -1235,7 +1249,7 @@ test('--api-workflow creative-plan forwards shared plan for API compilation', as
 test('--api-workflow forwards CLI media references and cost controls', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
-      '--api-workflow', 'image-to-video',
+      '--api-workflow',
       '--api-base-url', apiBaseUrl,
       '--json',
       '--ref', SCREENSHOT_FIXTURE,
@@ -1254,12 +1268,12 @@ test('--api-workflow forwards CLI media references and cost controls', async () 
     const request = requests.find(item => item.url === '/v1/creative-agent/workflows');
     assert.ok(request);
     assert.equal(request.url, '/v1/creative-agent/workflows');
-    assert.equal(request.body.api_media_references[0].flag, '--ref');
-    assert.equal(request.body.api_media_references[0].kind, 'image');
-    assert.match(request.body.api_media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
+    assert.equal(request.body.media_references[0].flag, '--ref');
+    assert.equal(request.body.media_references[0].kind, 'image');
+    assert.match(request.body.media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
     assert.equal(request.body.max_estimated_capacity_units, 25);
-    assert.equal(request.body.cost_ceiling, 25);
     assert.equal(request.body.confirm_cost, true);
+    assert.equal(Object.hasOwn(request.body, 'cost_ceiling'), false);
   });
 });
 
@@ -1272,7 +1286,7 @@ test('--api-workflow uploads local non-image media references before durable exe
 
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
-      '--api-workflow', 'hosted-tool-sequence',
+      '--api-workflow',
       '--api-base-url', apiBaseUrl,
       '--json',
       '--ref-audio', audioPath,
@@ -1294,13 +1308,13 @@ test('--api-workflow uploads local non-image media references before durable exe
 
     const request = requests.find(item => item.url === '/v1/creative-agent/workflows');
     assert.ok(request);
-    const mediaRefs = request.body.api_media_references;
+    const mediaRefs = request.body.media_references;
     assert.equal(mediaRefs.length, 2);
     assert.match(mediaRefs[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
     assert.match(mediaRefs[1].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//);
     assert.equal(mediaRefs[0].dataUri, undefined);
     assert.equal(request.body.media_references[1].filename, 'source.mp4');
-    assert.equal(request.body.public_skill_contract_runtime.contract_counts.repair_recipes > 20, true);
+    assert.equal(Object.hasOwn(request.body, 'public_skill_contract_runtime'), false);
   });
 });
 
@@ -1327,7 +1341,7 @@ test('shared cross-surface parity fixtures include public skill media-reference 
 test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
-      '--api-workflow', 'image-to-video',
+      '--api-workflow',
       '--api-base-url', apiBaseUrl,
       '--json',
       'animate this image'
@@ -1347,22 +1361,28 @@ test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', as
     assert.equal(requests.length, 1);
     const request = requests[0];
     assert.equal(request.body.max_estimated_capacity_units, 13);
-    assert.equal(request.body.cost_ceiling, 13);
     assert.equal(request.body.confirm_cost, false);
+    assert.equal(Object.hasOwn(request.body, 'cost_ceiling'), false);
   });
 });
 
-test('--api-workflow image-to-video rejects unsupported workflow title flag', () => {
-  const { exitCode, stderr } = runCli([
-    '--api-workflow', 'image-to-video',
-    '--workflow-title', 'Launch sketch',
-    'A graphite robot sketch on a drafting table'
-  ], {
-    SOGNI_API_KEY: 'test-api-key'
-  });
+test('--api-workflow applies workflow title to generated durable input', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--workflow-title', 'Launch sketch',
+      'A graphite robot sketch on a drafting table'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
 
-  assert.equal(exitCode, 1);
-  assert.ok(stderr.includes('--workflow-title is currently only supported'));
+    assert.equal(exitCode, 0);
+    assert.equal(JSON.parse(stdout.trim()).success, true);
+    assert.equal(requests[0].body.input.title, 'Launch sketch');
+  });
 });
 
 test('--api-workflow storyboard-video generates storyline and starts GPT Image 2 to Seedance sequence', async () => {
@@ -1385,7 +1405,6 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.equal(exitCode, 0);
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
-    assert.equal(payload.workflowKind, 'storyboard_video');
     assert.equal(payload.storyboardPlan.frameCount, 3);
     assert.equal(payload.storyboardPlan.image.model, 'gpt-image-2');
     assert.equal(payload.storyboardPlan.image.quality, 'low');
@@ -1402,8 +1421,9 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.match(requests[0].body.messages[0].content, /DIALOGUE\/VO: \[no dialogue\]/);
     assert.equal(requests[1].url, '/v1/creative-agent/workflows');
     assert.equal(requests[1].headers['idempotency-key'], 'idem-storyboard-123');
-    assert.equal(requests[1].body.kind, 'hosted_tool_sequence');
-    assert.equal(requests[1].body.idempotency_key, 'idem-storyboard-123');
+    assert.equal(Object.hasOwn(requests[1].body, 'kind'), false);
+    assert.equal(Object.hasOwn(requests[1].body, 'idempotency_key'), false);
+    assert.equal(requests[1].body.app_source, 'sogni-creative-agent-skill');
     assert.equal(requests[1].body.input.title, 'Neon bakery storyboard');
 
     const [imageStep, videoStep] = requests[1].body.input.steps;

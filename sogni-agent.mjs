@@ -22,8 +22,6 @@ import {
   VIDEO_WORKFLOW_DEFAULT_MODELS,
   buildStoryboardVideoHostedToolSequenceInput,
   classifySkillError,
-  compilePublicSkillToolSurface,
-  createPublicSkillDefaultContractRuntime,
   detectReferenceAudioFormat,
   dimensionsForAspectRatio,
   dimensionsWithShortSide,
@@ -36,7 +34,6 @@ import {
   isSeedanceModelSelection,
   normalizeVideoWorkflow,
   planCliVideoBrain,
-  PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
   resolveVideoControlNetStrength,
   resolveVideoModelAlias,
   resolveVideoSteps,
@@ -340,11 +337,8 @@ function normalizeApiToolMode(value) {
   return null;
 }
 
-function normalizeApiWorkflowKind(value) {
+function normalizeApiWorkflowTemplate(value) {
   const normalized = String(value || '').toLowerCase().replace(/-/g, '_');
-  if (normalized === 'image_to_video' || normalized === 'i2v') return 'image_to_video';
-  if (normalized === 'hosted_tool_sequence' || normalized === 'tool_sequence') return 'hosted_tool_sequence';
-  if (normalized === 'creative_plan' || normalized === 'plan') return 'creative_plan';
   if (normalized === 'storyboard_video' || normalized === 'storyboard_to_video' || normalized === 'gpt_image_2_seedance' || normalized === 'gpt_image_seedance') {
     return 'storyboard_video';
   }
@@ -1149,7 +1143,7 @@ const options = {
   apiReplayInput: null,
   apiReplayLimit: 50,
   apiWorkflowAction: null, // start|list|get|events|stream|cancel|resume
-  apiWorkflowKind: null, // image_to_video|hosted_tool_sequence|creative_plan|storyboard_video
+  apiWorkflowTemplate: null, // storyboard_video
   apiWorkflowInput: null,
   apiWorkflowTitle: null,
   apiWorkflowIdempotencyKey: null,
@@ -1235,7 +1229,7 @@ const cliSet = {
   apiThinking: false,
   apiTools: false,
   apiSystemPrompt: false,
-  apiWorkflowKind: false,
+  apiWorkflowTemplate: false,
   apiWorkflowInput: false,
   apiWorkflowTitle: false,
   apiWorkflowIdempotencyKey: false,
@@ -1700,11 +1694,13 @@ for (let i = 0; i < args.length; i++) {
     options.apiReplayAction = 'ingest';
     options.apiReplayInput = raw;
   } else if (arg === '--api-workflow' || arg === '--creative-workflow') {
-    const raw = requireFlagValue(args, i, arg);
-    i++;
     options.apiWorkflowAction = 'start';
-    options.apiWorkflowKind = raw;
-    cliSet.apiWorkflowKind = true;
+    const next = args[i + 1];
+    if (next && !next.startsWith('-') && normalizeApiWorkflowTemplate(next)) {
+      i++;
+      options.apiWorkflowTemplate = next;
+      cliSet.apiWorkflowTemplate = true;
+    }
   } else if (arg === '--workflow-input') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1974,18 +1970,19 @@ Hosted API Modes:
   --get-api-model <id>  Fetch one Sogni Intelligence model descriptor
   --list-replays [n]    List recent /v1/replay/records (default: 50)
   --get-replay <id>     Fetch one replay RunRecord
-  --ingest-replay <json|path|@path>  POST a RunRecord to /v1/replay/records
-  --api-workflow <kind> Start /v1/creative-agent/workflows: image-to-video|hosted-tool-sequence|creative-plan|storyboard-video
-  --workflow-input <json|path|@path> JSON input for hosted-tool-sequence/creative-plan/custom image-to-video/storyboard-video
-  --workflow-title <text> Title for hosted-tool-sequence, creative-plan, or storyboard-video workflow input
+  --ingest-replay <json|@path>  POST a RunRecord to /v1/replay/records (use @path to load JSON from a file)
+  --api-workflow       Start /v1/creative-agent/workflows with durable input.steps
+                         Optional preset: storyboard-video
+  --workflow-input <json|@path> JSON durable workflow input (use @path to load JSON from a file)
+  --workflow-title <text> Title for generated workflow input
   --workflow-idempotency-key <key> Reuse safely when retrying a workflow start request
   --workflow-max-cost <n> Reject the workflow if estimated capacity units exceed n
   --confirm-cost, --no-confirm-cost  Forward explicit workflow cost confirmation
-  --storyboard-frames <n> Frame/beat count for --api-workflow storyboard-video
-  --video-prompt <text> Motion prompt for --api-workflow image-to-video
-  --negative-prompt <text> Negative prompt for --api-workflow image-to-video
-  --generate-audio, --no-generate-audio  Toggle audio generation for image-to-video workflows
-  --expand-prompt, --no-expand-prompt    Toggle prompt expansion for image-to-video workflows
+  --storyboard-frames <n> Frame/beat count for the storyboard-video preset
+  --video-prompt <text> Motion prompt for the generated-keyframe durable workflow
+  --negative-prompt <text> Negative prompt for generated workflow steps
+  --generate-audio, --no-generate-audio  Toggle audio generation for generated video steps
+  --expand-prompt, --no-expand-prompt    Toggle prompt expansion for generated video steps
   --watch-workflow      Stream workflow events after starting
   --list-workflows      List recent durable creative workflows
   --get-workflow <id>   Fetch a workflow snapshot
@@ -2095,8 +2092,8 @@ Examples:
   sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale "C major" --output-format mp3 "bright indie pop chorus"
   sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
   sogni-agent --api-chat "Create a 4-shot product video concept for a red sneaker"
-  sogni-agent --api-workflow image-to-video --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
-  sogni-agent --api-workflow creative-plan --workflow-input @plan.json
+  sogni-agent --api-workflow --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
+  sogni-agent --api-workflow --workflow-input @workflow.json
   sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2 and Seedance"
   sogni-agent --video -m ltx23-22b-fp8_t2v_distilled --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
@@ -2249,15 +2246,15 @@ if (normalizedApiToolMode === null) {
 }
 options.apiTools = normalizedApiToolMode;
 
-if (options.apiWorkflowKind) {
-  const normalized = normalizeApiWorkflowKind(options.apiWorkflowKind);
+if (options.apiWorkflowTemplate) {
+  const normalized = normalizeApiWorkflowTemplate(options.apiWorkflowTemplate);
   if (!normalized) {
-    fatalCliError('--api-workflow must be "image-to-video", "hosted-tool-sequence", "creative-plan", or "storyboard-video".', {
+    fatalCliError('--api-workflow preset must be "storyboard-video".', {
       code: 'INVALID_ARGUMENT',
-      details: { flag: '--api-workflow', value: options.apiWorkflowKind }
+      details: { flag: '--api-workflow', value: options.apiWorkflowTemplate }
     });
   }
-  options.apiWorkflowKind = normalized;
+  options.apiWorkflowTemplate = normalized;
 }
 
 if (options.quality) {
@@ -2710,6 +2707,7 @@ if (options.music) {
 const apiWorkflowUtilityAction = options.apiWorkflowAction && options.apiWorkflowAction !== 'start';
 const apiWorkflowStartAction = options.apiWorkflowAction === 'start';
 const apiWorkflowStartHasExternalInput = options.apiWorkflowAction === 'start' && options.apiWorkflowInput;
+const apiWorkflowTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
 const apiModelUtilityAction = Boolean(options.apiModelAction);
 const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
@@ -2726,17 +2724,11 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.memoryAction &&
   !options.personalityAction &&
   !personaUtilityAction;
-if (apiWorkflowStartAction && options.apiWorkflowKind === 'image_to_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
-  fatalCliError('--api-workflow image-to-video requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
+if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
+  fatalCliError('--api-workflow requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
-if (apiWorkflowStartAction && options.apiWorkflowKind === 'hosted_tool_sequence' && !apiWorkflowStartHasExternalInput) {
-  fatalCliError('--api-workflow hosted-tool-sequence requires --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
-}
-if (apiWorkflowStartAction && options.apiWorkflowKind === 'creative_plan' && !apiWorkflowStartHasExternalInput) {
-  fatalCliError('--api-workflow creative-plan requires --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
-}
-if (apiWorkflowStartAction && options.apiWorkflowKind === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
-  fatalCliError('--api-workflow storyboard-video requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
+if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
+  fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
 if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
@@ -2744,13 +2736,6 @@ if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWork
 
 if (options.apiChat && !options.prompt && getApiModeMediaReferences().length === 0) {
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
-}
-
-if (options.apiWorkflowAction === 'start' && options.apiWorkflowKind === 'image_to_video' && options.apiWorkflowTitle) {
-  fatalCliError('--workflow-title is currently only supported with --api-workflow hosted-tool-sequence, creative-plan, or storyboard-video.', {
-    code: 'INVALID_ARGUMENT',
-    details: { flag: '--workflow-title', workflow: options.apiWorkflowKind }
-  });
 }
 
 if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null)) {
@@ -3425,38 +3410,6 @@ async function imageDataUriFromPathOrUrl(pathOrUrl) {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
-function publicSkillApiSessionState(apiMediaReferences) {
-  return {
-    hasUploadedImage: apiMediaReferences.some(ref => ref.kind === 'image'),
-    hasUploadedVideo: apiMediaReferences.some(ref => ref.kind === 'video'),
-    hasUploadedAudio: apiMediaReferences.some(ref => ref.kind === 'audio'),
-  };
-}
-
-function publicSkillContractRuntimePayload(apiMediaReferences) {
-  const runtime = createPublicSkillDefaultContractRuntime();
-  const compiled = compilePublicSkillToolSurface({
-    runtime,
-    tools: PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
-    sessionState: publicSkillApiSessionState(apiMediaReferences),
-  });
-  return {
-    version: 'default',
-    turn_policy: {
-      visible_tools: compiled.turnPolicy.visibleTools,
-      forbidden_tools: compiled.turnPolicy.forbiddenTools,
-      required_tools: compiled.turnPolicy.requiredTools,
-      applied_policies: compiled.turnPolicy.appliedPolicies,
-      rationale: compiled.turnPolicy.rationale,
-    },
-    contract_counts: {
-      policies: runtime.policies.length,
-      prompt_contracts: runtime.promptContracts.length,
-      repair_recipes: runtime.repairRecipes.length,
-    },
-  };
-}
-
 async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
   const system = options.apiSystemPrompt ||
     'You are a concise creative production assistant. Use Sogni creative tools when they help produce concrete media.';
@@ -3493,7 +3446,6 @@ async function runApiChat(log) {
   const apiMediaReferences = await buildApiMediaReferencesPayload(apiMediaRefs, { apiKey });
   const messages = sanitizeMessagesForLlm(await buildApiChatMessages(apiMediaRefs, apiMediaReferences));
   const chatTemplateKwargs = apiChatTemplateKwargs();
-  const publicSkillRuntime = publicSkillContractRuntimePayload(apiMediaReferences);
   const body = {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages,
@@ -3501,16 +3453,11 @@ async function runApiChat(log) {
     max_tokens: options.apiMaxTokens || 1600,
     token_type: options.tokenType || 'spark',
     app_source: SOGNI_APP_SOURCE,
-    appSource: SOGNI_APP_SOURCE,
     sogni_tools: options.apiTools,
     sogni_tool_execution: options.apiToolExecution,
-    public_skill_contract_runtime: publicSkillRuntime,
     ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
     ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
-    ...(apiMediaReferences.length > 0 ? {
-      api_media_references: apiMediaReferences,
-      media_references: apiMediaReferences,
-    } : {})
+    ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {})
   };
   const payload = await fetchApiJson('/v1/chat/completions', {
     apiKey,
@@ -3553,25 +3500,30 @@ async function runApiChat(log) {
 
 function parseJsonArgument(raw, label, code = 'INVALID_JSON_INPUT') {
   if (!raw) return null;
-  const sourcePath = raw.startsWith('@') ? raw.slice(1) : raw;
-  const expanded = expandHomePath(sourcePath);
   let text;
-  if (raw.startsWith('@') || existsSync(expanded)) {
+  if (raw.startsWith('@')) {
+    // Explicit @path sigil — strip, expand home, sanitize, read.
+    const sourcePath = sanitizePath(expandHomePath(raw.slice(1)), `${label} file path`);
     try {
-      text = readFileSync(expanded, 'utf8');
+      text = readFileSync(sourcePath, 'utf8');
     } catch (error) {
       const err = new Error(`Unable to read ${label} file: ${error?.message || String(error)}`);
       err.code = code;
-      err.details = { path: expanded };
+      err.details = { path: sourcePath };
       throw err;
     }
   } else {
+    // Everything else is inline JSON. Do NOT auto-detect filesystem paths —
+    // that turns CLI args into a file-existence oracle.
     text = raw;
   }
   try {
     return JSON.parse(text);
   } catch (error) {
-    const err = new Error(`Invalid ${label} JSON: ${error?.message || String(error)}`);
+    const message = raw.startsWith('@')
+      ? `Invalid ${label} JSON: ${error?.message || String(error)}`
+      : `Invalid ${label} JSON (use @path to load JSON from a file): ${error?.message || String(error)}`;
+    const err = new Error(message);
     err.code = code;
     throw err;
   }
@@ -3581,45 +3533,56 @@ function parseWorkflowInput(raw) {
   return parseJsonArgument(raw, '--workflow-input', 'INVALID_WORKFLOW_INPUT');
 }
 
-function buildImageToVideoWorkflowInput() {
+function buildGeneratedKeyframeVideoWorkflowInput() {
   const parsed = parseWorkflowInput(options.apiWorkflowInput);
   if (parsed) return parsed;
-  const input = {
-    prompt: options.prompt
+  const imageArgs = {
+    prompt: options.prompt,
   };
-  if (options.apiVideoPrompt) input.videoPrompt = options.apiVideoPrompt;
-  if (options.apiNegativePrompt) input.negativePrompt = options.apiNegativePrompt;
-  if (Number.isFinite(options.width)) input.width = options.width;
-  if (Number.isFinite(options.height)) input.height = options.height;
-  if (Number.isFinite(options.duration)) input.duration = options.duration;
-  if (options.model) input.imageModel = options.model;
-  if (options.videoModel) input.videoModel = options.videoModel;
-  if (Number.isFinite(options.count)) input.numberOfMedia = options.count;
-  if (options.seed !== null && options.seed !== undefined) input.seed = options.seed;
-  if (options.apiGenerateAudio !== null) input.generateAudio = options.apiGenerateAudio;
-  if (options.apiExpandPrompt !== null) input.expandPrompt = options.apiExpandPrompt;
-  return input;
-}
+  if (options.apiNegativePrompt) imageArgs.negativePrompt = options.apiNegativePrompt;
+  if (Number.isFinite(options.width)) imageArgs.width = options.width;
+  if (Number.isFinite(options.height)) imageArgs.height = options.height;
+  if (options.model) imageArgs.model = options.model;
+  if (Number.isFinite(options.count)) imageArgs.numberOfVariations = options.count;
+  if (options.seed !== null && options.seed !== undefined) imageArgs.seed = options.seed;
 
-function buildHostedToolSequenceWorkflowInput() {
-  const parsed = parseWorkflowInput(options.apiWorkflowInput);
-  if (!parsed) {
-    const err = new Error('--api-workflow hosted-tool-sequence requires --workflow-input JSON.');
-    err.code = 'MISSING_WORKFLOW_INPUT';
-    throw err;
-  }
-  if (options.apiWorkflowTitle && !parsed.title) {
-    parsed.title = options.apiWorkflowTitle;
-  }
-  return parsed;
-}
+  const videoArgs = {
+    prompt: options.apiVideoPrompt || options.prompt,
+  };
+  if (options.apiNegativePrompt) videoArgs.negativePrompt = options.apiNegativePrompt;
+  if (Number.isFinite(options.width)) videoArgs.width = options.width;
+  if (Number.isFinite(options.height)) videoArgs.height = options.height;
+  if (Number.isFinite(options.duration)) videoArgs.duration = options.duration;
+  if (options.videoModel) videoArgs.videoModel = options.videoModel;
+  if (Number.isFinite(options.count)) videoArgs.numberOfVariations = options.count;
+  if (options.apiGenerateAudio !== null) videoArgs.generateAudio = options.apiGenerateAudio;
+  if (options.apiExpandPrompt !== null) videoArgs.expandPrompt = options.apiExpandPrompt;
 
-function buildCreativePlanWorkflowInput() {
-  const parsed = parseWorkflowInput(options.apiWorkflowInput);
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && options.apiWorkflowTitle && !parsed.title) {
-    parsed.title = options.apiWorkflowTitle;
-  }
-  return parsed;
+  return {
+    title: options.apiWorkflowTitle || 'Generated keyframe to video',
+    steps: [
+      {
+        id: 'keyframe',
+        toolName: 'generate_image',
+        arguments: imageArgs,
+      },
+      {
+        id: 'clip',
+        toolName: 'generate_video',
+        arguments: videoArgs,
+        dependsOn: [
+          {
+            sourceStepId: 'keyframe',
+            sourceArtifactIndex: 0,
+            targetArgument: 'referenceImageIndices',
+            mediaType: 'image',
+            transform: 'image_index',
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function storyboardWorkflowImageQualityFromCli() {
@@ -3732,7 +3695,6 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       max_tokens: options.apiMaxTokens || 1800,
       token_type: options.tokenType || 'spark',
       app_source: SOGNI_APP_SOURCE,
-      appSource: SOGNI_APP_SOURCE,
       ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
       ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
       sogni_tools: false,
@@ -3892,7 +3854,6 @@ async function runApiReplay() {
 
 function printWorkflowSummary(workflow) {
   console.log(`Workflow: ${workflow.workflowId || workflow.id || '(unknown)'}`);
-  if (workflow.kind) console.log(`Kind:     ${workflow.kind}`);
   if (workflow.status) console.log(`Status:   ${workflow.status}`);
   if (workflow.title) console.log(`Title:    ${workflow.title}`);
   const artifacts = Array.isArray(workflow.artifacts) ? workflow.artifacts : [];
@@ -4047,25 +4008,18 @@ async function runApiWorkflow() {
   }
 
   const apiMediaReferences = await buildApiMediaReferencesPayload(undefined, { apiKey });
-  const publicSkillRuntime = publicSkillContractRuntimePayload(apiMediaReferences);
-  const requestedKind = options.apiWorkflowKind || 'image_to_video';
-  let kind = requestedKind;
+  const requestedTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
   let input;
   let storyboardPlan = null;
   let storyboardPlanningRaw = null;
 
-  if (requestedKind === 'storyboard_video') {
+  if (requestedTemplate === 'storyboard_video') {
     const built = await buildStoryboardVideoWorkflowInput(apiKey);
     storyboardPlan = built.plan;
     storyboardPlanningRaw = built.planningRaw;
-    kind = 'hosted_tool_sequence';
     input = storyboardPlan.input;
   } else {
-    input = requestedKind === 'hosted_tool_sequence'
-      ? buildHostedToolSequenceWorkflowInput()
-      : requestedKind === 'creative_plan'
-        ? buildCreativePlanWorkflowInput()
-        : buildImageToVideoWorkflowInput();
+    input = buildGeneratedKeyframeVideoWorkflowInput();
   }
 
   payload = await fetchApiJson('/v1/creative-agent/workflows', {
@@ -4075,22 +4029,14 @@ async function runApiWorkflow() {
       ? { 'Idempotency-Key': options.apiWorkflowIdempotencyKey }
       : {},
     body: {
-      kind,
       input,
-      ...(options.apiWorkflowIdempotencyKey ? { idempotency_key: options.apiWorkflowIdempotencyKey } : {}),
-      ...(apiMediaReferences.length > 0 ? {
-        api_media_references: apiMediaReferences,
-        media_references: apiMediaReferences,
-      } : {}),
+      ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {}),
       ...(options.apiWorkflowMaxCost !== null ? {
         max_estimated_capacity_units: options.apiWorkflowMaxCost,
-        cost_ceiling: options.apiWorkflowMaxCost,
       } : {}),
       ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
       token_type: tokenType,
-      app_source: SOGNI_APP_SOURCE,
-      appSource: SOGNI_APP_SOURCE,
-      public_skill_contract_runtime: publicSkillRuntime
+      app_source: SOGNI_APP_SOURCE
     }
   });
   const workflow = workflowFromPayload(payload);
@@ -4100,7 +4046,6 @@ async function runApiWorkflow() {
       success: true,
       type,
       action: 'start',
-      workflowKind: requestedKind,
       ...(storyboardPlan ? {
         storyline: storyboardPlan.storyline,
         storyboardPlan: {
@@ -4131,7 +4076,11 @@ async function runApiWorkflow() {
 // ---------------------------------------------------------------------------
 // Memory system — persistent user preferences on disk
 // ---------------------------------------------------------------------------
-const MEMORIES_PATH = getEnv('SOGNI_MEMORIES_PATH') || DEFAULT_MEMORIES_PATH;
+const MEMORIES_PATH = resolveConfiguredPath(
+  getEnv('SOGNI_MEMORIES_PATH'),
+  DEFAULT_MEMORIES_PATH,
+  'SOGNI memories path'
+);
 
 function loadMemories() {
   try {
@@ -4167,7 +4116,11 @@ function memoryRemove(key) {
 // ---------------------------------------------------------------------------
 // Personality system — custom instructions for agent behavior
 // ---------------------------------------------------------------------------
-const PERSONALITY_PATH = getEnv('SOGNI_PERSONALITY_PATH') || DEFAULT_PERSONALITY_PATH;
+const PERSONALITY_PATH = resolveConfiguredPath(
+  getEnv('SOGNI_PERSONALITY_PATH'),
+  DEFAULT_PERSONALITY_PATH,
+  'SOGNI personality path'
+);
 
 function loadPersonality() {
   try {
@@ -4189,7 +4142,11 @@ function clearPersonality() {
 // ---------------------------------------------------------------------------
 // Persona system — named people with reference photos and voice clips
 // ---------------------------------------------------------------------------
-const PERSONAS_DIR = getEnv('SOGNI_PERSONAS_DIR') || DEFAULT_PERSONAS_DIR;
+const PERSONAS_DIR = resolveConfiguredPath(
+  getEnv('SOGNI_PERSONAS_DIR'),
+  DEFAULT_PERSONAS_DIR,
+  'SOGNI personas directory'
+);
 const PERSONAS_INDEX_PATH = join(PERSONAS_DIR, 'index.json');
 
 function loadPersonas() {

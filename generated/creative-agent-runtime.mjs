@@ -5554,7 +5554,11 @@ export function inferExplicitStoryboardFrameCountFromText(text) {
     return candidates.length > 0 ? Math.max(...candidates) : null;
 }
 function inferMarkdownStoryboardTableFrameCount(text) {
-    const count = text
+    let activeHeader = null;
+    let activeCount = 0;
+    let activeLooksLikeStoryboard = false;
+    const counts = [];
+    const timecodedRowCount = text
         .split(/\r?\n/)
         .filter(line => {
         if (!line.trim().startsWith('|'))
@@ -5562,7 +5566,38 @@ function inferMarkdownStoryboardTableFrameCount(text) {
         return /\b(?:\d{1,2}:\d{2}(?:\.\d+)?|\d{1,3}(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)?\s*(?:-|to|\u2013|\u2014)\s*(?:\d{1,2}:\d{2}(?:\.\d+)?|\d{1,3}(?:\.\d+)?)\b/i.test(line);
     })
         .length;
-    return count >= 1 && count <= 24 ? count : null;
+    const flushActiveTable = () => {
+        if (activeLooksLikeStoryboard && activeCount >= 1 && activeCount <= 24) {
+            counts.push(activeCount);
+        }
+        activeHeader = null;
+        activeCount = 0;
+        activeLooksLikeStoryboard = false;
+    };
+    for (const line of text.split(/\r?\n/)) {
+        const cells = storyboardMarkdownCountTableCells(line);
+        if (cells.length < 3) {
+            if (!storyboardMarkdownTableSeparatorLine(line))
+                flushActiveTable();
+            continue;
+        }
+        if (looksLikeStoryboardCountTableHeader(cells)) {
+            flushActiveTable();
+            activeHeader = cells;
+            activeLooksLikeStoryboard = true;
+            continue;
+        }
+        if (!activeLooksLikeStoryboard && cells.some(cell => extractStoryboardTimingMarker(cell) !== null)) {
+            activeHeader = activeHeader ?? [];
+            activeLooksLikeStoryboard = true;
+        }
+        if (activeLooksLikeStoryboard && storyboardTableRowLooksLikeCountedBeat(cells, activeHeader)) {
+            activeCount += 1;
+        }
+    }
+    flushActiveTable();
+    const count = counts[0] ?? (timecodedRowCount >= 1 && timecodedRowCount <= 24 ? timecodedRowCount : null);
+    return count && count >= 1 && count <= 24 ? count : null;
 }
 export function inferStoryboardFrameCountFromScriptText(text) {
     if (!text)
@@ -5873,6 +5908,7 @@ function extractStoryboardRequiredText(text) {
     const required = new Set();
     const inlineProductionLabelPattern = /\b(?:SFX|FX|Audio(?:\s*\/\s*SFX)?|Sound(?:s)?|Music|Foley|Camera(?:\s*\/\s*Motion)?|Motion|Lighting(?:\s*\/\s*Style)?|Style|Transition|Action(?:\s*\/\s*Motion)?|Performance|Beat)\s*:\s*[^a-z0-9]{0,4}$/i;
     const visibleTextContextPattern = /\b(?:visible|on[-\s]?screen|in[-\s]?frame|text|copy|cta|tagline|headline|title\s+card|caption|subtitle|super|wordmark|spell(?:ed)?|read(?:s)?|slogan)\b/i;
+    const sceneHeadingPattern = /^\s*(?:[-*+]\s*)?(?:#{1,6}\s*)?(?:[*_]{1,3})?\s*(?:Scene|Shot|Beat|Panel|Frame)[\s_#-]*\d{1,2}\b/i;
     const shouldIgnoreRequiredText = (value, matchIndex, precedingText) => {
         const lineStart = text.lastIndexOf('\n', matchIndex) + 1;
         const nextLineBreak = text.indexOf('\n', matchIndex);
@@ -5889,11 +5925,17 @@ function extractStoryboardRequiredText(text) {
         const hasInlineProductionLabel = !!precedingTail
             && inlineProductionLabelPattern.test(precedingTail)
             && !visibleTextContextPattern.test(precedingTail);
+        const isNestedSceneHeadingField = sceneHeadingPattern.test(line)
+            && !!precedingText
+            && line.slice(0, matchIndex - lineStart).trim().length > 0;
         if (/\b(?:working\s+title|project\s+title)\b/i.test(line)
             && !/\b(?:title\s+card|on[-\s]?screen|visible|text|copy|cta|headline|tagline)\b/i.test(line)) {
             return true;
         }
         if (storyboardTextCandidateLooksLikeGenericProductionLabel(value)) {
+            return true;
+        }
+        if (isNestedSceneHeadingField) {
             return true;
         }
         if (hasInlineProductionLabel) {
@@ -5946,15 +5988,15 @@ function extractStoryboardRequiredText(text) {
     for (const match of text.matchAll(labeledTextPattern)) {
         const value = match[1] || '';
         const matchStartInText = match.index ?? 0;
+        const lineStart = text.lastIndexOf('\n', matchStartInText) + 1;
         const valueStartInMatch = match[0].indexOf(value);
         const valueStartInText = valueStartInMatch >= 0 ? matchStartInText + valueStartInMatch : matchStartInText;
         let addedQuotedText = false;
         for (const quote of value.matchAll(/"([^"]{1,160})"|“([^”]{1,160})”|`([^`]{1,160})`/g)) {
             const innerStartInValue = quote.index ?? 0;
-            const precedingInValue = value.slice(0, innerStartInValue);
             const quoteAbsIndex = valueStartInText + innerStartInValue;
             addRequiredText(quote[1] ?? quote[2] ?? quote[3], quoteAbsIndex, {
-                precedingText: precedingInValue,
+                precedingText: text.slice(lineStart, quoteAbsIndex),
             });
             addedQuotedText = true;
         }
@@ -5964,7 +6006,10 @@ function extractStoryboardRequiredText(text) {
                 .replace(/\s+\b(?:Dialogue\/VO|VO\/Dialogue|V\.O\.|VO|Voiceover|Voice-over|Speech|Narration|Audio\/SFX|Audio|SFX|FX|Foley|Sound|Sounds|Music|Camera\/Motion|Camera|Lighting\/Style|Lighting|Style|Look|Action\/Motion|Action|Motion)\s*:[\s\S]*$/i, '')
                 .replace(/\b(?:none|no\s+(?:visible\s+)?text|n\/a|not\s+specified)\b\.?$/i, '')
                 .trim();
-            addRequiredText(unquoted, matchStartInText, { splitUnquotedList: true });
+            addRequiredText(unquoted, matchStartInText, {
+                splitUnquotedList: true,
+                precedingText: text.slice(lineStart, matchStartInText),
+            });
         }
     }
     const renderThesePattern = /\b(?:exact words|exact text|required text|final cta|end card text)\b[\s\S]{0,320}/gi;
@@ -6230,6 +6275,33 @@ function storyboardMarkdownTableCells(line) {
         return [];
     return cells;
 }
+function storyboardMarkdownTableSeparatorLine(line) {
+    return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+function storyboardMarkdownCountTableCells(line) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('|'))
+        return [];
+    if (storyboardMarkdownTableSeparatorLine(trimmed))
+        return [];
+    return trimmed
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map(cell => cell
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<\/?[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim())
+        .filter(Boolean);
+}
 function splitStoryboardTitleDescription(value) {
     const cleaned = stripStoryboardMarkup(value);
     const fallbackTitleFromDescription = (description) => {
@@ -6297,6 +6369,24 @@ function looksLikeStoryboardTableHeader(cells) {
     const joined = cells.join(' ');
     return /\b(?:time|timecode|timing|duration)\b/i.test(joined)
         && /\b(?:visual|action|frame|shot|camera|audio|dialogue|vo|voiceover|sfx)\b/i.test(joined);
+}
+function looksLikeStoryboardCountTableHeader(cells) {
+    if (cells.some(cell => extractStoryboardTiming(cell)))
+        return false;
+    if (/^(?:beat|scene|shot|panel|frame)?\s*(?:#\s*)?0?\d{1,2}\b/i.test(cells[0] || '')) {
+        return false;
+    }
+    const joined = cells.join(' ');
+    return /\b(?:beat|scene|shot|panel|frame|time|timecode|timing|duration)\b/i.test(joined)
+        && /\b(?:purpose|story|feature|visual|action|frame|shot|image|camera|motion|audio|dialogue|vo|voiceover|sfx|sound|music|transition|copy|cta|text)\b/i.test(joined);
+}
+function storyboardTableRowLooksLikeCountedBeat(cells, headers) {
+    if (cells.some(cell => extractStoryboardTimingMarker(cell) !== null))
+        return true;
+    const headerIndex = headers?.findIndex(header => /\b(?:beat|scene|shot|panel|frame)\b/i.test(header)
+        && !/\b(?:visual|action|camera|audio|dialogue|vo|sfx|transition)\b/i.test(header)) ?? 0;
+    const candidate = compactStoryboardLine(cells[Math.max(0, headerIndex)] || cells[0] || '');
+    return /^(?:beat|scene|shot|panel|frame)?\s*(?:#\s*)?0?\d{1,2}\b/i.test(candidate);
 }
 function storyboardTableCellWithoutDialogue(cell, dialogue) {
     const normalizedDialogue = compactStoryboardLine(dialogue).toLowerCase();

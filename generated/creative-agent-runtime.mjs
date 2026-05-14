@@ -1677,52 +1677,87 @@ export function inferExplicitPixelDimensionsFromText(text) {
     }
     return null;
 }
+function ratioMatchLooksLikeMediaTimecodeRange(text, match) {
+    const rawWidth = match[1] ?? '';
+    const rawHeight = match[2] ?? '';
+    if (!/^\d{1,2}$/.test(rawWidth) || !/^\d{2}$/.test(rawHeight))
+        return false;
+    const width = Number(rawWidth);
+    const height = Number(rawHeight);
+    if (!Number.isInteger(width) || !Number.isInteger(height) || height < 0 || height > 59)
+        return false;
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const before = text.slice(Math.max(0, start - 40), start);
+    const after = text.slice(end, Math.min(text.length, end + 40));
+    const adjacentRange = /^\s*(?:-|–|—|\bto\b)\s*\d{1,2}:[0-5]\d\b/i.test(after)
+        || /\b\d{1,2}:[0-5]\d\s*(?:-|–|—|\bto\b)\s*$/i.test(before);
+    if (adjacentRange)
+        return true;
+    const timeCueContext = `${before} ${after}`;
+    return /^0\d$/.test(rawHeight)
+        && /\b(?:timecode|timestamp|audio|music|song|track|clip|file|source|window|segment|range)\b/i.test(timeCueContext);
+}
 export function inferExplicitAspectRatioFromText(text) {
-    const match = text.match(/\b(\d{1,4}(?:\.\d+)?)\s*:\s*(\d{1,4}(?:\.\d+)?)\b/);
-    if (!match)
-        return null;
-    const width = Number(match[1]);
-    const height = Number(match[2]);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-        return null;
-    }
-    const index = match.index ?? 0;
-    const context = text.slice(Math.max(0, index - 48), Math.min(text.length, index + match[0].length + 48));
-    const hasExplicitRatioContext = /\b(?:aspect|ratio|format|resolution|size|dimensions?|portrait|landscape|widescreen|horizontal|vertical)\b/i.test(context);
-    if (!hasExplicitRatioContext && width <= 3 && height >= 10 && height < 60) {
-        return null;
-    }
-    if (/\b(?:ratio|aspect|format|resolution|size|dimensions?|portrait|landscape|vertical|horizontal|widescreen|frame|image|photo|picture|video|clip|ad|advert|commercial|promo|story\s*board|storyboard|tiktok|tik\s*tok|reels?|shorts?|instagram|output)\b/i.test(context)) {
-        return { width, height, text: match[0] };
+    const ratioPattern = /\b(\d{1,4}(?:\.\d+)?)\s*:\s*(\d{1,4}(?:\.\d+)?)\b/g;
+    for (const match of text.matchAll(ratioPattern)) {
+        if (ratioMatchLooksLikeMediaTimecodeRange(text, match))
+            continue;
+        const width = Number(match[1]);
+        const height = Number(match[2]);
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            continue;
+        }
+        const index = match.index ?? 0;
+        const context = text.slice(Math.max(0, index - 48), Math.min(text.length, index + match[0].length + 48));
+        const hasExplicitRatioContext = /\b(?:aspect|ratio|format|resolution|size|dimensions?|portrait|landscape|widescreen|horizontal|vertical)\b/i.test(context);
+        if (!hasExplicitRatioContext && width <= 3 && height >= 10 && height < 60) {
+            continue;
+        }
+        if (/\b(?:ratio|aspect|format|resolution|size|dimensions?|portrait|landscape|vertical|horizontal|widescreen|frame|image|photo|picture|video|clip|ad|advert|commercial|promo|story\s*board|storyboard|tiktok|tik\s*tok|reels?|shorts?|instagram|output)\b/i.test(context)) {
+            return { width, height, text: match[0] };
+        }
     }
     return null;
 }
+function timeRangeLooksLikeSourceMediaWindow(text, match) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const context = text.slice(Math.max(0, start - 96), Math.min(text.length, end + 96));
+    return /\b(?:audio|music|song|sound|track)\s+(?:file|clip|track|source|upload|reference)\b/i.test(context)
+        || /\b(?:file|clip|track|source|upload|reference)\s+(?:audio|music|song|sound|track)\b/i.test(context)
+        || /\b(?:from|using|between|inside|within|in)\b[\s\S]{0,60}\b(?:audio|music|song|sound|track|clip|file)\b/i.test(context)
+        || /\b(?:audio|music|song|sound|track|clip|file)\b[\s\S]{0,60}\b(?:from|using|between|inside|within|in)\b/i.test(context);
+}
 export function inferRequestedTotalVideoDurationSeconds(text) {
-    const durations = [];
+    const explicitDurations = [];
     for (const match of text.matchAll(/\b(\d{1,3}(?:\.\d+)?)\s*(?:minutes?|mins?)\b/gi)) {
         if (match.index !== undefined && text[match.index - 1] === '%')
             continue;
         const minutes = Number(match[1]);
         if (Number.isFinite(minutes) && minutes > 0)
-            durations.push(Math.ceil(minutes * 60));
+            explicitDurations.push(Math.ceil(minutes * 60));
     }
     for (const match of text.matchAll(/\b(\d{1,3}(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b/gi)) {
         if (match.index !== undefined && text[match.index - 1] === '%')
             continue;
         const seconds = Number(match[1]);
         if (Number.isFinite(seconds) && seconds > 0)
-            durations.push(seconds);
+            explicitDurations.push(seconds);
     }
+    if (explicitDurations.length > 0)
+        return Math.max(...explicitDurations);
+    const timeRangeDurations = [];
     for (const match of text.matchAll(/\b(\d{1,2}):([0-5]\d)(?:\.\d+)?\s*(?:-|–|—|\bto\b)\s*(\d{1,2}):([0-5]\d)(?:\.\d+)?\b/gi)) {
         if (match.index !== undefined && text[match.index - 1] === '%')
             continue;
         const start = (Number(match[1]) * 60) + Number(match[2]);
         const end = (Number(match[3]) * 60) + Number(match[4]);
         if (Number.isFinite(start) && Number.isFinite(end) && end > start && end <= 600) {
-            durations.push(end);
+            timeRangeDurations.push(timeRangeLooksLikeSourceMediaWindow(text, match) ? end - start : end);
         }
     }
-    return durations.length > 0 ? Math.max(...durations) : null;
+    return timeRangeDurations.length > 0 ? Math.max(...timeRangeDurations) : null;
 }
 export function textProvidesLiteralVideoPrompt(text) {
     return /\b(?:full|exact|literal)\s+prompt\b/i.test(text)
@@ -2537,6 +2572,15 @@ function inferStoryboardAspectNearUnit(text, unitPattern, rejectBetweenPattern) 
     const candidates = [];
     for (const match of text.matchAll(aspectPattern)) {
         const aspect = match[1];
+        const numericAspect = aspect.match(/^(\d{1,4})\s*:\s*(\d{1,4})$/);
+        if (numericAspect && ratioMatchLooksLikeMediaTimecodeRange(text, {
+            ...match,
+            0: match[0],
+            1: numericAspect[1],
+            2: numericAspect[2],
+        })) {
+            continue;
+        }
         const ratio = ratioFromStoryboardAspectWords(aspect);
         if (!ratio)
             continue;
@@ -2598,6 +2642,14 @@ function inferExplicitStoryboardTargetVideoAspectRatio(text) {
         const between = explicitTarget[1] ?? '';
         if (/\b(?:story\s*board|storyboard|board|canvas|page|sheet|poster)\b/i.test(between))
             continue;
+        const fullMatch = explicitTarget[0] ?? '';
+        const ratioInMatch = fullMatch.match(/(\d{1,4})\s*:\s*(\d{1,4})\s*$/);
+        if (ratioInMatch?.index !== undefined && ratioMatchLooksLikeMediaTimecodeRange(text, {
+            ...ratioInMatch,
+            index: (explicitTarget.index ?? 0) + ratioInMatch.index,
+        })) {
+            continue;
+        }
         const width = Number(explicitTarget[2]);
         const height = Number(explicitTarget[3]);
         if (width > 0 && height > 0)
@@ -2721,20 +2773,22 @@ function normalizeStoryboardBoardDimensions(value) {
 function storyboardPlanningSourceFromContract(contract) {
     return contract?.layout?.source ?? contract?.source ?? 'fallback_text';
 }
-function applyStoryboardPlanningLayoutContract(fallback, contract, frameCount) {
+function applyStoryboardPlanningLayoutContract(fallback, contract, frameCount, userDefinedCanvas) {
     const layoutContract = contract?.layout;
     if (!layoutContract)
         return fallback;
-    const boardAspectRatio = normalizeAspectRatio(layoutContract.storyboardCanvasAspectRatio)
-        ?? fallback.boardAspectRatio;
+    const boardAspectRatio = userDefinedCanvas
+        ? normalizeAspectRatio(layoutContract.storyboardCanvasAspectRatio) ?? fallback.boardAspectRatio
+        : fallback.boardAspectRatio;
     const cellAspectRatio = normalizeAspectRatio(layoutContract.storyboardCellAspectRatio)
         ?? fallback.cellAspectRatio;
     const targetVideoAspectRatio = normalizeAspectRatio(layoutContract.targetVideoAspectRatio)
         ?? cellAspectRatio
         ?? fallback.targetVideoAspectRatio;
     const layout = describeStoryboardLayout(boardAspectRatio, cellAspectRatio, frameCount);
-    const boardDimensions = normalizeStoryboardBoardDimensions(layoutContract.boardDimensions)
-        ?? fallback.boardDimensions;
+    const boardDimensions = userDefinedCanvas
+        ? normalizeStoryboardBoardDimensions(layoutContract.boardDimensions) ?? fallback.boardDimensions
+        : fallback.boardDimensions;
     return {
         boardAspectRatio,
         cellAspectRatio,
@@ -2744,8 +2798,11 @@ function applyStoryboardPlanningLayoutContract(fallback, contract, frameCount) {
     };
 }
 export function inferStoryboardLayoutSpec(userIntentText, frameCount, planningContract) {
-    const explicitPixels = inferExplicitPixelDimensionsFromText(userIntentText);
-    const boardAspectRatio = inferStoryboardBoardAspectRatio(userIntentText);
+    const userDefinedCanvas = userDefinedStoryboardCanvas(userIntentText);
+    const explicitPixels = userDefinedCanvas ? inferExplicitPixelDimensionsFromText(userIntentText) : null;
+    const boardAspectRatio = userDefinedCanvas
+        ? inferStoryboardBoardAspectRatio(userIntentText)
+        : '16:9';
     const explicitTargetVideoAspectRatio = inferExplicitStoryboardTargetVideoAspectRatio(userIntentText);
     const inferredTargetVideoAspectRatio = explicitTargetVideoAspectRatio
         ?? inferStoryboardTargetVideoAspectRatio(userIntentText, boardAspectRatio);
@@ -2757,9 +2814,13 @@ export function inferStoryboardLayoutSpec(userIntentText, frameCount, planningCo
         cellAspectRatio,
         targetVideoAspectRatio,
         ...layout,
-        ...(explicitPixels ? { boardDimensions: `${explicitPixels.width}x${explicitPixels.height}` } : {}),
+        ...(explicitPixels
+            ? { boardDimensions: `${explicitPixels.width}x${explicitPixels.height}` }
+            : userDefinedCanvas
+                ? {}
+                : { boardDimensions: GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape.aspectRatio }),
     };
-    return applyStoryboardPlanningLayoutContract(fallback, planningContract, frameCount);
+    return applyStoryboardPlanningLayoutContract(fallback, planningContract, frameCount, userDefinedCanvas);
 }
 function clampStoryboardDefaultFrameCount(value) {
     return Math.max(STORYBOARD_DEFAULT_MIN_FRAMES, Math.min(STORYBOARD_DEFAULT_MAX_FRAMES, Math.round(value)));
@@ -5306,10 +5367,9 @@ function parseAspectRatioOrientation(aspectRatio) {
 }
 function defaultStoryboardCanvasForVideoAspectRatio(targetVideoAspectRatio) {
     const orientation = parseAspectRatioOrientation(targetVideoAspectRatio);
-    if (orientation === 'portrait')
+    if (orientation === 'portrait' || orientation === 'landscape' || orientation === 'square') {
         return GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape;
-    if (orientation === 'landscape')
-        return GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardPortrait;
+    }
     return null;
 }
 function storyboardCanvasHintText(canvas, targetVideoAspectRatio) {

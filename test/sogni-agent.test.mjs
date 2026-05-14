@@ -124,6 +124,39 @@ async function withTestApiServer(fn) {
       });
 
       res.setHeader('Content-Type', 'application/json');
+      const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
+      if (
+        (requestUrl.pathname === '/v1/media/uploadUrl' || requestUrl.pathname === '/v1/image/uploadUrl')
+        && req.method === 'GET'
+      ) {
+        const type = requestUrl.searchParams.get('type') || 'reference';
+        const jobId = requestUrl.searchParams.get('jobId') || 'job';
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            uploadUrl: `http://${req.headers.host}/test-upload/${encodeURIComponent(type)}/${encodeURIComponent(jobId)}?signature=test`,
+          },
+        }));
+        return;
+      }
+      if (requestUrl.pathname.startsWith('/test-upload/') && req.method === 'PUT') {
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+      if (
+        (requestUrl.pathname === '/v1/media/downloadUrl' || requestUrl.pathname === '/v1/image/downloadUrl')
+        && req.method === 'GET'
+      ) {
+        const type = requestUrl.searchParams.get('type') || 'reference';
+        const jobId = requestUrl.searchParams.get('jobId') || 'job';
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            downloadUrl: `https://cdn.sogni.ai/test-upload/${encodeURIComponent(type)}/${encodeURIComponent(jobId)}`,
+          },
+        }));
+        return;
+      }
       if (req.url === '/v1/chat/completions' && req.method === 'POST') {
         const content = parsedBody?.sogni_tool_execution === false
           ? [
@@ -904,11 +937,12 @@ test('--api-chat forwards image references with server-side tool execution enabl
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
 
-    assert.equal(requests.length, 1);
-    const request = requests[0];
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    assert.ok(request);
     assert.equal(request.body.sogni_tool_execution, true);
     assert.equal(request.body.api_media_references[0].flag, '--ref');
     assert.equal(request.body.api_media_references[0].kind, 'image');
+    assert.match(request.body.api_media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
     assert.equal(request.body.messages[1].content[0].type, 'text');
     assert.equal(request.body.messages[1].content[1].type, 'image_url');
     assert.match(request.body.messages[1].content[1].image_url.url, /^data:image\/jpeg;base64,/);
@@ -944,7 +978,7 @@ test('--api-chat forwards audio and video references in API metadata and prompt 
   });
 });
 
-test('--api-chat forwards local audio and video references as data URIs without base64 prompt leakage', async () => {
+test('--api-chat uploads local audio and video references before hosted execution', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-api-media-'));
   const audioPath = join(tempDir, 'music.mp3');
   const videoPath = join(tempDir, 'source.mp4');
@@ -968,19 +1002,25 @@ test('--api-chat forwards local audio and video references as data URIs without 
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
 
-    assert.equal(requests.length, 1);
-    const mediaRefs = requests[0].body.api_media_references;
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    assert.ok(request);
+    const mediaRefs = request.body.api_media_references;
     assert.equal(mediaRefs.length, 2);
     assert.equal(mediaRefs[0].kind, 'audio');
     assert.equal(mediaRefs[0].filename, 'music.mp3');
-    assert.match(mediaRefs[0].dataUri, /^data:audio\/mpeg;base64,/);
+    assert.match(mediaRefs[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
+    assert.equal(mediaRefs[0].dataUri, undefined);
     assert.equal(mediaRefs[1].kind, 'video');
     assert.equal(mediaRefs[1].filename, 'source.mp4');
-    assert.match(mediaRefs[1].dataUri, /^data:video\/mp4;base64,/);
-    assert.equal(mediaRefs[0].url, undefined);
-    assert.match(requests[0].body.messages[1].content, /music\.mp3/);
-    assert.match(requests[0].body.messages[1].content, /source\.mp4/);
-    assert.doesNotMatch(requests[0].body.messages[1].content, /base64/);
+    assert.match(mediaRefs[1].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//);
+    assert.equal(mediaRefs[1].dataUri, undefined);
+    assert.equal(requests.filter(item => item.url.startsWith('/v1/media/uploadUrl')).length, 2);
+    assert.equal(requests.filter(item => item.url.startsWith('/test-upload/')).length, 2);
+    assert.equal(requests.filter(item => item.url.startsWith('/v1/media/downloadUrl')).length, 2);
+    assert.equal(request.body.public_skill_contract_runtime.contract_counts.prompt_contracts > 20, true);
+    assert.match(request.body.messages[1].content, /music\.mp3/);
+    assert.match(request.body.messages[1].content, /source\.mp4/);
+    assert.doesNotMatch(request.body.messages[1].content, /base64/);
   });
 });
 
@@ -1211,18 +1251,19 @@ test('--api-workflow forwards CLI media references and cost controls', async () 
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
 
-    assert.equal(requests.length, 1);
-    const request = requests[0];
+    const request = requests.find(item => item.url === '/v1/creative-agent/workflows');
+    assert.ok(request);
     assert.equal(request.url, '/v1/creative-agent/workflows');
     assert.equal(request.body.api_media_references[0].flag, '--ref');
     assert.equal(request.body.api_media_references[0].kind, 'image');
+    assert.match(request.body.api_media_references[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
     assert.equal(request.body.max_estimated_capacity_units, 25);
     assert.equal(request.body.cost_ceiling, 25);
     assert.equal(request.body.confirm_cost, true);
   });
 });
 
-test('--api-workflow forwards local non-image media references as data URIs', async () => {
+test('--api-workflow uploads local non-image media references before durable execution', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-api-workflow-media-'));
   const audioPath = join(tempDir, 'music.mp3');
   const videoPath = join(tempDir, 'source.mp4');
@@ -1251,13 +1292,15 @@ test('--api-workflow forwards local non-image media references as data URIs', as
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
 
-    assert.equal(requests.length, 1);
-    const mediaRefs = requests[0].body.api_media_references;
+    const request = requests.find(item => item.url === '/v1/creative-agent/workflows');
+    assert.ok(request);
+    const mediaRefs = request.body.api_media_references;
     assert.equal(mediaRefs.length, 2);
-    assert.match(mediaRefs[0].dataUri, /^data:audio\/mpeg;base64,/);
-    assert.match(mediaRefs[1].dataUri, /^data:video\/mp4;base64,/);
-    assert.equal(mediaRefs[0].url, undefined);
-    assert.equal(requests[0].body.media_references[1].filename, 'source.mp4');
+    assert.match(mediaRefs[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
+    assert.match(mediaRefs[1].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//);
+    assert.equal(mediaRefs[0].dataUri, undefined);
+    assert.equal(request.body.media_references[1].filename, 'source.mp4');
+    assert.equal(request.body.public_skill_contract_runtime.contract_counts.repair_recipes > 20, true);
   });
 });
 
@@ -1278,6 +1321,7 @@ test('shared cross-surface parity fixtures include public skill media-reference 
     mediaRefsFixture.mediaReferences.map((ref) => ref.kind),
     ['audio', 'video']
   );
+  assert.ok(skillExpectation.expectedBehavior.some((value) => /uploaded to Sogni media URLs/.test(value)));
 });
 
 test('--api-workflow uses OpenClaw cost defaults when CLI flags are omitted', async () => {

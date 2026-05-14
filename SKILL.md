@@ -219,9 +219,9 @@ from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
 `--reference-audio-identity`, and `--ref-video` as `media_references`
 metadata; workflow JSON can bind them into step arguments with
 `sourceStepId: "$input_media"`, and API chat also attaches image refs as vision
-inputs. Prefer public HTTPS URLs for durable hosted workflows because the backend
-must retrieve non-inline media; use the direct CLI path for private or large
-local media.
+inputs. Local file references are uploaded to Sogni media storage first, then
+forwarded as retrievable URLs for hosted chat and durable workflows. Use the
+direct CLI path for private media that must not leave the local machine.
 Use `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to
 forward explicit workflow cost policy.
 Sogni Intelligence utilities are exposed through the same API key path:

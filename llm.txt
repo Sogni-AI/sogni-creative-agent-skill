@@ -73,9 +73,9 @@ Sogni Intelligence utilities are available with `--list-api-models`,
 `--get-replay <id>`, and `--ingest-replay <json|path|@path>`.
 Hosted API modes forward media references from `-c`, `--ref`, `--ref-end`,
 `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
-`media_references`; API chat also attaches image refs as vision inputs. Prefer
-public HTTPS URLs for durable hosted workflows because the backend must retrieve
-non-inline media. Workflow JSON can bind those refs with
+`media_references`; API chat also attaches image refs as vision inputs. Local
+file references are uploaded to Sogni media storage first and then forwarded as
+retrievable URLs. Workflow JSON can bind those refs with
 `sourceStepId: "$input_media"`. Use `--workflow-max-cost`, `--confirm-cost`,
 or `--no-confirm-cost` for durable workflow cost policy. JSON errors include
 canonical `errorType`, `errorCategory`, and retryability when classified.

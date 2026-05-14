@@ -22,6 +22,8 @@ import {
   VIDEO_WORKFLOW_DEFAULT_MODELS,
   buildStoryboardVideoHostedToolSequenceInput,
   classifySkillError,
+  compilePublicSkillToolSurface,
+  createPublicSkillDefaultContractRuntime,
   detectReferenceAudioFormat,
   dimensionsForAspectRatio,
   dimensionsWithShortSide,
@@ -34,6 +36,7 @@ import {
   isSeedanceModelSelection,
   normalizeVideoWorkflow,
   planCliVideoBrain,
+  PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
   resolveVideoControlNetStrength,
   resolveVideoModelAlias,
   resolveVideoSteps,
@@ -3236,7 +3239,7 @@ function mimeTypeForMediaReference(ref) {
   return mimeTypeForPath(value, `${ref.kind}/unknown`);
 }
 
-function localApiMediaReferenceDataUri(ref) {
+function localApiMediaReferenceFile(ref) {
   const filePath = sanitizePath(String(ref.value || ''), `${ref.flag} media reference`);
   const stat = statSync(filePath);
   if (!stat.isFile()) {
@@ -3246,21 +3249,97 @@ function localApiMediaReferenceDataUri(ref) {
   }
   const maxBytes = apiMediaReferenceMaxBytes();
   if (stat.size > maxBytes) {
-    const err = new Error(`${ref.flag} media reference is ${stat.size} bytes, above the ${maxBytes} byte API inline limit.`);
+    const err = new Error(`${ref.flag} media reference is ${stat.size} bytes, above the ${maxBytes} byte API upload limit.`);
     err.code = 'MEDIA_REFERENCE_TOO_LARGE';
     throw err;
   }
   const mimeType = mimeTypeForMediaReference(ref);
-  const buffer = readFileSync(filePath);
   return {
-    dataUri: `data:${mimeType};base64,${buffer.toString('base64')}`,
+    filePath,
     filename: basename(filePath),
     byteLength: stat.size,
     mimeType,
   };
 }
 
-function buildApiMediaReferencePayloadItem(ref, index) {
+function apiMediaReferenceUploadType(ref, index) {
+  if (ref.kind === 'audio') return 'referenceAudio';
+  if (ref.kind === 'video') return 'referenceVideo';
+  if (ref.flag === '--ref-end') return 'referenceImageEnd';
+  if (ref.flag === '-c/--context') return `contextImage${Math.min(index + 1, 16)}`;
+  return 'referenceImage';
+}
+
+function apiMediaReferenceEndpoint(ref, action) {
+  return ref.kind === 'image'
+    ? `/v1/image/${action}Url`
+    : `/v1/media/${action}Url`;
+}
+
+function apiMediaReferenceUrlPath(ref, file, index, action, jobId) {
+  const params = new URLSearchParams();
+  params.set('type', apiMediaReferenceUploadType(ref, index));
+  params.set('jobId', jobId);
+  params.set('contentType', file.mimeType);
+  if (ref.kind === 'image') {
+    params.set('imageId', `media_ref_${index + 1}`);
+  } else {
+    params.set('id', `media_ref_${index + 1}`);
+  }
+  return `${apiMediaReferenceEndpoint(ref, action)}?${params.toString()}`;
+}
+
+function apiStoredMediaUrl(payload, key) {
+  const data = extractApiEnvelopeData(payload);
+  const value = data?.[key] || payload?.[key];
+  if (typeof value === 'string' && value) return value;
+  const err = new Error(`Sogni API did not return ${key} for media reference upload.`);
+  err.code = 'MEDIA_UPLOAD_FAILED';
+  err.details = { payload };
+  throw err;
+}
+
+async function putApiMediaUpload(uploadUrl, file) {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.mimeType },
+    body: readFileSync(file.filePath),
+  });
+  if (!response.ok) {
+    const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
+    err.code = 'MEDIA_UPLOAD_FAILED';
+    err.details = { uploadUrl, status: response.status, statusText: response.statusText };
+    throw err;
+  }
+}
+
+async function uploadLocalApiMediaReference(ref, index, apiKey) {
+  if (!apiKey) {
+    const err = new Error(`${ref.flag} local media references require SOGNI_API_KEY so the CLI can upload them before hosted execution.`);
+    err.code = 'MISSING_API_KEY';
+    throw err;
+  }
+  const file = localApiMediaReferenceFile(ref);
+  const jobId = `sogni-agent-${Date.now()}-${index + 1}-${randomBytes(4).toString('hex')}`;
+  const uploadPayload = await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'upload', jobId), { apiKey });
+  const uploadUrl = apiStoredMediaUrl(uploadPayload, 'uploadUrl');
+  await putApiMediaUpload(uploadUrl, file);
+  const downloadPayload = await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'download', jobId), { apiKey });
+  const url = apiStoredMediaUrl(downloadPayload, 'downloadUrl');
+  return {
+    url,
+    filename: file.filename,
+    byte_length: file.byteLength,
+    mime_type: file.mimeType,
+    prompt_label: file.filename,
+    storage: {
+      jobId,
+      type: apiMediaReferenceUploadType(ref, index),
+    },
+  };
+}
+
+async function buildApiMediaReferencePayloadItem(ref, index, apiKey) {
   const mimeType = mimeTypeForMediaReference(ref);
   const base = {
     id: `media_ref_${index + 1}`,
@@ -3284,19 +3363,17 @@ function buildApiMediaReferencePayloadItem(ref, index) {
       prompt_label: ref.value,
     };
   }
-  const local = localApiMediaReferenceDataUri(ref);
+  const local = await uploadLocalApiMediaReference(ref, index, apiKey);
   return {
     ...base,
-    dataUri: local.dataUri,
+    ...local,
     filename: local.filename,
-    byte_length: local.byteLength,
-    mime_type: local.mimeType,
-    prompt_label: local.filename,
+    mime_type: local.mime_type,
   };
 }
 
-function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences()) {
-  return refs.map((ref, index) => buildApiMediaReferencePayloadItem(ref, index));
+async function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences(), { apiKey } = {}) {
+  return Promise.all(refs.map((ref, index) => buildApiMediaReferencePayloadItem(ref, index, apiKey)));
 }
 
 function formatApiMediaReferencesForPrompt(mediaReferences) {
@@ -3348,11 +3425,41 @@ async function imageDataUriFromPathOrUrl(pathOrUrl) {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
-async function buildApiChatMessages() {
+function publicSkillApiSessionState(apiMediaReferences) {
+  return {
+    hasUploadedImage: apiMediaReferences.some(ref => ref.kind === 'image'),
+    hasUploadedVideo: apiMediaReferences.some(ref => ref.kind === 'video'),
+    hasUploadedAudio: apiMediaReferences.some(ref => ref.kind === 'audio'),
+  };
+}
+
+function publicSkillContractRuntimePayload(apiMediaReferences) {
+  const runtime = createPublicSkillDefaultContractRuntime();
+  const compiled = compilePublicSkillToolSurface({
+    runtime,
+    tools: PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
+    sessionState: publicSkillApiSessionState(apiMediaReferences),
+  });
+  return {
+    version: 'default',
+    turn_policy: {
+      visible_tools: compiled.turnPolicy.visibleTools,
+      forbidden_tools: compiled.turnPolicy.forbiddenTools,
+      required_tools: compiled.turnPolicy.requiredTools,
+      applied_policies: compiled.turnPolicy.appliedPolicies,
+      rationale: compiled.turnPolicy.rationale,
+    },
+    contract_counts: {
+      policies: runtime.policies.length,
+      prompt_contracts: runtime.promptContracts.length,
+      repair_recipes: runtime.repairRecipes.length,
+    },
+  };
+}
+
+async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
   const system = options.apiSystemPrompt ||
     'You are a concise creative production assistant. Use Sogni creative tools when they help produce concrete media.';
-  const apiMediaRefs = getApiModeMediaReferences();
-  const apiMediaReferences = buildApiMediaReferencesPayload(apiMediaRefs);
   const imageRefs = apiMediaRefs.filter(ref => ref.kind === 'image');
   const nonImageRefs = apiMediaReferences.filter(ref => ref.kind !== 'image');
   const promptText = [
@@ -3382,9 +3489,11 @@ function apiChatTemplateKwargs() {
 async function runApiChat(log) {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-chat');
-  const apiMediaReferences = buildApiMediaReferencesPayload();
-  const messages = sanitizeMessagesForLlm(await buildApiChatMessages());
+  const apiMediaRefs = getApiModeMediaReferences();
+  const apiMediaReferences = await buildApiMediaReferencesPayload(apiMediaRefs, { apiKey });
+  const messages = sanitizeMessagesForLlm(await buildApiChatMessages(apiMediaRefs, apiMediaReferences));
   const chatTemplateKwargs = apiChatTemplateKwargs();
+  const publicSkillRuntime = publicSkillContractRuntimePayload(apiMediaReferences);
   const body = {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages,
@@ -3395,6 +3504,7 @@ async function runApiChat(log) {
     appSource: SOGNI_APP_SOURCE,
     sogni_tools: options.apiTools,
     sogni_tool_execution: options.apiToolExecution,
+    public_skill_contract_runtime: publicSkillRuntime,
     ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
     ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
     ...(apiMediaReferences.length > 0 ? {
@@ -3877,7 +3987,6 @@ async function runApiWorkflow() {
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-workflow');
   const tokenType = options.tokenType || 'spark';
-  const apiMediaReferences = buildApiMediaReferencesPayload();
   let payload;
   let type = 'api-workflow';
 
@@ -3937,6 +4046,8 @@ async function runApiWorkflow() {
     return;
   }
 
+  const apiMediaReferences = await buildApiMediaReferencesPayload(undefined, { apiKey });
+  const publicSkillRuntime = publicSkillContractRuntimePayload(apiMediaReferences);
   const requestedKind = options.apiWorkflowKind || 'image_to_video';
   let kind = requestedKind;
   let input;
@@ -3978,7 +4089,8 @@ async function runApiWorkflow() {
       ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
       token_type: tokenType,
       app_source: SOGNI_APP_SOURCE,
-      appSource: SOGNI_APP_SOURCE
+      appSource: SOGNI_APP_SOURCE,
+      public_skill_contract_runtime: publicSkillRuntime
     }
   });
   const workflow = workflowFromPayload(payload);

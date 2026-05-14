@@ -3308,7 +3308,7 @@ function buildStoryboardSourceBriefForPrompt(prompt, userIntentText, approvedScr
     if (canonicalApprovedScriptContext) {
         parts.push(`APPROVED STORYBOARD SCRIPT CONTEXT TO PRESERVE:\n${canonicalApprovedScriptContext}`);
     }
-    return parts.filter(Boolean).join('\n\n');
+    return stripGenericStoryboardVisibleTextMetadata(parts.filter(Boolean).join('\n\n'));
 }
 function buildStoryboardUserConstraintSource(userIntentText, primarySourceBrief, options) {
     const canonicalApprovedScriptContext = canonicalStoryboardScriptContext(options.approvedScriptContext);
@@ -3369,8 +3369,25 @@ function storyboardTextCandidateLooksLikeGenericProductionLabel(value) {
         .trim();
     return /^(?:visible\s+text|on[-\s]?screen\s+text|onscreen\s+text|text\s+overlay|title\s+card|caption|subtitle|super|copy|cta|tagline|headline)$/i.test(withoutTiming);
 }
+function stripGenericStoryboardVisibleTextMetadata(value) {
+    if (!value)
+        return '';
+    return value
+        .replace(/\s*(?:<br\s*\/?>\s*)?\b(?:visible\s+text|on[-\s]?screen\s+text|onscreen\s+text|text)\s*:\s*([^|\n\r<]+)/gi, (match, candidate) => storyboardTextCandidateLooksLikeGenericProductionLabel(candidate)
+        ? ''
+        : match)
+        .replace(/[ \t]+(?=\n)/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+function normalizeStoryboardVisibleText(value) {
+    const compact = compactStoryboardLine(stripGenericStoryboardVisibleTextMetadata(value));
+    if (!compact || storyboardTextCandidateLooksLikeGenericProductionLabel(compact))
+        return '';
+    return compact;
+}
 function normalizeStoryboardDialogue(value) {
-    const compact = compactStoryboardLine(value);
+    const compact = compactStoryboardLine(stripGenericStoryboardVisibleTextMetadata(value));
     if (!compact)
         return '';
     if (/^[-\u2013\u2014]\.?$/.test(compact))
@@ -3380,6 +3397,9 @@ function normalizeStoryboardDialogue(value) {
     }
     const visibleTextField = compact.match(/^(?:visible\s+text|on[-\s]?screen\s+text|onscreen\s+text|text|cta|tagline|headline|title\s+card|copy)\s*:\s*(.+)$/i)?.[1];
     if (visibleTextField !== undefined)
+        return '';
+    const audioField = compact.match(/^(?:audio\s*\/\s*sfx|audio\s*\/\s*foley|foley\s*\/\s*sfx|audio|sfx|fx|foley|sound|sounds|music)\s*:\s*(.+)$/i)?.[1];
+    if (audioField !== undefined)
         return '';
     if (/^text\s+only\s*:/i.test(compact))
         return '';
@@ -3647,8 +3667,8 @@ function splitStoryboardTableSections(text) {
                 : storyboardTableHeaderMatches(dialogueHeader, /\b(?:dialogue|vo|v\.o\.|voiceover|speech|narration)\b/i)
                     ? normalizeStoryboardDialogue(extractQuotedDialogueSegments(dialogueCell || audioCell)[0] || dialogueCell || audioCell)
                     : '';
-        const visibleText = extractStoryboardField(audioCell, ['Visible text', 'On-screen text', 'Onscreen text', 'Text', 'CTA'])
-            || (visibleTextHeaderIndex >= 0 ? compactStoryboardLine(visibleTextCell) : '');
+        const visibleText = normalizeStoryboardVisibleText(extractStoryboardField(audioCell, ['Visible text', 'On-screen text', 'Onscreen text', 'Text', 'CTA'])
+            || (visibleTextHeaderIndex >= 0 ? compactStoryboardLine(visibleTextCell) : ''));
         const audio = extractStoryboardField(audioCell, ['Audio/SFX', 'Audio', 'SFX', 'FX', 'Foley', 'Sound', 'Sounds'])
             || storyboardTableCellWithoutDialogue(soundCell || audioCell, dialogue);
         const number = sections.length + 1;
@@ -3706,6 +3726,10 @@ function splitStoryboardSceneSections(text) {
 function splitStoryboardSections(text) {
     const sectionHeadings = splitStoryboardSceneSections(text);
     const tableSections = splitStoryboardTableSections(text);
+    const explicitFrameCount = inferExplicitStoryboardFrameCountFromText(text);
+    if (tableSections.length > 0 && explicitFrameCount !== null && tableSections.length === explicitFrameCount) {
+        return tableSections;
+    }
     if (tableSections.length > 0 && tableSections.length >= sectionHeadings.length) {
         return tableSections;
     }
@@ -4362,12 +4386,12 @@ export function buildStoryboardProject(options) {
     const userIntentText = canonicalStoryboardScriptContext(rawUserIntentText) || rawUserIntentText;
     const approvedScriptContext = canonicalStoryboardScriptContext(options.approvedScriptContext);
     const primarySourceBrief = selectStoryboardSourceBrief(prompt, userIntentText);
-    const sourceText = sanitizeStoryboardExternalAudioReferences([
+    const sourceText = stripGenericStoryboardVisibleTextMetadata(sanitizeStoryboardExternalAudioReferences([
         primarySourceBrief,
         approvedScriptContext
             ? `APPROVED STORYBOARD SCRIPT CONTEXT TO PRESERVE:\n${approvedScriptContext}`
             : '',
-    ].filter(Boolean).join('\n\n'));
+    ].filter(Boolean).join('\n\n')));
     const allText = `${userIntentText}\n${sourceText}`;
     const layoutTextParts = [userIntentText].filter(Boolean);
     if (primarySourceBrief
@@ -4964,6 +4988,242 @@ export function lintStoryboardImagePrompt(prompt, layout, project) {
         warnings,
     };
 }
+function inferCompiledStoryboardPromptFrameCount(prompt) {
+    const match = prompt.match(/\bCreate\s+exactly\s+(\d{1,3})\s+sequential video storyboard frames\b/i);
+    if (!match)
+        return null;
+    const count = Number(match[1]);
+    return Number.isInteger(count) && count > 0 ? count : null;
+}
+function inferCompiledStoryboardPromptDurationSec(prompt) {
+    const match = prompt.match(/\bTarget duration:\s*(\d{1,3}(?:\.\d+)?)\s*seconds?\b/i);
+    if (!match)
+        return null;
+    const duration = Number(match[1]);
+    return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+function extractCompiledStoryboardScenesBlock(prompt) {
+    const match = prompt.match(/\nSCENES:\s*\n([\s\S]*?)(?:\nTEXT RENDERING:|\nSOURCE BRIEF TO FOLLOW:|\nNEGATIVE \/ AVOID:|$)/i);
+    return match?.[1] ?? '';
+}
+function parseCompiledStoryboardHeadingTiming(heading) {
+    const timing = heading.match(/(?:^|\s+-\s+)(\d{1,2}:\d{2}(?:\.\d+)?|\d{1,3}(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)?\s*-\s*(\d{1,2}:\d{2}(?:\.\d+)?|\d{1,3}(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)?\s*$/i);
+    if (!timing)
+        return { startSec: null, endSec: null };
+    return {
+        startSec: parseStoryboardTimeValue(timing[1]),
+        endSec: parseStoryboardTimeValue(timing[2]),
+    };
+}
+function extractCompiledStoryboardScenes(prompt) {
+    const block = extractCompiledStoryboardScenesBlock(prompt);
+    if (!block.trim())
+        return [];
+    const headings = Array.from(block.matchAll(/^SCENE_(\d{1,3})\s+-\s+([^\n]+)$/gim));
+    return headings.map((match, i) => {
+        const headingStart = match.index ?? 0;
+        const headingEnd = headingStart + match[0].length;
+        const nextStart = headings[i + 1]?.index ?? block.length;
+        const heading = match[0].trim();
+        const body = block.slice(headingEnd, nextStart).trim();
+        const dialogueMatch = body.match(/^\s*Dialogue\/VO:\s*(.+)$/im);
+        const timing = parseCompiledStoryboardHeadingTiming(heading);
+        return {
+            index: Number(match[1]),
+            heading,
+            body,
+            startSec: timing.startSec,
+            endSec: timing.endSec,
+            dialogue: normalizeStoryboardDialogue(dialogueMatch?.[1] ?? ''),
+        };
+    });
+}
+function sourceStoryboardDialogueRequirements(sourceText) {
+    const raw = (sourceText || '').trim();
+    if (!raw)
+        return { requirements: [], sourceSectionCount: 0 };
+    const source = canonicalStoryboardScriptContext(raw) || raw;
+    const requirements = [];
+    const sections = splitStoryboardSections(source);
+    sections.forEach((section, sectionIndex) => {
+        const dialogue = normalizeStoryboardDialogue(extractStoryboardField(section.body, [
+            'Dialogue/VO',
+            'VO/Dialogue',
+            'Dialogue',
+            'VO',
+            'V.O.',
+            'Voiceover',
+            'Voice-over',
+            'Speech',
+            'Narration',
+        ]));
+        if (dialogue)
+            requirements.push({ dialogue, sectionIndex });
+    });
+    if (requirements.length === 0) {
+        requirements.push(...sourceQuotedStoryboardDialogueSegments(source).map(dialogue => ({
+            dialogue,
+            sectionIndex: null,
+        })));
+    }
+    const unique = [];
+    const seen = new Set();
+    for (const requirement of requirements) {
+        const compact = compactStoryboardLine(requirement.dialogue);
+        if (!compact)
+            continue;
+        const tokenCount = storyboardDialogueWordSpans(compact).length;
+        if (tokenCount === 0 || compact.length < 2)
+            continue;
+        const key = storyboardDialogueWordSpans(compact).map(span => span.token).join(' ');
+        if (!key || seen.has(key))
+            continue;
+        seen.add(key);
+        unique.push({ ...requirement, dialogue: compact });
+    }
+    return { requirements: unique, sourceSectionCount: sections.length };
+}
+export function auditCompiledStoryboardImagePrompt(options) {
+    const prompt = options.prompt.trim();
+    const fatalIssues = [];
+    const warnings = [];
+    if (!prompt) {
+        fatalIssues.push({
+            code: 'storyboard_prompt_empty',
+            message: 'Storyboard image prompt is empty.',
+            field: 'prompt',
+        });
+        return { ok: false, fatalIssues, warnings };
+    }
+    const expectedFrameCount = options.expectedFrameCount
+        ?? inferCompiledStoryboardPromptFrameCount(prompt);
+    const expectedDurationSec = options.expectedDurationSec
+        ?? inferCompiledStoryboardPromptDurationSec(prompt);
+    const scenes = extractCompiledStoryboardScenes(prompt);
+    if (expectedFrameCount !== null && scenes.length !== expectedFrameCount) {
+        fatalIssues.push({
+            code: 'storyboard_prompt_scene_count_mismatch',
+            message: `Compiled storyboard prompt asks for ${expectedFrameCount} frame(s) but defines ${scenes.length} scene(s).`,
+            field: 'prompt',
+            metadata: { expectedFrameCount, actualSceneCount: scenes.length },
+        });
+    }
+    if (scenes.length === 0) {
+        fatalIssues.push({
+            code: 'storyboard_prompt_missing_scenes',
+            message: 'Compiled storyboard prompt has no SCENES entries.',
+            field: 'prompt',
+        });
+    }
+    const timedScenes = scenes.filter(scene => scene.startSec !== null && scene.endSec !== null);
+    if (timedScenes.length > 0) {
+        const backwards = timedScenes.find(scene => scene.endSec <= scene.startSec);
+        if (backwards) {
+            fatalIssues.push({
+                code: 'storyboard_prompt_invalid_scene_timing',
+                message: `Scene ${backwards.index} has a non-forward time range.`,
+                field: 'prompt',
+                metadata: {
+                    sceneIndex: backwards.index,
+                    startSec: backwards.startSec,
+                    endSec: backwards.endSec,
+                },
+            });
+        }
+        for (let i = 1; i < timedScenes.length; i += 1) {
+            const previous = timedScenes[i - 1];
+            const current = timedScenes[i];
+            if (current.startSec < previous.endSec - 0.05) {
+                fatalIssues.push({
+                    code: 'storyboard_prompt_timing_overlap',
+                    message: `Scene ${current.index} starts before scene ${previous.index} ends.`,
+                    field: 'prompt',
+                    metadata: {
+                        previousSceneIndex: previous.index,
+                        previousEndSec: previous.endSec,
+                        sceneIndex: current.index,
+                        startSec: current.startSec,
+                    },
+                });
+                break;
+            }
+        }
+    }
+    if (expectedDurationSec !== null && timedScenes.length > 0) {
+        const maxEndSec = Math.max(...timedScenes.map(scene => scene.endSec));
+        const firstStartSec = Math.min(...timedScenes.map(scene => scene.startSec));
+        const allowedLateStartSec = Math.min(2, expectedDurationSec * 0.2);
+        if (maxEndSec > expectedDurationSec + 0.75) {
+            fatalIssues.push({
+                code: 'storyboard_prompt_timing_exceeds_duration',
+                message: `Compiled storyboard prompt scene timings end at ${formatStoryboardSeconds(maxEndSec)}, beyond the ${formatStoryboardSeconds(expectedDurationSec)} target duration.`,
+                field: 'prompt',
+                metadata: { expectedDurationSec, maxEndSec },
+            });
+        }
+        if (firstStartSec > allowedLateStartSec) {
+            fatalIssues.push({
+                code: 'storyboard_prompt_timing_starts_late',
+                message: `Compiled storyboard prompt starts at ${formatStoryboardSeconds(firstStartSec)} instead of near 0s.`,
+                field: 'prompt',
+                metadata: { expectedDurationSec, firstStartSec },
+            });
+        }
+    }
+    const dialogueRequirementSet = sourceStoryboardDialogueRequirements(options.sourceText);
+    const requiredDialogue = dialogueRequirementSet.requirements;
+    if (requiredDialogue.length > 0) {
+        const compiledDialogue = scenes.map(scene => scene.dialogue).filter(Boolean).join(' ');
+        const canCheckSceneAlignment = dialogueRequirementSet.sourceSectionCount > 0
+            && dialogueRequirementSet.sourceSectionCount === scenes.length;
+        for (const requirement of requiredDialogue) {
+            const dialogue = requirement.dialogue;
+            const tokenCount = storyboardDialogueWordSpans(dialogue).length;
+            const minCoverage = tokenCount >= 8 ? 0.7 : 0.9;
+            const sceneDialogue = canCheckSceneAlignment && requirement.sectionIndex !== null
+                ? scenes[requirement.sectionIndex]?.dialogue ?? ''
+                : '';
+            const sceneCoverage = sceneDialogue
+                ? storyboardDialogueCoverage(dialogue, sceneDialogue)
+                : 0;
+            const coverage = storyboardDialogueCoverage(dialogue, compiledDialogue);
+            if (canCheckSceneAlignment && requirement.sectionIndex !== null && sceneCoverage < minCoverage) {
+                fatalIssues.push({
+                    code: coverage >= minCoverage
+                        ? 'storyboard_prompt_misassigned_source_dialogue'
+                        : 'storyboard_prompt_missing_source_dialogue',
+                    message: coverage >= minCoverage
+                        ? 'Compiled storyboard prompt preserves source Dialogue/VO but assigns it to the wrong scene.'
+                        : 'Compiled storyboard prompt does not preserve required Dialogue/VO from the approved source script.',
+                    field: 'prompt',
+                    metadata: {
+                        requiredDialogue: dialogue,
+                        sceneIndex: requirement.sectionIndex + 1,
+                        sceneCoverage,
+                        coverage,
+                    },
+                });
+                continue;
+            }
+            if (coverage < minCoverage) {
+                fatalIssues.push({
+                    code: 'storyboard_prompt_missing_source_dialogue',
+                    message: 'Compiled storyboard prompt does not preserve required Dialogue/VO from the approved source script.',
+                    field: 'prompt',
+                    metadata: {
+                        requiredDialogue: dialogue,
+                        coverage,
+                    },
+                });
+            }
+        }
+    }
+    return {
+        ok: fatalIssues.length === 0,
+        fatalIssues,
+        warnings,
+    };
+}
 function parseStoryboardDimensionText(value) {
     if (!value)
         return null;
@@ -5537,6 +5797,64 @@ export const CROSS_SURFACE_PARITY_FIXTURES = [
         mediaReferences: [{ kind: 'video', filename: 'source.mp4' }],
         expectations: [
             { surface: 'chat', entrypoint: 'workflow fixture replace-video-segment-uploaded', expectedTools: ['replace_video_segment'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['replace_video_segment'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['replace_video_segment'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['replace_video_segment'] },
+        ],
+    },
+    {
+        id: 'uploaded-video-extend',
+        focus: 'uploaded_video_edits',
+        description: 'Uploaded-video extension targets the uploaded base clip instead of regenerating from scratch.',
+        userText: 'Extend this uploaded video by 5 seconds.',
+        mediaReferences: [{ kind: 'video', filename: 'source.mp4' }],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture extend-video-uploaded-five-seconds', expectedTools: ['extend_video'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['extend_video'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['extend_video'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['extend_video'] },
+        ],
+    },
+    {
+        id: 'uploaded-video-transform',
+        focus: 'uploaded_video_edits',
+        description: 'Uploaded-video restyling routes to video_to_video and does not generate new source media first.',
+        userText: 'Transform this uploaded video into watercolor anime style while preserving the motion.',
+        mediaReferences: [{ kind: 'video', filename: 'street.mp4' }],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture uploaded-video-restyle', expectedTools: ['video_to_video'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['video_to_video'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['video_to_video'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['video_to_video'] },
+        ],
+    },
+    {
+        id: 'uploaded-video-stitch',
+        focus: 'uploaded_video_edits',
+        description: 'Simple uploaded-video stitch requests preserve upload/UI order and default to hard cuts.',
+        userText: 'Combine these 2 clips.',
+        mediaReferences: [
+            { kind: 'video', filename: 'first.mp4' },
+            { kind: 'video', filename: 'second.mp4' },
+        ],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture uploaded-videos-simple-stitch-hard-cut', expectedTools: ['stitch_video'] },
+            { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['stitch_video'] },
+            { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['stitch_video'] },
+            { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['stitch_video'] },
+        ],
+    },
+    {
+        id: 'uploaded-video-alternating-splice',
+        focus: 'uploaded_video_edits',
+        description: 'Alternating uploaded-video splices compile into repeated replace_video_segment existing-clip calls.',
+        userText: 'Create a video where you alternate 1s from each of these videos one after another.',
+        mediaReferences: [
+            { kind: 'video', filename: 'first.mp4' },
+            { kind: 'video', filename: 'second.mp4' },
+        ],
+        expectations: [
+            { surface: 'chat', entrypoint: 'workflow fixture uploaded-videos-alternating-one-second-splices', expectedTools: ['replace_video_segment'] },
             { surface: 'api_chat_completions', entrypoint: '/v1/chat/completions', expectedTools: ['replace_video_segment'] },
             { surface: 'api_creative_agent_workflows', entrypoint: '/v1/creative-agent/workflows', expectedTools: ['replace_video_segment'] },
             { surface: 'public_skill', entrypoint: '--api-workflow hosted-tool-sequence', expectedTools: ['replace_video_segment'] },

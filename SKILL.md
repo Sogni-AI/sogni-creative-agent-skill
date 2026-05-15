@@ -124,13 +124,33 @@ Path override environment variables:
 - `SOGNI_MEDIA_INBOUND_DIR`
 - `OPENCLAW_CONFIG_PATH`
 
-## Usage (Images, Video & Music)
+## Recommended path: route through the hosted Sogni Intelligence endpoints
+
+For any natural-language creative request — anything that should be planned, multi-step, or that benefits from tool selection, repair, or durable workflows — prefer the hosted endpoints over the direct-to-SDK flags. The hosted endpoints are the canonical home for tool dispatch, Structured Contracts v1 (gating policies, repair recipes, prompt contracts), durable workflows, replay, and asset-manifest mapping. They stay aligned with `sogni-chat` and the rest of the `@sogni/creative-agent` consumers automatically.
+
+```bash
+# Natural-language creative request (LLM picks the tool, dispatches, repairs)
+node sogni-agent.mjs --api-chat "Turn the attached product photo into a launch poster" --ref product.jpg
+
+# Multi-step durable workflow (resumable, replay-friendly, server-orchestrated)
+node sogni-agent.mjs --api-workflow \
+  --video-prompt "The camera slowly pushes in" \
+  "A graphite robot sketch on a drafting table"
+
+# Storyboard → keyframe → Seedance, all server-side
+node sogni-agent.mjs --api-workflow storyboard-video --storyboard-frames 6 -Q hq \
+  "Create a 9:16 bakery launch video with a neon street-window reveal"
+```
+
+The direct-to-SDK flags below remain available for explicit one-shot generation when you already know the exact model, dimensions, and prompt and don't need LLM planning. Use them when latency or cost rules out the LLM round-trip.
+
+## Usage (direct-to-SDK image, video & music)
 
 ```bash
 # Generate and get URL
 node sogni-agent.mjs "a cat wearing a hat"
 
-# Quality presets (recommended — auto-selects model, steps, and size)
+# Quality presets (recommended for direct mode — auto-selects model, steps, and size)
 node sogni-agent.mjs -Q fast "a cat wearing a hat"    # z_image_turbo, 8 steps, 512x512 (~5-10s)
 node sogni-agent.mjs -Q hq "a cat wearing a hat"      # z_image_turbo, default steps, 768x768 (~10-15s)
 node sogni-agent.mjs -Q pro "a cat wearing a hat"      # flux2_dev, 40 steps, 1024x1024 (~2min)

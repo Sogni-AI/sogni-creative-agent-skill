@@ -3233,6 +3233,45 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
   );
 }
 
+/**
+ * Phase 6 P0 — SDK transport dispatch for hosted chat completions.
+ *
+ * When `SOGNI_SKILL_USE_SDK_TRANSPORT=1` is set, route synchronous
+ * hosted chat through `@sogni-ai/sogni-client` via the SSRF-validated
+ * factory. The SDK's `chat.hosted.create` accepts the same field
+ * names the legacy fetch sends (`model`, `messages`, `temperature`,
+ * `max_tokens`, `token_type`, `app_source`, `sogni_tools`,
+ * `sogni_tool_execution`, `task_profile`, `chat_template_kwargs`,
+ * `media_references`), so the bridge forwards the body unchanged. The
+ * SDK returns a `HostedChatCompletionResult` whose flat shape is
+ * already handled by `extractChatMessage` / `extractChatWorkflows`'s
+ * fallback path.
+ *
+ * Returns `null` when SDK transport is off so the caller falls back
+ * to `fetchApiJson`.
+ */
+async function dispatchChatHostedViaSdk(apiKey, body) {
+  let helpers;
+  try {
+    helpers = await import('./sogni-hosted-client.mjs');
+  } catch {
+    return null;
+  }
+  if (!helpers.shouldUseSdkTransport()) return null;
+  const restEndpoint = await buildSafeApiUrl('/');
+  const restBase = new URL(restEndpoint).origin;
+  return helpers.withHostedClient(
+    {
+      apiKey,
+      restEndpoint: restBase,
+      socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
+      appSource: SOGNI_APP_SOURCE,
+      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+    },
+    async (client) => helpers.sdkChatHostedCreate(client, body),
+  );
+}
+
 async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, headers = {} } = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
@@ -3538,11 +3577,13 @@ async function runApiChat(log) {
     ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
     ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {})
   };
-  const payload = await fetchApiJson('/v1/chat/completions', {
-    apiKey,
-    method: 'POST',
-    body
-  });
+  const payload =
+    (await dispatchChatHostedViaSdk(apiKey, body))
+    ?? (await fetchApiJson('/v1/chat/completions', {
+      apiKey,
+      method: 'POST',
+      body
+    }));
   const message = extractChatMessage(payload);
   const workflows = extractChatWorkflows(payload);
   const toolCalls = message.tool_calls || message.toolCalls || [];
@@ -3764,22 +3805,25 @@ function buildStoryboardStorylineMessages() {
 async function generateStoryboardWorkflowStoryline(apiKey) {
   const messages = sanitizeMessagesForLlm(buildStoryboardStorylineMessages());
   const chatTemplateKwargs = apiChatTemplateKwargs();
-  const payload = await fetchApiJson('/v1/chat/completions', {
-    apiKey,
-    method: 'POST',
-    body: {
-      model: options.llmModel || DEFAULT_LLM_MODEL,
-      messages,
-      temperature: 0.45,
-      max_tokens: options.apiMaxTokens || 1800,
-      token_type: options.tokenType || 'spark',
-      app_source: SOGNI_APP_SOURCE,
-      ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
-      ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
-      sogni_tools: false,
-      sogni_tool_execution: false
-    }
-  });
+  const body = {
+    model: options.llmModel || DEFAULT_LLM_MODEL,
+    messages,
+    temperature: 0.45,
+    max_tokens: options.apiMaxTokens || 1800,
+    token_type: options.tokenType || 'spark',
+    app_source: SOGNI_APP_SOURCE,
+    ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
+    ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
+    sogni_tools: false,
+    sogni_tool_execution: false
+  };
+  const payload =
+    (await dispatchChatHostedViaSdk(apiKey, body))
+    ?? (await fetchApiJson('/v1/chat/completions', {
+      apiKey,
+      method: 'POST',
+      body
+    }));
   const message = extractChatMessage(payload);
   const storyline = typeof message.content === 'string' ? message.content.trim() : '';
   if (!storyline) {

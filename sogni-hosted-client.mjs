@@ -126,3 +126,40 @@ export async function sdkCancelCreativeWorkflow(client, workflowId) {
 export async function* sdkStreamCreativeWorkflowEvents(client, workflowId, options = {}) {
   yield* client.workflows.streamEvents(workflowId, options);
 }
+
+/**
+ * Synchronous hosted chat completion. Mirrors the
+ * `POST /v1/chat/completions` REST surface but goes through the SDK so
+ * the SSRF guard runs at client construction and the SDK's typed
+ * `HostedChatCompletionParams` shape is enforced. Returns the raw
+ * `HostedChatCompletionResult` so the skill's existing extractors
+ * (`extractChatMessage`, `extractChatWorkflows`) keep working.
+ */
+export async function sdkChatHostedCreate(client, params) {
+  return client.chat.hosted.create(params);
+}
+
+/**
+ * Submit a durable hosted chat run. Returns the persisted record
+ * immediately; the executor drives the LLM/tool loop server-side.
+ */
+export async function sdkChatRunsCreate(client, params) {
+  return client.chat.runs.create(params);
+}
+
+export async function sdkChatRunsGet(client, runId) {
+  return client.chat.runs.get(runId);
+}
+
+export async function sdkChatRunsCancel(client, runId, reason) {
+  return client.chat.runs.cancel(runId, reason);
+}
+
+/**
+ * SSE iterator for durable chat run events. Honors `lastEventId` in
+ * `options` so callers can resume after disconnect via Last-Event-ID
+ * replay.
+ */
+export async function* sdkChatRunsStreamEvents(client, runId, options = {}) {
+  yield* client.chat.runs.streamEvents(runId, options);
+}

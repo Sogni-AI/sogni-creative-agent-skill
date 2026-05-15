@@ -1318,6 +1318,41 @@ test('--api-workflow uploads local non-image media references before durable exe
   });
 });
 
+test('--api-workflow uploads inline media references before durable execution', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--api-workflow',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--ref', 'data:image/png;base64,AAECAwQ=',
+      '--workflow-input', JSON.stringify({
+        steps: [{
+          toolName: 'edit_image',
+          arguments: { prompt: 'turn the uploaded image into a poster' }
+        }]
+      })
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, true);
+
+    const request = requests.find(item => item.url === '/v1/creative-agent/workflows');
+    assert.ok(request);
+    const mediaRefs = request.body.media_references;
+    assert.equal(mediaRefs.length, 1);
+    assert.equal(mediaRefs[0].kind, 'image');
+    assert.match(mediaRefs[0].url, /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceImage\//);
+    assert.equal(mediaRefs[0].dataUri, undefined);
+    assert.equal(mediaRefs[0].filename, 'inline-media-ref-image.png');
+    assert.equal(requests.filter(item => item.url.startsWith('/v1/image/uploadUrl')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/test-upload/referenceImage/')).length, 1);
+  });
+});
+
 test('shared cross-surface parity fixtures include public skill media-reference cases', () => {
   for (const fixture of CROSS_SURFACE_PARITY_FIXTURES) {
     assert.deepEqual(

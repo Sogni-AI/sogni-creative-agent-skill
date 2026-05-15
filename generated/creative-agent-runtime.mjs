@@ -158,6 +158,19 @@ export function workflowStatusForDebugEvent(event) {
             return { label: 'Classified storyboard reference', kind: 'info' };
         case 'seedance_storyboard_reference_classification_failed':
             return { label: 'Could not classify storyboard reference', kind: 'warn' };
+        case 'character_reference_video_creative_pass_started':
+            return { label: 'Writing character video prompt', kind: 'info' };
+        case 'character_reference_video_creative_pass_completed':
+            return { label: 'Prepared character video prompt', kind: 'success' };
+        case 'character_reference_video_creative_pass_failed':
+            return { label: 'Character video prompt fallback', kind: 'warn' };
+        case 'uploaded_character_reference_ltx_fallback_direct_tool_call':
+        case 'uploaded_character_reference_detected_for_ltx_fallback':
+        case 'generated_reference_ltx_fallback_direct_tool_call':
+        case 'character_reference_sheet_ltx_fallback_direct_tool_call':
+        case 'seedance_uploaded_asset_ltx_fallback_direct_tool_call':
+        case 'storyboard_reference_ltx_fallback_direct_tool_call':
+            return { label: 'Switched to LTX 2.3 fallback', kind: 'info' };
         case 'uploaded_script_seedance_plan_detected':
             return { label: 'Detected uploaded script plan', kind: 'info' };
         case 'uploaded_character_reference_detected_for_seedance':
@@ -2807,6 +2820,45 @@ const PHASE_5_PROMPT_CONTRACTS = [
         "parameterDocs": {
             "summary": "Short user-visible closeout. Mention produced media or the concrete blocker; avoid duplicating prior tool output.",
             "outcome": "success, partial, asked_user, failed, or no_action based on the actual turn outcome."
+        }
+    },
+    {
+        "contractId": "compose_workflow_v1",
+        "version": "1.0.0",
+        "toolName": "compose_workflow",
+        "baseDescription": "compose_workflow turns a creative brief into a runnable durable creative workflow plan\n(the same shape that POST /v1/creative-agent/workflows accepts). Use it when the caller\nalready knows roughly what should happen (for example \"5-shot product teaser, 9:16, 15s\")\nand wants the workflow plan compiled in one call instead of dispatching tools turn-by-turn.\n\nDo not use compose_workflow for ordinary creative writing artifacts — use compose_script for\nscripts, storyboards, ad concepts, or trailers. Do not use it for prompt expansion — use\nenhance_prompt. Do not use it to actually run a workflow — the response is just the plan;\nthe caller is responsible for submitting it to POST /v1/creative-agent/workflows with their\nown Idempotency-Key.\n\nThe returned plan is not idempotent on its own. Pair the eventual workflow submission with\na caller-owned Idempotency-Key. Phase 1 only supports return_format=\"json\".",
+        "parameterDocs": {
+            "brief": "Required free-form natural-language description of what the workflow should produce.",
+            "scene_count": "Suggested number of distinct shots/scenes (1-12). The planner may emit more steps than scenes (for example, a keyframe + clip pair per scene).",
+            "duration_seconds": "Target total duration in seconds for video-bearing plans (1-120).",
+            "aspect_ratio": "Output aspect ratio. One of 1:1, 4:3, 3:4, 16:9, 9:16, 21:9.",
+            "style": "Optional stylistic guidance such as \"cinematic, neon, low-key\" or \"whiteboard illustration\".",
+            "destination_models": "Optional preferred image/video/music model selectors (e.g. flux2, ltx23). Each subkey is optional.",
+            "max_estimated_capacity_units": "Optional coarse capacity budget. If set, the planner tries to keep total estimated cost at or below this value; the API returns fits_budget=false if it cannot.",
+            "include_audio": "When true, include a generate_music step in the plan. Defaults to false.",
+            "return_format": "Reserved for future use; only \"json\" is supported in Phase 1. Omit if unsure."
+        }
+    },
+    {
+        "contractId": "compose_workflow_template_v1",
+        "version": "1.0.0",
+        "toolName": "compose_workflow_template",
+        "baseDescription": "compose_workflow_template turns a creative brief into a savable, parameterized workflow\ntemplate plus a concrete example plan for the inputs the planner picked. Use it when the\nuser is creating a named, reusable workflow in the builder UI (the \"New workflow\" flow).\n\nThe returned `template_draft` carries typed `inputs[]` (image/audio/video/text/number/\nselect/boolean), parameterized `stages[]` that reference inputs via `$inputs.NAME`\nplaceholders, and an optional `graph` layout the visual builder consumes. A sibling\n`plan` field carries a Phase-1-compatible `steps[]` rendering for the example inputs so\nthe UI can preview the workflow without round-tripping the compiler.\n\nDo not use compose_workflow_template for one-shot turn-by-turn plans — use compose_workflow\ninstead. The returned template is a draft; the caller is responsible for saving it via\nPOST /v1/creative-agent/workflows/templates and minting a stable template id.\n\nPhase 2 supports return_format=\"json\" only. Visibility defaults to \"private\"; the \"team\"\nvisibility slot is reserved for a later milestone.",
+        "parameterDocs": {
+            "brief": "Required free-form natural-language description of what the workflow should produce.",
+            "name": "Required human-readable template name. Shown in the workflow library and run launcher.",
+            "description": "Optional template description; the planner derives one from the brief if omitted.",
+            "category": "Optional category (portrait, video-social, makeover, cinematic, music, analysis, custom, other). Defaults to \"custom\".",
+            "visibility": "Persistence visibility: \"private\" (default) or \"public\". \"team\" is reserved for a later milestone.",
+            "inputs": "Optional typed input declarations. When omitted, the planner LLM proposes inputs based on the brief. Each entry needs name + type; required, description, default, options, multiple, and internal are optional refinements.",
+            "scene_count": "Suggested number of distinct shots/scenes (1-12).",
+            "duration_seconds": "Target total duration in seconds for video-bearing plans (1-120).",
+            "aspect_ratio": "Output aspect ratio. One of 1:1, 4:3, 3:4, 16:9, 9:16, 21:9.",
+            "style": "Optional stylistic guidance such as \"cinematic, neon, low-key\" or \"whiteboard illustration\".",
+            "destination_models": "Optional preferred image/video/music model selectors (e.g. flux2, ltx23). Each subkey is optional.",
+            "max_estimated_capacity_units": "Optional coarse capacity budget. The planner returns fits_budget=false if it cannot fit under the cap.",
+            "include_audio": "When true, include a generate_music step in the example plan. Defaults to false.",
+            "return_format": "Reserved for future use; only \"json\" is supported in Phase 2. Omit if unsure."
         }
     }
 ];
@@ -7980,6 +8032,8 @@ export function compileVideoStoryboardImagePrompt(options) {
         '',
         'GLOBAL STYLE:',
         `${project.creativeBrief.visualQualityBar} with cinematic shot language, coherent art direction, readable labels, and consistent reference usage.`,
+        'Reference-driven personality: before drawing, infer concrete visual and behavioral cues from uploaded/reference images, including character attitude, materials, props, palette, brand tone, typography style, and implied world. Let those cues make this storyboard specific to the supplied subject instead of a generic reusable template.',
+        'Vary composition within the required grid: keep the exact scene count, layout, and cell geometry, but make each panel feel intentionally staged with distinct shot scale, pose/action, camera angle, lighting beat, transition idea, and character-specific detail unless the user explicitly asks for identical framing.',
         '',
         'CRITICAL REQUIREMENTS:',
         ...compileStoryboardCriticalRequirements().map((item, index) => `${index + 1}. ${item}`),

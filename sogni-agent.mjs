@@ -3475,7 +3475,7 @@ async function putApiMediaUpload(uploadUrl, file) {
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': file.mimeType },
-    body: readFileSync(file.filePath),
+    body: file.buffer || readFileSync(file.filePath),
   });
   if (!response.ok) {
     const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
@@ -3485,13 +3485,59 @@ async function putApiMediaUpload(uploadUrl, file) {
   }
 }
 
-async function uploadLocalApiMediaReference(ref, index, apiKey) {
+function extensionForApiMediaReference(mimeType, kind) {
+  const normalized = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
+  if (normalized === 'image/png') return 'png';
+  if (normalized === 'audio/mpeg' || normalized === 'audio/mp3') return 'mp3';
+  if (normalized === 'audio/mp4' || normalized === 'audio/m4a' || normalized === 'audio/x-m4a') return 'm4a';
+  if (normalized === 'audio/wav' || normalized === 'audio/x-wav' || normalized === 'audio/wave') return 'wav';
+  if (normalized === 'video/quicktime') return 'mov';
+  if (normalized === 'video/mp4') return 'mp4';
+  return kind === 'image' ? 'jpg' : kind;
+}
+
+function decodeInlineApiMediaReference(ref) {
+  const raw = String(ref.value || '');
+  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/is.exec(raw);
+  if (!match) {
+    const err = new Error(`${ref.flag} inline media reference must be a base64 data URI.`);
+    err.code = 'INVALID_MEDIA_REFERENCE';
+    throw err;
+  }
+  const mimeType = match[1].trim().toLowerCase();
+  const base64 = match[2].replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+    const err = new Error(`${ref.flag} inline media reference has invalid base64 data.`);
+    err.code = 'INVALID_MEDIA_REFERENCE';
+    throw err;
+  }
+  const buffer = Buffer.from(base64, 'base64');
+  if (buffer.length === 0 || buffer.toString('base64').replace(/=+$/, '') !== base64.replace(/=+$/, '')) {
+    const err = new Error(`${ref.flag} inline media reference has invalid base64 data.`);
+    err.code = 'INVALID_MEDIA_REFERENCE';
+    throw err;
+  }
+  const maxBytes = apiMediaReferenceMaxBytes();
+  if (buffer.length > maxBytes) {
+    const err = new Error(`${ref.flag} media reference is ${buffer.length} bytes, above the ${maxBytes} byte API upload limit.`);
+    err.code = 'MEDIA_REFERENCE_TOO_LARGE';
+    throw err;
+  }
+  return {
+    buffer,
+    filename: `inline-media-ref-${ref.kind}.${extensionForApiMediaReference(mimeType, ref.kind)}`,
+    byteLength: buffer.length,
+    mimeType,
+  };
+}
+
+async function uploadPreparedApiMediaReference(ref, index, apiKey, file) {
   if (!apiKey) {
-    const err = new Error(`${ref.flag} local media references require SOGNI_API_KEY so the CLI can upload them before hosted execution.`);
+    const err = new Error(`${ref.flag} media references require SOGNI_API_KEY so the CLI can upload them before hosted execution.`);
     err.code = 'MISSING_API_KEY';
     throw err;
   }
-  const file = localApiMediaReferenceFile(ref);
   const jobId = `sogni-agent-${Date.now()}-${index + 1}-${randomBytes(4).toString('hex')}`;
   const uploadPayload =
     (await dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action: 'upload', apiKey }))
@@ -3515,7 +3561,15 @@ async function uploadLocalApiMediaReference(ref, index, apiKey) {
   };
 }
 
-async function buildApiMediaReferencePayloadItem(ref, index, apiKey) {
+async function uploadLocalApiMediaReference(ref, index, apiKey) {
+  return uploadPreparedApiMediaReference(ref, index, apiKey, localApiMediaReferenceFile(ref));
+}
+
+async function uploadInlineApiMediaReference(ref, index, apiKey) {
+  return uploadPreparedApiMediaReference(ref, index, apiKey, decodeInlineApiMediaReference(ref));
+}
+
+async function buildApiMediaReferencePayloadItem(ref, index, apiKey, { requireUploadedMedia = false } = {}) {
   const mimeType = mimeTypeForMediaReference(ref);
   const base = {
     id: `media_ref_${index + 1}`,
@@ -3525,6 +3579,15 @@ async function buildApiMediaReferencePayloadItem(ref, index, apiKey) {
     mime_type: mimeType,
   };
   if (isInlineApiMediaReference(ref.value)) {
+    if (requireUploadedMedia) {
+      const uploaded = await uploadInlineApiMediaReference(ref, index, apiKey);
+      return {
+        ...base,
+        ...uploaded,
+        filename: uploaded.filename,
+        mime_type: uploaded.mime_type,
+      };
+    }
     return {
       ...base,
       dataUri: ref.value,
@@ -3548,8 +3611,10 @@ async function buildApiMediaReferencePayloadItem(ref, index, apiKey) {
   };
 }
 
-async function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences(), { apiKey } = {}) {
-  return Promise.all(refs.map((ref, index) => buildApiMediaReferencePayloadItem(ref, index, apiKey)));
+async function buildApiMediaReferencesPayload(refs = getApiModeMediaReferences(), { apiKey, requireUploadedMedia = false } = {}) {
+  return Promise.all(refs.map((ref, index) =>
+    buildApiMediaReferencePayloadItem(ref, index, apiKey, { requireUploadedMedia })
+  ));
 }
 
 function formatApiMediaReferencesForPrompt(mediaReferences) {
@@ -4219,7 +4284,10 @@ async function runApiWorkflow() {
     return;
   }
 
-  const apiMediaReferences = await buildApiMediaReferencesPayload(undefined, { apiKey });
+  const apiMediaReferences = await buildApiMediaReferencesPayload(undefined, {
+    apiKey,
+    requireUploadedMedia: true,
+  });
   const requestedTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
   let input;
   let storyboardPlan = null;

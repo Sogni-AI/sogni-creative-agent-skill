@@ -163,3 +163,38 @@ export async function sdkChatRunsCancel(client, runId, reason) {
 export async function* sdkChatRunsStreamEvents(client, runId, options = {}) {
   yield* client.chat.runs.streamEvents(runId, options);
 }
+
+/**
+ * Image asset upload URL. Mirrors `GET /v1/image/uploadUrl` and
+ * returns the presigned URL string. Params shape:
+ *   { imageId, jobId, type: 'referenceImage'|'referenceImageEnd'|'contextImageN'|..., contentType? }
+ *
+ * Returns the URL string the caller should `PUT` the asset to.
+ */
+export async function sdkImageUploadUrl(client, params) {
+  return client.projects.uploadUrl(params);
+}
+
+/**
+ * Image asset download URL. Mirrors `GET /v1/image/downloadUrl`.
+ */
+export async function sdkImageDownloadUrl(client, params) {
+  return client.projects.downloadUrl(params);
+}
+
+/**
+ * Media (audio/video) asset upload URL. Mirrors `GET /v1/media/uploadUrl`.
+ * Params shape:
+ *   { id?, jobId, type: 'referenceAudio'|'referenceVideo'|..., contentType? }
+ */
+export async function sdkMediaUploadUrl(client, params) {
+  return client.projects.mediaUploadUrl(params);
+}
+
+/**
+ * Media (audio/video) asset download URL. Mirrors
+ * `GET /v1/media/downloadUrl`.
+ */
+export async function sdkMediaDownloadUrl(client, params) {
+  return client.projects.mediaDownloadUrl(params);
+}

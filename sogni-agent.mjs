@@ -3272,6 +3272,75 @@ async function dispatchChatHostedViaSdk(apiKey, body) {
   );
 }
 
+/**
+ * Phase 6 P1 — SDK transport dispatch for media-reference upload/download
+ * URL acquisition.
+ *
+ * The skill historically called `/v1/image/{action}Url` and
+ * `/v1/media/{action}Url` directly via `fetchApiJson`. alpha.22's
+ * `ProjectsApi` already exposes those endpoints as
+ * `uploadUrl` / `downloadUrl` (image) and
+ * `mediaUploadUrl` / `mediaDownloadUrl` (audio/video) with the exact
+ * same query-param shape (`imageId|id`, `jobId`, `type`, `contentType`)
+ * and accepts `'referenceImage'` / `'referenceImageEnd'` /
+ * `'referenceAudio'` / `'referenceVideo'` in the type union the skill
+ * uses.
+ *
+ * The SDK methods return the presigned URL **string** directly (they
+ * already unwrap `r.data.uploadUrl` internally). To keep
+ * `apiStoredMediaUrl` working as a drop-in extractor, the bridge wraps
+ * the URL in a `{data: {uploadUrl|downloadUrl: '...'}, sdkTransport: true}`
+ * envelope. Returns `null` when SDK transport is off so the caller
+ * falls back to `fetchApiJson`.
+ */
+async function dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action, apiKey }) {
+  let helpers;
+  try {
+    helpers = await import('./sogni-hosted-client.mjs');
+  } catch {
+    return null;
+  }
+  if (!helpers.shouldUseSdkTransport()) return null;
+  const restEndpoint = await buildSafeApiUrl('/');
+  const restBase = new URL(restEndpoint).origin;
+  return helpers.withHostedClient(
+    {
+      apiKey,
+      restEndpoint: restBase,
+      socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
+      appSource: SOGNI_APP_SOURCE,
+      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+    },
+    async (client) => {
+      const type = apiMediaReferenceUploadType(ref, index);
+      if (ref.kind === 'image') {
+        const params = {
+          imageId: `media_ref_${index + 1}`,
+          jobId,
+          type,
+          contentType: file.mimeType,
+        };
+        const url = action === 'upload'
+          ? await helpers.sdkImageUploadUrl(client, params)
+          : await helpers.sdkImageDownloadUrl(client, params);
+        const key = action === 'upload' ? 'uploadUrl' : 'downloadUrl';
+        return { data: { [key]: url }, sdkTransport: true };
+      }
+      const params = {
+        id: `media_ref_${index + 1}`,
+        jobId,
+        type,
+        contentType: file.mimeType,
+      };
+      const url = action === 'upload'
+        ? await helpers.sdkMediaUploadUrl(client, params)
+        : await helpers.sdkMediaDownloadUrl(client, params);
+      const key = action === 'upload' ? 'uploadUrl' : 'downloadUrl';
+      return { data: { [key]: url }, sdkTransport: true };
+    },
+  );
+}
+
 async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, headers = {} } = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
@@ -3424,10 +3493,14 @@ async function uploadLocalApiMediaReference(ref, index, apiKey) {
   }
   const file = localApiMediaReferenceFile(ref);
   const jobId = `sogni-agent-${Date.now()}-${index + 1}-${randomBytes(4).toString('hex')}`;
-  const uploadPayload = await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'upload', jobId), { apiKey });
+  const uploadPayload =
+    (await dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action: 'upload', apiKey }))
+    ?? (await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'upload', jobId), { apiKey }));
   const uploadUrl = apiStoredMediaUrl(uploadPayload, 'uploadUrl');
   await putApiMediaUpload(uploadUrl, file);
-  const downloadPayload = await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'download', jobId), { apiKey });
+  const downloadPayload =
+    (await dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action: 'download', apiKey }))
+    ?? (await fetchApiJson(apiMediaReferenceUrlPath(ref, file, index, 'download', jobId), { apiKey }));
   const url = apiStoredMediaUrl(downloadPayload, 'downloadUrl');
   return {
     url,

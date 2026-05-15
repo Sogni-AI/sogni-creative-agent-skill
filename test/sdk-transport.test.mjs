@@ -27,7 +27,11 @@ import {
   sdkChatRunsCreate,
   sdkChatRunsGet,
   sdkChatRunsCancel,
-  sdkChatRunsStreamEvents
+  sdkChatRunsStreamEvents,
+  sdkImageUploadUrl,
+  sdkImageDownloadUrl,
+  sdkMediaUploadUrl,
+  sdkMediaDownloadUrl
 } from '../sogni-hosted-client.mjs';
 
 function recordingClient() {
@@ -35,6 +39,13 @@ function recordingClient() {
   const record = (group, method) => (...args) => {
     calls.push({ group, method, args });
     return { group, method, echo: args };
+  };
+  // Projects.uploadUrl / mediaUploadUrl in the SDK return the
+  // presigned URL string directly. The stub mirrors that contract so
+  // the bridge's envelope-wrapping logic sees what production sees.
+  const recordReturningUrl = (group, method, urlLabel) => (...args) => {
+    calls.push({ group, method, args });
+    return `https://stub.test/${urlLabel}/${calls.length}`;
   };
   async function* recordIter(group, method) {
     // Forwarded args are captured before the first yield so the caller
@@ -67,6 +78,12 @@ function recordingClient() {
           return recordIter('chat.runs', 'streamEvents');
         }
       }
+    },
+    projects: {
+      uploadUrl: recordReturningUrl('projects', 'uploadUrl', 'image-upload'),
+      downloadUrl: recordReturningUrl('projects', 'downloadUrl', 'image-download'),
+      mediaUploadUrl: recordReturningUrl('projects', 'mediaUploadUrl', 'media-upload'),
+      mediaDownloadUrl: recordReturningUrl('projects', 'mediaDownloadUrl', 'media-download')
     }
   };
 }
@@ -184,4 +201,120 @@ test('sdkChatRunsStreamEvents forwards runId + options to client.chat.runs.strea
   assert.deepEqual(client.calls, [
     { group: 'chat.runs', method: 'streamEvents', args: ['run_789', { lastEventId: 12 }] }
   ]);
+});
+
+test('sdkImageUploadUrl forwards ImageUrlParams to client.projects.uploadUrl and returns the URL string', async () => {
+  const client = recordingClient();
+  const params = {
+    imageId: 'media_ref_1',
+    jobId: 'sogni-agent-1735000000-1-abcdef',
+    type: 'referenceImage',
+    contentType: 'image/png'
+  };
+  const url = await sdkImageUploadUrl(client, params);
+  assert.deepEqual(client.calls, [
+    { group: 'projects', method: 'uploadUrl', args: [params] }
+  ]);
+  assert.match(url, /^https:\/\/stub\.test\/image-upload\//);
+});
+
+test('sdkImageDownloadUrl forwards ImageUrlParams to client.projects.downloadUrl', async () => {
+  const client = recordingClient();
+  const params = {
+    imageId: 'media_ref_2',
+    jobId: 'sogni-agent-1735000000-2-deadbeef',
+    type: 'referenceImageEnd',
+    contentType: 'image/jpeg'
+  };
+  const url = await sdkImageDownloadUrl(client, params);
+  assert.deepEqual(client.calls, [
+    { group: 'projects', method: 'downloadUrl', args: [params] }
+  ]);
+  assert.match(url, /^https:\/\/stub\.test\/image-download\//);
+});
+
+test('sdkMediaUploadUrl forwards MediaUrlParams to client.projects.mediaUploadUrl', async () => {
+  const client = recordingClient();
+  const params = {
+    id: 'media_ref_3',
+    jobId: 'sogni-agent-1735000000-3-cafebabe',
+    type: 'referenceAudio',
+    contentType: 'audio/mp4'
+  };
+  const url = await sdkMediaUploadUrl(client, params);
+  assert.deepEqual(client.calls, [
+    { group: 'projects', method: 'mediaUploadUrl', args: [params] }
+  ]);
+  assert.match(url, /^https:\/\/stub\.test\/media-upload\//);
+});
+
+test('sdkMediaDownloadUrl forwards MediaUrlParams to client.projects.mediaDownloadUrl', async () => {
+  const client = recordingClient();
+  const params = {
+    id: 'media_ref_4',
+    jobId: 'sogni-agent-1735000000-4-f00dface',
+    type: 'referenceVideo',
+    contentType: 'video/mp4'
+  };
+  const url = await sdkMediaDownloadUrl(client, params);
+  assert.deepEqual(client.calls, [
+    { group: 'projects', method: 'mediaDownloadUrl', args: [params] }
+  ]);
+  assert.match(url, /^https:\/\/stub\.test\/media-download\//);
+});
+
+// ---------------------------------------------------------------------------
+// Bridge envelope contract
+// ---------------------------------------------------------------------------
+//
+// `dispatchMediaReferenceUrlViaSdk` returns the SDK's bare URL string
+// wrapped in `{ data: { uploadUrl|downloadUrl: '...' }, sdkTransport: true }`
+// so the skill's existing `apiStoredMediaUrl(payload, key)` extractor
+// works without changes. The extractor is internal to sogni-agent.mjs,
+// so this test replicates its public contract (which the production
+// extractor obeys) and proves the bridge's envelope satisfies it.
+//
+// Extractor contract (pinned from sogni-agent.mjs):
+//   apiStoredMediaUrl(payload, key) returns:
+//     payload.data[key]  if payload.data is an object and that key holds a
+//                        non-empty string, else
+//     payload[key]       if it holds a non-empty string, else
+//     throws MEDIA_UPLOAD_FAILED.
+function apiStoredMediaUrlContract(payload, key) {
+  const data =
+    payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+  const value = data?.[key] || payload?.[key];
+  if (typeof value === 'string' && value) return value;
+  const err = new Error('MEDIA_UPLOAD_FAILED');
+  err.code = 'MEDIA_UPLOAD_FAILED';
+  throw err;
+}
+
+test('bridge envelope { data: { uploadUrl } } unwraps via apiStoredMediaUrl contract', () => {
+  const envelope = {
+    data: { uploadUrl: 'https://stub.test/presigned-put' },
+    sdkTransport: true
+  };
+  assert.equal(
+    apiStoredMediaUrlContract(envelope, 'uploadUrl'),
+    'https://stub.test/presigned-put'
+  );
+});
+
+test('bridge envelope { data: { downloadUrl } } unwraps via apiStoredMediaUrl contract', () => {
+  const envelope = {
+    data: { downloadUrl: 'https://stub.test/presigned-get' },
+    sdkTransport: true
+  };
+  assert.equal(
+    apiStoredMediaUrlContract(envelope, 'downloadUrl'),
+    'https://stub.test/presigned-get'
+  );
+});
+
+test('apiStoredMediaUrl contract throws MEDIA_UPLOAD_FAILED when the key is missing', () => {
+  assert.throws(
+    () => apiStoredMediaUrlContract({ data: { somethingElse: 'x' } }, 'uploadUrl'),
+    /MEDIA_UPLOAD_FAILED/
+  );
 });

@@ -2826,7 +2826,7 @@ const PHASE_5_PROMPT_CONTRACTS = [
         "contractId": "compose_workflow_v1",
         "version": "1.0.0",
         "toolName": "compose_workflow",
-        "baseDescription": "compose_workflow turns a creative brief into a runnable durable creative workflow plan\n(the same shape that POST /v1/creative-agent/workflows accepts). Use it when the caller\nalready knows roughly what should happen (for example \"5-shot product teaser, 9:16, 15s\")\nand wants the workflow plan compiled in one call instead of dispatching tools turn-by-turn.\n\nDo not use compose_workflow for ordinary creative writing artifacts — use compose_script for\nscripts, storyboards, ad concepts, or trailers. Do not use it for prompt expansion — use\nenhance_prompt. Do not use it to actually run a workflow — the response is just the plan;\nthe caller is responsible for submitting it to POST /v1/creative-agent/workflows with their\nown Idempotency-Key.\n\nThe returned plan is not idempotent on its own. Pair the eventual workflow submission with\na caller-owned Idempotency-Key. Phase 1 only supports return_format=\"json\".",
+        "baseDescription": "compose_workflow turns a creative brief into a runnable ONE-SHOT durable creative workflow\nplan (the same shape that POST /v1/creative-agent/workflows accepts). Pick this when the\nuser wants to RUN a multi-step pipeline ONCE — they will review the plan, submit it, get\nthe output, and be done. Trigger phrases: \"give me a runnable workflow plan\", \"compose a\none-shot plan\", \"compile a plan I can submit\", \"I want to run this once\", \"I do NOT need\nto save it as a template\", \"just review the steps and run it\", \"5-shot teaser, 9:16, 15s\"\nstyle concrete one-off briefs.\n\nHard line vs compose_workflow_template: if the user wants to SAVE / REUSE / NAME a\nworkflow recipe to re-run later on different inputs, use compose_workflow_template\ninstead. compose_workflow returns a one-time plan with no template wrapper; the user\nCANNOT re-run this output with different inputs without a fresh planner call.\n\nDo not use compose_workflow for ordinary creative writing artifacts — use compose_script for\nscripts, storyboards, ad concepts, or trailers. Do not use it for prompt expansion — use\nenhance_prompt. Do not use it to actually run a workflow — the response is just the plan;\nthe caller is responsible for submitting it to POST /v1/creative-agent/workflows with their\nown Idempotency-Key.\n\nThe returned plan is not idempotent on its own. Pair the eventual workflow submission with\na caller-owned Idempotency-Key. Phase 1 only supports return_format=\"json\".",
         "parameterDocs": {
             "brief": "Required free-form natural-language description of what the workflow should produce.",
             "scene_count": "Suggested number of distinct shots/scenes (1-12). The planner may emit more steps than scenes (for example, a keyframe + clip pair per scene).",
@@ -2843,7 +2843,7 @@ const PHASE_5_PROMPT_CONTRACTS = [
         "contractId": "compose_workflow_template_v1",
         "version": "1.0.0",
         "toolName": "compose_workflow_template",
-        "baseDescription": "compose_workflow_template turns a creative brief into a savable, parameterized workflow\ntemplate plus a concrete example plan for the inputs the planner picked. Use it when the\nuser is creating a named, reusable workflow in the builder UI (the \"New workflow\" flow).\n\nThe returned `template_draft` carries typed `inputs[]` (image/audio/video/text/number/\nselect/boolean), parameterized `stages[]` that reference inputs via `$inputs.NAME`\nplaceholders, and an optional `graph` layout the visual builder consumes. A sibling\n`plan` field carries a Phase-1-compatible `steps[]` rendering for the example inputs so\nthe UI can preview the workflow without round-tripping the compiler.\n\nDo not use compose_workflow_template for one-shot turn-by-turn plans — use compose_workflow\ninstead. The returned template is a draft; the caller is responsible for saving it via\nPOST /v1/creative-agent/workflows/templates and minting a stable template id.\n\nEditing an existing template: pass the full template JSON as `existing_template` together\nwith the modification brief and the planner returns a refined `template_draft` that keeps\nthe id stable, bumps the version, preserves stages the brief did not touch, and applies\nthe requested changes. This is the canonical path for \"add a music step\", \"switch the\nstoryboard model to GPT Image 2\", or \"make this 9:16 instead of 16:9\" style edits.\n\nPhase 2 supports return_format=\"json\" only. Visibility defaults to \"private\"; the \"team\"\nvisibility slot is reserved for a later milestone.",
+        "baseDescription": "compose_workflow_template turns a creative brief into a savable, parameterized workflow\ntemplate plus a concrete example plan for the inputs the planner picked. This is the\ntool to use whenever the user wants to CREATE / SAVE / DESIGN / BUILD a reusable\nworkflow recipe — not just run one once. Trigger phrases: \"create a workflow that…\",\n\"save this as a workflow\", \"make me a reusable workflow…\", \"build a workflow that…\",\n\"design a workflow…\", \"I want a recipe for…\", \"I want to be able to re-run this on…\",\n\"save as workflow\", \"turn this into a workflow\", \"workflow that takes X as input\".\n\nThe returned `template_draft` carries typed `inputs[]` (image/audio/video/text/number/\nselect/boolean), parameterized `stages[]` that reference inputs via `$inputs.NAME`\nplaceholders, and an optional `graph` layout the visual builder consumes. A sibling\n`plan` field carries a Phase-1-compatible `steps[]` rendering for the example inputs so\nthe UI can preview the workflow without round-tripping the compiler.\n\nHard line vs direct generation tools: if the user asked to MAKE / SAVE / DESIGN a\nworkflow, never call generate_video, generate_image, edit_image, animate_photo, or any\nother rendering tool directly — that consumes credits to produce one-shot media when\nthe user wanted a reusable recipe. Pick compose_workflow_template instead. After\ncompose_workflow_template returns the template_draft, you MUST immediately call\nfinalize_response next. DO NOT call any other tool after compose_workflow_template —\nno render tools \"to show a preview\", no demonstration runs, nothing. The user reviews\nthe draft in the builder UI, not in chat. Calling generate_image / generate_video /\nedit_image after compose_workflow_template is a fixture-failing mistake.\n\nHard line vs compose_workflow: if the user said \"I do not need to save it as a\ntemplate\", \"give me a runnable plan to submit\", \"one-shot\", \"just run this once\", or\nsimilar single-use phrasing — pick compose_workflow, NOT compose_workflow_template.\ncompose_workflow_template is exclusively for SAVING reusable recipes.\n\nDo not use compose_workflow_template for one-shot turn-by-turn plans — use compose_workflow\ninstead. The returned template is a draft; the caller is responsible for saving it via\nPOST /v1/creative-agent/workflows/templates and minting a stable template id.\n\nEditing an existing template: pass the full template JSON as `existing_template` together\nwith the modification brief and the planner returns a refined `template_draft` that keeps\nthe id stable, bumps the version, preserves stages the brief did not touch, and applies\nthe requested changes. This is the canonical path for \"add a music step\", \"switch the\nstoryboard model to GPT Image 2\", or \"make this 9:16 instead of 16:9\" style edits.\n\nPhase 2 supports return_format=\"json\" only. Visibility defaults to \"private\"; the \"team\"\nvisibility slot is reserved for a later milestone.",
         "parameterDocs": {
             "brief": "Required free-form natural-language description of what the workflow should produce. When editing an existing template, phrase the brief as the modification request (e.g. \"Add a music step at the end and make the duration 12s\").",
             "name": "Required human-readable template name. Shown in the workflow library and run launcher.",
@@ -9645,3 +9645,156 @@ export const CROSS_SURFACE_PARITY_FIXTURES = [
         ],
     },
 ];
+export const RUN_RECORD_SCHEMA_VERSION = 2;
+export function emptyRunRecord() {
+    return {
+        schemaVersion: RUN_RECORD_SCHEMA_VERSION,
+        run_id: '',
+        startedAt: 0,
+        endedAt: 0,
+        user_request: '',
+        model_id: '',
+        runtime_config: {},
+        tool_schemas: [],
+        rounds: [],
+        final_response: '',
+        audit_results: [],
+        job_ids: [],
+        asset_ids: [],
+        redacted: false,
+    };
+}
+const REDACTION_PLACEHOLDER = '[REDACTED]';
+/**
+ * Keys that always get redacted regardless of value. Lowercase comparison.
+ * Includes both Sogni-specific (apiKey, walletAuth) and generic auth
+ * (authorization, cookie, sessionId, accessToken, ...) names.
+ */
+const SECRET_KEY_PATTERNS = [
+    /api[_-]?key$/i,
+    /access[_-]?token$/i,
+    /id[_-]?token$/i,
+    /refresh[_-]?token$/i,
+    /bearer[_-]?token$/i,
+    /^token$/i,
+    /authorization$/i,
+    /^cookie$/i,
+    /^set-?cookie$/i,
+    /session[_-]?id$/i,
+    /password$/i,
+    /secret$/i,
+    /private[_-]?key$/i,
+    /signing[_-]?key$/i,
+    /^pem$/i,
+    /walletauth$/i,
+    /^x-?api-?key$/i,
+];
+/**
+ * Substrings inside string values that suggest secrets. Used for
+ * value-side scrubbing (e.g. Authorization header value embedded in a
+ * free-form note).
+ */
+const VALUE_SCRUBBERS = [
+    // Standard auth headers
+    { pattern: /(Authorization\s*:\s*)(Bearer|Basic)\s+\S+/gi, replacement: `$1$2 ${REDACTION_PLACEHOLDER}` },
+    // Standalone bearer tokens
+    { pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{20,}/g, replacement: `Bearer ${REDACTION_PLACEHOLDER}` },
+    // Signed S3-style URLs: keep the host/path, drop the signature payload
+    { pattern: /([?&](?:X-Amz-Signature|Signature|sig|Policy|Key-Pair-Id|X-Amz-Credential)=)[^&\s"']+/gi, replacement: `$1${REDACTION_PLACEHOLDER}` },
+    // OpenAI / Anthropic style API keys
+    { pattern: /\bsk-[A-Za-z0-9]{20,}/g, replacement: REDACTION_PLACEHOLDER },
+    { pattern: /\bsk-ant-[A-Za-z0-9-_]{20,}/g, replacement: REDACTION_PLACEHOLDER },
+    // JWTs (three base64url chunks separated by dots, length floor)
+    { pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, replacement: REDACTION_PLACEHOLDER },
+    // PEM-style private keys (one-liner heuristic)
+    { pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replacement: REDACTION_PLACEHOLDER },
+];
+/** True when the key (case-insensitive) matches a known secret pattern. */
+function isSecretKey(key) {
+    return SECRET_KEY_PATTERNS.some((re) => re.test(key));
+}
+/** Apply value-side scrubbers to a string. Returns the same string when
+ *  no pattern matched (preserves identity for short-circuit chains). */
+export function redactStringValue(value) {
+    let out = value;
+    for (const { pattern, replacement } of VALUE_SCRUBBERS) {
+        if (pattern.test(out)) {
+            // Each scrubber must reset its regex state if it's global.
+            pattern.lastIndex = 0;
+            out = out.replace(pattern, replacement);
+        }
+    }
+    return out;
+}
+/**
+ * Recursively redact a JSON-ish value. Returns a new structure; never
+ * mutates the input. Handles primitives, arrays, plain records, and
+ * preserves null. Circular references are not expected (RunRecord is
+ * JSON-serializable) but are tolerated by tracking depth.
+ */
+export function redactPayload(value, depth = 0) {
+    if (depth > 32)
+        return REDACTION_PLACEHOLDER;
+    if (value === null || value === undefined)
+        return value;
+    if (typeof value === 'string')
+        return redactStringValue(value);
+    if (typeof value === 'number' || typeof value === 'boolean')
+        return value;
+    if (Array.isArray(value)) {
+        return value.map((item) => redactPayload(item, depth + 1));
+    }
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [key, val] of Object.entries(value)) {
+            if (isSecretKey(key)) {
+                out[key] = REDACTION_PLACEHOLDER;
+            }
+            else {
+                out[key] = redactPayload(val, depth + 1);
+            }
+        }
+        return out;
+    }
+    // Unknown primitive (bigint, symbol, function) — coerce to redacted
+    // string rather than risk surfacing it.
+    return REDACTION_PLACEHOLDER;
+}
+function redactToolCall(call) {
+    return {
+        ...call,
+        arguments: redactPayload(call.arguments),
+    };
+}
+function redactToolResult(result) {
+    return {
+        ok: result.ok,
+        ...(result.error_type !== undefined ? { error_type: result.error_type } : {}),
+        payload: redactPayload(result.payload),
+    };
+}
+function redactRound(round) {
+    return {
+        round: round.round,
+        assistant_message: redactStringValue(round.assistant_message),
+        tool_calls: round.tool_calls.map(redactToolCall),
+        tool_results: round.tool_results.map(redactToolResult),
+    };
+}
+/**
+ * Apply redaction to a RunRecord. Returns a new record with
+ * `redacted: true`. Idempotent — running this twice produces the same
+ * output (no values left to scrub after the first pass).
+ */
+export function redactRunRecord(record) {
+    return {
+        ...record,
+        user_request: redactStringValue(record.user_request),
+        runtime_config: redactPayload(record.runtime_config),
+        tool_schemas: record.tool_schemas.map((schema) => redactPayload(schema)),
+        rounds: record.rounds.map(redactRound),
+        final_response: redactStringValue(record.final_response),
+        redacted: true,
+    };
+}
+export { REDACTION_PLACEHOLDER };

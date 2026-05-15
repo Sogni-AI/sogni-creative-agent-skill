@@ -17,14 +17,23 @@ import { PACKAGE_VERSION } from './version.mjs';
 import { assertSafeUrl } from './ssrf-guard.mjs';
 import {
   LTX23_WORKFLOW_MODELS,
+  PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
+  PUBLIC_SKILL_DEFAULT_TOOL_NAMES,
   QUALITY_TIERS,
   SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS,
   VIDEO_WORKFLOW_DEFAULT_MODELS,
+  buildStoryboardProject,
   buildStoryboardVideoHostedToolSequenceInput,
+  classifyPublicSkillTurn,
   classifySkillError,
+  compileForModel,
+  compilePublicSkillToolSurface,
+  composeAdapterPromptGuidance,
+  createPublicSkillDefaultContractRuntime,
   detectReferenceAudioFormat,
   dimensionsForAspectRatio,
   dimensionsWithShortSide,
+  dispatchPublicSkillToolCall,
   getModelDefaults,
   getVideoPromptGuardrailPlan,
   inferVideoWorkflowFromAssets,
@@ -32,8 +41,11 @@ import {
   isLtx2Model,
   isSeedanceModel,
   isSeedanceModelSelection,
+  normalizeReferenceAudioMimeType,
   normalizeVideoWorkflow,
   planCliVideoBrain,
+  redactPayload,
+  redactRunRecord,
   resolveVideoControlNetStrength,
   resolveVideoModelAlias,
   resolveVideoSteps,
@@ -1156,6 +1168,17 @@ const options = {
   apiGenerateAudio: null,
   apiExpandPrompt: null,
   storyboardFrames: null,
+  skipRedact: false, // --skip-redact: bypass redactRunRecord (debug only)
+  // Tier 4 contract-runtime debug surface (shared with sogni-chat + sogni-api):
+  contractAction: null, // classify|compile|dispatch
+  contractToolName: null,
+  contractToolArgs: null,
+  contractTurnSource: null, // hosted_chat|durable_chat|durable_workflow|public_skill
+  // Tier 2 local storyboard planning surface:
+  storyboardPlanAction: false,
+  storyboardPlanFrames: null,
+  storyboardPlanModel: null, // seedance|seedance2|gpt-image-2|ltx23|wan
+  storyboardPlanStage: null, // storyboard_image|scene_clip
   noFilter: false // Disable NSFW content filter
 };
 const cliSet = {
@@ -1693,6 +1716,46 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.apiReplayAction = 'ingest';
     options.apiReplayInput = raw;
+  } else if (arg === '--skip-redact' || arg === '--no-redact') {
+    // Escape hatch for trusted offline debugging only. By default every
+    // RunRecord that leaves the CLI is run through redactRunRecord /
+    // redactPayload so signed URLs, bearer tokens, and JWTs can't leak.
+    options.skipRedact = true;
+  } else if (arg === '--turn-classify') {
+    options.contractAction = 'classify';
+  } else if (arg === '--compile-tools') {
+    options.contractAction = 'compile';
+  } else if (arg === '--dispatch-tool') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.contractAction = 'dispatch';
+    options.contractToolName = raw;
+  } else if (arg === '--tool-args') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.contractToolArgs = raw;
+  } else if (arg === '--turn-source') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.contractTurnSource = raw;
+  } else if (arg === '--storyboard-plan') {
+    // Local-only: build a storyboard project + per-model compiled prompt
+    // using the shared buildStoryboardProject / compileForModel adapters
+    // (the same primitives that drive the hosted storyboard pipeline)
+    // and print the result. Does not call the network.
+    options.storyboardPlanAction = true;
+  } else if (arg === '--storyboard-frames-local' || arg === '--storyboard-plan-frames') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.storyboardPlanFrames = parsePositiveIntegerValue(raw, arg);
+  } else if (arg === '--storyboard-plan-model') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.storyboardPlanModel = raw;
+  } else if (arg === '--storyboard-plan-stage') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.storyboardPlanStage = raw;
   } else if (arg === '--api-workflow' || arg === '--creative-workflow') {
     options.apiWorkflowAction = 'start';
     const next = args[i + 1];
@@ -2711,10 +2774,14 @@ const apiWorkflowTemplate = options.apiWorkflowTemplate || 'generated_keyframe_v
 const apiModelUtilityAction = Boolean(options.apiModelAction);
 const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
+const contractUtilityAction = Boolean(options.contractAction);
+const storyboardPlanUtilityAction = Boolean(options.storyboardPlanAction);
 const commandUsesGenerationSeed = !options.apiChat &&
   !apiWorkflowUtilityAction &&
   !apiModelUtilityAction &&
   !apiReplayUtilityAction &&
+  !contractUtilityAction &&
+  !storyboardPlanUtilityAction &&
   !options.estimateVideoCost &&
   !options.showBalance &&
   !options.showVersion &&
@@ -2730,8 +2797,15 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
+}
+
+if (contractUtilityAction && options.contractAction === 'dispatch' && !options.contractToolName) {
+  fatalCliError('--dispatch-tool requires a tool name.', { code: 'INVALID_ARGUMENT' });
+}
+if (storyboardPlanUtilityAction && !options.prompt) {
+  fatalCliError('--storyboard-plan requires a prompt describing the scene.', { code: 'INVALID_ARGUMENT' });
 }
 
 if (options.apiChat && !options.prompt && getApiModeMediaReferences().length === 0) {
@@ -3667,8 +3741,17 @@ async function imageDataUriFromPathOrUrl(pathOrUrl) {
 }
 
 async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
-  const system = options.apiSystemPrompt ||
+  // composeAdapterPromptGuidance() returns the same per-model storyboard
+  // routing guidance the hosted chat and durable workflow surfaces inject
+  // (Seedance @ImageN refs, GPT Image 2 bracketed refs, LTX23 context
+  // tokens, Wan numeric tokens). Wiring it through here keeps the public
+  // skill's --api-chat behavior aligned with sogni-chat and the
+  // /v1/chat/completions endpoint when references are present.
+  const baseSystem = options.apiSystemPrompt ||
     'You are a concise creative production assistant. Use Sogni creative tools when they help produce concrete media.';
+  const system = apiMediaRefs.length > 0
+    ? `${baseSystem}\n\n${composeAdapterPromptGuidance()}`
+    : baseSystem;
   const imageRefs = apiMediaRefs.filter(ref => ref.kind === 'image');
   const nonImageRefs = apiMediaReferences.filter(ref => ref.kind !== 'image');
   const promptText = [
@@ -4063,6 +4146,29 @@ function replayRecordFromPayload(payload) {
   return data?.record || payload?.record || payload;
 }
 
+// Defense-in-depth: every RunRecord that leaves this CLI passes through
+// the shared `redactRunRecord` so signed URLs, bearer tokens, JWTs, etc.
+// can't leak via stdout. Records that don't yet match the canonical
+// RunRecord shape fall back to `redactPayload`, which scrubs the same
+// secret patterns at the value layer.
+function safeRedactRunRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  if (options.skipRedact) return record;
+  if (Array.isArray(record.rounds) && typeof record.run_id === 'string') {
+    try {
+      return redactRunRecord(record);
+    } catch {
+      // fall through to payload-level redaction
+    }
+  }
+  return redactPayload(record);
+}
+
+function safeRedactRunRecords(records) {
+  if (!Array.isArray(records)) return records;
+  return records.map((record) => safeRedactRunRecord(record));
+}
+
 async function runApiReplay() {
   const creds = loadCredentials();
   const type = 'api-replay';
@@ -4077,9 +4183,9 @@ async function runApiReplay() {
 
   if (action === 'list') {
     payload = await fetchApiJson(`/v1/replay/records?limit=${encodeURIComponent(options.apiReplayLimit || 50)}`, { apiKey });
-    const records = recordsFromReplayPayload(payload);
+    const records = safeRedactRunRecords(recordsFromReplayPayload(payload));
     if (options.json) {
-      console.log(JSON.stringify({ success: true, type, action, records, raw: payload }));
+      console.log(JSON.stringify({ success: true, type, action, records, redacted: !options.skipRedact }));
     } else {
       for (const record of records) {
         console.log(`${record.runId || record.run_id || '(unknown)'}\t${record.modelId || record.model_id || '-'}\t${record.rounds ?? '-'}\t${record.userRequest || record.user_request || ''}`);
@@ -4090,9 +4196,9 @@ async function runApiReplay() {
 
   if (action === 'get') {
     payload = await fetchApiJson(`/v1/replay/records/${encodeURIComponent(options.apiReplayId)}`, { apiKey });
-    const record = replayRecordFromPayload(payload);
+    const record = safeRedactRunRecord(replayRecordFromPayload(payload));
     if (options.json) {
-      console.log(JSON.stringify({ success: true, type, action, runId: options.apiReplayId, record, raw: payload }));
+      console.log(JSON.stringify({ success: true, type, action, runId: options.apiReplayId, record, redacted: !options.skipRedact }));
     } else {
       console.log(JSON.stringify(record, null, 2));
     }
@@ -4107,9 +4213,163 @@ async function runApiReplay() {
   });
   const result = extractApiEnvelopeData(payload);
   if (options.json) {
-    console.log(JSON.stringify({ success: true, type, action, result, raw: payload }));
+    console.log(JSON.stringify({ success: true, type, action, result }));
   } else {
     console.log(`Replay record ingested: ${result.runId || result.run_id || recordInput?.run_id || '(unknown)'}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public contract-runtime debug surface — mirrors the chat/api Structured
+// Contracts v1 pipeline (classifyTurn → compileTools → dispatchToolCall)
+// so consumers can verify per-turn routing matches the live surfaces.
+// ---------------------------------------------------------------------------
+function buildContractSessionState() {
+  const hasUploadedImage = Boolean(options.refImage || (Array.isArray(options.contextImages) && options.contextImages.length > 0));
+  const hasUploadedVideo = Boolean(options.refVideo);
+  const hasUploadedAudio = Boolean(options.refAudio || options.referenceAudioIdentity);
+  return {
+    hasUploadedImage,
+    hasUploadedVideo,
+    hasUploadedAudio,
+    hasActivePersona: Boolean(options.voicePersonaName || options._resolvedPersona),
+  };
+}
+
+function buildContractRuntimeForCli() {
+  return createPublicSkillDefaultContractRuntime();
+}
+
+function buildContractTools() {
+  return PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS;
+}
+
+function buildContractTurnInput() {
+  const runtime = buildContractRuntimeForCli();
+  const sessionState = buildContractSessionState();
+  const tools = buildContractTools();
+  const availableTools = tools.map((tool) => tool.function?.name).filter(Boolean);
+  return { runtime, sessionState, tools, availableTools };
+}
+
+function runContractDebugAction() {
+  const { runtime, sessionState, tools, availableTools } = buildContractTurnInput();
+  if (options.contractAction === 'classify') {
+    const turnPolicy = classifyPublicSkillTurn({
+      availableTools,
+      sessionState,
+      runtime,
+    });
+    console.log(JSON.stringify({
+      success: true,
+      type: 'contract-classify',
+      sessionState,
+      availableTools,
+      turnPolicy,
+    }, null, options.json ? 0 : 2));
+    return;
+  }
+  if (options.contractAction === 'compile') {
+    const compiled = compilePublicSkillToolSurface({
+      tools,
+      sessionState,
+      runtime,
+    });
+    const turnPolicy = compiled.turnPolicy ?? classifyPublicSkillTurn({
+      availableTools,
+      sessionState,
+      runtime,
+    });
+    console.log(JSON.stringify({
+      success: true,
+      type: 'contract-compile',
+      sessionState,
+      turnPolicy,
+      tools: compiled.tools.map((tool) => ({
+        name: tool.function?.name,
+        description: tool.function?.description,
+      })),
+    }, null, options.json ? 0 : 2));
+    return;
+  }
+  if (options.contractAction === 'dispatch') {
+    let parsedArgs = {};
+    if (options.contractToolArgs) {
+      try {
+        parsedArgs = JSON5.parse(options.contractToolArgs);
+      } catch (err) {
+        fatalCliError(`--tool-args must be valid JSON: ${err.message}`, { code: 'INVALID_JSON_INPUT' });
+      }
+    }
+    const turnPolicy = classifyPublicSkillTurn({
+      availableTools,
+      sessionState,
+      runtime,
+    });
+    const verdict = dispatchPublicSkillToolCall({
+      toolName: options.contractToolName,
+      arguments: parsedArgs,
+      turnPolicy,
+      runtime,
+    });
+    console.log(JSON.stringify({
+      success: true,
+      type: 'contract-dispatch',
+      toolName: options.contractToolName,
+      arguments: parsedArgs,
+      turnPolicy,
+      verdict,
+    }, null, options.json ? 0 : 2));
+    return;
+  }
+  fatalCliError(`Unknown contract action: ${options.contractAction}`, { code: 'INVALID_ARGUMENT' });
+}
+
+// ---------------------------------------------------------------------------
+// Local storyboard plan — exposes the same buildStoryboardProject /
+// compileForModel adapters used by the hosted storyboard pipeline so the
+// CLI can inspect (and downstream agents can consume) the compiled plan
+// without round-tripping to the hosted API.
+// ---------------------------------------------------------------------------
+function runStoryboardPlanAction() {
+  const frameCount = options.storyboardPlanFrames
+    ?? (options.storyboardFrames || null)
+    ?? null;
+  const project = buildStoryboardProject({
+    prompt: options.prompt,
+    userIntentText: options.prompt,
+    frameCount: frameCount ?? undefined,
+    promptAuthorship: 'user',
+  });
+  const adapterId = options.storyboardPlanModel
+    ?? resolveVideoModelAlias(options.model || 'seedance2', options.videoWorkflow || 't2v')
+    ?? 'seedance2';
+  const stage = options.storyboardPlanStage || 'storyboard_image';
+  let compiled = null;
+  try {
+    const firstScene = Array.isArray(project.scenes) ? project.scenes[0] : null;
+    compiled = compileForModel(adapterId, project, { stage, scene: firstScene });
+  } catch (err) {
+    compiled = { error: err?.message || String(err) };
+  }
+  const payload = {
+    success: true,
+    type: 'storyboard-plan',
+    adapterId,
+    stage,
+    frameCount: project.frameCount ?? frameCount ?? null,
+    aspectRatio: project.layout?.aspectRatio ?? null,
+    layout: project.layout ?? null,
+    scenes: project.scenes ?? [],
+    references: project.references ?? [],
+    durationSec: project.durationSec ?? null,
+    compiled,
+    adapterGuidance: composeAdapterPromptGuidance(),
+  };
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify(payload));
+  } else {
+    console.log(JSON.stringify(payload, null, 2));
   }
 }
 
@@ -4717,7 +4977,12 @@ async function transcodeMp3ReferenceAudioBuffer(buffer, sourceLabel) {
 }
 
 async function prepareReferenceAudioForVideoBuffer(buffer, sourceLabel) {
-  const mimeType = mimeTypeForPath(sourceLabel, 'application/octet-stream');
+  // normalizeReferenceAudioMimeType lets path-derived MIME types (audio/mpeg
+  // for .mp3, audio/mp4 for .m4a, etc.) map to the canonical bucket the
+  // hosted audio pipeline expects, matching how sogni-chat and sogni-api
+  // canonicalize before passing to detectReferenceAudioFormat.
+  const rawMimeType = mimeTypeForPath(sourceLabel, 'application/octet-stream');
+  const mimeType = normalizeReferenceAudioMimeType(rawMimeType) || rawMimeType;
   const sourceFormat = detectReferenceAudioFormat(buffer, mimeType);
   if (sourceFormat !== 'mp3') return buffer;
 
@@ -5685,6 +5950,16 @@ async function main() {
       return;
     }
 
+    if (contractUtilityAction) {
+      runContractDebugAction();
+      return;
+    }
+
+    if (storyboardPlanUtilityAction) {
+      runStoryboardPlanAction();
+      return;
+    }
+
     if (options.apiChat) {
       await runApiChat(log);
       return;
@@ -5976,7 +6251,11 @@ async function main() {
       const useRefImageUrl = isSeedanceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
       const useRefImageEndUrl = isSeedanceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
       const refAudioFormatByPath = options.refAudio
-        ? detectReferenceAudioFormat(new Uint8Array(), mimeTypeForPath(options.refAudio, 'application/octet-stream'))
+        ? detectReferenceAudioFormat(
+            new Uint8Array(),
+            normalizeReferenceAudioMimeType(mimeTypeForPath(options.refAudio, 'application/octet-stream'))
+              || mimeTypeForPath(options.refAudio, 'application/octet-stream')
+          )
         : 'unknown';
       const useRefAudioUrl = isSeedanceVideo
         && refAudioFormatByPath !== 'mp3'

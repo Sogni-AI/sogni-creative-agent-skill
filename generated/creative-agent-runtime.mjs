@@ -3677,7 +3677,7 @@ const PUBLIC_GPT_IMAGE_2_ADAPTER = {
                 prompt: compileStoryboardImagePromptFromProject(storyboard),
                 args: {
                     model: 'gpt-image-2',
-                    ...buildStoryboardCanvasArgs(storyboard.outputAspectRatio, true),
+                    ...buildStoryboardCanvasArgs(storyboard.outputAspectRatio, true, storyboard.boardDimensions),
                     numberOfVariations: 1,
                 },
             };
@@ -5673,6 +5673,118 @@ function describeLandscapePortraitCellArrangement(frameCount, cellAspectRatio) {
         'use unused grid slots as margin/notes space only',
     ].join('; ');
 }
+function parseAspectRatioPair(aspectRatio) {
+    const normalized = normalizeAspectRatio(aspectRatio);
+    if (!normalized)
+        return null;
+    const [widthText, heightText] = normalized.split(':');
+    const width = Number(widthText);
+    const height = Number(heightText);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return null;
+    }
+    return { width, height };
+}
+function gcdInt(a, b) {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    while (y !== 0) {
+        [x, y] = [y, x % y];
+    }
+    return x || 1;
+}
+function reduceRatioString(width, height) {
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    const divisor = gcdInt(w, h);
+    return `${w / divisor}:${h / divisor}`;
+}
+// Long-axis-first balanced slot grid for a given count. The first number is the
+// slot count along the "long" axis of each cell — i.e. the axis that gets more
+// cells when cells are not square — so callers can orient it: cols for portrait
+// cells, rows for landscape cells.
+function pickBalancedSlotGrid(frameCount) {
+    const clamped = Math.max(1, Math.min(24, Math.round(frameCount)));
+    const table = [
+        [1, 1], [2, 1], [3, 1], [2, 2],
+        [3, 2], [3, 2], [4, 2], [4, 2],
+        [3, 3], [4, 3], [4, 3], [4, 3],
+        [5, 3], [5, 3], [5, 3], [4, 4],
+        [5, 4], [5, 4], [5, 4], [5, 4],
+        [6, 4], [6, 4], [6, 4], [6, 4],
+    ];
+    const [major, minor] = table[clamped - 1];
+    return { major, minor };
+}
+const STORYBOARD_BOARD_TARGET_PIXEL_BUDGET = 4_000_000;
+const STORYBOARD_BOARD_MIN_PIXEL_BUDGET = 720_000;
+const STORYBOARD_BOARD_MAX_PIXEL_BUDGET = 8_000_000;
+const STORYBOARD_BOARD_MAX_EDGE = 3840;
+const STORYBOARD_BOARD_MIN_EDGE = 768;
+const STORYBOARD_BOARD_DIMENSION_MULTIPLE = 16;
+function snapStoryboardDimension(value) {
+    const snapped = Math.round(value / STORYBOARD_BOARD_DIMENSION_MULTIPLE) * STORYBOARD_BOARD_DIMENSION_MULTIPLE;
+    return Math.max(STORYBOARD_BOARD_MIN_EDGE, Math.min(STORYBOARD_BOARD_MAX_EDGE, snapped));
+}
+function pickStoryboardBoardPixelDimensions(boardRatioWidth, boardRatioHeight) {
+    if (!Number.isFinite(boardRatioWidth)
+        || !Number.isFinite(boardRatioHeight)
+        || boardRatioWidth <= 0
+        || boardRatioHeight <= 0) {
+        return { width: 2560, height: 1440 };
+    }
+    const ratio = boardRatioWidth / boardRatioHeight;
+    let width = Math.sqrt(STORYBOARD_BOARD_TARGET_PIXEL_BUDGET * ratio);
+    let height = width / ratio;
+    if (width > STORYBOARD_BOARD_MAX_EDGE) {
+        width = STORYBOARD_BOARD_MAX_EDGE;
+        height = width / ratio;
+    }
+    if (height > STORYBOARD_BOARD_MAX_EDGE) {
+        height = STORYBOARD_BOARD_MAX_EDGE;
+        width = height * ratio;
+    }
+    const snappedWidth = snapStoryboardDimension(width);
+    const snappedHeight = snapStoryboardDimension(height);
+    const totalPixels = snappedWidth * snappedHeight;
+    if (totalPixels < STORYBOARD_BOARD_MIN_PIXEL_BUDGET) {
+        const scale = Math.sqrt(STORYBOARD_BOARD_MIN_PIXEL_BUDGET / totalPixels);
+        return {
+            width: snapStoryboardDimension(snappedWidth * scale),
+            height: snapStoryboardDimension(snappedHeight * scale),
+        };
+    }
+    if (totalPixels > STORYBOARD_BOARD_MAX_PIXEL_BUDGET) {
+        const scale = Math.sqrt(STORYBOARD_BOARD_MAX_PIXEL_BUDGET / totalPixels);
+        return {
+            width: snapStoryboardDimension(snappedWidth * scale),
+            height: snapStoryboardDimension(snappedHeight * scale),
+        };
+    }
+    return { width: snappedWidth, height: snappedHeight };
+}
+// Pick a (cols, rows) grid whose geometry hosts cells of the given cellAspectRatio
+// natively, then derive a board aspect ratio and snapped pixel dimensions. This
+// avoids the "9:16 cells inside a 16:9 board" trap where prompt prose tells the
+// model "9:16 portrait cells" but the canvas physically forces cells to ~4:3
+// landscape.
+export function chooseBalancedStoryboardGrid(frameCount, cellAspectRatio) {
+    const pair = parseAspectRatioPair(cellAspectRatio) ?? { width: 16, height: 9 };
+    const orientation = parseAspectRatioOrientation(cellAspectRatio);
+    const slotGrid = pickBalancedSlotGrid(frameCount);
+    const cols = orientation === 'landscape' ? slotGrid.minor : slotGrid.major;
+    const rows = orientation === 'landscape' ? slotGrid.major : slotGrid.minor;
+    const boardRatioWidth = cols * pair.width;
+    const boardRatioHeight = rows * pair.height;
+    const boardAspectRatio = reduceRatioString(boardRatioWidth, boardRatioHeight);
+    const { width, height } = pickStoryboardBoardPixelDimensions(boardRatioWidth, boardRatioHeight);
+    return {
+        cols,
+        rows,
+        boardAspectRatio,
+        boardDimensions: `${width}x${height}`,
+    };
+}
 function describeSingleOrientationStoryboardArrangement(boardAspectRatio, cellAspectRatio, frameCount) {
     const boardOrientation = parseAspectRatioOrientation(boardAspectRatio);
     const frameShape = describeVideoFrameShape(cellAspectRatio);
@@ -5760,14 +5872,18 @@ export function inferStoryboardLayoutSpec(userIntentText, frameCount, planningCo
         ? planningLayout.storyboardCanvasSpecifiedByUser
         : userDefinedStoryboardCanvas(userIntentText);
     const explicitPixels = userDefinedCanvas ? inferExplicitStoryboardCanvasPixelDimensions(userIntentText) : null;
-    const boardAspectRatio = userDefinedCanvas
+    const explicitTargetVideoAspectRatio = inferExplicitStoryboardTargetVideoAspectRatio(userIntentText);
+    const provisionalBoardAspectRatio = userDefinedCanvas
         ? inferStoryboardBoardAspectRatio(userIntentText)
         : '16:9';
-    const explicitTargetVideoAspectRatio = inferExplicitStoryboardTargetVideoAspectRatio(userIntentText);
     const inferredTargetVideoAspectRatio = explicitTargetVideoAspectRatio
-        ?? inferStoryboardTargetVideoAspectRatio(userIntentText, boardAspectRatio);
+        ?? inferStoryboardTargetVideoAspectRatio(userIntentText, provisionalBoardAspectRatio);
     const cellAspectRatio = inferStoryboardCellAspectRatio(userIntentText, inferredTargetVideoAspectRatio);
     const targetVideoAspectRatio = explicitTargetVideoAspectRatio ?? cellAspectRatio;
+    const balancedGrid = userDefinedCanvas
+        ? null
+        : chooseBalancedStoryboardGrid(frameCount, cellAspectRatio);
+    const boardAspectRatio = balancedGrid?.boardAspectRatio ?? provisionalBoardAspectRatio;
     const layout = describeStoryboardLayout(boardAspectRatio, cellAspectRatio, frameCount);
     const fallback = {
         boardAspectRatio,
@@ -5778,7 +5894,7 @@ export function inferStoryboardLayoutSpec(userIntentText, frameCount, planningCo
             ? { boardDimensions: `${explicitPixels.width}x${explicitPixels.height}` }
             : userDefinedCanvas
                 ? {}
-                : { boardDimensions: GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape.aspectRatio }),
+                : { boardDimensions: balancedGrid?.boardDimensions ?? GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape.aspectRatio }),
     };
     return applyStoryboardPlanningLayoutContract(fallback, planningContract, frameCount, userDefinedCanvas);
 }
@@ -8576,17 +8692,30 @@ function parseAspectRatioOrientation(aspectRatio) {
         return 'portrait';
     return 'square';
 }
-function defaultStoryboardCanvasForVideoAspectRatio(targetVideoAspectRatio) {
+function defaultStoryboardCanvasForVideoAspectRatio(targetVideoAspectRatio, frameCount) {
     const orientation = parseAspectRatioOrientation(targetVideoAspectRatio);
-    if (orientation === 'portrait' || orientation === 'landscape' || orientation === 'square') {
+    if (orientation !== 'portrait' && orientation !== 'landscape' && orientation !== 'square') {
+        return null;
+    }
+    const grid = chooseBalancedStoryboardGrid(frameCount, targetVideoAspectRatio);
+    const dims = parseStoryboardDimensionText(grid.boardDimensions);
+    if (!dims) {
         return GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape;
     }
-    return null;
+    return {
+        width: dims.width,
+        height: dims.height,
+        aspectRatio: `${dims.width}x${dims.height}`,
+    };
 }
 function storyboardCanvasHintText(canvas, targetVideoAspectRatio) {
-    const boardAspect = canvas === GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape
-        ? '16:9 landscape'
-        : '9:16 portrait';
+    const orientation = canvas.width > canvas.height
+        ? 'landscape'
+        : canvas.height > canvas.width
+            ? 'portrait'
+            : 'square';
+    const canvasRatioLabel = reduceRatioString(canvas.width, canvas.height);
+    const boardAspect = `${canvasRatioLabel} ${orientation}`;
     return [
         `${DEFAULT_STORYBOARD_CANVAS_HINT_MARKER} Use a ${boardAspect} storyboard canvas/page (${canvas.aspectRatio}) for the composite storyboard sheet.`,
         `Keep individual scene-cell/frame aspect ratio ${targetVideoAspectRatio}; target final video aspect ratio ${targetVideoAspectRatio}.`,
@@ -8611,33 +8740,39 @@ export function applyDefaultStoryboardCanvasHint(text, frameCount) {
     const explicitRatio = inferExplicitAspectRatioFromText(maskedText);
     const explicitTargetAspectRatio = explicitRatio ? `${explicitRatio.width}:${explicitRatio.height}` : null;
     const targetVideoAspectRatio = explicitTargetAspectRatio ?? layout.targetVideoAspectRatio;
-    const canvas = defaultStoryboardCanvasForVideoAspectRatio(targetVideoAspectRatio);
+    const canvas = defaultStoryboardCanvasForVideoAspectRatio(targetVideoAspectRatio, frameCount);
     if (!canvas)
         return maskedText;
     return insertDefaultStoryboardCanvasHint(maskedText, storyboardCanvasHintText(canvas, targetVideoAspectRatio));
 }
-export function buildStoryboardCanvasArgs(boardAspectRatio, isGptImage2) {
+export function buildStoryboardCanvasArgs(boardAspectRatio, isGptImage2, boardDimensions) {
     const normalizedBoardAspectRatio = normalizeAspectRatio(boardAspectRatio) ?? boardAspectRatio;
     const orientation = parseAspectRatioOrientation(normalizedBoardAspectRatio);
-    const canvas = orientation === 'landscape'
-        ? GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape
-        : orientation === 'portrait'
-            ? GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardPortrait
-            : null;
-    if (!canvas) {
+    if (orientation !== 'landscape' && orientation !== 'portrait' && orientation !== 'square') {
         return { aspectRatio: normalizedBoardAspectRatio };
     }
+    const explicitDimensions = boardDimensions
+        ? parseStoryboardDimensionText(boardDimensions)
+        : null;
     if (isGptImage2) {
+        const dims = explicitDimensions ?? (() => {
+            const pair = parseAspectRatioPair(normalizedBoardAspectRatio);
+            if (!pair)
+                return GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape;
+            const sized = pickStoryboardBoardPixelDimensions(pair.width, pair.height);
+            return { width: sized.width, height: sized.height };
+        })();
         return {
-            width: canvas.width,
-            height: canvas.height,
-            aspectRatio: canvas.aspectRatio,
+            width: dims.width,
+            height: dims.height,
+            aspectRatio: `${dims.width}x${dims.height}`,
         };
     }
-    const isLandscapeCanvas = canvas === GPT_IMAGE_STORYBOARD_DEFAULTS.storyboardLandscape;
-    const width = isLandscapeCanvas ? 1920 : 1080;
-    const height = isLandscapeCanvas ? 1080 : 1920;
-    return { width, height, aspectRatio: `${width}x${height}` };
+    // Non-GPT-Image-2 renderers run on a more limited pixel budget; keep the
+    // short edge near 1080 and let the long edge follow the board ratio.
+    const dims = explicitDimensions
+        ?? dimensionsForShortSideAspectRatio(normalizedBoardAspectRatio, 1080);
+    return { width: dims.width, height: dims.height, aspectRatio: `${dims.width}x${dims.height}` };
 }
 function storyboardIntentWithDefaultCanvasHint(userIntentText, frameCount) {
     return applyDefaultStoryboardCanvasHint(userIntentText, frameCount);

@@ -8885,4 +8885,120 @@ export const CROSS_SURFACE_PARITY_FIXTURES = [
             { surface: 'public_skill', entrypoint: '--api-chat and --api-workflow', expectedBehavior: ['local files are uploaded to Sogni media URLs before durable execution'] },
         ],
     },
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Phase 5 — Durable hosted chat runs (Slice F). Fixtures #24-27.
+    // ─────────────────────────────────────────────────────────────────────────────
+    {
+        id: 'durable-chat-run-completes-after-browser-close',
+        focus: 'durable_chat_run_completion_after_close',
+        description: 'A durable chat run that spans multiple tool rounds finishes server-side after the client disconnects; rehydration via getRun returns the final assistant response and artifacts without re-running the LLM.',
+        userText: 'Make me a 12-second storyboard video with three scenes — go ahead and execute the full plan without waiting for me.',
+        expectations: [
+            {
+                surface: 'chat',
+                entrypoint: 'sogni.chat.runs.create',
+                expectedBehavior: [
+                    'session.pendingDurableRunId is set immediately on submit',
+                    'after browser close + reopen, resumeDurableChatRun fetches the terminal record and surfaces finalResponse without re-running the LLM',
+                ],
+            },
+            {
+                surface: 'api_chat_completions',
+                entrypoint: 'POST /v1/chat/runs',
+                expectedRequest: { messages: true },
+                expectedBehavior: [
+                    'returns 202 with run record on first submit',
+                    'GET /v1/chat/runs/:id returns finalResponse + artifacts once status=completed',
+                ],
+            },
+            {
+                surface: 'api_creative_agent_workflows',
+                entrypoint: 'subrun creative_workflows[]',
+                expectedBehavior: [
+                    'child workflow ids are captured on chat-run.childWorkflowIds for paid-artifact preservation',
+                ],
+            },
+            {
+                surface: 'public_skill',
+                entrypoint: 'sogni.chat.runs.create via SDK transport',
+                expectedBehavior: [
+                    'skill can recover a durable run id from local state and rehydrate via SDK getRun',
+                ],
+            },
+        ],
+    },
+    {
+        id: 'durable-chat-run-resumes-after-api-worker-restart',
+        focus: 'durable_chat_run_resume_after_worker_restart',
+        description: 'A durable chat run whose executor lease expired (API worker crashed mid-tool-round) is picked up by the recovery scanner and resumes from the last persisted checkpoint — no duplicate paid work.',
+        userText: 'Generate four versions and stitch the best into a final clip.',
+        expectations: [
+            {
+                surface: 'chat',
+                entrypoint: 'resumeDurableChatRun on reload',
+                expectedBehavior: [
+                    'SSE replay uses Last-Event-ID derived from pendingDurableRunLastSequence',
+                    'recovery scanner appends a run_resumed event observable in SSE',
+                ],
+            },
+            {
+                surface: 'api_chat_completions',
+                entrypoint: 'POST /v1/chat/runs + ChatRunRecoveryService.scanOnce',
+                expectedBehavior: [
+                    'recovery worker acquires the lease, increments recovery.resumeCount, and continues from completed-step checkpoints',
+                    'persisted toolResults are not re-executed',
+                ],
+            },
+            {
+                surface: 'api_creative_agent_workflows',
+                entrypoint: '/v1/creative-agent/workflows recovery worker',
+                expectedBehavior: [
+                    'parallel pattern: workflow recovery and chat-run recovery both expose metrics on /v1/internal/recovery-metrics',
+                ],
+            },
+            {
+                surface: 'public_skill',
+                entrypoint: 'sogni.chat.runs.streamEvents w/ lastEventId',
+                expectedBehavior: ['skill can resume the SSE stream after disconnect using Last-Event-ID'],
+            },
+        ],
+    },
+    {
+        id: 'durable-chat-run-waiting-for-user',
+        focus: 'durable_chat_run_waiting_for_user',
+        description: 'A durable chat run that emits ask_clarifying_question (or hits a cost approval gate) transitions to waiting_for_user and stops; forced tool execution must NOT resume until the user replies.',
+        userText: 'Make me something cool — and ask me what vibe to go for before you start.',
+        expectations: [
+            {
+                surface: 'chat',
+                entrypoint: 'durableChatRuns onWaitingForUser callback',
+                expectedBehavior: [
+                    'onWaitingForUser fires and the assistant question renders verbatim',
+                    'pendingDurableRunId remains set so the next user reply can reopen the same run',
+                ],
+            },
+            {
+                surface: 'api_chat_completions',
+                entrypoint: 'ChatRunExecutorService.runRound (adapter returns waiting)',
+                expectedBehavior: [
+                    'status=waiting_for_user, waiting.reason=ask_clarifying_question is persisted',
+                    'no further LLM rounds are executed until a new turn submission references the run',
+                ],
+            },
+            {
+                surface: 'api_creative_agent_workflows',
+                entrypoint: '/v1/creative-agent/workflows analogue (waiting_for_user)',
+                expectedBehavior: [
+                    'chat-run waiting state behaves like workflow waiting_for_user — no auto-resume by the recovery scanner',
+                ],
+            },
+            {
+                surface: 'public_skill',
+                entrypoint: 'sogni.chat.runs.get',
+                expectedBehavior: [
+                    'skill can read waiting.reason + waiting.message and surface them in the CLI',
+                ],
+            },
+        ],
+    },
 ];

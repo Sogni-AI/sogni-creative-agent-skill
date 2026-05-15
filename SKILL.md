@@ -364,7 +364,16 @@ positions.
 | `--max-tokens <n>` | Max hosted chat completion tokens | 1600 |
 | `--thinking`, `--no-thinking` | Toggle `chat_template_kwargs.enable_thinking` for hosted chat | server default |
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM model metadata | - |
-| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay RunRecords (use `@path` to load JSON from a file) | - |
+| `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay RunRecords. List/get output is run through `redactRunRecord` from `@sogni/creative-agent/replay` before printing, so signed URLs, bearer tokens, JWTs, and PEM blocks cannot leak via the CLI. Use `@path` to load JSON from a file. | - |
+| `--skip-redact`, `--no-redact` | Bypass the replay redactor on `--list-replays` / `--get-replay`. Debug-only — emits unredacted RunRecord payloads. | redacted |
+| `--turn-classify` | Print the public-skill turn policy (`visibleTools`, `forbiddenTools`, `requiredTools`) the default contract runtime would produce for the current session-state flags. Mirrors the chat / `/v1/chat/completions` Structured Contracts v1 pipeline. | - |
+| `--compile-tools` | Print the per-turn compiled tool surface (filtered tool list + prompt-contract fragments) the default contract runtime emits. | - |
+| `--dispatch-tool <name>` | Print the dispatch verdict (`allowed`, `mode`, repair recipe, suggested args) the default contract runtime would return for a tool call. Combine with `--tool-args` to supply arguments. | - |
+| `--tool-args <json>` | JSON arguments for `--dispatch-tool`. | `{}` |
+| `--storyboard-plan` | Build a storyboard project from the prompt locally (`buildStoryboardProject` + per-model adapter compilation via `compileForModel`) and print the plan as JSON. Does not call the network. Expects scene-structured prompt input (`SCENE NN - Title` / `VISUAL:` / `ACTION:` / `CAMERA:` / `AUDIO/SFX:` blocks) — for casual prompts, use `--api-workflow storyboard-video` instead, which runs an LLM storyline expansion first. Pair with `--storyboard-plan-frames`, `--storyboard-plan-model`, `--storyboard-plan-stage`. | - |
+| `--storyboard-plan-frames <n>` | Frame count for `--storyboard-plan`. | inferred |
+| `--storyboard-plan-model <id>` | Adapter target for `--storyboard-plan` (seedance, seedance2, gpt-image-2, ltx23, wan). | inferred |
+| `--storyboard-plan-stage <stage>` | Compilation stage for `--storyboard-plan` (storyboard_image, scene_clip). | storyboard_image |
 | `--api-workflow` | Start a durable workflow with explicit `input.steps`; optional `storyboard-video` preset | - |
 | `--workflow-input <json\|@path>` | Durable workflow input JSON. Use `@path` to load from a file. | - |
 | `--workflow-title <text>` | Title for generated or storyboard durable workflow input | - |

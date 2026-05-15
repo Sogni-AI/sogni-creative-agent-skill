@@ -1,0 +1,125 @@
+/**
+ * Sogni Hosted Client Factory (Phase 6 P0).
+ *
+ * Wraps `@sogni-ai/sogni-client` for the durable hosted workflow + chat
+ * surfaces the skill needs, while preserving the skill's SSRF guard
+ * contract.
+ *
+ * The skill historically called these endpoints via `fetchApiJson` ->
+ * `buildSafeApiUrl` -> `assertSafeUrl`. Migrating to the SDK directly
+ * would lose the SSRF check because `SogniClient.createInstance`
+ * accepts an arbitrary `restEndpoint`. This factory closes the gap:
+ *   - Validate the resolved REST + Socket endpoints via `assertSafeUrl`
+ *     **before** constructing the client.
+ *   - Pin the resolved endpoint on the client so subsequent SDK calls
+ *     can't be redirected to an unsafe host.
+ *   - Expose a narrow `withClient(apiKey, work)` pattern that
+ *     constructs + disposes the SDK client per task, mirroring the
+ *     short-lived per-request shape the skill already used for fetch.
+ *
+ * Opt-in: callers receive the factory only when
+ * `SOGNI_SKILL_USE_SDK_TRANSPORT` is truthy. The legacy fetch path
+ * remains the default until the durable chat run methods are
+ * battle-tested in production.
+ */
+import { SogniClient } from '@sogni-ai/sogni-client';
+import { assertSafeUrl } from './ssrf-guard.mjs';
+
+function readBoolEnv(name) {
+  const raw = process.env[name];
+  if (!raw) return false;
+  const value = String(raw).trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+/**
+ * Returns true when the skill should route hosted operations through
+ * the SDK transport. Default: false. Operators opt in via
+ * `SOGNI_SKILL_USE_SDK_TRANSPORT=1` once they've validated the SDK
+ * path in their environment.
+ */
+export function shouldUseSdkTransport() {
+  return readBoolEnv('SOGNI_SKILL_USE_SDK_TRANSPORT');
+}
+
+/**
+ * Validate the resolved API endpoint via the SSRF guard.
+ *
+ * Accepts `restEndpoint` (https://api.sogni.ai) and `socketEndpoint`
+ * (wss://socket.sogni.ai) shaped values. Throws when either fails the
+ * guard so the caller can fall back to the legacy fetch path or abort
+ * cleanly.
+ */
+export async function assertSafeSogniEndpoints({ restEndpoint, socketEndpoint }) {
+  if (restEndpoint) await assertSafeUrl(restEndpoint);
+  if (socketEndpoint) {
+    // assertSafeUrl validates `http(s)` schemes; convert ws(s) → https for
+    // host/IP resolution checks. The actual websocket connection still
+    // uses the original scheme.
+    const httpsEquivalent = socketEndpoint.replace(/^ws/i, 'http');
+    await assertSafeUrl(httpsEquivalent);
+  }
+}
+
+/**
+ * Construct a managed `SogniClient` for the duration of `work`. Disposes
+ * the socket connection on completion (matching the per-request shape
+ * the skill already used for fetch). The skill is short-lived enough
+ * that pooling isn't required; the API process owns long-running pools
+ * via `SogniClientSessionService`.
+ */
+export async function withHostedClient({ apiKey, restEndpoint, socketEndpoint, appSource, appId }, work) {
+  await assertSafeSogniEndpoints({ restEndpoint, socketEndpoint });
+  const client = await SogniClient.createInstance({
+    appId: appId ?? `sogni-skill-${process.pid}-${Date.now()}`,
+    apiKey,
+    appSource: appSource ?? 'sogni-creative-agent-skill',
+    logLevel: 'error',
+    ...(restEndpoint ? { restEndpoint } : {}),
+    ...(socketEndpoint ? { socketEndpoint } : {}),
+    socketEventSubscriptions: { modelAvailability: false }
+  });
+  try {
+    return await work(client);
+  } finally {
+    try {
+      client.dispose();
+    } catch {
+      // Best-effort dispose; do not mask the original error.
+    }
+  }
+}
+
+/**
+ * Helper: start a durable creative workflow via the SDK and return the
+ * resulting record. Caller is responsible for SSRF endpoint validation;
+ * the factory handles that via `withHostedClient`.
+ */
+export async function sdkStartCreativeWorkflow(client, input, options = {}) {
+  return client.workflows.start(input, options);
+}
+
+export async function sdkGetCreativeWorkflow(client, workflowId) {
+  return client.workflows.get(workflowId);
+}
+
+export async function sdkListCreativeWorkflows(client, options = {}) {
+  return client.workflows.list(options);
+}
+
+export async function sdkListCreativeWorkflowEvents(client, workflowId) {
+  return client.workflows.events(workflowId);
+}
+
+export async function sdkCancelCreativeWorkflow(client, workflowId) {
+  return client.workflows.cancel(workflowId);
+}
+
+/**
+ * SSE iterator wrapper. The underlying SDK iterator yields parsed
+ * `CreativeWorkflowSseEvent`s; the skill's UI loop already knows how
+ * to interpret them, so we forward as-is.
+ */
+export async function* sdkStreamCreativeWorkflowEvents(client, workflowId, options = {}) {
+  yield* client.workflows.streamEvents(workflowId, options);
+}

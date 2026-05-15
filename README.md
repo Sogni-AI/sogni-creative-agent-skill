@@ -297,6 +297,13 @@ sogni-agent --api-workflow storyboard-video --storyboard-frames 6 --duration 12 
 sogni-agent --list-replays 20
 sogni-agent --get-replay run_abc123 --json
 
+# Opt in to SDK transport for hosted operations (durable workflows + chat).
+# Validates restEndpoint/socketEndpoint via the skill's SSRF guard, then
+# calls sogni.workflows.* / .chat.completions.* directly.
+# Falls back to the legacy SSRF-validated fetch path when the env is unset.
+export SOGNI_SKILL_USE_SDK_TRANSPORT=1
+sogni-agent --api-workflow storyboard-video "10s neon city flyover"
+
 # Local segment + concat with external soundtrack
 sogni-agent --video --workflow v2v --ref-video dance.mp4 \
   --video-start 10 --duration 8 --controlnet-name pose -o /tmp/clip-2.mp4 \

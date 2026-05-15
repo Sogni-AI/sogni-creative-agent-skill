@@ -3154,6 +3154,85 @@ function apiRequestHeaders(apiKey, extra = {}) {
   };
 }
 
+/**
+ * Phase 6 P0 — SDK transport dispatch for hosted workflow operations.
+ *
+ * When `SOGNI_SKILL_USE_SDK_TRANSPORT=1` is set, route hosted workflow
+ * start / get / list / events / cancel through `@sogni-ai/sogni-client`
+ * via the SSRF-validated `SogniHostedClientFactory` in
+ * `sogni-hosted-client.mjs`. Otherwise fall back to the legacy
+ * `fetchApiJson` path so existing users on older SDK versions are
+ * unaffected.
+ *
+ * The SDK methods produce identical wire payloads to the legacy fetch
+ * (same `/v1/creative-agent/workflows*` request shape), so callers do
+ * not have to branch — they hand off to `dispatchWorkflowAction` and
+ * receive an envelope shape compatible with `workflowFromPayload`,
+ * `workflowsFromPayload`, and `eventsFromPayload`.
+ *
+ * Returns `null` when SDK transport is off, signalling the caller to
+ * use the legacy `fetchApiJson` path.
+ */
+async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
+  let helpers;
+  try {
+    helpers = await import('./sogni-hosted-client.mjs');
+  } catch {
+    return null; // SDK transport unavailable; fall back to fetch.
+  }
+  if (!helpers.shouldUseSdkTransport()) return null;
+  const restEndpoint = await buildSafeApiUrl('/');
+  const restBase = new URL(restEndpoint).origin;
+  return helpers.withHostedClient(
+    {
+      apiKey,
+      restEndpoint: restBase,
+      socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
+      appSource: SOGNI_APP_SOURCE,
+      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+    },
+    async (client) => {
+      if (action === 'list') {
+        const records = await helpers.sdkListCreativeWorkflows(client, {
+          limit: params.limit ?? 20,
+        });
+        return { status: 'success', data: { workflows: records }, sdkTransport: true };
+      }
+      if (action === 'get') {
+        const record = await helpers.sdkGetCreativeWorkflow(client, params.workflowId);
+        return { status: 'success', data: { workflow: record }, sdkTransport: true };
+      }
+      if (action === 'events') {
+        const events = await helpers.sdkListCreativeWorkflowEvents(client, params.workflowId);
+        return { status: 'success', data: { events }, sdkTransport: true };
+      }
+      if (action === 'cancel') {
+        const record = await helpers.sdkCancelCreativeWorkflow(client, params.workflowId);
+        return { status: 'success', data: { workflow: record }, sdkTransport: true };
+      }
+      if (action === 'start') {
+        const record = await helpers.sdkStartCreativeWorkflow(
+          client,
+          {
+            input: params.input,
+            tokenType: params.tokenType,
+            appSource: SOGNI_APP_SOURCE,
+            ...(params.mediaReferences?.length ? { mediaReferences: params.mediaReferences } : {}),
+            ...(params.maxEstimatedCapacityUnits != null
+              ? { maxEstimatedCapacityUnits: params.maxEstimatedCapacityUnits }
+              : {}),
+            ...(params.confirmCost != null ? { confirmCost: params.confirmCost } : {}),
+            ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+          },
+          {},
+        );
+        return { status: 'success', data: { workflow: record }, sdkTransport: true };
+      }
+      return null;
+    },
+  );
+}
+
 async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, headers = {} } = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
@@ -3381,7 +3460,7 @@ function extractChatMessage(payload) {
 
 function extractChatWorkflows(payload) {
   const data = extractApiEnvelopeData(payload);
-  return data?.creative_workflows || data?.creativeWorkflows || payload?.creative_workflows || payload?.creativeWorkflows || [];
+  return data?.creative_workflows || payload?.creative_workflows || [];
 }
 
 function mimeTypeForPath(pathOrUrl, fallback = 'application/octet-stream') {
@@ -3474,7 +3553,7 @@ async function runApiChat(log) {
       type: 'api-chat',
       content: message.content || '',
       toolCalls,
-      creativeWorkflows: workflows,
+      workflows,
       raw: payload
     }));
     return;
@@ -3952,7 +4031,9 @@ async function runApiWorkflow() {
   let type = 'api-workflow';
 
   if (options.apiWorkflowAction === 'list') {
-    payload = await fetchApiJson('/v1/creative-agent/workflows?limit=20', { apiKey });
+    payload =
+      (await dispatchWorkflowActionViaSdk('list', apiKey, { limit: 20 }))
+      ?? (await fetchApiJson('/v1/creative-agent/workflows?limit=20', { apiKey }));
     const workflows = workflowsFromPayload(payload);
     if (options.json) {
       console.log(JSON.stringify({ success: true, type, action: 'list', workflows, raw: payload }));
@@ -3984,6 +4065,20 @@ async function runApiWorkflow() {
       await streamApiWorkflowEvents(apiKey, id);
       return;
     }
+    // Prefer SDK transport when opted-in. `resume` has no SDK
+    // equivalent yet (it lives on the API; the SDK exposes
+    // cancel/get/events/streamEvents). For resume we fall through to
+    // the legacy fetch path.
+    let sdkPayload = null;
+    if (
+      options.apiWorkflowAction === 'get'
+      || options.apiWorkflowAction === 'events'
+      || options.apiWorkflowAction === 'cancel'
+    ) {
+      sdkPayload = await dispatchWorkflowActionViaSdk(options.apiWorkflowAction, apiKey, {
+        workflowId: id,
+      });
+    }
     const path = options.apiWorkflowAction === 'events'
       ? `/v1/creative-agent/workflows/${encodeURIComponent(id)}/events`
       : options.apiWorkflowAction === 'cancel'
@@ -3991,10 +4086,10 @@ async function runApiWorkflow() {
         : options.apiWorkflowAction === 'resume'
           ? `/v1/creative-agent/workflows/${encodeURIComponent(id)}/resume`
           : `/v1/creative-agent/workflows/${encodeURIComponent(id)}`;
-    payload = await fetchApiJson(path, {
+    payload = sdkPayload ?? (await fetchApiJson(path, {
       apiKey,
       method: options.apiWorkflowAction === 'cancel' || options.apiWorkflowAction === 'resume' ? 'POST' : 'GET'
-    });
+    }));
     if (options.apiWorkflowAction === 'events') {
       const events = eventsFromPayload(payload);
       if (options.json) console.log(JSON.stringify({ success: true, type, action: 'events', workflowId: id, events, raw: payload }));
@@ -4022,23 +4117,32 @@ async function runApiWorkflow() {
     input = buildGeneratedKeyframeVideoWorkflowInput();
   }
 
-  payload = await fetchApiJson('/v1/creative-agent/workflows', {
-    apiKey,
-    method: 'POST',
-    headers: options.apiWorkflowIdempotencyKey
-      ? { 'Idempotency-Key': options.apiWorkflowIdempotencyKey }
-      : {},
-    body: {
+  payload =
+    (await dispatchWorkflowActionViaSdk('start', apiKey, {
       input,
-      ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {}),
-      ...(options.apiWorkflowMaxCost !== null ? {
-        max_estimated_capacity_units: options.apiWorkflowMaxCost,
-      } : {}),
-      ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
-      token_type: tokenType,
-      app_source: SOGNI_APP_SOURCE
-    }
-  });
+      tokenType,
+      mediaReferences: apiMediaReferences.length > 0 ? apiMediaReferences : undefined,
+      maxEstimatedCapacityUnits: options.apiWorkflowMaxCost ?? undefined,
+      confirmCost: options.apiWorkflowConfirmCost ?? undefined,
+      idempotencyKey: options.apiWorkflowIdempotencyKey ?? undefined,
+    }))
+    ?? (await fetchApiJson('/v1/creative-agent/workflows', {
+      apiKey,
+      method: 'POST',
+      headers: options.apiWorkflowIdempotencyKey
+        ? { 'Idempotency-Key': options.apiWorkflowIdempotencyKey }
+        : {},
+      body: {
+        input,
+        ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {}),
+        ...(options.apiWorkflowMaxCost !== null ? {
+          max_estimated_capacity_units: options.apiWorkflowMaxCost,
+        } : {}),
+        ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
+        token_type: tokenType,
+        app_source: SOGNI_APP_SOURCE
+      }
+    }));
   const workflow = workflowFromPayload(payload);
   const workflowId = workflow?.workflowId || workflow?.id;
   if (options.json) {

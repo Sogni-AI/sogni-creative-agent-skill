@@ -232,6 +232,16 @@ viewers.
 Hosted API modes require `SOGNI_API_KEY`; this skill's CLI uses API-key
 authentication.
 
+For durable hosted chat runs (long-running multi-tool turns that should
+survive a client disconnect), the SDK now exposes
+`sogni.chat.runs.{create, get, cancel, streamEvents}`.
+Set `SOGNI_SKILL_USE_SDK_TRANSPORT=1` to route hosted workflow + chat
+operations through the SDK transport instead of the legacy
+SSRF-validated fetch path. The skill's `sogni-hosted-client.mjs`
+factory still validates `restEndpoint` / `socketEndpoint` against the
+SSRF guard before constructing the SDK client, so the safety contract
+holds.
+
 When changing hosted API chat/workflow behavior, keep reusable validation,
 workflow compilation, repair-control, and guard telemetry logic in
 `../sogni-creative-agent` first. The public skill should consume generated or

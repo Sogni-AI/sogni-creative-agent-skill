@@ -4341,9 +4341,14 @@ function runStoryboardPlanAction() {
     frameCount: frameCount ?? undefined,
     promptAuthorship: 'user',
   });
+  // --storyboard-plan is a model-agnostic preview surface that hands off to
+  // a per-model adapter (seedance / gpt-image-2 / ltx23 / wan). When the
+  // user doesn't pick one, prefer the seedance adapter because it owns the
+  // canonical storyboard-reference prompt; the user's currently-set image
+  // model (e.g., z_image_turbo_bf16) is not a registered storyboard adapter.
   const adapterId = options.storyboardPlanModel
-    ?? resolveVideoModelAlias(options.model || 'seedance2', options.videoWorkflow || 't2v')
-    ?? 'seedance2';
+    ?? (options.video ? resolveVideoModelAlias(options.model, options.videoWorkflow || 't2v') : null)
+    ?? 'seedance';
   const stage = options.storyboardPlanStage || 'storyboard_image';
   let compiled = null;
   try {

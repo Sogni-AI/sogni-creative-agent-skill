@@ -22,8 +22,11 @@
  * remains the default until the durable chat run methods are
  * battle-tested in production.
  */
-import { SogniClient } from '@sogni-ai/sogni-client';
+import { createRequire } from 'node:module';
 import { assertSafeUrl } from './ssrf-guard.mjs';
+
+const require = createRequire(import.meta.url);
+const { SogniClient } = require('@sogni-ai/sogni-client');
 
 function readBoolEnv(name) {
   const raw = process.env[name];

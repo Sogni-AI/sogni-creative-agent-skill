@@ -44,8 +44,6 @@ import {
   normalizeReferenceAudioMimeType,
   normalizeVideoWorkflow,
   planCliVideoBrain,
-  redactPayload,
-  redactRunRecord,
   resolveVideoControlNetStrength,
   resolveVideoModelAlias,
   resolveVideoSteps,
@@ -54,7 +52,11 @@ import {
   selectDefaultVideoModel,
   shouldTrimSeedanceV2VSourceVideo,
   workflowRequiresImage
-} from './generated/creative-agent-runtime.mjs';
+} from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
+import {
+  redactPayload,
+  redactRunRecord
+} from '@sogni-ai/sogni-intelligence-client/replay';
 
 const require = createRequire(import.meta.url);
 const { parseCreativeWorkflowSseChunk } = require('@sogni-ai/sogni-intelligence-client');

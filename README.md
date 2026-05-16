@@ -69,14 +69,23 @@ With this skill, an agent can:
 ## Quick Start
 
 1. Get a Sogni API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu) and save it — see [Setup](#setup-sogni-api-key).
-2. Install the CLI:
+2. Install (one command):
+
+   ```bash
+   npx setup-sogni-agent-skill
+   ```
+
+   This auto-detects Claude Code, Codex CLI, and Hermes; installs the CLI globally;
+   registers the skill into each detected runtime; and prompts for your API key.
+
+   Prefer to do it manually? Install the CLI directly:
 
    ```bash
    npm install -g @sogni-ai/sogni-creative-agent-skill@latest
    sogni-agent --version
    ```
 
-3. Point your agent runtime at this repository's [`SKILL.md`](./SKILL.md).
+   Then point your agent runtime at this repository's [`SKILL.md`](./SKILL.md).
 
 Then ask your agent to do something:
 

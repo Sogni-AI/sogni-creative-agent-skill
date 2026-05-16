@@ -318,7 +318,9 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
   assert.equal(plan.input.steps[0].arguments.gptImageQuality, 'high');
   assert.equal(plan.input.steps[0].arguments.outputFormat, 'png');
   assert.match(plan.input.steps[0].arguments.prompt, /Create exactly 2 sequential video storyboard frames/);
-  assert.match(plan.input.steps[0].arguments.prompt, /Overall storyboard canvas: 2560x1440 pixels \(16:9\)/);
+  // 2 portrait 9:16 cells balance as a 2-col x 1-row grid -> 18:16 = 9:8 sheet
+  // (upstream layout logic: balance cell shape with grid to avoid distortion).
+  assert.match(plan.input.steps[0].arguments.prompt, /Overall storyboard canvas: 2128x1888 pixels \(9:8\)/);
   assert.equal(plan.input.steps[1].toolName, 'generate_video');
   assert.equal(plan.input.steps[1].arguments.videoModel, 'seedance2');
   assert.equal(plan.input.steps[1].arguments.width, 720);

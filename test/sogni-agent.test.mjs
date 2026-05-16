@@ -1468,7 +1468,9 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.equal(imageStep.arguments.outputFormat, 'png');
     assert.equal(imageStep.arguments.numberOfVariations, 1);
     assert.match(imageStep.arguments.prompt, /Create exactly 3 sequential video storyboard frames/);
-    assert.match(imageStep.arguments.prompt, /Overall storyboard canvas: 2560x1440 pixels \(16:9\)/);
+    // 3 portrait 9:16 cells balance as a 3-col x 1-row grid -> 27:16 landscape sheet
+    // (upstream layout logic: balance cell shape with grid to avoid distortion).
+    assert.match(imageStep.arguments.prompt, /Overall storyboard canvas: 2592x1536 pixels \(27:16\)/);
     assert.match(imageStep.arguments.prompt, /Target final video aspect ratio: 9:16/);
 
     assert.equal(videoStep.toolName, 'generate_video');

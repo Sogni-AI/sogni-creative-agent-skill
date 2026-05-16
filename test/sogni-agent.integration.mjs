@@ -21,7 +21,7 @@ globalThis.setInterval = (...args) => {
 let SogniClientWrapper;
 async function getSogniClientWrapper() {
   if (!SogniClientWrapper) {
-    ({ SogniClientWrapper } = await import('@sogni-ai/sogni-client-wrapper'));
+    ({ SogniClientWrapper } = await import('@sogni-ai/sogni-intelligence-client'));
   }
   return SogniClientWrapper;
 }

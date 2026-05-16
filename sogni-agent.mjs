@@ -4,7 +4,7 @@
  * Usage: sogni-agent [options] "prompt"
  */
 
-import { SogniClientWrapper, ClientEvent, getMaxContextImages as getWrapperMaxContextImages } from '@sogni-ai/sogni-client-wrapper';
+import { SogniClientWrapper, ClientEvent, getMaxContextImages as getWrapperMaxContextImages } from '@sogni-ai/sogni-intelligence-client';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
@@ -57,7 +57,7 @@ import {
 } from './generated/creative-agent-runtime.mjs';
 
 const require = createRequire(import.meta.url);
-const { parseCreativeWorkflowSseChunk } = require('@sogni-ai/sogni-client-wrapper');
+const { parseCreativeWorkflowSseChunk } = require('@sogni-ai/sogni-intelligence-client');
 
 // ---------------------------------------------------------------------------
 // Path sanitization — defense-in-depth for any value that becomes a file path

@@ -89,22 +89,35 @@ test('public skill runtime bundle has no relative import statements', () => {
   }
 });
 
-test('public skill runtime bundle has no node: protocol or bare specifier dependencies', () => {
-  // The runtime ships into LLM-tool environments without a package manager;
-  // any external dependency import would break it.
+// Bare specifiers the runtime is permitted to re-export from. The skill ships
+// alongside @sogni-ai/sogni-intelligence-client, so subpath exports of that
+// package are bundled by reference rather than inlined. Any other bare import
+// would break the LLM-tool environment, which has no package manager.
+const ALLOWED_BARE_SPECIFIER_PREFIXES = [
+  '@sogni-ai/sogni-intelligence-client',
+];
+
+function isAllowedBareSpecifier(spec) {
+  return ALLOWED_BARE_SPECIFIER_PREFIXES.some(
+    (prefix) => spec === prefix || spec.startsWith(`${prefix}/`),
+  );
+}
+
+test('public skill runtime bundle has no node: protocol or disallowed bare specifier dependencies', () => {
   const specifiers = extractImportSpecifiers(bundle);
   const nodeProtoSpecs = specifiers.filter((spec) => spec.startsWith('node:'));
   const bareSpecs = specifiers.filter(
     (spec) => !spec.startsWith('./') && !spec.startsWith('../') && !spec.startsWith('node:'),
   );
+  const disallowedBareSpecs = bareSpecs.filter((spec) => !isAllowedBareSpecifier(spec));
   assert.equal(
     nodeProtoSpecs.length,
     0,
     `Public runtime must not import node: builtins (found ${nodeProtoSpecs.length}): ${nodeProtoSpecs.slice(0, 3).join(', ')}`,
   );
   assert.equal(
-    bareSpecs.length,
+    disallowedBareSpecs.length,
     0,
-    `Public runtime must not import bare package specifiers (found ${bareSpecs.length}): ${bareSpecs.slice(0, 3).join(', ')}`,
+    `Public runtime may only import from allowed bundled packages (${ALLOWED_BARE_SPECIFIER_PREFIXES.join(', ')}); found ${disallowedBareSpecs.length} disallowed: ${disallowedBareSpecs.slice(0, 3).join(', ')}`,
   );
 });

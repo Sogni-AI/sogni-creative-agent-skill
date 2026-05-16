@@ -26,7 +26,7 @@ import { createRequire } from 'node:module';
 import { assertSafeUrl } from './ssrf-guard.mjs';
 
 const require = createRequire(import.meta.url);
-const { SogniClient } = require('@sogni-ai/sogni-client');
+const { SogniClient } = require('@sogni-ai/sogni-intelligence-client');
 
 function readBoolEnv(name) {
   const raw = process.env[name];

@@ -785,6 +785,132 @@ test('--last-seed is ignored for non-generation utility commands', () => {
   assert.doesNotMatch(stderr, /Using seed from last render|No previous render|Using .* seed/);
 });
 
+test('--api-chat injects saved personas, memories, and personality into the system prompt', async () => {
+  // Pre-populate the persona / memory / personality stores in a shared
+  // temp dir so the CLI process picks them up via the SOGNI_* env vars
+  // (which the skill prefers over the default HOME-relative paths).
+  const sharedDir = mkdtempSync(join(tmpdir(), 'sogni-agent-dynamic-prompt-'));
+  const personasDir = join(sharedDir, 'personas');
+  const memoriesPath = join(sharedDir, 'memories.json');
+  const personalityPath = join(sharedDir, 'personality.txt');
+
+  // Seed personas index.
+  (await import('node:fs')).mkdirSync(personasDir, { recursive: true });
+  writeFileSync(
+    join(personasDir, 'index.json'),
+    JSON.stringify([
+      {
+        id: 'p1',
+        name: 'Aleyna',
+        slug: 'aleyna',
+        relationship: 'partner',
+        description: 'long brown hair',
+        tags: ['wife'],
+        voice: null,
+        photoPath: null,
+        voiceClipPath: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ], null, 2)
+  );
+  writeFileSync(
+    memoriesPath,
+    JSON.stringify([
+      { id: 'm1', key: 'preferred_style', value: 'watercolor', category: 'preference', source: 'user', createdAt: 0, updatedAt: 0 },
+    ], null, 2)
+  );
+  writeFileSync(personalityPath, 'Be concise and witty.');
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      'Hello!'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      SOGNI_PERSONAS_DIR: personasDir,
+      SOGNI_MEMORIES_PATH: memoriesPath,
+      SOGNI_PERSONALITY_PATH: personalityPath,
+    });
+
+    assert.equal(exitCode, 0);
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    assert.ok(request, 'expected a chat completions request');
+    const systemContent = request.body.messages[0].content;
+    assert.equal(request.body.messages[0].role, 'system');
+    // Persona name surfaced into the prompt.
+    assert.match(systemContent, /Aleyna/);
+    assert.match(systemContent, /partner/);
+    // Memory key/value pair surfaced.
+    assert.match(systemContent, /preferred_style: watercolor/);
+    // Personality instruction surfaced.
+    assert.match(systemContent, /Be concise and witty\./);
+  });
+});
+
+test('--api-chat propagates --no-filter as safeContentFilter=false in the chat body', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--no-filter',
+      '--json',
+      'Test prompt'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    assert.ok(request);
+    assert.equal(request.body.safeContentFilter, false);
+  });
+});
+
+test('--api-chat omits safeContentFilter when --no-filter is absent', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode } = await runCliAsync([
+      '--api-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      'Test prompt'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    assert.ok(request);
+    assert.equal(Object.hasOwn(request.body, 'safeContentFilter'), false);
+  });
+});
+
+test('--durable-chat without SDK transport enabled fails with a clear error', async () => {
+  await withTestApiServer(async (apiBaseUrl) => {
+    const { exitCode, stdout } = await runCliAsync([
+      '--durable-chat',
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      'Hello'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      // Ensure SDK transport is off
+      SOGNI_SKILL_USE_SDK_TRANSPORT: ''
+    });
+
+    assert.notEqual(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, false);
+    assert.match(payload.errorCode || '', /DURABLE_CHAT/);
+  });
+});
+
 test('--api-chat posts to /v1/chat/completions with creative-agent tools', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([

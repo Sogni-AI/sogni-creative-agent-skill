@@ -1142,6 +1142,7 @@ const options = {
   personaVoiceClip: null,
   personaPhoto: null, // alias for --ref when used with --persona-add
   apiChat: false,
+  durableChat: false,
   apiBaseUrl: null,
   llmModel: DEFAULT_LLM_MODEL,
   apiTaskProfile: null,
@@ -1656,6 +1657,9 @@ for (let i = 0; i < args.length; i++) {
   // --- Hosted Sogni API paths ---
   } else if (arg === '--api-chat') {
     options.apiChat = true;
+  } else if (arg === '--durable-chat') {
+    options.apiChat = true;
+    options.durableChat = true;
   } else if (arg === '--api-base-url' || arg === '--api-base') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -2024,6 +2028,7 @@ Video Options:
 
 Hosted API Modes:
   --api-chat            Use /v1/chat/completions with Sogni creative-agent tools
+  --durable-chat        Like --api-chat but routes through durable /v1/chat/runs + SSE
   --api-tools <mode>    creative-agent|creative-tools|none (default: creative-agent)
   --no-api-tool-execution  Ask for tool calls/plans but do not execute Sogni tools
   --llm-model <id>      LLM model for --api-chat (default: ${DEFAULT_LLM_MODEL})
@@ -3742,6 +3747,75 @@ async function imageDataUriFromPathOrUrl(pathOrUrl) {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
+/**
+ * Build the persona/memory/personality dynamic-system-prompt suffix the
+ * skill injects into `/v1/chat/completions` (and durable
+ * `/v1/chat/runs`). Mirrors sogni-chat's `buildChatDynamicSystemPrompt`
+ * (chatService.ts ~line 12031) so a user's saved personas, memories,
+ * and personality text are visible to the hosted LLM regardless of
+ * which surface they're chatting from.
+ *
+ * Returns the empty string when no personas/memories/personality are
+ * configured, so the base system prompt is unchanged for fresh
+ * installs.
+ */
+function buildSkillDynamicSystemPrompt() {
+  let suffix = '';
+
+  // Persona context — capped at 8 names to match sogni-chat's
+  // buildPersonaContext.
+  try {
+    const personas = loadPersonas();
+    if (personas.length > 0) {
+      const MAX_PERSONAS = 8;
+      const shown = personas.slice(0, MAX_PERSONAS);
+      let personaContext = shown
+        .map((p) => {
+          const nicknames = p.tags?.length ? ` aka ${p.tags.join('/')}` : '';
+          const voice = p.voiceClipPath ? ', has voice clip' : '';
+          return `${p.name}${nicknames} (${p.relationship}${voice})`;
+        })
+        .join(', ');
+      if (personas.length > MAX_PERSONAS) {
+        personaContext += ` and ${personas.length - MAX_PERSONAS} more`;
+      }
+      suffix += `\nUser's people: ${personaContext}.`;
+      suffix += '\n\nPERSONA RULES:'
+        + '\n- "me"/"I"/"myself" = the person marked (self) — match by relationship when the user uses self-referencing pronouns.'
+        + '\n- Match personas by explicit name, self-referencing pronouns, OR relationship phrases ("my wife", "my son", "my dog", etc.).'
+        + '\n- When creating images of personas, prefer image-editing with the persona\'s reference photo over generating from scratch.'
+        + '\n- If the user mentions someone not listed, suggest adding them via `--persona-add`.';
+    }
+  } catch {
+    // best-effort — never block chat on a corrupt personas index
+  }
+
+  // Memory context — flat "key: value" list matching sogni-chat's
+  // buildMemoryContext format.
+  try {
+    const memories = loadMemories();
+    if (memories.length > 0) {
+      const memoryContext = memories.map((m) => `${m.key}: ${m.value}`).join('; ');
+      suffix += `\nUser preferences (always respect these): ${memoryContext}`;
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Personality context — verbatim user instruction wrapped in the same
+  // framing sogni-chat uses so the LLM treats it as an override.
+  try {
+    const personality = loadPersonality();
+    if (personality) {
+      suffix += `\nUSER PERSONALITY PREFERENCE: The user has customized your personality as follows: "${personality}". Adopt this personality while following all other instructions above.`;
+    }
+  } catch {
+    // best-effort
+  }
+
+  return suffix;
+}
+
 async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
   // composeAdapterPromptGuidance() returns the same per-model storyboard
   // routing guidance the hosted chat and durable workflow surfaces inject
@@ -3751,9 +3825,11 @@ async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
   // /v1/chat/completions endpoint when references are present.
   const baseSystem = options.apiSystemPrompt ||
     'You are a concise creative production assistant. Use Sogni creative tools when they help produce concrete media.';
+  const dynamicSuffix = buildSkillDynamicSystemPrompt();
+  const systemWithDynamic = dynamicSuffix ? `${baseSystem}${dynamicSuffix}` : baseSystem;
   const system = apiMediaRefs.length > 0
-    ? `${baseSystem}\n\n${composeAdapterPromptGuidance()}`
-    : baseSystem;
+    ? `${systemWithDynamic}\n\n${composeAdapterPromptGuidance()}`
+    : systemWithDynamic;
   const imageRefs = apiMediaRefs.filter(ref => ref.kind === 'image');
   const nonImageRefs = apiMediaReferences.filter(ref => ref.kind !== 'image');
   const promptText = [
@@ -3798,8 +3874,17 @@ async function runApiChat(log) {
     sogni_tool_execution: options.apiToolExecution,
     ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
     ...(chatTemplateKwargs ? { chat_template_kwargs: chatTemplateKwargs } : {}),
+    // Propagate the NSFW-filter preference into the chat request body so
+    // the hosted LLM round/tool dispatcher honors `--no-filter` for both
+    // the LLM moderation pass and any server-executed tool calls. Mirrors
+    // sogni-chat's `runtimeConfig.safeContentFilter` propagation
+    // (chatService.ts ~line 12460).
+    ...(options.noFilter === true ? { safeContentFilter: false } : {}),
     ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {})
   };
+  if (options.durableChat) {
+    return runApiChatDurable(log, { apiKey, body });
+  }
   const payload =
     (await dispatchChatHostedViaSdk(apiKey, body))
     ?? (await fetchApiJson('/v1/chat/completions', {
@@ -3838,6 +3923,161 @@ async function runApiChat(log) {
   }
   if (!message.content && toolCalls.length === 0 && workflows.length === 0) {
     log('No API chat content returned.');
+  }
+}
+
+/**
+ * Durable chat dispatch (Phase 6 P0 follow-up).
+ *
+ * Routes the synchronous `/v1/chat/completions` body through the SDK's
+ * durable `client.chat.runs.create` + `streamEvents` pair. Mirrors
+ * sogni-chat's durable chat run flow so a single skill invocation can
+ * survive the executor restarting mid-tool-call and resume via
+ * Last-Event-ID replay.
+ *
+ * Requires `SOGNI_SKILL_USE_SDK_TRANSPORT=1` since the durable surface
+ * is only exposed via the SDK. When the flag is off (or the SDK isn't
+ * installed) we fail with a clear error rather than silently falling
+ * back to the synchronous endpoint.
+ */
+async function runApiChatDurable(log, { apiKey, body }) {
+  let helpers;
+  try {
+    helpers = await import('./sogni-hosted-client.mjs');
+  } catch (err) {
+    const error = new Error('--durable-chat requires @sogni-ai/sogni-intelligence-client (SDK transport).');
+    error.code = 'DURABLE_CHAT_UNAVAILABLE';
+    error.cause = err;
+    throw error;
+  }
+  if (!helpers.shouldUseSdkTransport()) {
+    const error = new Error('--durable-chat requires SOGNI_SKILL_USE_SDK_TRANSPORT=1 to route through the durable SDK transport.');
+    error.code = 'DURABLE_CHAT_TRANSPORT_DISABLED';
+    throw error;
+  }
+
+  // Translate the synchronous chat-completions body to the durable
+  // `StartChatRunParams` shape the SDK expects. Field names switch
+  // from snake_case to camelCase per the durable contract.
+  const sampling = {
+    ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+    ...(body.max_tokens !== undefined ? { max_tokens: body.max_tokens } : {}),
+    ...(body.task_profile ? { taskProfile: body.task_profile } : {}),
+    ...(body.chat_template_kwargs?.enable_thinking !== undefined
+      ? { think: body.chat_template_kwargs.enable_thinking }
+      : {}),
+  };
+  const runParams = {
+    model: body.model,
+    messages: body.messages,
+    ...(Object.keys(sampling).length > 0 ? { sampling } : {}),
+    ...(body.token_type ? { tokenType: body.token_type } : {}),
+    appSource: body.app_source || SOGNI_APP_SOURCE,
+    ...(body.media_references ? { mediaReferences: body.media_references } : {}),
+    ...(typeof body.safeContentFilter === 'boolean'
+      ? { runtimeConfig: { safeContentFilter: body.safeContentFilter } }
+      : {}),
+  };
+
+  const restEndpoint = await buildSafeApiUrl('/');
+  const restBase = new URL(restEndpoint).origin;
+
+  const assistantParts = [];
+  const toolCalls = [];
+  const workflows = [];
+  let runId = null;
+  let finalStatus = null;
+
+  await helpers.withHostedClient(
+    {
+      apiKey,
+      restEndpoint: restBase,
+      socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
+      appSource: SOGNI_APP_SOURCE,
+      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+    },
+    async (client) => {
+      const created = await helpers.sdkChatRunsCreate(client, runParams);
+      runId = created?.runId || created?.id || created?.run?.id || null;
+      if (!runId) {
+        const error = new Error('Durable chat run did not return a runId.');
+        error.code = 'DURABLE_CHAT_NO_RUN_ID';
+        error.details = { created };
+        throw error;
+      }
+      if (!options.json) log(`Durable chat run started: ${runId}`);
+
+      for await (const event of helpers.sdkChatRunsStreamEvents(client, runId, {})) {
+        const type = event?.type || event?.event || '';
+        const payload = event?.data || event;
+        // Stream assistant message deltas as they arrive.
+        const delta =
+          payload?.delta?.content
+          || payload?.choices?.[0]?.delta?.content
+          || (typeof payload?.content === 'string' ? payload.content : null);
+        if (typeof delta === 'string' && delta) {
+          assistantParts.push(delta);
+          if (!options.json) {
+            process.stdout.write(delta);
+          }
+        }
+        const eventToolCalls =
+          payload?.toolCalls
+          || payload?.tool_calls
+          || payload?.choices?.[0]?.message?.tool_calls
+          || [];
+        if (Array.isArray(eventToolCalls) && eventToolCalls.length > 0) {
+          toolCalls.push(...eventToolCalls);
+        }
+        const eventWorkflows =
+          payload?.creative_workflows
+          || payload?.creativeWorkflows
+          || [];
+        if (Array.isArray(eventWorkflows) && eventWorkflows.length > 0) {
+          workflows.push(...eventWorkflows);
+        }
+        if (type === 'run.completed' || type === 'completed' || type === 'done') {
+          finalStatus = payload?.status || 'completed';
+          break;
+        }
+        if (type === 'run.failed' || type === 'failed' || type === 'error') {
+          const error = new Error(payload?.error?.message || 'Durable chat run failed.');
+          error.code = payload?.error?.code || 'DURABLE_CHAT_RUN_FAILED';
+          error.details = { runId, payload };
+          throw error;
+        }
+      }
+    },
+  );
+
+  const content = assistantParts.join('');
+  if (options.json) {
+    console.log(JSON.stringify({
+      success: true,
+      type: 'durable-chat',
+      runId,
+      status: finalStatus,
+      content,
+      toolCalls,
+      workflows,
+    }));
+    return;
+  }
+  if (assistantParts.length > 0) process.stdout.write('\n');
+  if (toolCalls.length > 0) {
+    console.log('\nTool calls:');
+    for (const call of toolCalls) {
+      console.log(`  - ${call.function?.name || call.name || call.id || 'tool_call'}`);
+    }
+  }
+  if (workflows.length > 0) {
+    console.log('\nCreative workflows:');
+    for (const workflow of workflows) {
+      console.log(`  - ${workflow.workflowId || workflow.id}: ${workflow.status || 'submitted'}`);
+    }
+  }
+  if (!content && toolCalls.length === 0 && workflows.length === 0) {
+    log('No durable chat content returned.');
   }
 }
 

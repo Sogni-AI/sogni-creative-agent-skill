@@ -1,0 +1,21 @@
+npx --no -- commitlint --edit "$1" || {
+  cat <<'EOF'
+
+Commit messages need a conventional subject plus a useful body.
+
+Use the body to explain:
+- why the change was needed
+- what changed at the behavioral or architectural level
+- what validation was run, or why it was not run
+
+Example:
+fix(account): preserve reward claim denial reason
+
+Reward claim responses include a machine-readable denial reason when
+the user cannot claim Spark. Preserve it in the public account reward
+shape so consumers can explain disabled claim states correctly.
+
+Validation: npm run build
+EOF
+  exit 1
+}

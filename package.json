@@ -17,7 +17,8 @@
     "test:integration": "npm run check:creative-agent-runtime && node --test test/*.integration.mjs",
     "test:coverage": "npm run check:creative-agent-runtime && node --test --experimental-test-coverage --test-coverage-include=sogni-agent.mjs --test-coverage-lines=50 --test-coverage-branches=35 --test-coverage-functions=50 test/sogni-agent.test.mjs",
     "test:coverage:full": "npm run check:creative-agent-runtime && node --test --experimental-test-coverage --test-coverage-include=sogni-agent.mjs --test-coverage-lines=50 --test-coverage-branches=35 --test-coverage-functions=50 test/*.test.mjs test/*.integration.mjs",
-    "prepack": "npm run check:creative-agent-source:strict && npm run check:creative-agent-runtime"
+    "prepack": "npm run check:creative-agent-source:strict && npm run check:creative-agent-runtime",
+    "prepare": "husky"
   },
   "keywords": [
     "sogni",
@@ -73,5 +74,10 @@
     "extensions": [
       "./openclaw-plugin.mjs"
     ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "husky": "^9.1.7"
   }
 }

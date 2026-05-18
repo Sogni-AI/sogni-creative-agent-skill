@@ -11,7 +11,7 @@ export * from '@sogni-ai/sogni-intelligence-client/skill-runtime-source';
 // callers keep working. New code should import from the public mid-tier:
 //   import { ... } from '@sogni-ai/sogni-intelligence-client/skill-runtime-source';
 export * from '@sogni-ai/sogni-intelligence-client/skill-runtime-source';
-const PHASE_3_GATING_POLICIES = [
+const GATING_POLICIES = [
     {
         "policyId": "DIAGNOSTIC_REQUEST",
         "version": "1.0.0",
@@ -356,7 +356,7 @@ const PHASE_3_GATING_POLICIES = [
         "rationale": "Persona images must use edit_image with the persona reference photo, never generate_image (which has no access to the persona identity)."
     }
 ];
-const PHASE_4_REPAIR_RECIPES = [
+const REPAIR_RECIPES = [
     {
         "recipeId": "extend_video.duration_clamp",
         "version": "1.0.0",
@@ -2108,7 +2108,7 @@ const PHASE_4_REPAIR_RECIPES = [
         "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
     }
 ];
-const PHASE_5_PROMPT_CONTRACTS = [
+const PROMPT_CONTRACTS = [
     {
         "contractId": "restore_photo_v1",
         "version": "1.0.0",
@@ -2437,6 +2437,70 @@ const PHASE_5_PROMPT_CONTRACTS = [
         "parameterDocs": {
             "summary": "Short user-visible closeout. Mention produced media or the concrete blocker; avoid duplicating prior tool output.",
             "outcome": "success, partial, asked_user, failed, or no_action based on the actual turn outcome."
+        }
+    },
+    {
+        "contractId": "enhance_prompt_v1",
+        "version": "1.0.0",
+        "toolName": "enhance_prompt",
+        "baseDescription": "enhance_prompt enhances or adapts a source prompt into a model-ready image, video, music, or\nedit prompt. Use for prompt expansion and model-specific prompt preparation when the caller\nhas a rough idea, a revision request, or a prompt that needs to be tuned for a specific\ndownstream model or generation tool.\n\nDo not use enhance_prompt for full creative-writing artifacts. Use compose_script for\nscripts, storyboards, ad concepts, trailers, and talking-head plans. Use compose_lyrics for\nsong lyrics and compose_instrumental for instrumental music structure. Do not use\nenhance_prompt to plan a multi-step workflow — use compose_workflow or\ncompose_workflow_template instead.\n\nenhance_prompt returns prompt text. The caller is responsible for handing the enhanced\nprompt to the chosen downstream generation tool (generate_image, edit_image,\ngenerate_video, animate_photo, sound_to_video, video_to_video, generate_music, etc.).",
+        "parameterDocs": {
+            "prompt": "The source prompt, rough idea, or prompt revision request to enhance.",
+            "target_output": "The kind of prompt artifact to produce. One of image_prompt, video_prompt, music_prompt, edit_prompt, model_prompt, or general_prompt.",
+            "destination_model": "Optional destination model selector, such as seedance2, ltx23, wan22, flux2, gpt-image-2, or sdxl.",
+            "destination_tool": "Optional downstream generation tool, such as generate_image, edit_image, generate_video, animate_photo, sound_to_video, video_to_video, or generate_music.",
+            "prompting_type": "Optional image-prompting family when producing an image prompt. One of flux, sdxl, sd15, pony, fast, sd3, editing, or video.",
+            "model_title": "Optional human-readable target model name for image prompt guidance.",
+            "style_prompt": "Optional current style, brand, or prompt context to complement without repeating.",
+            "prompt_mode": "Optional model prompt adaptation mode. One of auto, preserve, expand, compress, validate, or payload.",
+            "duration_seconds": "Requested runtime in seconds (1-300) when enhancing a video or music prompt.",
+            "aspect_ratio": "Optional target aspect ratio, such as 16:9, 9:16, 1:1, 4:5, or 21:9.",
+            "assets": "Optional available assets (max 12) the enhanced prompt may reference. Each entry needs media_type (image/video/audio) and may include id, label, role, and url.",
+            "constraints": "Optional production, brand, model, or user constraints to preserve."
+        }
+    },
+    {
+        "contractId": "compose_lyrics_v1",
+        "version": "1.0.0",
+        "toolName": "compose_lyrics",
+        "baseDescription": "compose_lyrics composes vocal song lyrics and suggested musical parameters. Use for songs\nwith words, choruses, verses, jingles, vocal hooks, or lyric rewrites.\n\nDo not use compose_lyrics for instrumental-only music — use compose_instrumental instead.\nDo not use it for spoken-word scripts, ad copy, or storyboards — use compose_script. Do\nnot use it to plan a multi-step workflow — use compose_workflow.\n\ncompose_lyrics returns lyrics text plus musical guidance. The caller is responsible for\nhanding the lyrics to generate_music to actually synthesize audio.",
+        "parameterDocs": {
+            "prompt": "The song topic, mood, genre, scene, campaign, or lyric request.",
+            "language": "Optional language code or language name for the lyrics.",
+            "music_prompt": "Optional musical style context, genre, instrumentation, mood, or production direction.",
+            "duration_seconds": "Optional desired song duration in seconds (10-600)."
+        }
+    },
+    {
+        "contractId": "compose_instrumental_v1",
+        "version": "1.0.0",
+        "toolName": "compose_instrumental",
+        "baseDescription": "compose_instrumental composes an instrumental music structure and suggested musical\nparameters. Use for background scores, beds, cues, themes, and music requests without\nlyrics.\n\nDo not use compose_instrumental when the user wants sung lyrics, vocal hooks, or a jingle\nwith words — use compose_lyrics instead. Do not use it to actually render audio — the\nresponse is musical guidance; the caller hands it to generate_music for synthesis.",
+        "parameterDocs": {
+            "prompt": "The instrumental music topic, mood, genre, scene, campaign, or composition request.",
+            "music_prompt": "Optional musical style context, instrumentation, mood, or production direction.",
+            "duration_seconds": "Optional desired track duration in seconds (10-600)."
+        }
+    },
+    {
+        "contractId": "compose_script_v1",
+        "version": "1.0.0",
+        "toolName": "compose_script",
+        "baseDescription": "compose_script composes scripts, storyboards, video prompts, ad concepts, trailers, social\nshorts, campaign beats, and talking-head plans. Use for creative writing artifacts where\nthe user wants prose, scenes, beats, or a script-shaped deliverable.\n\nDo not use compose_script for song lyrics — use compose_lyrics. Do not use it for simple\nprompt expansion — use enhance_prompt. Do not use it to plan a runnable multi-step\nworkflow — use compose_workflow or compose_workflow_template.\n\ncompose_script returns a creative-writing deliverable. When the script is meant to feed a\ndownstream video tool, pair it with destination_tool/destination_model so the output is\ntuned for that pipeline; the caller still has to invoke the generation tool itself.",
+        "parameterDocs": {
+            "brief": "The creative writing brief, story idea, product concept, video idea, or revision request.",
+            "script_type": "The kind of script or creative writing artifact to produce. One of video_prompt, screenplay, storyboard, ad_script, trailer, social_short, talking_head, campaign, or revision.",
+            "destination_model": "Optional destination video model selector, such as ltx23, wan22, or seedance2.",
+            "destination_tool": "Optional downstream tool, such as generate_video, animate_photo, sound_to_video, or video_to_video.",
+            "duration_seconds": "Requested runtime in seconds (1-300) for a video prompt, social short, ad, or talking-head script.",
+            "scene_count": "Requested number of scenes, shots, beats, or storyboard panels (1-12).",
+            "aspect_ratio": "Optional target aspect ratio, such as 16:9, 9:16, 1:1, 4:5, or 21:9.",
+            "platform": "Optional target platform or context, such as TikTok, YouTube Shorts, Instagram Reels, broadcast, landing page, game trailer, or pitch deck.",
+            "style": "Optional style, genre, tone, visual treatment, or brand voice to preserve.",
+            "first_frame_description": "Optional description of the starting frame when composing an image-to-video prompt without attached vision content.",
+            "first_frame_data_url": "Optional inline image data URI for the starting frame when composing an image-to-video or first-frame video prompt.",
+            "last_frame_data_url": "Optional inline image data URI for the ending frame when composing an image-to-video transition prompt.",
+            "return_format": "Requested output format. One of script, markdown, or json. Use script unless structured planning output is explicitly needed."
         }
     },
     {

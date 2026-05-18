@@ -28,6 +28,7 @@ Available to every per-skill consumer. Sogni-hosted chat loads all capabilities 
 | [`media_analysis`](./media_analysis.md) | `analyze_image`, `analyze_video`, `extract_metadata` |
 | [`persona_management`](./persona_management.md) | `resolve_personas`, `manage_memory` |
 | [`app_settings`](./app_settings.md) | `set_content_filter` |
+| [`composition_planning`](./composition_planning.md) | `enhance_prompt`, `compose_lyrics`, `compose_instrumental`, `compose_script`, `compose_workflow`, `compose_workflow_template` |
 
 ## How to consume
 

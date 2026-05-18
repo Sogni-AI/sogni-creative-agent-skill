@@ -139,7 +139,8 @@ test('ALL_BUILT_IN_SKILLS covers every skill manifest shipped under skills/*.md'
     'music_generation',
     'media_analysis',
     'persona_management',
-    'app_settings'
+    'app_settings',
+    'composition_planning'
   ];
   for (const expected of expectedSubset) {
     assert.ok(ids.has(expected), `ALL_BUILT_IN_SKILLS missing ${expected}`);

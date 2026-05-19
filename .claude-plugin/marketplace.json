@@ -1,0 +1,23 @@
+{
+  "name": "sogni",
+  "owner": {
+    "name": "Sogni AI",
+    "url": "https://sogni.ai"
+  },
+  "metadata": {
+    "description": "Sogni AI plugins for Claude Code.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "sogni-creative-agent",
+      "source": ".",
+      "description": "Image, video, and music generation via Sogni AI's decentralized GPU network.",
+      "category": "creative",
+      "tags": ["sogni", "image-generation", "video-generation", "music-generation"],
+      "homepage": "https://sogni.ai",
+      "repository": "https://github.com/Sogni-AI/sogni-creative-agent-skill",
+      "license": "MIT"
+    }
+  ]
+}

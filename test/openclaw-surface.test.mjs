@@ -22,6 +22,7 @@ test('OpenClaw link surface stays in sync with root plugin files', async () => {
 
 test('non-OpenClaw skill distribution keeps a single root skill source', () => {
   const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+  const skillPackage = JSON.parse(readFileSync(join(repoRoot, 'skill-package.json'), 'utf8'));
   const clawhubIgnore = readFileSync(join(repoRoot, '.clawhubignore'), 'utf8');
   const npmIgnore = readFileSync(join(repoRoot, '.npmignore'), 'utf8');
 
@@ -33,4 +34,12 @@ test('non-OpenClaw skill distribution keeps a single root skill source', () => {
   assert.ok(!rootPackage.files.includes('openclaw'), 'OpenClaw mirror must not create a second packaged SKILL.md');
   assert.ok(clawhubIgnore.includes('.openclaw-link/'), 'ClawHub skill packaging must ignore generated link surface');
   assert.ok(npmIgnore.includes('.openclaw-link/'), 'npm packaging must ignore generated link surface');
+
+  assert.equal(rootPackage.dependencies['@sogni-ai/sogni-client-wrapper'], undefined);
+  assert.equal(skillPackage.dependencies['@sogni-ai/sogni-client-wrapper'], undefined);
+  assert.equal(
+    skillPackage.dependencies['@sogni-ai/sogni-intelligence-client'],
+    rootPackage.dependencies['@sogni-ai/sogni-intelligence-client'],
+    'skill-package.json must install the same SDK package as the published npm package',
+  );
 });

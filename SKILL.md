@@ -263,15 +263,15 @@ SSRF-validated fetch path. The skill's `sogni-hosted-client.mjs`
 factory still validates `restEndpoint` / `socketEndpoint` against the
 SSRF guard before constructing the SDK client, so the safety contract
 holds.
+For `--durable-chat`, stream output as the run advances; the CLI reports
+assistant deltas plus de-duplicated per-job progress / ETA / result lines from
+hosted run events.
 
 When changing hosted API chat/workflow behavior, keep reusable validation,
-workflow compilation, repair-control, and guard telemetry logic in
-`../sogni-creative-agent` first. The public skill should consume generated or
-copied shared contracts instead of adding skill-local regex guards. Media-routing
-decisions should come from typed planner/runtime contracts such as
-`CreativeTurnPlannerFields`, `classifyMediaTurnIntent()`, `videoContinuation`,
-`videoModification`, `outputGrouping`, `imageSelectionPolicy`, and
-`pendingStitchAfterBatch`; regex is appropriate only for bounded CLI/fact
+workflow compilation, repair-control, and guard telemetry logic in the shared
+Sogni runtime first, then sync it into this public skill. The public skill
+should consume generated or shared typed contracts instead of adding
+skill-local regex guards. Keep local regex limited to bounded CLI/fact
 extraction such as paths, URLs, extensions, dimensions, durations, and explicit
 positions.
 

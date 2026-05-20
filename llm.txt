@@ -67,6 +67,9 @@ for `/v1/chat/completions` with rich creative-agent tools and sanitized
 message forwarding, or
 `sogni-agent --api-workflow --video-prompt "motion" "image prompt"`
 for durable `/v1/creative-agent/workflows` execution.
+Use `SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat "prompt"` for
+durable `/v1/chat/runs` execution with SSE assistant deltas and per-job
+progress / ETA / result events.
 Sogni Intelligence utilities are available with `--list-api-models`,
 `--get-api-model <id>`, `--task-profile general|coding|reasoning`,
 `--max-tokens <n>`, `--thinking` / `--no-thinking`, `--list-replays [n]`,

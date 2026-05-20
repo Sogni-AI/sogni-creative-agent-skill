@@ -275,6 +275,10 @@ sogni-agent --api-chat --task-profile reasoning --no-thinking \
   "Plan a concise multi-step product launch workflow"
 sogni-agent --list-api-models
 
+# Durable hosted chat run with SSE progress events
+SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat \
+  "Create a product launch storyboard and render the first hero image"
+
 # Durable hosted workflow (/v1/creative-agent/workflows)
 sogni-agent --api-workflow \
   --video-prompt "The camera slowly pushes in as the sketch comes alive" \
@@ -299,7 +303,7 @@ sogni-agent --get-replay run_abc123 --json
 
 # Opt in to SDK transport for hosted operations (durable workflows + chat).
 # Validates restEndpoint/socketEndpoint via the skill's SSRF guard, then
-# calls sogni.workflows.* / .chat.completions.* directly.
+# calls the SDK workflow/chat methods directly.
 # Falls back to the legacy SSRF-validated fetch path when the env is unset.
 export SOGNI_SKILL_USE_SDK_TRANSPORT=1
 sogni-agent --api-workflow storyboard-video "10s neon city flyover"
@@ -508,6 +512,7 @@ Hosted API modes require `SOGNI_API_KEY`.
 
 - **`--api-chat`** targets `/v1/chat/completions` with Sogni creative-agent tools — best for text-first natural-language workflows. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|creative-tools|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
 - **Sogni Intelligence controls** include `--task-profile general|coding|reasoning`, `--max-tokens`, and `--thinking` / `--no-thinking`, which forward to `/v1/chat/completions` as `task_profile`, `max_tokens`, and `chat_template_kwargs.enable_thinking`. Use `--list-api-models` or `--get-api-model <id>` to inspect `/v1/models`.
+- **`--durable-chat`** starts a hosted `/v1/chat/runs` record through the SDK transport. Set `SOGNI_SKILL_USE_SDK_TRANSPORT=1` before using it. The CLI streams assistant deltas and de-duplicated per-job progress / ETA / result lines from hosted run events.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Requests carry `input.steps` plus snake_case controls such as `token_type`, `media_references`, `max_estimated_capacity_units`, and `confirm_cost`.
 - **`--workflow-input`** forwards exact durable workflow JSON (`{ title?, steps: [...] }`). Use this when you need exact multi-step behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single GPT Image 2 storyboard sheet, then passes that artifact into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low/medium/high quality for that storyboard sheet.
@@ -601,7 +606,7 @@ With both repos checked out as siblings, refresh the generated runtime before pu
 npm run sync:creative-agent-runtime
 ```
 
-Reusable workflow rules should be added to `../sogni-creative-agent` first, then synced here. Keep storyboard planning, tool argument validation, prompt linting, typed media turn intent, and typed repair/control semantics aligned with `sogni-chat`, `sogni-client`, and `sogni-api` hosted chat/workflow endpoints rather than recreating skill-only regex guards. Prefer generated or copied shared helpers for hosted workflow compilation, schema argument validation, `CreativeTurnPlannerFields` / `classifyMediaTurnIntent()` media-routing contracts, repair-control decisions, and guard telemetry summaries over skill-local guard code — this keeps public-agent behavior close to `/v1/chat/completions` and `/v1/creative-agent/workflows`.
+Reusable workflow rules should come from the shared Sogni runtime before they are synced into this public package. Keep storyboard planning, tool argument validation, prompt linting, media-routing decisions, chat-run progress extraction, and repair/control behavior aligned with the hosted `/v1/chat/completions` and `/v1/creative-agent/workflows` APIs. Prefer typed helpers exported by `@sogni-ai/sogni-intelligence-client` or the generated runtime over new skill-local regex guards.
 
 Public-skill regex should stay limited to CLI argument/fact extraction such as file paths, URLs, extensions, dimensions, durations, and explicit positions. Hosted-style decisions such as latest-video continuation, uploaded-video modification, image-selection waits, stitch-after-batch state, and repair/control routing belong upstream in typed planner/runtime fields before they are synced here.
 

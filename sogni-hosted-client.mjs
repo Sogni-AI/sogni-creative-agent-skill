@@ -1,8 +1,9 @@
 /**
  * Sogni Hosted Client Factory (Phase 6 P0).
  *
- * Wraps `@sogni-ai/sogni-client` for the durable hosted workflow + chat
- * surfaces the skill needs, while preserving the skill's SSRF guard
+ * Wraps the SDK-backed client re-exported by
+ * `@sogni-ai/sogni-intelligence-client` for the durable hosted workflow +
+ * chat surfaces the skill needs, while preserving the skill's SSRF guard
  * contract.
  *
  * The skill historically called these endpoints via `fetchApiJson` ->

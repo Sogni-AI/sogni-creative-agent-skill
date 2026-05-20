@@ -56,6 +56,9 @@ import {
   redactPayload,
   redactRunRecord
 } from '@sogni-ai/sogni-intelligence-client/replay';
+import {
+  extractToolCallProgressUpdate
+} from '@sogni-ai/sogni-intelligence-client/chatRun';
 
 const require = createRequire(import.meta.url);
 const rootClientModule = process.env.SOGNI_AGENT_TEST_STATE_PATH
@@ -3246,8 +3249,9 @@ function apiRequestHeaders(apiKey, extra = {}) {
  * Phase 6 P0 — SDK transport dispatch for hosted workflow operations.
  *
  * When `SOGNI_SKILL_USE_SDK_TRANSPORT=1` is set, route hosted workflow
- * start / get / list / events / cancel through `@sogni-ai/sogni-client`
- * via the SSRF-validated `SogniHostedClientFactory` in
+ * start / get / list / events / cancel through
+ * `@sogni-ai/sogni-intelligence-client`'s SDK-backed client via the
+ * SSRF-validated `SogniHostedClientFactory` in
  * `sogni-hosted-client.mjs`. Otherwise fall back to the legacy
  * `fetchApiJson` path so existing users on older SDK versions are
  * unaffected.
@@ -3325,8 +3329,9 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
  * Phase 6 P0 — SDK transport dispatch for hosted chat completions.
  *
  * When `SOGNI_SKILL_USE_SDK_TRANSPORT=1` is set, route synchronous
- * hosted chat through `@sogni-ai/sogni-client` via the SSRF-validated
- * factory. The SDK's `chat.hosted.create` accepts the same field
+ * hosted chat through `@sogni-ai/sogni-intelligence-client`'s SDK-backed
+ * client via the SSRF-validated factory. The SDK's `chat.hosted.create`
+ * accepts the same field
  * names the legacy fetch sends (`model`, `messages`, `temperature`,
  * `max_tokens`, `token_type`, `app_source`, `sogni_tools`,
  * `sogni_tool_execution`, `task_profile`, `chat_template_kwargs`,
@@ -4048,23 +4053,15 @@ async function runApiChatDurable(log, { apiKey, body }) {
         // Untouched payloads from older sogni-api builds simply lack
         // `jobIndex` and skip this block — forward-compatible.
         if (type === 'tool_call_progress' && payload && typeof payload === 'object') {
-          const jobIndex = typeof payload.jobIndex === 'number' && Number.isFinite(payload.jobIndex)
-            ? payload.jobIndex
-            : undefined;
+          const {
+            jobIndex,
+            jobProgress,
+            jobEtaSeconds,
+            resultUrl,
+            jobError,
+          } = extractToolCallProgressUpdate(payload);
           if (jobIndex !== undefined) {
             const state = perJobLogState.get(jobIndex) ?? {};
-            const jobProgress = typeof payload.jobProgress === 'number' && Number.isFinite(payload.jobProgress)
-              ? payload.jobProgress
-              : undefined;
-            const jobEtaSeconds = typeof payload.jobEtaSeconds === 'number' && Number.isFinite(payload.jobEtaSeconds)
-              ? payload.jobEtaSeconds
-              : undefined;
-            const resultUrl = typeof payload.resultUrl === 'string' && payload.resultUrl.length > 0
-              ? payload.resultUrl
-              : undefined;
-            const jobError = typeof payload.jobError === 'string' && payload.jobError.length > 0
-              ? payload.jobError
-              : undefined;
             if (jobError && state.error !== jobError) {
               logJobUpdate(`[job ${jobIndex}] error: ${jobError}`);
               state.error = jobError;

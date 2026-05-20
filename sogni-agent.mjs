@@ -4014,6 +4014,17 @@ async function runApiChatDurable(log, { apiKey, body }) {
       }
       if (!options.json) log(`Durable chat run started: ${runId}`);
 
+      // Per-job tool_call_progress dedupe state. The sogni-api throttled
+      // emitter sends 1 Hz `jobETA` countdowns + per-step progress
+      // ticks per job; we log only when the value actually changes
+      // (and only in non-JSON CLI mode) so a 16-image batch doesn't
+      // pour ~16 lines/sec into the log file.
+      const perJobLogState = new Map();
+      const logJobUpdate = (line) => {
+        if (options.json) return;
+        log(line);
+      };
+
       for await (const event of helpers.sdkChatRunsStreamEvents(client, runId, {})) {
         const type = event?.type || event?.event || '';
         const payload = event?.data || event;
@@ -4026,6 +4037,58 @@ async function runApiChatDurable(log, { apiKey, body }) {
           assistantParts.push(delta);
           if (!options.json) {
             process.stdout.write(delta);
+          }
+        }
+        // Per-job progress / ETA / completion / error log lines for
+        // CLI watchers. The sogni-api `tool_call_progress` SSE event
+        // packs `jobIndex` + per-job fields (`jobProgress`,
+        // `jobEtaSeconds`, `resultUrl`, `jobError`) for vendor-emulated
+        // jobs (GPT, Seedance — 1 Hz `jobETA` heartbeat from
+        // sogni-socket) and real workers (per-step progress).
+        // Untouched payloads from older sogni-api builds simply lack
+        // `jobIndex` and skip this block — forward-compatible.
+        if (type === 'tool_call_progress' && payload && typeof payload === 'object') {
+          const jobIndex = typeof payload.jobIndex === 'number' && Number.isFinite(payload.jobIndex)
+            ? payload.jobIndex
+            : undefined;
+          if (jobIndex !== undefined) {
+            const state = perJobLogState.get(jobIndex) ?? {};
+            const jobProgress = typeof payload.jobProgress === 'number' && Number.isFinite(payload.jobProgress)
+              ? payload.jobProgress
+              : undefined;
+            const jobEtaSeconds = typeof payload.jobEtaSeconds === 'number' && Number.isFinite(payload.jobEtaSeconds)
+              ? payload.jobEtaSeconds
+              : undefined;
+            const resultUrl = typeof payload.resultUrl === 'string' && payload.resultUrl.length > 0
+              ? payload.resultUrl
+              : undefined;
+            const jobError = typeof payload.jobError === 'string' && payload.jobError.length > 0
+              ? payload.jobError
+              : undefined;
+            if (jobError && state.error !== jobError) {
+              logJobUpdate(`[job ${jobIndex}] error: ${jobError}`);
+              state.error = jobError;
+            } else if (resultUrl && state.resultUrl !== resultUrl) {
+              logJobUpdate(`[job ${jobIndex}] done${jobProgress !== undefined ? ` (${Math.round(jobProgress * 100)}%)` : ''} → ${resultUrl}`);
+              state.resultUrl = resultUrl;
+              state.progress = jobProgress ?? state.progress;
+            } else if (jobProgress !== undefined || jobEtaSeconds !== undefined) {
+              // Dedupe: only emit when progress moved >=5% or ETA changed.
+              const pctBefore = state.progress !== undefined ? Math.round(state.progress * 100) : -1;
+              const pctNow = jobProgress !== undefined ? Math.round(jobProgress * 100) : pctBefore;
+              const progressChanged = jobProgress !== undefined && Math.abs(pctNow - pctBefore) >= 5;
+              const etaChanged = jobEtaSeconds !== undefined && jobEtaSeconds !== state.eta;
+              if (progressChanged || etaChanged) {
+                const parts = [`[job ${jobIndex}]`];
+                if (jobProgress !== undefined) parts.push(`${pctNow}%`);
+                else if (state.progress !== undefined) parts.push(`${pctBefore}%`);
+                if (jobEtaSeconds !== undefined) parts.push(`(${jobEtaSeconds}s)`);
+                logJobUpdate(parts.join(' '));
+                if (jobProgress !== undefined) state.progress = jobProgress;
+                if (jobEtaSeconds !== undefined) state.eta = jobEtaSeconds;
+              }
+            }
+            perJobLogState.set(jobIndex, state);
           }
         }
         const eventToolCalls =

@@ -43,3 +43,12 @@ test('non-OpenClaw skill distribution keeps a single root skill source', () => {
     'skill-package.json must install the same SDK package as the published npm package',
   );
 });
+
+test('skill instructions invoke the installed CLI instead of local script paths', () => {
+  const skillMd = readFileSync(join(repoRoot, 'SKILL.md'), 'utf8');
+  assert.equal(
+    /(?:^|\s)node\s+(?:\{\{skillDir\}\}\/)?sogni-agent\.mjs\b/.test(skillMd),
+    false,
+    'SKILL.md command examples must use `sogni-agent`; Claude and Hermes installs do not include sogni-agent.mjs',
+  );
+});

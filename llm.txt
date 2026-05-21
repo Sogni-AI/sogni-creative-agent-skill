@@ -11,6 +11,11 @@ runtimes.
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 sogni-agent --version
 
+# Claude Code plugin (requires the CLI install above; the plugin shells out to sogni-agent).
+# Run both slash commands from inside Claude Code:
+#   /plugin marketplace add Sogni-AI/sogni-creative-agent-skill
+#   /plugin install sogni-creative-agent@sogni
+
 # OpenClaw plugin
 openclaw plugins install sogni-creative-agent-skill
 

@@ -42,6 +42,7 @@ With this skill, an agent can:
 - [Requirements](#requirements)
 - [Installation](#installation)
   - [Node CLI (default)](#node-cli-default)
+  - [Claude Code plugin](#claude-code-plugin)
   - [OpenClaw plugin](#openclaw-plugin)
   - [Hermes Agent / Manus / other frameworks](#hermes-agent--manus--other-frameworks)
   - [Manual install from source](#manual-install-from-source)
@@ -110,6 +111,17 @@ sogni-agent --version
 ```
 
 Then point your agent/runtime at this repository's [`SKILL.md`](./SKILL.md). When an install request is ambiguous, install the CLI and skill source together — that's the supported default.
+
+### Claude Code plugin
+
+The Claude Code plugin shells out to the `sogni-agent` CLI installed above, so both steps are required. From inside Claude Code, register the marketplace and install the plugin:
+
+```text
+/plugin marketplace add Sogni-AI/sogni-creative-agent-skill
+/plugin install sogni-creative-agent@sogni
+```
+
+The first command registers a `sogni` marketplace with one plugin entry (`sogni-creative-agent`) backed by a lean Claude-Code-focused [`plugin-skills/sogni-creative-agent/SKILL.md`](./plugin-skills/sogni-creative-agent/SKILL.md); the second installs the plugin into Claude Code. The full skill spec still lives at the repository root [`SKILL.md`](./SKILL.md).
 
 ### OpenClaw plugin
 

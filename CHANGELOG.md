@@ -30,3 +30,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tests
 
 - 10 new `node:test` cases covering multi-ref forwarding (HTTPS extras → URL arrays), per-modality cap errors, the combined 12-asset cap, dedicated-vs-loose mutex, local-file extra rejection in CLI direct-gen, `seedance2-fast` parity, and non-seedance multi-ref rejection.
+
+## [3.1.1] - 2026-05-20
+
+### Changed
+
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^2.2.8` and refreshed the intelligence-client runtime bundle.
+
+### Fixed
+
+- The skill now invokes the globally installed `sogni-agent` command directly instead of assuming a specific install path, so agents that resolve the binary via `PATH` work in both global-install and `npm link` setups.
+- Republished alongside the renamed `@sogni-ai/sogni-client` package so consumers pulling the latest skill no longer hit the unscoped/legacy client name.
+
+## [3.1.0] - 2026-05-20
+
+### Added
+
+- **Claude Code plugin marketplace manifest.** Scaffolds the `sogni` marketplace and `sogni-creative-agent` plugin entry that ships a lean Claude-Code-focused `SKILL.md` from `plugin-skills/` while keeping the full skill spec at the repository root.
+- **`setup-sogni-agent-skill` installer.** Adds the design spec and implementation plan for the upcoming bootstrap installer; the runtime work lands in a later release.
+
+### Changed
+
+- Bumped `@sogni-ai/sogni-intelligence-client` through `^2.2.4` to `^2.2.6` as the client stabilized.
+
+### Fixed
+
+- Root SDK is now loaded through a compatible module path so installs on Node module resolvers that disallow deep imports continue to work.
+
+## [3.1.0-alpha.1] - 2026-05-20
+
+### Changed
+
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^2.2.1`.
+
+### Fixed
+
+- Synced `version.mjs` with `package.json` so the runtime `--version` output matches the published npm version.
+
+## [3.1.0-alpha.0] - 2026-05-18
+
+### Added
+
+- **Cloud-mode parity with sogni-chat.** `buildSkillDynamicSystemPrompt()` injects the same persona / memory / personality framing as `buildChatDynamicSystemPrompt` (`User's people` / `PERSONA RULES` / `User preferences` / `USER PERSONALITY PREFERENCE`) so saved `--persona-*`, `--memory-set`, and `--personality-*` stores travel into `/v1/chat/completions`. Empty when no stores are populated, so fresh installs are unaffected.
+- **`--no-filter` now propagates to `safeContentFilter: false`** on the hosted chat body, in addition to the existing per-tool `disableNSFWFilter` plumbing.
+- **`--durable-chat` CLI flag** for `/v1/chat/runs` with SSE assistant deltas — the foundation for the per-job progress / ETA / result events added in 3.2.0.
+- **`composition_planning` per-skill manifest** groups `enhance_prompt`, `compose_lyrics`, `compose_instrumental`, `compose_script`, `compose_workflow`, and `compose_workflow_template` into a single capability surface, matching the canonical `@sogni/creative-agent` manifest layout. SKILL.md and `skills/README.md` are updated to list it in the per-skill index, and the cross-surface parity test asserts `ALL_BUILT_IN_SKILLS` exposes it.
+- **Conventional commits tooling.** Adopted commitlint + husky for the strict commit-message rules used across the Sogni ecosystem.
+- **Semantic-release configuration** added; publish remains manual-gated for now (the CI auto-publish workflow was added and then removed in the same release pending an automation token).
+
+### Changed
+
+- Settled on `@sogni-ai/sogni-intelligence-client` `^2.1.0` stable after a brief evaluation of `^3.0.0-alpha.5`.

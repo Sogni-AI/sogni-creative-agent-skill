@@ -128,11 +128,15 @@ Path override environment variables:
 
 ## Recommended path: route through the hosted Sogni Intelligence endpoints
 
-For any natural-language creative request — anything that should be planned, multi-step, or that benefits from tool selection, repair, or durable workflows — prefer the hosted endpoints over the direct-to-SDK flags. The hosted endpoints are the canonical home for tool dispatch, Structured Contracts v1 (gating policies, repair recipes, prompt contracts), durable workflows, replay, and asset-manifest mapping. They stay aligned with `sogni-chat` and the rest of the `@sogni/creative-agent` consumers automatically.
+For any natural-language creative request — anything that should be planned, multi-step, resumable, or that benefits from tool selection, repair, or durable workflows — prefer the hosted Sogni Intelligence endpoints over the direct-to-SDK media flags. The hosted surfaces are the canonical home for OpenAI-compatible chat, server-side creative tool dispatch, Structured Contracts v1 (gating policies, repair recipes, prompt contracts), durable chat runs, durable workflows, workflow templates, replay, and asset-manifest mapping. They stay aligned with `sogni-chat`, `sogni-api`, and the rest of the `@sogni/creative-agent` consumers.
 
 ```bash
 # Natural-language creative request (LLM picks the tool, dispatches, repairs)
 sogni-agent --api-chat "Turn the attached product photo into a launch poster" --ref product.jpg
+
+# Durable hosted chat run (persisted event log + SSE stream)
+SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat \
+  "Create a four-shot launch campaign, generate the key art, and animate the hero clip"
 
 # Multi-step durable workflow (resumable, replay-friendly, server-orchestrated)
 sogni-agent --api-workflow \
@@ -196,10 +200,14 @@ sogni-agent --api-chat --ref product.jpg \
 
 # Sogni Intelligence model/replay utilities
 sogni-agent --list-api-models
-sogni-agent --api-chat --task-profile reasoning --no-thinking \
+sogni-agent --api-chat --task-profile reasoning --max-tokens 2000 \
   "Plan a concise multi-step product launch workflow"
 sogni-agent --list-replays 20
 sogni-agent --get-replay run_abc123 --json
+
+# Draft a savable workflow template through the hosted creative-agent tool loop
+sogni-agent --api-chat \
+  "Design a reusable workflow for a 9:16 product teaser from one product photo"
 
 # Durable API workflow: generated keyframe to video with resumable workflow record
 sogni-agent --api-workflow \
@@ -214,43 +222,100 @@ sogni-agent --api-workflow \
   "Animate the referenced sketch"
 
 # Exact durable workflow input with explicit steps
-sogni-agent --api-workflow --workflow-input @workflow.json
+sogni-agent --api-workflow --workflow-input @workflow-input.json \
+  --workflow-idempotency-key product-teaser-v1
 
 # Durable storyboard-video workflow: storyline -> GPT Image 2 storyboard -> Seedance
 sogni-agent --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
   "Create a 9:16 bakery launch video with a neon street-window reveal"
+
+# Workflow management
+sogni-agent --list-workflows
+sogni-agent --resume-workflow wf_durable_workflow_123
 ```
 
 Use `--api-chat` for text-first natural-language workflows that should go through
-Sogni API's OpenAI-compatible `/v1/chat/completions` tool loop. This path
-sanitizes prompt-injection markers before forwarding messages and uses the
-current hosted creative-agent tool surface. Use `--api-workflow` when the caller
-already knows it wants an async durable workflow record under
-`/v1/creative-agent/workflows`. Use `--workflow-input @workflow.json` when the
-caller already has exact durable workflow input with `steps`; the skill forwards
-that body to the API as-is. This is the preferred hosted path for
-exact multi-step plans, including repeated `replace_video_segment` operations
-with `replacementStartSeconds` / `replacementEndSeconds` when interleaving
-existing video slices. Use `--api-workflow storyboard-video`
-when the caller wants the hosted sequence to generate a storyline, create one GPT
-Image 2 storyboard sheet, and feed that image artifact into Seedance as the video
-reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low|medium|high
-quality for the storyboard sheet. Hosted API requests forward media references
-from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
-`--reference-audio-identity`, and `--ref-video` as `media_references`
-metadata; workflow JSON can bind them into step arguments with
-`sourceStepId: "$input_media"`, and API chat also attaches image refs as vision
-inputs. Local file references are uploaded to Sogni media storage first, then
-forwarded as retrievable URLs for hosted chat and durable workflows. Use the
-direct CLI path for private media that must not leave the local machine.
-Use `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to
-forward explicit workflow cost policy.
-Sogni Intelligence utilities are exposed through the same API key path:
-`--list-api-models` / `--get-api-model <id>` read `/v1/models`,
-`--task-profile`, `--max-tokens`, and `--thinking` / `--no-thinking` tune
-`/v1/chat/completions`, and `--list-replays`, `--get-replay`, and
-`--ingest-replay` manage `/v1/replay/records` RunRecords for replay/debug
-viewers.
+Sogni API's OpenAI-compatible `POST /v1/chat/completions` loop. The public
+REST body uses snake_case controls such as `tool_choice`, `response_format`,
+`task_profile`, `token_type`, `app_source`, `media_references`,
+`chat_template_kwargs`, `sogni_tools`, and `sogni_tool_execution`. The endpoint
+normalizes OpenAI `developer` messages to `system`; when a developer message is
+present and no explicit `task_profile` is supplied, the server treats the task
+as `coding`. The CLI sanitizes prompt-injection markers before forwarding
+messages and sends API-key auth so hosted Sogni tools can execute server-side.
+
+Hosted tool surfaces are split by `sogni_tools`:
+
+- `creative-tools` is the public API default when `sogni_tools` is omitted or
+  true. It exposes generation/editing tools (`generate_image`,
+  `generate_video`, `generate_music`, `edit_image`, `apply_style`,
+  `restore_photo`, `refine_result`, `animate_photo`, `change_angle`,
+  `video_to_video`, `stitch_video`, `orbit_video`, `dance_montage`,
+  `sound_to_video`, `extend_video`, `replace_video_segment`, `overlay_video`,
+  `add_subtitles`), media-analysis tools (`analyze_image`, `analyze_video`,
+  `extract_metadata`), and lightweight composition tools (`enhance_prompt`,
+  `compose_lyrics`, `compose_instrumental`, `compose_script`).
+- `creative-agent` is this CLI's default for `--api-chat`. It includes the
+  `creative-tools` surface plus session-control tools
+  (`ask_clarifying_question`, `finalize_response`), asset-manifest tools
+  (`create_asset_manifest`, `inspect_asset`, `label_asset`,
+  `map_assets_for_model`, `validate_asset_references`), and durable planning
+  tools (`compose_workflow`, `compose_workflow_template`). Use this surface
+  when the model should design one-shot workflow plans, draft savable workflow
+  templates, or maintain stable asset references across a multi-step turn.
+- `none` disables Sogni tool injection and leaves only caller-supplied OpenAI
+  tools on raw API/SDK requests. In the CLI, use it with
+  `--no-api-tool-execution` when you want text-only planning without hosted
+  Sogni tool dispatch.
+
+Use `--durable-chat` for long-running, LLM-in-the-loop turns that should be
+persisted as `POST /v1/chat/runs` records instead of a single
+`/v1/chat/completions` request. Chat runs keep an event log, stream via
+`/v1/chat/runs/:id/events/stream`, support cancellation, and can pause for
+persisted cost approval (`/v1/chat/runs/:id/confirm-cost`) in first-party
+clients. The CLI can start and stream durable chat runs through the SDK
+transport when `SOGNI_SKILL_USE_SDK_TRANSPORT=1` is set.
+
+Use `--api-workflow` when the caller already knows it wants an async durable
+workflow under `POST /v1/creative-agent/workflows`. The API now accepts either
+an inline durable plan (`input.steps`) or a saved workflow template invocation
+(`workflow_id` plus `inputs`) and rejects requests that provide both. The CLI's
+generated-keyframe and `storyboard-video` presets submit inline `input.steps`;
+`--workflow-input @workflow-input.json` supplies that `input` object directly.
+Saved template CRUD lives at `/v1/creative-agent/workflows/templates`, and a
+saved template can later be run by API/SDK callers with `workflow_id + inputs`.
+Use `compose_workflow_template` through `--api-chat` to draft a savable template;
+the caller is still responsible for persisting the returned `template_draft`.
+
+Exact multi-step workflow plans should use explicit step dependencies, including
+`replace_video_segment` steps with bounded `replacementStartSeconds` /
+`replacementEndSeconds` when interleaving existing video slices. Workflow JSON
+can bind request media into step arguments with `sourceStepId: "$input_media"`.
+Use `--api-workflow storyboard-video` when the hosted sequence should generate a
+storyline, create one GPT Image 2 storyboard sheet, and feed that image artifact
+into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT
+Image 2 low|medium|high quality for the storyboard sheet.
+
+Hosted API requests forward media references from `-c`, `--ref`, `--ref-end`,
+`--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
+`media_references` metadata. API chat also attaches image refs as vision inputs.
+Local file references are uploaded to Sogni media storage first, then forwarded
+as retrievable URLs for hosted chat and durable workflows. Use the direct CLI
+path for private media that must not leave the local machine. Use
+`--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to forward
+explicit workflow cost policy, and `--workflow-idempotency-key` when retrying a
+workflow start request.
+
+Sogni Intelligence utilities are exposed through the same API-key path:
+`--list-api-models` / `--get-api-model <id>` read `/v1/models`, `--task-profile`
+and `--max-tokens` tune `/v1/chat/completions`, and `--list-replays`,
+`--get-replay`, and `--ingest-replay` manage `/v1/replay/records` RunRecords for
+replay/debug viewers. The public chat endpoint also accepts OpenAI-standard
+`reasoning_effort` / `reasoning.effort` in raw API requests. The CLI's
+`--thinking` / `--no-thinking` flags are forwarded as
+`chat_template_kwargs.enable_thinking`; current hosted Qwen requests may
+normalize thinking on server-side, so do not rely on `--no-thinking` as a hard
+suppression switch for `/v1/chat/completions`.
 Hosted API modes require `SOGNI_API_KEY`; this skill's CLI uses API-key
 authentication.
 
@@ -358,13 +423,15 @@ positions.
 | `--concat-audio <path>` | Optional audio track to mux over `--concat-videos` output | - |
 | `--concat-audio-start <sec>` | Start offset into `--concat-audio` | - |
 | `--list-media [type]` | List recent inbound media (images\|audio\|all) | images |
-| `--api-chat` | Call `/v1/chat/completions` with Sogni creative-agent tool injection | - |
-| `--api-tools <mode>` | API tool mode: creative-agent\|creative-tools\|none | creative-agent |
+| `--api-chat` | Call OpenAI-compatible `/v1/chat/completions`; CLI default sends the hosted `creative-agent` tool surface | - |
+| `--durable-chat` | Start and stream a durable `/v1/chat/runs` record through SDK transport; requires `SOGNI_SKILL_USE_SDK_TRANSPORT=1` | - |
+| `--api-tools <mode>` | API tool mode: creative-agent\|creative-tools\|none. CLI default is creative-agent; raw API default is creative-tools. | creative-agent |
 | `--no-api-tool-execution` | Plan/tool-call via API chat without executing Sogni tools | - |
 | `--llm-model <id>` | LLM model for `--api-chat` | qwen3.6-35b-a3b-gguf-iq4xs |
 | `--task-profile <profile>` | Sogni Intelligence task profile: general\|coding\|reasoning | - |
 | `--max-tokens <n>` | Max hosted chat completion tokens | 1600 |
-| `--thinking`, `--no-thinking` | Toggle `chat_template_kwargs.enable_thinking` for hosted chat | server default |
+| `--thinking`, `--no-thinking` | Forward `chat_template_kwargs.enable_thinking` for hosted chat; current public Qwen requests may normalize thinking on server-side | server default |
+| `--system <text>` | Override the base system prompt for hosted chat | built-in creative assistant prompt |
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM model metadata | - |
 | `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay RunRecords. List/get output is run through `redactRunRecord` from `@sogni/creative-agent/replay` before printing, so signed URLs, bearer tokens, JWTs, and PEM blocks cannot leak via the CLI. Use `@path` to load JSON from a file. | - |
 | `--skip-redact`, `--no-redact` | Bypass the replay redactor on `--list-replays` / `--get-replay`. Debug-only — emits unredacted RunRecord payloads. | redacted |
@@ -376,9 +443,10 @@ positions.
 | `--storyboard-plan-frames <n>` | Frame count for `--storyboard-plan`. | inferred |
 | `--storyboard-plan-model <id>` | Adapter target for `--storyboard-plan` (seedance, seedance2, gpt-image-2, ltx23, wan). | inferred |
 | `--storyboard-plan-stage <stage>` | Compilation stage for `--storyboard-plan` (storyboard_image, scene_clip). | storyboard_image |
-| `--api-workflow` | Start a durable workflow with explicit `input.steps`; optional `storyboard-video` preset | - |
-| `--workflow-input <json\|@path>` | Durable workflow input JSON. Use `@path` to load from a file. | - |
+| `--api-workflow` | Start `/v1/creative-agent/workflows` with generated inline `input.steps`; optional `storyboard-video` preset | - |
+| `--workflow-input <json\|@path>` | Durable workflow `input` JSON for the start request. Use `@path` to load from a file. | - |
 | `--workflow-title <text>` | Title for generated or storyboard durable workflow input | - |
+| `--workflow-idempotency-key <key>`, `--idempotency-key <key>` | Reuse safely when retrying a durable workflow start request | - |
 | `--workflow-max-cost <n>` | Reject hosted workflow starts above this estimated capacity-unit ceiling | - |
 | `--confirm-cost`, `--no-confirm-cost` | Forward explicit hosted workflow cost confirmation | - |
 | `--storyboard-frames <n>` | Beat count for storyboard-video workflow | - |
@@ -387,7 +455,7 @@ positions.
 | `--generate-audio`, `--no-generate-audio` | Toggle audio generation for generated video steps | - |
 | `--expand-prompt`, `--no-expand-prompt` | Toggle prompt expansion for generated video steps | - |
 | `--watch-workflow` | Stream durable workflow events after start | - |
-| `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>` | Durable workflow management helpers | - |
+| `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>`, `--resume-workflow <id>` | Durable workflow management helpers | - |
 | `--api-base-url <url>` | Sogni API base for hosted API modes. Credentials are only sent to `https://api.sogni.ai` by default; use `SOGNI_API_ALLOWED_HOSTS` for trusted custom hosts or `SOGNI_ALLOW_UNSAFE_API_BASE_URL=1` for isolated local testing. | https://api.sogni.ai |
 | `--no-filter` | Disable NSFW content filter | - |
 | `--memory-set <key> <value>` | Save a user preference | - |

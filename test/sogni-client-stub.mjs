@@ -107,6 +107,9 @@ class SogniClientWrapper extends EventEmitter {
     this.lastVideoProject = config;
     state.lastVideoProject = config;
     persistState();
+    if (process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR) {
+      throw new Error(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR);
+    }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
     return { project: { id: 'proj-1' }, videoUrls: ['https://example.com/video.mp4'] };
   }

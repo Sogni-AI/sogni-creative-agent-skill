@@ -67,8 +67,14 @@ import {
   extractToolCallProgressUpdate
 } from '@sogni-ai/sogni-intelligence-client/chatRun';
 import {
+  SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
+  prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
+} from '@sogni-ai/sogni-intelligence-client/media';
+import {
   SEEDANCE_REFERENCE_LIMITS,
   SeedanceReferenceLimitError,
+  seedanceTerminalGenerationFailurePayloadFromError,
+  seedanceTerminalPolicyPayloadFromError,
   validateSeedanceReferenceCounts
 } from '@sogni-ai/sogni-intelligence-client/tools';
 
@@ -220,15 +226,19 @@ function isPathWithinBase(basePath, targetPath) {
 }
 
 function buildCliErrorPayload({ message, code, details, hint, prompt }) {
-  const classified = classifySkillError({ message, code });
+  const classified = classifyCliError({ message, code });
   const payload = {
     success: false,
-    error: message || 'Unknown error',
+    error: classified.message || message || 'Unknown error',
     errorType: classified.error_type,
     errorCategory: classified.category,
     retryable: classified.retryable,
     prompt: prompt ?? null
   };
+  if (classified.metadata) payload.metadata = classified.metadata;
+  if (classified.technicalError && classified.technicalError !== payload.error) {
+    payload.technicalError = classified.technicalError;
+  }
   if (code) payload.errorCode = code;
   if (details) payload.errorDetails = details;
   if (hint) payload.hint = hint;
@@ -239,11 +249,71 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   return payload;
 }
 
+function cliErrorMessage(error) {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message || String(error);
+  if (error && typeof error === 'object') {
+    const record = error;
+    if (typeof record.message === 'string') return record.message;
+    if (typeof record.error === 'string') return record.error;
+  }
+  return String(error ?? 'Unknown error');
+}
+
+function seedanceFriendlyGenerationMessage(payload) {
+  const raw = [
+    payload?.message,
+    payload?.vendorError,
+    payload?.vendorErrorCode
+  ].filter(Boolean).join(' ');
+  if (/\baudio\s+format\b[\s\S]{0,120}\b(?:not valid|invalid)\b/i.test(raw)) {
+    return 'Seedance rejected the audio reference format for this model. Try a different audio file, trim/convert the clip, or use a non-Seedance audio-driven workflow such as LTX sound-to-video.';
+  }
+  return payload?.message || 'Seedance could not complete this video.';
+}
+
+function classifyCliError(error) {
+  const rawMessage = cliErrorMessage(error);
+  const seedancePolicyPayload = seedanceTerminalPolicyPayloadFromError(error);
+  if (seedancePolicyPayload) {
+    return {
+      error_type: 'SAFETY_REJECTED',
+      category: 'content_refused',
+      message: seedancePolicyPayload.message,
+      retryable: false,
+      metadata: seedancePolicyPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  const seedanceGenerationPayload = seedanceTerminalGenerationFailurePayloadFromError(error);
+  if (seedanceGenerationPayload) {
+    const vendorCode = seedanceGenerationPayload.vendorErrorCode;
+    const isInvalidParameter = vendorCode === 'InvalidParameter' ||
+      seedanceGenerationPayload.error === 'seedance_reference_audio_too_long';
+    return {
+      error_type: isInvalidParameter ? 'PARAMETER_INVALID' : 'GPU_WORKER_FAILED',
+      category: isInvalidParameter ? 'schema_validation' : 'transient_failure',
+      message: seedanceFriendlyGenerationMessage(seedanceGenerationPayload),
+      retryable: !isInvalidParameter,
+      metadata: seedanceGenerationPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  return classifySkillError(error);
+}
+
 function addCanonicalErrorFields(payload, error) {
-  const classified = classifySkillError(error);
+  const classified = classifyCliError(error);
+  payload.error = classified.message;
   payload.errorType = classified.error_type;
   payload.errorCategory = classified.category;
   payload.retryable = classified.retryable;
+  if (classified.metadata) payload.metadata = classified.metadata;
+  if (classified.technicalError && classified.technicalError !== classified.message) {
+    payload.technicalError = classified.technicalError;
+  }
   return payload;
 }
 
@@ -3653,6 +3723,12 @@ function apiMediaReferenceEndpoint(ref, action) {
     : `/v1/media/${action}Url`;
 }
 
+function apiMediaReferenceV2Endpoint(ref, action) {
+  return ref.kind === 'image'
+    ? `/v2/image/${action}Url`
+    : `/v2/media/${action}Url`;
+}
+
 function apiMediaReferenceUrlPath(ref, file, index, action, jobId) {
   const params = new URLSearchParams();
   params.set('type', apiMediaReferenceUploadType(ref, index));
@@ -3666,6 +3742,19 @@ function apiMediaReferenceUrlPath(ref, file, index, action, jobId) {
   return `${apiMediaReferenceEndpoint(ref, action)}?${params.toString()}`;
 }
 
+function apiMediaReferenceV2UrlPath(ref, file, index, action, jobId) {
+  const params = new URLSearchParams();
+  params.set('type', apiMediaReferenceUploadType(ref, index));
+  params.set('jobId', jobId);
+  params.set('contentType', file.mimeType);
+  if (ref.kind === 'image') {
+    params.set('imageId', `media_ref_${index + 1}`);
+  } else {
+    params.set('id', `media_ref_${index + 1}`);
+  }
+  return `${apiMediaReferenceV2Endpoint(ref, action)}?${params.toString()}`;
+}
+
 function apiStoredMediaUrl(payload, key) {
   const data = extractApiEnvelopeData(payload);
   const value = data?.[key] || payload?.[key];
@@ -3674,6 +3763,41 @@ function apiStoredMediaUrl(payload, key) {
   err.code = 'MEDIA_UPLOAD_FAILED';
   err.details = { payload };
   throw err;
+}
+
+function apiStoredMediaUploadPost(payload) {
+  const data = extractApiEnvelopeData(payload);
+  const url = data?.url || data?.uploadUrl;
+  if (typeof url === 'string' && url) {
+    const fields = data?.fields && typeof data.fields === 'object' ? data.fields : {};
+    return { url, fields };
+  }
+  const err = new Error('Sogni API did not return a presigned POST URL for media reference upload.');
+  err.code = 'MEDIA_UPLOAD_FAILED';
+  err.details = { payload };
+  throw err;
+}
+
+async function postApiMediaUploadForm(uploadPayload, file) {
+  const { url, fields } = apiStoredMediaUploadPost(uploadPayload);
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue;
+    form.append(key, String(value));
+  }
+  const body = file.buffer || readFileSync(file.filePath);
+  form.append('file', new Blob([body], { type: file.mimeType }), file.filename);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
+    err.code = 'MEDIA_UPLOAD_FAILED';
+    err.details = { uploadUrl: url, status: response.status, statusText: response.statusText };
+    throw err;
+  }
 }
 
 async function putApiMediaUpload(uploadUrl, file) {
@@ -3762,6 +3886,31 @@ async function uploadPreparedApiMediaReference(ref, index, apiKey, file) {
     storage: {
       jobId,
       type: apiMediaReferenceUploadType(ref, index),
+    },
+  };
+}
+
+async function uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file) {
+  if (!apiKey) {
+    const err = new Error(`${ref.flag} media references require SOGNI_API_KEY so the CLI can upload them before execution.`);
+    err.code = 'MISSING_API_KEY';
+    throw err;
+  }
+  const jobId = `sogni-agent-${Date.now()}-${index + 1}-${randomBytes(4).toString('hex')}`;
+  const uploadPayload = await fetchApiJson(apiMediaReferenceV2UrlPath(ref, file, index, 'upload', jobId), { apiKey });
+  await postApiMediaUploadForm(uploadPayload, file);
+  const downloadPayload = await fetchApiJson(apiMediaReferenceV2UrlPath(ref, file, index, 'download', jobId), { apiKey });
+  const url = apiStoredMediaUrl(downloadPayload, 'downloadUrl');
+  return {
+    url,
+    filename: file.filename,
+    byte_length: file.byteLength,
+    mime_type: file.mimeType,
+    prompt_label: file.filename,
+    storage: {
+      jobId,
+      type: apiMediaReferenceUploadType(ref, index),
+      version: 'v2',
     },
   };
 }
@@ -5419,6 +5568,235 @@ async function prepareReferenceAudioForVideoBuffer(buffer, sourceLabel) {
   return prepared;
 }
 
+function mediaFilenameFromSource(sourceLabel, fallbackName) {
+  const raw = String(sourceLabel || '');
+  try {
+    if (isHttpUrl(raw)) {
+      const pathname = new URL(raw).pathname;
+      const name = basename(decodeURIComponent(pathname));
+      return name || fallbackName;
+    }
+  } catch {
+    // Fall through to path handling.
+  }
+  const name = basename(raw.split('?')[0]);
+  return name || fallbackName;
+}
+
+function withMediaExtension(filename, extension) {
+  const cleanExtension = extension.startsWith('.') ? extension : `.${extension}`;
+  const currentExt = extname(filename);
+  const base = currentExt ? filename.slice(0, -currentExt.length) : filename;
+  return `${base || 'reference'}${cleanExtension}`;
+}
+
+async function probeLocalMediaDurationSeconds(pathOrUrl) {
+  if (isHttpUrl(pathOrUrl)) return undefined;
+  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
+  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const result = await runCommand(ffprobePath, [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    pathOrUrl,
+  ], { captureOutput: true });
+  if (result.error || result.status !== 0) return undefined;
+  const parsed = Number(String(result.stdout || '').trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+async function transcodeSeedanceReferenceAudioToMp3(request) {
+  const ffmpegPath = await ensureFfmpegAvailable();
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-audio-'));
+  const inputPath = mediaTempInputPath(tempDir, request.filename, '.audio');
+  const outputPath = join(tempDir, 'reference-audio.mp3');
+  try {
+    writeFileSync(inputPath, Buffer.from(request.data));
+    const result = await runCommand(ffmpegPath, [
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-y',
+      '-i', inputPath,
+      '-vn',
+      '-ac', '2',
+      '-ar', '44100',
+      '-c:a', 'libmp3lame',
+      '-b:a', '128k',
+      outputPath
+    ], { captureOutput: true });
+
+    if (result.error || result.status !== 0 || !isNonEmptyFile(outputPath)) {
+      const err = new Error('Failed to convert Seedance reference audio to MP3.');
+      err.code = 'FFMPEG_SEEDANCE_AUDIO_PREP_FAILED';
+      err.hint = 'Seedance accepts MP3 audio references only. Install ffmpeg with MP3 support or provide an MP3 clip.';
+      err.details = { sourceLabel: request.filename, stderr: result.stderr || '', stdout: result.stdout || '', status: result.status };
+      throw err;
+    }
+
+    return { data: readFileSync(outputPath), mimeType: 'audio/mpeg' };
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { if (existsSync(outputPath)) unlinkSync(outputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+}
+
+async function trimSeedanceReferenceAudioToMp3(request) {
+  const ffmpegPath = await ensureFfmpegAvailable();
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-audio-'));
+  const inputPath = mediaTempInputPath(tempDir, request.filename, '.audio');
+  const outputPath = join(tempDir, 'reference-audio.mp3');
+  const start = Math.max(0, Number(request.start) || 0);
+  const duration = Math.max(
+    0.1,
+    Math.min(15, Number(request.duration) || 15),
+  );
+  try {
+    writeFileSync(inputPath, Buffer.from(request.data));
+    const result = await runCommand(ffmpegPath, [
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-y',
+      '-ss', String(start),
+      '-i', inputPath,
+      '-t', String(duration),
+      '-vn',
+      '-ac', '2',
+      '-ar', '44100',
+      '-c:a', 'libmp3lame',
+      '-b:a', '128k',
+      outputPath
+    ], { captureOutput: true });
+
+    if (result.error || result.status !== 0 || !isNonEmptyFile(outputPath)) {
+      const err = new Error('Failed to trim Seedance reference audio to MP3.');
+      err.code = 'FFMPEG_SEEDANCE_AUDIO_TRIM_FAILED';
+      err.hint = 'Seedance accepts MP3 audio references only and short audio windows. Try a shorter MP3 clip.';
+      err.details = { sourceLabel: request.filename, start, duration, stderr: result.stderr || '', stdout: result.stdout || '', status: result.status };
+      throw err;
+    }
+
+    return { data: readFileSync(outputPath), mimeType: 'audio/mpeg' };
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { if (existsSync(outputPath)) unlinkSync(outputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+}
+
+async function trimSeedanceV2VSourceVideo(request) {
+  return {
+    data: await trimSeedanceV2VSourceVideoBuffer(
+      Buffer.from(request.data),
+      request.filename,
+      request.start,
+      request.duration,
+    ),
+    mimeType: 'video/mp4',
+  };
+}
+
+function seedanceReferenceAudioWindow() {
+  const requestedDuration = options.audioDuration ?? options.duration;
+  const maxDurationSeconds = Math.min(
+    Number.isFinite(Number(requestedDuration)) && Number(requestedDuration) > 0
+      ? Number(requestedDuration)
+      : SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
+    15,
+  );
+  return {
+    maxDurationSeconds,
+    startOffsetSeconds: options.audioStart ?? 0,
+  };
+}
+
+async function prepareSeedanceReferenceAudioUploadFile(pathOrUrl, buffer) {
+  const filename = mediaFilenameFromSource(pathOrUrl, 'reference-audio');
+  const rawMimeType = mimeTypeForPath(pathOrUrl, 'application/octet-stream');
+  const mimeType = normalizeReferenceAudioMimeType(rawMimeType) || rawMimeType;
+  const sourceFormat = detectReferenceAudioFormat(buffer, mimeType);
+  const sourceDurationSeconds = await probeLocalMediaDurationSeconds(pathOrUrl);
+  const window = seedanceReferenceAudioWindow();
+  const shouldTrim =
+    window.startOffsetSeconds > 0 ||
+    (Number.isFinite(sourceDurationSeconds) && sourceDurationSeconds > window.maxDurationSeconds);
+  let prepared = { data: buffer, mimeType: 'audio/mpeg' };
+  let action = null;
+  if (shouldTrim) {
+    prepared = await trimSeedanceReferenceAudioToMp3({
+      data: buffer,
+      filename,
+      inputMimeType: mimeType,
+      sourceFormat,
+      duration: window.maxDurationSeconds,
+      start: window.startOffsetSeconds,
+    });
+    action = 'trimmed and converted';
+  } else if (sourceFormat !== 'mp3') {
+    prepared = await transcodeSeedanceReferenceAudioToMp3({
+      data: buffer,
+      filename,
+      inputMimeType: mimeType,
+      sourceFormat,
+    });
+    action = 'converted';
+  }
+  if (!options.quiet && action) {
+    console.error(`Prepared Seedance reference audio as ${action} MP3 before upload.`);
+  }
+  const data = Buffer.from(prepared.data);
+  return {
+    buffer: data,
+    filename: withMediaExtension(filename, 'mp3'),
+    byteLength: data.length,
+    mimeType: 'audio/mpeg',
+  };
+}
+
+async function prepareSeedanceReferenceVideoUploadFile(pathOrUrl, buffer) {
+  const filename = mediaFilenameFromSource(pathOrUrl, 'reference-video.mp4');
+  const rawMimeType = mimeTypeForPath(pathOrUrl, 'video/mp4');
+  const sourceDurationSeconds = await probeLocalMediaDurationSeconds(pathOrUrl);
+  const requestedDuration = Number.isFinite(Number(options.duration))
+    ? Number(options.duration)
+    : SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS;
+  const prepared = await prepareSharedSeedanceV2VSourceVideo(
+    buffer,
+    rawMimeType,
+    filename,
+    sourceDurationSeconds,
+    requestedDuration,
+    options.videoStart ?? 0,
+    { trimVideo: trimSeedanceV2VSourceVideo },
+  );
+  if (!options.quiet && prepared.trimmed) {
+    console.error('Prepared Seedance V2V reference video clip before upload.');
+  }
+  const data = Buffer.from(prepared.data);
+  return {
+    buffer: data,
+    filename: withMediaExtension(filename, 'mp4'),
+    byteLength: data.length,
+    mimeType: prepared.mimeType || 'video/mp4',
+  };
+}
+
+async function uploadSeedanceReferenceAudioUrl(pathOrUrl, apiKey, index = 0) {
+  const ref = { flag: '--ref-audio', value: pathOrUrl, kind: 'audio' };
+  const buffer = await fetchMediaBuffer(pathOrUrl);
+  const file = await prepareSeedanceReferenceAudioUploadFile(pathOrUrl, buffer);
+  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  return uploaded.url;
+}
+
+async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
+  const ref = { flag: '--ref-video', value: pathOrUrl, kind: 'video' };
+  const buffer = await fetchMediaBuffer(pathOrUrl);
+  const file = await prepareSeedanceReferenceVideoUploadFile(pathOrUrl, buffer);
+  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  return uploaded.url;
+}
+
 async function trimSeedanceV2VSourceVideoBuffer(buffer, sourceLabel, startOffset, requestedDuration) {
   const ffmpegPath = await ensureFfmpegAvailable();
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-v2v-'));
@@ -6733,12 +7111,41 @@ async function main() {
               || mimeTypeForPath(options.refAudio, 'application/octet-stream')
           )
         : 'unknown';
-      const useRefAudioUrl = isSeedanceVideo
-        && refAudioFormatByPath !== 'mp3'
-        && await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, options.refAudio, 'Reference audio');
-      const useRefVideoUrl = isSeedanceVideo
-        && options.videoStart === null
-        && await appendSafeSeedanceReferenceUrl(seedanceReferenceVideoUrls, options.refVideo, 'Reference video');
+      let projectVideoStart = options.videoStart;
+      let useRefAudioUrl = false;
+      if (isSeedanceVideo && options.refAudio) {
+        const shouldUploadAudio =
+          !isHttpsUrl(options.refAudio) ||
+          refAudioFormatByPath !== 'mp3' ||
+          options.audioStart !== null ||
+          options.audioDuration !== null;
+        if (shouldUploadAudio) {
+          const uploadedAudioUrl = await uploadSeedanceReferenceAudioUrl(
+            options.refAudio,
+            creds.SOGNI_API_KEY,
+            0,
+          );
+          seedanceReferenceAudioUrls.push(uploadedAudioUrl);
+          useRefAudioUrl = true;
+        } else {
+          useRefAudioUrl = await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, options.refAudio, 'Reference audio');
+        }
+      }
+      let useRefVideoUrl = false;
+      if (isSeedanceVideo && options.refVideo) {
+        if (isHttpsUrl(options.refVideo) && options.videoStart === null) {
+          useRefVideoUrl = await appendSafeSeedanceReferenceUrl(seedanceReferenceVideoUrls, options.refVideo, 'Reference video');
+        } else {
+          const uploadedVideoUrl = await uploadSeedanceReferenceVideoUrl(
+            options.refVideo,
+            creds.SOGNI_API_KEY,
+            0,
+          );
+          seedanceReferenceVideoUrls.push(uploadedVideoUrl);
+          useRefVideoUrl = true;
+          projectVideoStart = null;
+        }
+      }
 
       // Seedance loose-reference extras: -c/--context images beyond start/end,
       // plus repeated --ref-audio / --ref-video entries past the first. The
@@ -6757,7 +7164,7 @@ async function main() {
           }
           await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Seedance image reference');
         }
-        for (const extraAudio of options.refAudios) {
+        for (const [extraAudioIndex, extraAudio] of options.refAudios.entries()) {
           if (!isHttpsUrl(extraAudio)) {
             fatalCliError(
               `Additional --ref-audio "${extraAudio}" must be an HTTPS URL. ` +
@@ -6765,7 +7172,21 @@ async function main() {
               { code: 'INVALID_ARGUMENT', details: { flag: '--ref-audio', value: extraAudio } },
             );
           }
-          await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, extraAudio, 'Seedance audio reference');
+          const extraAudioFormat = detectReferenceAudioFormat(
+            new Uint8Array(),
+            normalizeReferenceAudioMimeType(mimeTypeForPath(extraAudio, 'application/octet-stream'))
+              || mimeTypeForPath(extraAudio, 'application/octet-stream')
+          );
+          if (extraAudioFormat !== 'mp3') {
+            const uploadedAudioUrl = await uploadSeedanceReferenceAudioUrl(
+              extraAudio,
+              creds.SOGNI_API_KEY,
+              extraAudioIndex + 1,
+            );
+            seedanceReferenceAudioUrls.push(uploadedAudioUrl);
+          } else {
+            await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, extraAudio, 'Seedance audio reference');
+          }
         }
         for (const extraVideo of options.refVideos) {
           if (!isHttpsUrl(extraVideo)) {
@@ -6783,7 +7204,6 @@ async function main() {
       let endImageBuffer = options.refImageEnd && !useRefImageEndUrl ? await fetchMediaBuffer(options.refImageEnd) : undefined;
       let audioBuffer = options.refAudio && !useRefAudioUrl ? await fetchMediaBuffer(options.refAudio) : undefined;
       let videoBuffer = options.refVideo && !useRefVideoUrl ? await fetchMediaBuffer(options.refVideo) : undefined;
-      let projectVideoStart = options.videoStart;
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
       }
@@ -6884,10 +7304,10 @@ async function main() {
       if (audioBuffer) {
         projectConfig.referenceAudio = audioBuffer;
       }
-      if (options.audioStart !== null) {
+      if (options.audioStart !== null && !useRefAudioUrl) {
         projectConfig.audioStart = options.audioStart;
       }
-      if (options.audioDuration !== null) {
+      if (options.audioDuration !== null && !useRefAudioUrl) {
         projectConfig.audioDuration = options.audioDuration;
       }
       if (audioIdentityMedia) {

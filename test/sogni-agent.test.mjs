@@ -126,6 +126,44 @@ async function withTestApiServer(fn) {
       res.setHeader('Content-Type', 'application/json');
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
       if (
+        (requestUrl.pathname === '/v2/media/uploadUrl' || requestUrl.pathname === '/v2/image/uploadUrl')
+        && req.method === 'GET'
+      ) {
+        const type = requestUrl.searchParams.get('type') || 'reference';
+        const jobId = requestUrl.searchParams.get('jobId') || 'job';
+        const contentType = requestUrl.searchParams.get('contentType') || 'application/octet-stream';
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            url: `http://${req.headers.host}/test-v2-upload/${encodeURIComponent(type)}/${encodeURIComponent(jobId)}?signature=test`,
+            fields: {
+              key: `test/${type}/${jobId}`,
+              'Content-Type': contentType,
+              policy: 'test-policy',
+            },
+          },
+        }));
+        return;
+      }
+      if (requestUrl.pathname.startsWith('/test-v2-upload/') && req.method === 'POST') {
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+      if (
+        (requestUrl.pathname === '/v2/media/downloadUrl' || requestUrl.pathname === '/v2/image/downloadUrl')
+        && req.method === 'GET'
+      ) {
+        const type = requestUrl.searchParams.get('type') || 'reference';
+        const jobId = requestUrl.searchParams.get('jobId') || 'job';
+        res.end(JSON.stringify({
+          status: 'success',
+          data: {
+            downloadUrl: `https://cdn.sogni.ai/test-v2-upload/${encodeURIComponent(type)}/${encodeURIComponent(jobId)}`,
+          },
+        }));
+        return;
+      }
+      if (
         (requestUrl.pathname === '/v1/media/uploadUrl' || requestUrl.pathname === '/v1/image/uploadUrl')
         && req.method === 'GET'
       ) {
@@ -632,13 +670,13 @@ test('seedance v2v alias does not require or send ControlNet', () => {
     '--video',
     '--workflow', 'v2v',
     '-m', 'seedance2',
-    '--ref-video', SCREENSHOT_FIXTURE,
+    '--ref-video', 'https://example.com/source.mp4',
     'make the clip more cinematic'
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.modelId, 'seedance-2-0');
-  assert.equal(state.lastVideoProject.referenceVideo != null, true);
+  assert.deepEqual(state.lastVideoProject.referenceVideoUrls, ['https://example.com/source.mp4']);
   assert.equal(state.lastVideoProject.controlNet, undefined);
 });
 
@@ -650,7 +688,7 @@ test('seedance t2v forwards HTTPS multimodal references as URL arrays', () => {
     '--fps', '30',
     '--ref', 'https://example.com/product.png',
     '--ref-video', 'https://example.com/motion.mp4',
-    '--ref-audio', 'https://example.com/music.m4a',
+    '--ref-audio', 'https://example.com/music.mp3',
     'Use @Image1 for product identity, @Video1 for motion, and @Audio1 for rhythm.'
   ]);
   assert.equal(exitCode, 0);
@@ -659,7 +697,7 @@ test('seedance t2v forwards HTTPS multimodal references as URL arrays', () => {
   assert.equal(state.lastVideoProject.fps, 24);
   assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/product.png']);
   assert.deepEqual(state.lastVideoProject.referenceVideoUrls, ['https://example.com/motion.mp4']);
-  assert.deepEqual(state.lastVideoProject.referenceAudioUrls, ['https://example.com/music.m4a']);
+  assert.deepEqual(state.lastVideoProject.referenceAudioUrls, ['https://example.com/music.mp3']);
   assert.equal(state.lastVideoProject.referenceImage, undefined);
   assert.equal(state.lastVideoProject.referenceVideo, undefined);
   assert.equal(state.lastVideoProject.referenceAudio, undefined);
@@ -709,7 +747,7 @@ test('--last-image participates in video workflow inference', () => {
 
 test('seedance rejects audio-only references before wrapper validation', () => {
   expectCliError(
-    ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref-audio', 'https://cdn.example.com/music.m4a', 'music-led clip'],
+    ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref-audio', 'https://cdn.example.com/music.mp3', 'music-led clip'],
     'Seedance audio references require --ref, --ref-video, or -c/--context image refs.'
   );
 });
@@ -720,9 +758,9 @@ test('seedance multi-ref forwards repeated --ref-audio / --ref-video HTTPS URLs 
     '--workflow', 't2v',
     '-m', 'seedance2',
     '--ref', 'https://example.com/cover.png',
-    '--ref-audio', 'https://example.com/voice.m4a',
-    '--ref-audio', 'https://example.com/bed.m4a',
-    '--ref-audio', 'https://example.com/sfx.m4a',
+    '--ref-audio', 'https://example.com/voice.mp3',
+    '--ref-audio', 'https://example.com/bed.mp3',
+    '--ref-audio', 'https://example.com/sfx.mp3',
     '--ref-video', 'https://example.com/motion.mp4',
     '--ref-video', 'https://example.com/transition.mp4',
     'Use @Image1 for product identity, @Audio1 for voice, @Audio2/@Audio3 for ambience, @Video1/@Video2 for motion cues.'
@@ -731,9 +769,9 @@ test('seedance multi-ref forwards repeated --ref-audio / --ref-video HTTPS URLs 
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
   assert.deepEqual(state.lastVideoProject.referenceAudioUrls, [
-    'https://example.com/voice.m4a',
-    'https://example.com/bed.m4a',
-    'https://example.com/sfx.m4a',
+    'https://example.com/voice.mp3',
+    'https://example.com/bed.mp3',
+    'https://example.com/sfx.mp3',
   ]);
   assert.deepEqual(state.lastVideoProject.referenceVideoUrls, [
     'https://example.com/motion.mp4',
@@ -746,10 +784,10 @@ test('seedance enforces 3-audio cap with canonical error message', () => {
     [
       '--video', '--workflow', 't2v', '-m', 'seedance2',
       '--ref', 'https://example.com/cover.png',
-      '--ref-audio', 'https://example.com/a1.m4a',
-      '--ref-audio', 'https://example.com/a2.m4a',
-      '--ref-audio', 'https://example.com/a3.m4a',
-      '--ref-audio', 'https://example.com/a4.m4a',
+      '--ref-audio', 'https://example.com/a1.mp3',
+      '--ref-audio', 'https://example.com/a2.mp3',
+      '--ref-audio', 'https://example.com/a3.mp3',
+      '--ref-audio', 'https://example.com/a4.mp3',
       'Use @Audio1..@Audio4 for layered audio reference.',
     ],
     'Seedance can use up to 3 audio references per video; this request included 4.'
@@ -788,7 +826,7 @@ test('seedance enforces 12-asset combined-total cap', () => {
       '--ref-video', 'https://example.com/v1.mp4',
       '--ref-video', 'https://example.com/v2.mp4',
       '--ref-video', 'https://example.com/v3.mp4',
-      '--ref-audio', 'https://example.com/a1.m4a',
+      '--ref-audio', 'https://example.com/a1.mp3',
       'Use @Image1..@Image9 plus @Video1..@Video3 and @Audio1 to layer the scene.',
     ],
     'Seedance can use up to 12 total references per video; this request included 13.'
@@ -824,7 +862,7 @@ test('seedance rejects local-file extras for --ref-audio in CLI direct-gen', () 
     [
       '--video', '--workflow', 't2v', '-m', 'seedance2',
       '--ref', 'https://example.com/cover.png',
-      '--ref-audio', 'https://example.com/primary.m4a',
+      '--ref-audio', 'https://example.com/primary.mp3',
       '--ref-audio', '/tmp/local-extra.m4a',
       'Layered audio test.',
     ],
@@ -838,13 +876,77 @@ test('seedance multi-ref accepts seedance2-fast model identically', () => {
     '--workflow', 't2v',
     '-m', 'seedance2-fast',
     '--ref', 'https://example.com/cover.png',
-    '--ref-audio', 'https://example.com/voice.m4a',
-    '--ref-audio', 'https://example.com/bed.m4a',
+    '--ref-audio', 'https://example.com/voice.mp3',
+    '--ref-audio', 'https://example.com/bed.mp3',
     'seedance fast with multi-ref audio.'
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.referenceAudioUrls.length, 2);
+});
+
+test('seedance direct video uploads local MP3 reference audio to v2 media URLs', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-audio-'));
+  const audioPath = join(tempDir, 'voice.mp3');
+  writeFileSync(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, state } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video',
+      '--workflow', 't2v',
+      '-m', 'seedance2-fast',
+      '--ref', 'https://example.com/cover.png',
+      '--ref-audio', audioPath,
+      '--duration', '4',
+      'Use @Image1 for subject identity and @Audio1 for speech rhythm.'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+    assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
+    assert.equal(state.lastVideoProject.referenceAudio, undefined);
+    assert.equal(state.lastVideoProject.referenceAudioUrls.length, 1);
+    assert.match(state.lastVideoProject.referenceAudioUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceAudio\//);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/referenceAudio/')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/downloadUrl')).length, 1);
+    assert.match(requests.find(item => item.url.startsWith('/v2/media/uploadUrl')).url, /contentType=audio%2Fmpeg/);
+  });
+});
+
+test('seedance v2v uploads local source video to v2 media URLs', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-video-'));
+  const videoPath = join(tempDir, 'source.mp4');
+  writeFileSync(videoPath, Buffer.from('fake mp4 bytes'));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, state } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video',
+      '--workflow', 'v2v',
+      '-m', 'seedance2-fast',
+      '--ref-video', videoPath,
+      '--duration', '4',
+      'Make the source clip more cinematic.'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+    assert.equal(state.lastVideoProject.referenceVideo, undefined);
+    assert.equal(state.lastVideoProject.referenceVideoUrls.length, 1);
+    assert.match(state.lastVideoProject.referenceVideoUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceVideo\//);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/referenceVideo/')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/downloadUrl')).length, 1);
+    assert.match(requests.find(item => item.url.startsWith('/v2/media/uploadUrl')).url, /contentType=video%2Fmp4/);
+  });
 });
 
 test('non-seedance video rejects multiple --ref-audio entries', () => {
@@ -2026,6 +2128,71 @@ test('missing API key is rejected', () => {
     payload.hint,
     'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.'
   );
+});
+
+test('json error: seedance real-person policy cancellation is safety rejected and friendly', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2-fast',
+    'gentle product reveal'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: 'Seedance rejected the input image because it may contain a real person.'
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorType, 'SAFETY_REJECTED');
+  assert.equal(payload.errorCategory, 'content_refused');
+  assert.equal(payload.retryable, false);
+  assert.equal(payload.metadata.error, 'seedance_input_image_privacy_policy');
+  assert.doesNotMatch(payload.error, /Vendor task|status=failed|cgt-/);
+});
+
+test('json error: seedance generated content policy cancellation hides vendor internals', () => {
+  const vendorError = 'Seedance rejected the request: Vendor job failed: Vendor task cgt-test ended with status=failed: {"status":"failed","error":{"code":"SensitiveContentDetected","message":"The generated video failed a content policy check.","request_id":"req","type":"BadRequest"}}';
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2-fast',
+    'gentle product reveal'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: vendorError
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorType, 'SAFETY_REJECTED');
+  assert.equal(payload.errorCategory, 'content_refused');
+  assert.equal(payload.retryable, false);
+  assert.equal(payload.metadata.error, 'seedance_content_policy');
+  assert.equal(payload.metadata.vendorErrorCode, 'SensitiveContentDetected');
+  assert.doesNotMatch(payload.error, /Vendor task|status=failed|cgt-test/);
+  assert.match(payload.technicalError, /cgt-test/);
+});
+
+test('json error: seedance invalid audio format is parameter invalid and friendly', () => {
+  const vendorError = 'Seedance rejected the request: Vendor job failed: Vendor task cgt-audio ended with status=failed: {"status":"failed","error":{"code":"InvalidParameter","message":"audio format from file https://example.com/audio.m4a not valid for model dreamina-seedance-2-0-fast in r2v, content[3].","request_id":"req","type":"BadRequest"}}';
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2-fast',
+    'gentle product reveal'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: vendorError
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorType, 'PARAMETER_INVALID');
+  assert.equal(payload.errorCategory, 'schema_validation');
+  assert.equal(payload.retryable, false);
+  assert.match(payload.error, /audio reference format/);
+  assert.doesNotMatch(payload.error, /content\[3\]|cgt-audio/);
+  assert.match(payload.technicalError, /content\[3\]/);
 });
 
 test('json error: i2v rejects mismatched explicit size and suggests a compatible 16-multiple aspect', () => {

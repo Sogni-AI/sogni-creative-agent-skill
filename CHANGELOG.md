@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Seedance direct-gen media upload support.** Local Seedance `--ref-audio` and `--ref-video` references now upload through the Sogni Intelligence `/v2/media/*Url` presigned POST flow and are forwarded as Sogni-hosted URL references, matching the documented backend media-reference contract.
+- Regression coverage for Seedance direct-gen local MP3 audio uploads, local V2V source uploads, and vendor policy-failure JSON shaping.
+
+### Changed
+
+- Seedance audio references are now treated as MP3-only. Local audio is trimmed to the requested Seedance clip window and converted to `audio/mpeg` before upload; HTTPS non-MP3 audio references are re-uploaded as prepared MP3 media instead of being forwarded directly.
+- Seedance V2V local source clips are trimmed to the requested clip duration before upload so long local source videos are not submitted raw to the vendor.
+
+### Fixed
+
+- Seedance vendor content-policy cancellations now surface friendly, structured CLI errors (`SAFETY_REJECTED` / `content_refused`) without leaking raw vendor task IDs or terminal status payloads.
+- Seedance invalid audio-format failures now classify as non-retryable parameter errors with actionable MP3 guidance instead of opaque vendor failures.
+
 ## [3.3.0] - 2026-05-20
 
 ### Added

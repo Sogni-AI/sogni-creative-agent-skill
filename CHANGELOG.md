@@ -71,13 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Cloud-mode parity with sogni-chat.** `buildSkillDynamicSystemPrompt()` injects the same persona / memory / personality framing as `buildChatDynamicSystemPrompt` (`User's people` / `PERSONA RULES` / `User preferences` / `USER PERSONALITY PREFERENCE`) so saved `--persona-*`, `--memory-set`, and `--personality-*` stores travel into `/v1/chat/completions`. Empty when no stores are populated, so fresh installs are unaffected.
+- **Managed Agent parity with sogni-chat.** `buildSkillDynamicSystemPrompt()` injects the same persona / memory / personality framing as `buildChatDynamicSystemPrompt` (`User's people` / `PERSONA RULES` / `User preferences` / `USER PERSONALITY PREFERENCE`) so saved `--persona-*`, `--memory-set`, and `--personality-*` stores travel into `/v1/chat/completions`. Empty when no stores are populated, so fresh installs are unaffected.
 - **`--no-filter` now propagates to `safeContentFilter: false`** on the hosted chat body, in addition to the existing per-tool `disableNSFWFilter` plumbing.
 - **`--durable-chat` CLI flag** for `/v1/chat/runs` with SSE assistant deltas — the foundation for the per-job progress / ETA / result events added in 3.2.0.
 - **`composition_planning` per-skill manifest** groups `enhance_prompt`, `compose_lyrics`, `compose_instrumental`, `compose_script`, `compose_workflow`, and `compose_workflow_template` into a single capability surface, matching the canonical `@sogni/creative-agent` manifest layout. SKILL.md and `skills/README.md` are updated to list it in the per-skill index, and the cross-surface parity test asserts `ALL_BUILT_IN_SKILLS` exposes it.
 - **Conventional commits tooling.** Adopted commitlint + husky for the strict commit-message rules used across the Sogni ecosystem.
 - **Semantic-release configuration** added; publish remains manual-gated for now (the CI auto-publish workflow was added and then removed in the same release pending an automation token).
-
-### Changed
-
-- Settled on `@sogni-ai/sogni-intelligence-client` `^2.1.0` stable after a brief evaluation of `^3.0.0-alpha.5`.

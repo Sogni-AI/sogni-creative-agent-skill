@@ -15,6 +15,13 @@ import { getEnv, hasEnv } from './env.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
 import { assertSafeUrl } from './ssrf-guard.mjs';
 import {
+  INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
+  runForegroundCheck as runUpdateCheckForeground,
+  maybeSpawnBackgroundCheck as maybeSpawnUpdateCheck,
+  getQueuedNotice as getUpdateCheckNotice,
+  runSelfUpdate as runSogniSelfUpdate,
+} from './update-check.mjs';
+import {
   LTX23_WORKFLOW_MODELS,
   PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
   PUBLIC_SKILL_DEFAULT_TOOL_NAMES,
@@ -59,6 +66,11 @@ import {
 import {
   extractToolCallProgressUpdate
 } from '@sogni-ai/sogni-intelligence-client/chatRun';
+import {
+  SEEDANCE_REFERENCE_LIMITS,
+  SeedanceReferenceLimitError,
+  validateSeedanceReferenceCounts
+} from '@sogni-ai/sogni-intelligence-client/tools';
 
 const require = createRequire(import.meta.url);
 const rootClientModule = process.env.SOGNI_AGENT_TEST_STATE_PATH
@@ -124,6 +136,26 @@ const IS_OPENCLAW_INVOCATION = Boolean(getEnv('OPENCLAW_PLUGIN_CONFIG'));
 const RAW_ARGS = process.argv.slice(2);
 const CLI_WANTS_JSON = RAW_ARGS.includes('--json');
 const JSON_ERROR_MODE = CLI_WANTS_JSON || IS_OPENCLAW_INVOCATION;
+
+// --- Update-check entry points --------------------------------------------
+// Internal mode: the detached background child that fetches the npm registry.
+if (RAW_ARGS[0] === UPDATE_CHECK_INTERNAL_FLAG) {
+  await runUpdateCheckForeground({ currentVersion: PACKAGE_VERSION });
+  process.exit(0);
+}
+// User-facing subcommand: `sogni-agent self-update`
+if (RAW_ARGS[0] === 'self-update') {
+  process.exit(runSogniSelfUpdate({}));
+}
+// Fire-and-forget background check (no-op when throttled or skipped)
+try { maybeSpawnUpdateCheck({ cliPath: process.argv[1] }); } catch { /* never break the CLI */ }
+// Trailing notice on exit, if a newer version is on file
+process.on('exit', () => {
+  try {
+    const notice = getUpdateCheckNotice({ currentVersion: PACKAGE_VERSION });
+    if (notice) process.stderr.write(notice + '\n');
+  } catch { /* never break exit */ }
+});
 const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
@@ -1111,12 +1143,14 @@ const options = {
   angles360Video: null,
   refImage: null, // Reference image for video (start frame)
   refImageEnd: null, // End frame for video interpolation
-  refAudio: null, // Uploaded/generated audio for ia2v/a2v, or s2v lip-sync
+  refAudio: null, // Uploaded/generated audio for ia2v/a2v, or s2v lip-sync (primary)
+  refAudios: [], // Additional Seedance loose audio refs; first --ref-audio fills refAudio, subsequent calls append here
   audioStart: null, // Optional start offset into reference audio
   audioDuration: null, // Optional duration slice for reference audio
   referenceAudioIdentity: null, // Voice identity reference for LTX native audio
   voicePersonaName: null,
-  refVideo: null, // Reference video for animate workflows
+  refVideo: null, // Reference video for animate workflows (primary)
+  refVideos: [], // Additional Seedance loose video refs; first --ref-video fills refVideo, subsequent calls append here
   videoStart: null, // Optional start offset into reference video
   contextImages: [], // Context images for image editing
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
@@ -1241,11 +1275,13 @@ const cliSet = {
   refImage: false,
   refImageEnd: false,
   refAudio: false,
+  refAudios: false,
   audioStart: false,
   audioDuration: false,
   referenceAudioIdentity: false,
   voicePersonaName: false,
   refVideo: false,
+  refVideos: false,
   videoStart: false,
   context: false,
   looping: false,
@@ -1532,8 +1568,13 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--ref-audio' || arg === '--audio') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.refAudio = raw;
-    cliSet.refAudio = true;
+    if (!options.refAudio) {
+      options.refAudio = raw;
+      cliSet.refAudio = true;
+    } else {
+      options.refAudios.push(raw);
+      cliSet.refAudios = true;
+    }
   } else if (arg === '--audio-start') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1557,8 +1598,13 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--ref-video') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.refVideo = raw;
-    cliSet.refVideo = true;
+    if (!options.refVideo) {
+      options.refVideo = raw;
+      cliSet.refVideo = true;
+    } else {
+      options.refVideos.push(raw);
+      cliSet.refVideos = true;
+    }
   } else if (arg === '--video-start' || arg === '--video-start-offset') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -1950,6 +1996,9 @@ for (let i = 0; i < args.length; i++) {
     options.showBalance = true;
   } else if (arg === '--version' || arg === '-V') {
     options.showVersion = true;
+  } else if (arg === '--no-update-check') {
+    // Update-check opt-out handled at module load; no-op here so the parser
+    // doesn't reject it as an unknown option.
   } else if (arg === '--help') {
     console.log(`
 sogni-agent - Generate images, videos, and music using Sogni AI
@@ -2018,14 +2067,30 @@ Video Options:
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
-  --ref <path|url>      Reference image for video (start frame)
-  --ref-end <path|url>  End frame for interpolation/morphing
-  --ref-audio <path|url> Uploaded/generated audio for ia2v/a2v, or s2v lip-sync
+  --ref <path|url>      Reference image for video (start/first frame on Seedance)
+  --ref-end <path|url>  End frame for interpolation/morphing (last frame on Seedance)
+  --ref-audio <path|url> Audio reference. Repeatable on Seedance models (up to 3 total);
+                         first entry is the primary, extras must be HTTPS URLs in CLI
+                         direct-gen (use --api-chat for multi local-file uploads).
+                         On LTX/WAN: single primary only (for ia2v/a2v/s2v lip-sync).
   --audio-start <sec>   Start offset into --ref-audio for audio-driven clips
   --audio-duration <sec> Duration slice from --ref-audio
   --reference-audio-identity <path>  Voice identity clip for LTX native audio
   --voice-persona <name>  Use saved persona voice clip as LTX voice identity
-  --ref-video <path|url> Reference video for animate/v2v workflows
+  --ref-video <path|url> Video reference. Repeatable on Seedance models (up to 3 total);
+                         first entry is the primary, extras must be HTTPS URLs in CLI
+                         direct-gen. On LTX/WAN: single primary for animate/v2v workflows.
+
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-fast):
+  - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
+    Best when you want canonical first/last frame anchoring; max 2 images.
+  - LOOSE REFERENCE MODE: -c/--context image refs plus optional --ref-audio /
+    --ref-video extras. Anchor frame intent in the prompt with @Image1, @Image2,
+    @Video1, @Audio1 etc. (e.g. "Use @Image1 as the opening shot reference").
+    Up to 9 image / 3 video / 3 audio / 12 total references per video request.
+  Combining --ref/--ref-end with -c/--context on Seedance is rejected client-side.
+  All three modalities pull caps from the canonical
+  @sogni-ai/sogni-protocol seedance-reference-limits catalog.
   --video-start <sec>   Start offset into --ref-video for segmented V2V/animate
   --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer
   --controlnet-strength <n>  ControlNet strength for v2v (0.0-1.0, default: 0.8)
@@ -2079,6 +2144,8 @@ General:
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
   --balance, --balances Show SPARK/SOGNI balances and exit
   --version, -V         Show sogni-agent version and exit
+  --no-update-check     Skip the once-daily npm update check for this run
+  self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
   --extract-last-frame <video> <image>  Extract last frame from a video (safe ffmpeg wrapper)
   --concat-videos <out> <clips...>      Concatenate video clips (safe ffmpeg wrapper, min 2 clips)
   --concat-audio <path> Optional audio track to mux over --concat-videos output
@@ -2919,8 +2986,47 @@ if (options.video) {
   if (options.videoStart !== null && !options.refVideo) {
     fatalCliError('--video-start requires --ref-video.', { code: 'INVALID_ARGUMENT' });
   }
-  if (isSeedanceVideo && options.refAudio && !options.refImage && !options.refImageEnd && !options.refVideo) {
-    fatalCliError('Seedance audio references require --ref or --ref-video.', { code: 'INVALID_ARGUMENT' });
+  if (isSeedanceVideo && options.refAudio && !options.refImage && !options.refImageEnd && !options.refVideo
+      && (!Array.isArray(options.contextImages) || options.contextImages.length === 0)) {
+    fatalCliError('Seedance audio references require --ref, --ref-video, or -c/--context image refs.', { code: 'INVALID_ARGUMENT' });
+  }
+
+  // Seedance reference modes are mutually exclusive:
+  //   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
+  //     Up to 2 images; the platform pins them as parameter-mode firstFrame/lastFrame.
+  //   - LOOSE REFERENCE MODE: -c/--context (repeatable image refs), --ref-audio extras,
+  //     --ref-video extras. Up to 9 images / 3 videos / 3 audios / 12 total.
+  //     Anchor frame intent in the prompt with @Image1 / @Video1 / @Audio1 etc.
+  // Mixing dedicated frames with loose image refs is rejected at sogni-socket
+  // (jobsController.js) so we catch it client-side with a clearer message.
+  if (isSeedanceVideo
+      && (options.refImage || options.refImageEnd)
+      && Array.isArray(options.contextImages) && options.contextImages.length > 0) {
+    fatalCliError(
+      'Seedance reference modes are mutually exclusive: --ref/--ref-end (dedicated first/last frame) cannot be combined with -c/--context (loose image references). '
+      + 'Pick one: use --ref/--ref-end for first-class first-frame/last-frame anchoring (max 2 images), '
+      + 'or use -c/--context (plus optional @Image1/@Image2 prompt language) for up to 9 loose image references.',
+      { code: 'INVALID_ARGUMENT', details: {
+          dedicatedFrames: [options.refImage, options.refImageEnd].filter(Boolean),
+          looseImageRefs: options.contextImages,
+        } },
+    );
+  }
+  // Non-Seedance video models do not understand multi-ref audio/video extras —
+  // they only support a single primary --ref-audio / --ref-video each.
+  if (!isSeedanceVideo) {
+    if (Array.isArray(options.refAudios) && options.refAudios.length > 0) {
+      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, extras: options.refAudios },
+      });
+    }
+    if (Array.isArray(options.refVideos) && options.refVideos.length > 0) {
+      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, extras: options.refVideos },
+      });
+    }
   }
 
   if (options.referenceAudioIdentity && !['t2v', 'i2v'].includes(options.videoWorkflow)) {
@@ -3469,8 +3575,14 @@ function getApiModeMediaReferences() {
   if (options.refImage) refs.push({ flag: '--ref', value: options.refImage, kind: 'image' });
   if (options.refImageEnd) refs.push({ flag: '--ref-end', value: options.refImageEnd, kind: 'image' });
   if (options.refAudio) refs.push({ flag: '--ref-audio', value: options.refAudio, kind: 'audio' });
+  for (const value of options.refAudios || []) {
+    if (value) refs.push({ flag: '--ref-audio', value, kind: 'audio' });
+  }
   if (options.referenceAudioIdentity) refs.push({ flag: '--reference-audio-identity', value: options.referenceAudioIdentity, kind: 'audio' });
   if (options.refVideo) refs.push({ flag: '--ref-video', value: options.refVideo, kind: 'video' });
+  for (const value of options.refVideos || []) {
+    if (value) refs.push({ flag: '--ref-video', value, kind: 'video' });
+  }
   return refs;
 }
 
@@ -5366,6 +5478,51 @@ async function appendSafeSeedanceReferenceUrl(target, pathOrUrl, label) {
   return true;
 }
 
+// Effective Seedance reference counts for the current `options` snapshot.
+// Mirrors the per-modality bookkeeping sogni-chat does in
+// uploadedModalityReferenceIndices(...) (chatService.ts ~6149), translated to
+// the skill's primary + extras CLI shape:
+//   images = refImage + refImageEnd + contextImages (loose Seedance @ImageN refs)
+//   audios = refAudio + refAudios (extras)
+//   videos = refVideo + refVideos (extras)
+function effectiveSeedanceReferenceCounts() {
+  const images =
+    (options.refImage ? 1 : 0)
+    + (options.refImageEnd ? 1 : 0)
+    + (Array.isArray(options.contextImages) ? options.contextImages.length : 0);
+  const audios =
+    (options.refAudio ? 1 : 0)
+    + (Array.isArray(options.refAudios) ? options.refAudios.length : 0);
+  const videos =
+    (options.refVideo ? 1 : 0)
+    + (Array.isArray(options.refVideos) ? options.refVideos.length : 0);
+  return { images, audios, videos };
+}
+
+// Wraps the shared validateSeedanceReferenceCounts() so a thrown
+// SeedanceReferenceLimitError is re-raised as a CLI fatal error with the same
+// human message the hosted chat surfaces. Source of truth for the numeric caps
+// (9 / 3 / 3 / 12) is @sogni-ai/sogni-protocol's seedance-reference-limits
+// catalog, surfaced through @sogni-ai/sogni-intelligence-client/tools.
+function enforceSeedanceReferenceCaps() {
+  try {
+    validateSeedanceReferenceCounts(effectiveSeedanceReferenceCounts());
+  } catch (err) {
+    if (err instanceof SeedanceReferenceLimitError) {
+      fatalCliError(err.message, {
+        code: err.code,
+        details: {
+          limitKind: err.limitKind,
+          requestedCount: err.requestedCount,
+          maxCount: err.maxCount,
+          limits: SEEDANCE_REFERENCE_LIMITS,
+        },
+      });
+    }
+    throw err;
+  }
+}
+
 function resolveMultiAngleOutputConfig(outputPath, outputFormat) {
   if (!outputPath) return null;
   const ext = extname(outputPath);
@@ -6559,6 +6716,11 @@ async function main() {
       if (options.refVideo) log(`Reference video: ${options.refVideo}`);
 
       const isSeedanceVideo = isSeedanceModel(options.model);
+      if (isSeedanceVideo) {
+        // Source of truth: @sogni-ai/sogni-protocol catalogs/seedance-reference-limits.json
+        // surfaced through @sogni-ai/sogni-intelligence-client/tools.
+        enforceSeedanceReferenceCaps();
+      }
       const seedanceReferenceImageUrls = [];
       const seedanceReferenceVideoUrls = [];
       const seedanceReferenceAudioUrls = [];
@@ -6577,6 +6739,45 @@ async function main() {
       const useRefVideoUrl = isSeedanceVideo
         && options.videoStart === null
         && await appendSafeSeedanceReferenceUrl(seedanceReferenceVideoUrls, options.refVideo, 'Reference video');
+
+      // Seedance loose-reference extras: -c/--context images beyond start/end,
+      // plus repeated --ref-audio / --ref-video entries past the first. The
+      // Sogni Client SDK accepts only URL arrays for these (createJobRequestMessage),
+      // so extras MUST be HTTPS URLs. For multi-file local uploads, use --api-chat /
+      // --durable-chat where the LLM upload pipeline handles per-file uploads.
+      if (isSeedanceVideo) {
+        for (const ctxImage of (Array.isArray(options.contextImages) ? options.contextImages : [])) {
+          if (!ctxImage) continue;
+          if (!isHttpsUrl(ctxImage)) {
+            fatalCliError(
+              `Seedance extra image reference "${ctxImage}" must be an HTTPS URL. ` +
+              'Local file uploads beyond --ref / --ref-end are only supported in --api-chat / --durable-chat mode.',
+              { code: 'INVALID_ARGUMENT', details: { flag: '-c/--context', value: ctxImage } },
+            );
+          }
+          await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Seedance image reference');
+        }
+        for (const extraAudio of options.refAudios) {
+          if (!isHttpsUrl(extraAudio)) {
+            fatalCliError(
+              `Additional --ref-audio "${extraAudio}" must be an HTTPS URL. ` +
+              'Local file uploads beyond the primary --ref-audio are only supported in --api-chat / --durable-chat mode.',
+              { code: 'INVALID_ARGUMENT', details: { flag: '--ref-audio', value: extraAudio } },
+            );
+          }
+          await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, extraAudio, 'Seedance audio reference');
+        }
+        for (const extraVideo of options.refVideos) {
+          if (!isHttpsUrl(extraVideo)) {
+            fatalCliError(
+              `Additional --ref-video "${extraVideo}" must be an HTTPS URL. ` +
+              'Local file uploads beyond the primary --ref-video are only supported in --api-chat / --durable-chat mode.',
+              { code: 'INVALID_ARGUMENT', details: { flag: '--ref-video', value: extraVideo } },
+            );
+          }
+          await appendSafeSeedanceReferenceUrl(seedanceReferenceVideoUrls, extraVideo, 'Seedance video reference');
+        }
+      }
 
       let imageBuffer = options.refImage && !useRefImageUrl ? await fetchMediaBuffer(options.refImage) : undefined;
       let endImageBuffer = options.refImageEnd && !useRefImageEndUrl ? await fetchMediaBuffer(options.refImageEnd) : undefined;

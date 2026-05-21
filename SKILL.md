@@ -298,10 +298,38 @@ Image 2 low|medium|high quality for the storyboard sheet.
 
 Hosted API requests forward media references from `-c`, `--ref`, `--ref-end`,
 `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
-`media_references` metadata. API chat also attaches image refs as vision inputs.
-Local file references are uploaded to Sogni media storage first, then forwarded
-as retrievable URLs for hosted chat and durable workflows. Use the direct CLI
-path for private media that must not leave the local machine. Use
+`media_references` metadata. `--ref-audio` and `--ref-video` are repeatable in
+api-chat / durable-chat mode — each entry uploads independently and is exposed
+to the hosted LLM at `@Audio1` / `@Audio2` / `@Video1` etc. API chat also
+attaches image refs as vision inputs. Local file references are uploaded to
+Sogni media storage first, then forwarded as retrievable URLs for hosted chat
+and durable workflows. Use the direct CLI path for private media that must not
+leave the local machine.
+
+### Seedance reference modes (mutually exclusive)
+
+When `--video -m seedance2` or `-m seedance2-fast` is selected, the skill
+exposes the same two-mode pattern that the hosted chat surfaces. Pick one
+mode per video request:
+
+- **Dedicated frame mode — `--ref` and/or `--ref-end`.** First-class
+  first-frame / last-frame anchoring; the Seedance worker pins them as
+  parameter-mode firstFrame / lastFrame. Max 2 images.
+- **Loose reference mode — `-c/--context` plus optional `--ref-audio`
+  extras and `--ref-video` extras.** Anchor frame intent in the prompt with
+  `@Image1` / `@Image2` / `@Video1` / `@Audio1` etc. (e.g. *"Use @Image1 as
+  the opening shot reference"*). Supports up to 9 image refs, 3 video refs,
+  3 audio refs, and 12 total reference assets per video request. The
+  numeric caps come from the canonical
+  `@sogni-ai/sogni-protocol/catalogs/seedance-reference-limits.json` catalog,
+  surfaced through `@sogni-ai/sogni-intelligence-client/tools` as
+  `SEEDANCE_REFERENCE_LIMITS` and `validateSeedanceReferenceCounts()`.
+
+Combining `--ref` / `--ref-end` with `-c/--context` on Seedance is rejected
+client-side with a clear error pointing to the correct mode. In CLI direct-gen
+mode, additional `--ref-audio` / `--ref-video` entries beyond the first must
+be HTTPS URLs (the primary entry can still be a local file path); for local
+multi-file Seedance uploads, use `--api-chat` / `--durable-chat` instead. Use
 `--workflow-max-cost <n>` plus `--confirm-cost` / `--no-confirm-cost` to forward
 explicit workflow cost policy, and `--workflow-idempotency-key` when retrying a
 workflow start request.

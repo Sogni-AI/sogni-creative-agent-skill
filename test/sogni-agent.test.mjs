@@ -710,7 +710,155 @@ test('--last-image participates in video workflow inference', () => {
 test('seedance rejects audio-only references before wrapper validation', () => {
   expectCliError(
     ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref-audio', 'https://cdn.example.com/music.m4a', 'music-led clip'],
-    'Seedance audio references require --ref or --ref-video.'
+    'Seedance audio references require --ref, --ref-video, or -c/--context image refs.'
+  );
+});
+
+test('seedance multi-ref forwards repeated --ref-audio / --ref-video HTTPS URLs as URL arrays', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2',
+    '--ref', 'https://example.com/cover.png',
+    '--ref-audio', 'https://example.com/voice.m4a',
+    '--ref-audio', 'https://example.com/bed.m4a',
+    '--ref-audio', 'https://example.com/sfx.m4a',
+    '--ref-video', 'https://example.com/motion.mp4',
+    '--ref-video', 'https://example.com/transition.mp4',
+    'Use @Image1 for product identity, @Audio1 for voice, @Audio2/@Audio3 for ambience, @Video1/@Video2 for motion cues.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
+  assert.deepEqual(state.lastVideoProject.referenceAudioUrls, [
+    'https://example.com/voice.m4a',
+    'https://example.com/bed.m4a',
+    'https://example.com/sfx.m4a',
+  ]);
+  assert.deepEqual(state.lastVideoProject.referenceVideoUrls, [
+    'https://example.com/motion.mp4',
+    'https://example.com/transition.mp4',
+  ]);
+});
+
+test('seedance enforces 3-audio cap with canonical error message', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '--ref', 'https://example.com/cover.png',
+      '--ref-audio', 'https://example.com/a1.m4a',
+      '--ref-audio', 'https://example.com/a2.m4a',
+      '--ref-audio', 'https://example.com/a3.m4a',
+      '--ref-audio', 'https://example.com/a4.m4a',
+      'Use @Audio1..@Audio4 for layered audio reference.',
+    ],
+    'Seedance can use up to 3 audio references per video; this request included 4.'
+  );
+});
+
+test('seedance enforces 3-video cap with canonical error message', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '--ref', 'https://example.com/cover.png',
+      '--ref-video', 'https://example.com/v1.mp4',
+      '--ref-video', 'https://example.com/v2.mp4',
+      '--ref-video', 'https://example.com/v3.mp4',
+      '--ref-video', 'https://example.com/v4.mp4',
+      'Use @Video1..@Video4 for layered motion reference.',
+    ],
+    'Seedance can use up to 3 video references per video; this request included 4.'
+  );
+});
+
+test('seedance enforces 12-asset combined-total cap', () => {
+  // 9 images (max) + 3 videos (max) + 1 audio = 13 → assets cap fires
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '-c', 'https://example.com/i1.png',
+      '-c', 'https://example.com/i2.png',
+      '-c', 'https://example.com/i3.png',
+      '-c', 'https://example.com/i4.png',
+      '-c', 'https://example.com/i5.png',
+      '-c', 'https://example.com/i6.png',
+      '-c', 'https://example.com/i7.png',
+      '-c', 'https://example.com/i8.png',
+      '-c', 'https://example.com/i9.png',
+      '--ref-video', 'https://example.com/v1.mp4',
+      '--ref-video', 'https://example.com/v2.mp4',
+      '--ref-video', 'https://example.com/v3.mp4',
+      '--ref-audio', 'https://example.com/a1.m4a',
+      'Use @Image1..@Image9 plus @Video1..@Video3 and @Audio1 to layer the scene.',
+    ],
+    'Seedance can use up to 12 total references per video; this request included 13.'
+  );
+});
+
+test('seedance rejects mixing --ref dedicated frame with -c/--context loose refs', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '--ref', 'https://example.com/first.png',
+      '-c', 'https://example.com/loose.png',
+      'Mixing dedicated frame mode and loose-refs mode.',
+    ],
+    'Seedance reference modes are mutually exclusive'
+  );
+});
+
+test('seedance rejects mixing --ref-end dedicated last-frame with -c/--context loose refs', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '--ref-end', 'https://example.com/last.png',
+      '-c', 'https://example.com/loose.png',
+      'Mixing dedicated last-frame and loose refs.',
+    ],
+    'Seedance reference modes are mutually exclusive'
+  );
+});
+
+test('seedance rejects local-file extras for --ref-audio in CLI direct-gen', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 't2v', '-m', 'seedance2',
+      '--ref', 'https://example.com/cover.png',
+      '--ref-audio', 'https://example.com/primary.m4a',
+      '--ref-audio', '/tmp/local-extra.m4a',
+      'Layered audio test.',
+    ],
+    'Additional --ref-audio "/tmp/local-extra.m4a" must be an HTTPS URL.'
+  );
+});
+
+test('seedance multi-ref accepts seedance2-fast model identically', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2-fast',
+    '--ref', 'https://example.com/cover.png',
+    '--ref-audio', 'https://example.com/voice.m4a',
+    '--ref-audio', 'https://example.com/bed.m4a',
+    'seedance fast with multi-ref audio.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.referenceAudioUrls.length, 2);
+});
+
+test('non-seedance video rejects multiple --ref-audio entries', () => {
+  expectCliError(
+    [
+      '--video',
+      '--workflow', 'ia2v',
+      '-m', 'ltx23-22b-fp8_ia2v_distilled',
+      '--ref', 'https://example.com/first.png',
+      '--ref-audio', 'https://example.com/a1.m4a',
+      '--ref-audio', 'https://example.com/a2.m4a',
+      'LTX should reject multi-audio.',
+    ],
+    'Multiple --ref-audio entries are only supported for Seedance models'
   );
 });
 

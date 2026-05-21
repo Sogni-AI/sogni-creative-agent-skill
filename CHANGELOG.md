@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2026-05-21
+
+### Changed
+
+- Synced the bundled creative-agent runtime with the same source SHA now deployed by `sogni-chat`, picking up the latest prompt contracts for exact Seedance prompts, Seedance V2V remaster routing, relative video segment windows, persona video gating, and non-empty text-only `finalize_response` answers.
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^2.4.1` so npm installs use the current shared Sogni runtime dependency set.
+- Aligned skill, OpenClaw, and Claude Code plugin version metadata with the npm package version for the release.
+
+### Fixed
+
+- Active persona state now gates only explicit persona-video requests that lack a persona image, instead of broad video-generation requests.
+- Text-only / no-action `finalize_response` guidance now requires a substantive final answer instead of an empty or placeholder summary.
+
 ## [3.3.1] - 2026-05-21
 
 ### Added

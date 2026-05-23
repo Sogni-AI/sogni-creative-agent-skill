@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -413,6 +413,21 @@ test('GPT Image 2 forces Spark token type even when SOGNI is requested', () => {
   assert.ok(state?.lastImageProject, 'createImageProject was called');
   assert.equal(state.lastImageProject.modelId, 'gpt-image-2');
   assert.equal(state.lastImageProject.tokenType, 'spark');
+});
+
+test('auto token fallback does not treat freeform insufficient text as balance authority', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--json',
+    '--video',
+    '--token-type', 'auto',
+    'a prompt with insufficient detail'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: 'The prompt has insufficient detail for this render.'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(state.clientConfigs.length, 1);
+  assert.doesNotMatch(stderr, /retrying with SOGNI tokens/);
 });
 
 test('invalid seed strategy returns a validation error', () => {
@@ -1035,6 +1050,42 @@ test('--last-seed is ignored for non-generation utility commands', () => {
   assert.doesNotMatch(stderr, /Using seed from last render|No previous render|Using .* seed/);
 });
 
+test('--persona-resolve matches exact persona id but not relationship text', () => {
+  const sharedDir = mkdtempSync(join(tmpdir(), 'sogni-agent-persona-resolve-'));
+  const personasDir = join(sharedDir, 'personas');
+  mkdirSync(personasDir, { recursive: true });
+  writeFileSync(
+    join(personasDir, 'index.json'),
+    JSON.stringify([
+      {
+        id: 'persona-partner-1',
+        name: 'Aleyna',
+        slug: 'aleyna',
+        relationship: 'partner',
+        description: '',
+        tags: [],
+        voice: null,
+        photoPath: null,
+        voiceClipPath: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ], null, 2)
+  );
+
+  const byId = runCli(['--json', '--persona-resolve', 'persona-partner-1'], {
+    SOGNI_PERSONAS_DIR: personasDir,
+  });
+  assert.equal(byId.exitCode, 0);
+  assert.equal(JSON.parse(byId.stdout.trim()).persona.name, 'Aleyna');
+
+  const byRelationship = runCli(['--json', '--persona-resolve', 'my wife'], {
+    SOGNI_PERSONAS_DIR: personasDir,
+  });
+  assert.equal(byRelationship.exitCode, 0);
+  assert.equal(JSON.parse(byRelationship.stdout.trim()).found, false);
+});
+
 test('--api-chat injects saved personas, memories, and personality into the system prompt', async () => {
   // Pre-populate the persona / memory / personality stores in a shared
   // temp dir so the CLI process picks them up via the SOGNI_* env vars
@@ -1094,6 +1145,7 @@ test('--api-chat injects saved personas, memories, and personality into the syst
     // Persona name surfaced into the prompt.
     assert.match(systemContent, /Aleyna/);
     assert.match(systemContent, /partner/);
+    assert.doesNotMatch(systemContent, /my wife/);
     // Memory key/value pair surfaced.
     assert.match(systemContent, /preferred_style: watercolor/);
     // Personality instruction surfaced.

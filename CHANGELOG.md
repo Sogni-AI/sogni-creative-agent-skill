@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^3.0.0-alpha.7` so the skill consumes the published v2 Sogni Intelligence contracts, artifact graph, billing, and protocol schema exports.
+
+### Fixed
+
+- `--durable-chat` now recognizes v2 chat-run SSE event names such as `assistant_message_delta`, `run_completed`, `run_failed`, and `run_waiting_for_user` while preserving the legacy aliases.
+
 ## [3.3.3] - 2026-05-22
 
 ### Changed

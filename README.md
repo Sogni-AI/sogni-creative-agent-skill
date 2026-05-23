@@ -489,7 +489,7 @@ sogni-agent --persona-list
 sogni-agent --persona-remove "Mark"
 ```
 
-Stored at `~/.config/sogni/personas/`. Pronouns like "me" / "myself" auto-resolve to the `self` persona; "my wife" resolves to `partner`, etc.
+Stored at `~/.config/sogni/personas/`. Personas resolve by explicit saved name, id, or tag/alias; relationship phrases are not treated as persona identifiers.
 
 ### Memory (persistent preferences)
 
@@ -561,13 +561,13 @@ Options cycle sequentially per image. Without `{...}` syntax, `-n` produces mult
 
 ## Token Auto-Fallback
 
-Use `--token-type auto` to retry with SOGNI tokens when SPARK is insufficient:
+Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient:
 
 ```bash
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first (free daily tokens), then falls back to SOGNI if the balance is too low.
+Tries SPARK first (free daily tokens), then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback.
 
 ---
 

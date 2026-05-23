@@ -721,6 +721,10 @@ function buildBalanceError(message, details) {
   return err;
 }
 
+function isStructuredInsufficientBalanceError(error) {
+  return Boolean(error && typeof error === 'object' && error.code === 'INSUFFICIENT_BALANCE');
+}
+
 function gcdInt(a, b) {
   let x = Math.abs(Math.trunc(a));
   let y = Math.abs(Math.trunc(b));
@@ -4054,8 +4058,7 @@ function buildSkillDynamicSystemPrompt() {
       }
       suffix += `\nUser's people: ${personaContext}.`;
       suffix += '\n\nPERSONA RULES:'
-        + '\n- "me"/"I"/"myself" = the person marked (self) — match by relationship when the user uses self-referencing pronouns.'
-        + '\n- Match personas by explicit name, self-referencing pronouns, OR relationship phrases ("my wife", "my son", "my dog", etc.).'
+        + '\n- Match personas only by explicit listed name or tag/alias. Do not infer persona identity from relationship phrases alone.'
         + '\n- When creating images of personas, prefer image-editing with the persona\'s reference photo over generating from scratch.'
         + '\n- If the user mentions someone not listed, suggest adding them via `--persona-add`.';
     }
@@ -4127,6 +4130,45 @@ async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
 function apiChatTemplateKwargs() {
   if (typeof options.apiThinking !== 'boolean') return null;
   return { enable_thinking: options.apiThinking };
+}
+
+function chatRunEventPayload(event) {
+  if (!event || typeof event !== 'object') return event;
+  return event.payload || event.data || event;
+}
+
+function chatRunAssistantDelta(type, payload) {
+  if (type === 'assistant_message_delta' && typeof payload?.content === 'string') {
+    return payload.content;
+  }
+  if (
+    chatRunTerminalStatus(type, payload)
+    || chatRunFailureStatus(type)
+    || chatRunWaitingStatus(type)
+    || type === 'tool_call_progress'
+  ) {
+    return null;
+  }
+  return payload?.delta?.content
+    || payload?.choices?.[0]?.delta?.content
+    || (typeof payload?.content === 'string' ? payload.content : null);
+}
+
+function chatRunTerminalStatus(type, payload) {
+  if (type === 'run_completed' || type === 'run.completed' || type === 'completed' || type === 'done') {
+    return payload?.status || 'completed';
+  }
+  if (type === 'run_partial_failure') return payload?.status || 'partial_failure';
+  if (type === 'run_cancelled' || type === 'cancelled') return payload?.status || 'cancelled';
+  return null;
+}
+
+function chatRunFailureStatus(type) {
+  return type === 'run_failed' || type === 'run.failed' || type === 'failed' || type === 'error';
+}
+
+function chatRunWaitingStatus(type) {
+  return type === 'run_waiting_for_user' || type === 'waiting_for_user';
 }
 
 async function runApiChat(log) {
@@ -4293,12 +4335,9 @@ async function runApiChatDurable(log, { apiKey, body }) {
 
       for await (const event of helpers.sdkChatRunsStreamEvents(client, runId, {})) {
         const type = event?.type || event?.event || '';
-        const payload = event?.data || event;
+        const payload = chatRunEventPayload(event);
         // Stream assistant message deltas as they arrive.
-        const delta =
-          payload?.delta?.content
-          || payload?.choices?.[0]?.delta?.content
-          || (typeof payload?.content === 'string' ? payload.content : null);
+        const delta = chatRunAssistantDelta(type, payload);
         if (typeof delta === 'string' && delta) {
           assistantParts.push(delta);
           if (!options.json) {
@@ -4364,15 +4403,24 @@ async function runApiChatDurable(log, { apiKey, body }) {
         if (Array.isArray(eventWorkflows) && eventWorkflows.length > 0) {
           workflows.push(...eventWorkflows);
         }
-        if (type === 'run.completed' || type === 'completed' || type === 'done') {
-          finalStatus = payload?.status || 'completed';
+        const terminalStatus = chatRunTerminalStatus(type, payload);
+        if (terminalStatus) {
+          finalStatus = terminalStatus;
           break;
         }
-        if (type === 'run.failed' || type === 'failed' || type === 'error') {
+        if (chatRunFailureStatus(type)) {
           const error = new Error(payload?.error?.message || 'Durable chat run failed.');
           error.code = payload?.error?.code || 'DURABLE_CHAT_RUN_FAILED';
           error.details = { runId, payload };
           throw error;
+        }
+        if (chatRunWaitingStatus(type)) {
+          finalStatus = payload?.status || 'waiting_for_user';
+          if (!options.json) {
+            const reason = payload?.reason || payload?.waiting?.reason || 'user input required';
+            log(`Durable chat run is waiting for user input: ${reason}`);
+          }
+          break;
         }
       }
     },
@@ -5363,20 +5411,11 @@ function resolvePersonaByName(name) {
   // Match by name (case-insensitive)
   let match = personas.find(p => p.name.toLowerCase() === name.toLowerCase());
   if (match) return match;
+  // Match by stable id
+  match = personas.find(p => typeof p.id === 'string' && p.id.toLowerCase() === name.toLowerCase());
+  if (match) return match;
   // Match by tag
   match = personas.find(p => p.tags?.some(t => t.toLowerCase() === name.toLowerCase()));
-  if (match) return match;
-  // Match implicit pronouns
-  const lower = name.toLowerCase();
-  if (lower === 'me' || lower === 'myself' || lower === 'i') {
-    match = personas.find(p => p.relationship === 'self');
-  } else if (lower.includes('wife') || lower.includes('husband') || lower.includes('partner')) {
-    match = personas.find(p => p.relationship === 'partner');
-  } else if (lower.includes('son') || lower.includes('daughter') || lower.includes('kid') || lower.includes('child')) {
-    match = personas.find(p => p.relationship === 'child');
-  } else if (lower.includes('dog') || lower.includes('cat') || lower.includes('pet')) {
-    match = personas.find(p => p.relationship === 'pet');
-  }
   return match || null;
 }
 
@@ -7963,7 +8002,7 @@ async function main() {
     
   } catch (error) {
     // Token auto-fallback: if using auto mode and got insufficient balance, retry with the other token
-    const isBalanceError = error.code === 'INSUFFICIENT_BALANCE' || /insufficient/i.test(error.message);
+    const isBalanceError = isStructuredInsufficientBalanceError(error);
     if (_allowAutoTokenFallback && isBalanceError && options.tokenType === 'spark') {
       log('Insufficient SPARK balance — retrying with SOGNI tokens...');
       options.tokenType = 'sogni';

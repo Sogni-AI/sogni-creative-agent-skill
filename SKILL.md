@@ -165,7 +165,7 @@ sogni-agent -Q pro "a cat wearing a hat"      # flux2_dev, 40 steps, 1024x1024 (
 sogni-agent -n 3 "a {red|blue|green} sports car"
 # → generates "a red sports car", "a blue sports car", "a green sports car"
 
-# Token auto-fallback (tries SPARK, falls back to SOGNI)
+# Token auto-fallback for native Sogni models (tries SPARK, falls back to SOGNI)
 sogni-agent --token-type auto "a cat wearing a hat"
 
 # Save to file
@@ -732,7 +732,7 @@ For **any transition video work**, always use the **Sogni skill/plugin** (not ra
 
 ### Insufficient Funds Handling
 
-Use `--token-type auto` to automatically retry with SOGNI tokens when SPARK is insufficient.
+Use `--token-type auto` to automatically retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never fall back to SOGNI.
 
 When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply:
 
@@ -951,7 +951,7 @@ sogni-agent -q --video --ref /path/to/image.png -m ltx23-22b-fp8_i2v_distilled -
 # Photobooth: stylize a face photo
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o /tmp/stylized.png "80s fashion portrait"
 
-# Token auto-fallback (tries SPARK first, retries with SOGNI on insufficient balance)
+# Token auto-fallback for native Sogni models (tries SPARK first, retries with SOGNI on insufficient balance)
 sogni-agent -q --token-type auto -o /tmp/generated.png "user's prompt"
 
 # Check current SPARK/SOGNI balances (no prompt required)
@@ -1086,7 +1086,7 @@ Balance check example (`--json --balance`):
 
 ## Cost
 
-Uses Spark tokens from your Sogni account. 512x512 images are most cost-efficient. Use `--token-type auto` to automatically fall back to SOGNI tokens when SPARK is insufficient.
+Uses Spark tokens from your Sogni account. 512x512 images are most cost-efficient. Use `--token-type auto` to automatically fall back to SOGNI tokens for native Sogni models when SPARK is insufficient. Seedance and GPT Image 2 are vendor models and require Premium Spark eligibility; they never use SOGNI fallback.
 
 ## Persona System
 
@@ -1116,19 +1116,13 @@ sogni-agent --persona-remove "Mark"
 
 ### Persona Pipeline Rules
 
-When a user mentions a persona (by name, tag, or pronoun):
+When a user mentions a persona by explicit saved name, id, or tag/alias:
 
 1. **For images:** Use `--persona "Name" "prompt"` which auto-injects the persona's reference photo as context and selects the Qwen editing model
 2. **For video with voice cloning:** The persona's voice clip is used as `--reference-audio-identity` when `--video` is combined with `--persona`
 3. **For video without voice clip:** Describe the voice in the prompt ("speaks in a warm alto with a British accent")
 
-**Pronoun matching:**
-- "me" / "myself" / "I" → persona with `relationship: self`
-- "my wife" / "my husband" / "my partner" → persona with `relationship: partner`
-- "my son" / "my daughter" / "my kid" → persona with `relationship: child`
-- "my dog" / "my cat" / "my pet" → persona with `relationship: pet`
-
-**Important:** User-uploaded photos are NOT personas. Only use `--persona` when referring to a saved persona by name or pronoun. For ad-hoc photos, use `-c` (context image) directly.
+**Important:** User-uploaded photos are NOT personas. Only use `--persona` when referring to a saved persona by explicit name, id, or tag/alias. For ad-hoc photos, use `-c` (context image) directly.
 
 ## Memory System
 

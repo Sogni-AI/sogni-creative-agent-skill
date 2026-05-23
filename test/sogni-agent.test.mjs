@@ -1142,6 +1142,12 @@ test('--api-chat injects saved personas, memories, and personality into the syst
     assert.ok(request, 'expected a chat completions request');
     const systemContent = request.body.messages[0].content;
     assert.equal(request.body.messages[0].role, 'system');
+    // Default hosted-chat prompt is Sogni-aware and v2-aware, not a generic
+    // text-only assistant prompt.
+    assert.match(systemContent, /V2 TURN ARCHITECTURE/);
+    assert.match(systemContent, /GPT Image 2 in Sogni/);
+    assert.match(systemContent, /generic text-only limitations/);
+    assert.doesNotMatch(systemContent, /You are a concise creative production assistant/);
     // Persona name surfaced into the prompt.
     assert.match(systemContent, /Aleyna/);
     assert.match(systemContent, /partner/);

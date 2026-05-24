@@ -165,6 +165,10 @@ sogni-agent -Q pro "a cat wearing a hat"      # flux2_dev, 40 steps, 1024x1024 (
 sogni-agent -n 3 "a {red|blue|green} sports car"
 # → generates "a red sports car", "a blue sports car", "a green sports car"
 
+# Prompt-only video takes from the same source image
+sogni-agent --video --ref hero.png -n 3 --duration 5 \
+  "{the subject smiles and waves|the subject turns toward the window|the subject raises a hand in greeting}"
+
 # Token auto-fallback for native Sogni models (tries SPARK, falls back to SOGNI)
 sogni-agent --token-type auto "a cat wearing a hat"
 
@@ -876,6 +880,7 @@ Whenever the chosen video model is `ltx23-22b-fp8_t2v_distilled`, do not pass th
 - Keep people, clothing, props, and locations concrete and stable across the whole paragraph.
 - Give the scene one main action thread from start to finish. Use connectors like `as`, `while`, and `then` so motion reads as a continuous filmed moment.
 - If the user asks for dialogue, embed the spoken words inline as prose and identify who is speaking and how they deliver the line.
+- Budget spoken dialogue at about 3 words per second, plus about 1 second for each meaningful acting beat or pause.
 - Express emotion through visible physical cues such as posture, grip, jaw tension, breathing, or pacing. Ambient sound can be woven into the prose naturally.
 - Use positive phrasing only. Do not add negative prompts, "no ..." clauses, on-screen text/logo requests, vague filler words like `beautiful` or `nice`, or structural markup such as `[DIALOGUE]`.
 - Keep action density proportional to duration. For short clips, describe one main beat rather than several separate events.
@@ -988,6 +993,15 @@ sogni-agent -q -n 4 "a portrait in {oil painting|watercolor|pencil sketch|pop ar
 ```
 
 Options cycle sequentially per image. Without `{...}` syntax, `-n` generates multiple images with the same prompt.
+
+For video, use the same `{...}` + `-n` pattern when all outputs share the same source image, end image, duration, audio, and settings and only prompt text varies:
+
+```bash
+sogni-agent --video --ref hero.png -n 3 --duration 5 \
+  "{the subject smiles and waves|the subject turns toward the window|the subject raises a hand in greeting}"
+```
+
+If clips need different source images, end frames, durations, audio windows, or other per-output settings, keep them as separate per-clip workflow arguments. Do not force those into a single Dynamic Prompt branch.
 
 ### Token Auto-Fallback
 

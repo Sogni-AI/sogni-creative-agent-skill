@@ -36,3 +36,5 @@ Convert a still image, audio track, or existing clip into video, plus stitching,
 
 - Per-clip retry and the batch progress contract are sacred — never collapse a multi-clip render down to a single waterfall call.
 - `animate_photo` errors with `all_failed` must surface to the user; do not auto-retry from inside the chat loop.
+- For multiple prompt-only takes from one fixed source/end image and shared settings, prefer one Dynamic Prompt request with `numberOfVariations`/`-n`, then stitch the returned clips if the user asked for a single final video.
+- Keep per-clip prompt arrays and source/end image arrays when clips need different assets, durations, audio windows, or other per-output settings.

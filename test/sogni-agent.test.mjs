@@ -2095,7 +2095,7 @@ test('quoted dialogue auto-extends implicit video duration', () => {
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.duration, 10);
+  assert.equal(state.lastVideoProject.duration, 9);
 });
 
 test('reference audio identity uses LTX native voice identity instead of ref-audio', () => {

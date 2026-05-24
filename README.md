@@ -415,6 +415,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
 - The script auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
@@ -556,6 +557,15 @@ sogni-agent -n 4 "a {cat|dog} in a {garden|kitchen}"
 ```
 
 Options cycle sequentially per image. Without `{...}` syntax, `-n` produces multiple images with the same prompt.
+
+For video, use the same pattern when every output shares the same source/end assets and settings and only the prompt text varies:
+
+```bash
+sogni-agent --video --ref hero.png -n 3 --duration 5 \
+  "{the subject smiles and waves|the subject turns toward the window|the subject raises a hand in greeting}"
+```
+
+If each clip needs different source images, end frames, durations, audio slices, or other per-output settings, keep those as separate per-clip workflow arguments instead of collapsing them into a Dynamic Prompt branch.
 
 ---
 

@@ -17,3 +17,4 @@ Text-to-video synthesis (LTX-2). Use when the user wants a new video clip genera
 ## Constraints
 
 - Persona-driven video requests must always go through `image_editing` first to produce a conditioned image; never go straight to text-to-video for personas.
+- For prompt-only variants with the same model, duration, dimensions, and references, use one Dynamic Prompt branch with `numberOfVariations`/`-n` instead of serial video calls.

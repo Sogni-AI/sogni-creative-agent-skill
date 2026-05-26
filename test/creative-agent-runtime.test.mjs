@@ -328,7 +328,7 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
   assert.equal(plan.input.steps[1].arguments.numberOfVariations, 1);
   assert.equal(plan.input.steps[1].arguments.generateAudio, true);
   assert.equal(plan.input.steps[1].arguments.expandPrompt, false);
-  assert.match(plan.input.steps[1].arguments.prompt, /@Image1: approved GPT Image 2 storyboard board/);
+  assert.match(plan.input.steps[1].arguments.prompt, /@Image1: approved storyboard reference image/);
   assert.deepEqual(plan.input.steps[1].dependsOn, [{
     sourceStepId: 'storyboard_image',
     sourceArtifactIndex: 0,

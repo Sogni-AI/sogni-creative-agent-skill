@@ -1912,7 +1912,7 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.equal(videoStep.arguments.expandPrompt, false);
     assert.equal(videoStep.arguments.generateAudio, true);
     assert.equal(videoStep.arguments.numberOfVariations, 1);
-    assert.match(videoStep.arguments.prompt, /@Image1: approved GPT Image 2 storyboard board/);
+    assert.match(videoStep.arguments.prompt, /@Image1: approved storyboard reference image/);
     assert.match(videoStep.arguments.prompt, /not as a collage, split-screen, grid/);
     assert.deepEqual(videoStep.dependsOn, [{
       sourceStepId: 'storyboard_image',

@@ -1,8 +1,8 @@
 # sogni-creative-agent-skill
 
-Agent skill and CLI for Sogni AI image and video generation. Works as a skill
-source for Claude Code, OpenClaw, Hermes Agent, Manus AI, and other agent
-runtimes.
+Agent skill and CLI for Sogni AI image, video, and music generation. Works as
+a skill source for Claude Code, OpenClaw, Hermes Agent, Manus AI, and other
+agent runtimes.
 
 ## Install (pick the integration that matches your environment)
 

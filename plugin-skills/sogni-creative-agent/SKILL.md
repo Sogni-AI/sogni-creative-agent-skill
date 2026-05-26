@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent
-description: "Sogni Creative Agent: image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories (user preferences across sessions), custom personality, style transfer, angle synthesis, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent: image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 ---
 
 # Sogni Creative Agent
@@ -15,10 +15,11 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 
 ## Quick examples
 
-- Image: `sogni-agent --image "a cat on the moon, cinematic"`
-- Image edit: `sogni-agent --image "make it night, add fireflies" --context-image <path>`
-- Video (image-to-video): `sogni-agent --video --i2v --image <path>`
+- Image: `sogni-agent "a cat on the moon, cinematic"`
+- Image edit: `sogni-agent -c <path> "make it night, add fireflies"`
+- Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"`
 - Music: `sogni-agent --music "ambient drone, 30 seconds"`
+- Hosted workflow: `sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "9:16 bakery launch video"`
 - List recent renders: `sogni-agent --list-media`
 - Full reference: `sogni-agent --help`
 

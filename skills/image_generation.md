@@ -1,6 +1,6 @@
 ---
 name: image_generation
-description: Text-to-image synthesis (Flux).
+description: Text-to-image synthesis with Z-Image, Flux, Qwen, and GPT Image 2 models.
 always_loaded: false
 tool_names:
   - generate_image
@@ -8,7 +8,7 @@ tool_names:
 
 # Image generation
 
-Text-to-image synthesis (Flux). Use when the user wants a new image generated from a prompt with no source asset.
+Text-to-image synthesis with the current Sogni image stack (Z-Image, Flux, Qwen, and GPT Image 2). Use when the user wants a new image generated from a prompt with no source asset.
 
 ## Tools
 

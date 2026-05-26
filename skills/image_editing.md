@@ -19,7 +19,7 @@ Edit, restore, restyle, refine, or change the camera angle of an existing image.
 - `edit_image` — instruction-based image editing including persona-reference flows.
 - `restore_photo` — AI photo restoration (Qwen Image Edit).
 - `apply_style` — artistic style transfer.
-- `change_angle` — novel view synthesis (SV3D).
+- `change_angle` — camera-angle synthesis over an existing subject.
 - `refine_result` — iterative refinement of a prior result in the session.
 
 ## Constraints

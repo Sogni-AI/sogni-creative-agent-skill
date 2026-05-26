@@ -5,15 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [3.3.4] - 2026-05-26
+
+### Added
+
+- Added a Sogni-aware default hosted-chat system prompt for `--api-chat` and `--durable-chat`, so hosted
+  chat describes and uses Sogni's real image, video, music, GPT Image 2, Seedance, workflow, and media-reference
+  capabilities instead of behaving like a generic text-only assistant.
+- Added public guidance for batching prompt-only video variations with Dynamic Prompt syntax and `-n` when each
+  output shares the same source/end assets, duration, dimensions, and references.
+- Added LTX-2.3 dialogue-duration guidance that budgets roughly three spoken words per second plus acting beats,
+  helping agents choose workable clip durations before submitting paid video jobs.
 
 ### Changed
 
-- Bumped `@sogni-ai/sogni-intelligence-client` to `^3.0.0-alpha.7` so the skill consumes the published v2 Sogni Intelligence contracts, artifact graph, billing, and protocol schema exports.
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^3.0.8` so the skill consumes the current published Sogni Intelligence client stack, including `@sogni-ai/sogni-client@5.0.0-alpha.15` and `@sogni-ai/sogni-protocol@1.0.0-alpha.6`.
+- Synced the bundled creative-agent runtime with the current shared prompt contracts and storyboard helpers, including
+  provider-neutral storyboard reference wording, field-tag sanitizer compatibility, and updated video Dynamic Prompt
+  instructions from the shared runtime.
+- Tightened persona resolution to explicit saved persona names, ids, and tags/aliases. Relationship phrases such as
+  "my wife" or "my son" are no longer treated as persona identifiers by themselves.
+- Refreshed README, root skill, Claude Code plugin skill, `llm.txt`, and per-skill docs to reflect the current image, video, music, hosted chat, durable workflow, replay, and Seedance/LTX/WAN feature surface.
 
 ### Fixed
 
 - `--durable-chat` now recognizes v2 chat-run SSE event names such as `assistant_message_delta`, `run_completed`, `run_failed`, and `run_waiting_for_user` while preserving the legacy aliases.
+- Vendor models such as Seedance and GPT Image 2 no longer fall back to SOGNI tokens under `--token-type auto`; they
+  require Premium Spark eligibility and fail clearly when that billing path is unavailable.
+- Hosted API chat now keeps saved persona, memory, and personality injection while using the richer Sogni-specific
+  prompt, avoiding regressions where media requests could be framed as plain text-only chat.
+- Replaced stale agent-facing quick examples that referenced removed `--image`, `--context-image`, and `--i2v --image` flags with current `sogni-agent`, `-c`, and `--video --ref` usage.
 
 ## [3.3.3] - 2026-05-22
 

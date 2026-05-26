@@ -1,6 +1,6 @@
 ---
 name: video_editing
-description: Source-conditioned video flows: animate a photo, audio-driven motion, video style transfer, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles).
+description: Source-conditioned video flows: animate a photo, audio-driven motion, video style transfer, Seedance references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles).
 always_loaded: false
 tool_names:
   - animate_photo
@@ -17,11 +17,11 @@ tool_names:
 
 # Video editing
 
-Convert a still image, audio track, or existing clip into video, plus stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles) over previously rendered or uploaded clips.
+Convert a still image, audio track, or existing clip into video, plus Seedance multimodal references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles) over previously rendered or uploaded clips.
 
 ## Tools
 
-- `animate_photo` — photo-to-video animation (LTX-2).
+- `animate_photo` — photo-to-video animation with LTX/WAN/Seedance routing.
 - `sound_to_video` — audio-synced video generation.
 - `video_to_video` — video style transfer with ControlNet.
 - `stitch_video` — concatenate previously rendered clips.

@@ -1,6 +1,6 @@
 ---
 name: music_generation
-description: Compose music with optional lyrics, BPM, key, and structural hints (Sonic Logos).
+description: Generate instrumental music or full songs with lyrics, BPM, key, and structural hints.
 always_loaded: false
 tool_names:
   - generate_music
@@ -8,7 +8,7 @@ tool_names:
 
 # Music generation
 
-Compose music with optional lyrics, BPM, key, and structural hints (Sonic Logos).
+Generate instrumental music or full songs with optional lyrics, BPM, key, and structural hints.
 
 ## Tools
 

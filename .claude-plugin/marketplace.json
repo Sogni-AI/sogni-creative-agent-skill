@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "sogni-creative-agent",
-      "source": ".",
+      "source": "./",
       "description": "Image, video, and music generation via Sogni AI's decentralized GPU network.",
       "category": "creative",
       "tags": ["sogni", "image-generation", "video-generation", "music-generation"],

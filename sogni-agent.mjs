@@ -78,6 +78,9 @@ import {
   validateSeedanceReferenceCounts
 } from '@sogni-ai/sogni-intelligence-client/tools';
 
+const SPARK_PACKS_PURCHASE_URL = 'https://docs.sogni.ai/pricing/#spark-packs';
+const SPARK_PACKS_PURCHASE_HINT = `Buy Spark Packs to continue: ${SPARK_PACKS_PURCHASE_URL}`;
+
 const require = createRequire(import.meta.url);
 const rootClientModule = process.env.SOGNI_AGENT_TEST_STATE_PATH
   ? await import('@sogni-ai/sogni-intelligence-client')
@@ -242,6 +245,13 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   if (code) payload.errorCode = code;
   if (details) payload.errorDetails = details;
   if (hint) payload.hint = hint;
+  if (classified.category === 'insufficient_credits') {
+    payload.purchaseAction = true;
+    payload.purchaseLabel = 'Buy Spark Packs';
+    payload.purchaseUrl = SPARK_PACKS_PURCHASE_URL;
+    payload.purchaseReason = SPARK_PACKS_PURCHASE_HINT;
+    if (!payload.hint) payload.hint = SPARK_PACKS_PURCHASE_HINT;
+  }
   payload.timestamp = new Date().toISOString();
   payload.node = process.versions.node;
   payload.cwd = process.cwd();
@@ -313,6 +323,13 @@ function addCanonicalErrorFields(payload, error) {
   if (classified.metadata) payload.metadata = classified.metadata;
   if (classified.technicalError && classified.technicalError !== classified.message) {
     payload.technicalError = classified.technicalError;
+  }
+  if (classified.category === 'insufficient_credits') {
+    payload.purchaseAction = true;
+    payload.purchaseLabel = 'Buy Spark Packs';
+    payload.purchaseUrl = SPARK_PACKS_PURCHASE_URL;
+    payload.purchaseReason = SPARK_PACKS_PURCHASE_HINT;
+    if (!payload.hint) payload.hint = SPARK_PACKS_PURCHASE_HINT;
   }
   return payload;
 }
@@ -718,11 +735,30 @@ function buildBalanceError(message, details) {
   const err = new Error(message);
   err.code = 'INSUFFICIENT_BALANCE';
   err.details = details || null;
+  err.hint = SPARK_PACKS_PURCHASE_HINT;
   return err;
 }
 
 function isStructuredInsufficientBalanceError(error) {
   return Boolean(error && typeof error === 'object' && error.code === 'INSUFFICIENT_BALANCE');
+}
+
+/**
+ * Build an Error from an SDK project result that signals failure via
+ * `{ error, message, code, details, hint }` fields instead of throwing.
+ * Preserving `code` is critical — without it, downstream classification
+ * (auto-fallback retry via `isStructuredInsufficientBalanceError`, and
+ * the `insufficient_credits` payload enrichment in `buildCliErrorPayload`
+ * / `addCanonicalErrorFields`) cannot tell that the failure is e.g.
+ * `INSUFFICIENT_BALANCE`, so the "Buy Spark Packs" CTA silently no-ops.
+ */
+function buildProjectResultError(projectResult) {
+  const message = projectResult?.error || projectResult?.message || 'Project failed';
+  const err = new Error(message);
+  if (projectResult?.code) err.code = projectResult.code;
+  if (projectResult?.details) err.details = projectResult.details;
+  if (projectResult?.hint) err.hint = projectResult.hint;
+  return err;
 }
 
 function gcdInt(a, b) {
@@ -6243,7 +6279,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
     // Check for errors in the response (e.g., insufficient tokens)
     if (projectResult?.error || projectResult?.message) {
       cleanup();
-      throw new Error(projectResult.error || projectResult.message);
+      throw buildProjectResultError(projectResult);
     }
     if (!projectId) {
       cleanup();
@@ -6542,7 +6578,7 @@ async function runMultiAngleFlow(client, log) {
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (clipResult?.error || clipResult?.message) {
-        throw new Error(clipResult.error || clipResult.message);
+        throw buildProjectResultError(clipResult);
       }
 
       const clipUrl = clipResult?.videoUrls?.[0];
@@ -7430,7 +7466,7 @@ async function main() {
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (videoResult?.error || videoResult?.message) {
-        throw new Error(videoResult.error || videoResult.message);
+        throw buildProjectResultError(videoResult);
       }
     } else if (options.music) {
       log(`Generating music with ${options.model}...`);
@@ -7491,7 +7527,7 @@ async function main() {
       const audioResult = await client.createAudioProject(projectConfig);
 
       if (audioResult?.error || audioResult?.message) {
-        throw new Error(audioResult.error || audioResult.message);
+        throw buildProjectResultError(audioResult);
       }
     } else if (options.contextImages.length > 0) {
       // Image editing with context images
@@ -7600,7 +7636,7 @@ async function main() {
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (projectResult?.error || projectResult?.message) {
-        throw new Error(projectResult.error || projectResult.message);
+        throw buildProjectResultError(projectResult);
       }
     } else {
       // Standard image generation
@@ -7885,7 +7921,7 @@ async function main() {
 
           // Check for errors in the response (e.g., insufficient tokens)
           if (clip2Result?.error || clip2Result?.message) {
-            throw new Error(clip2Result.error || clip2Result.message);
+            throw buildProjectResultError(clip2Result);
           }
 
           await clip2Promise;
@@ -8040,7 +8076,10 @@ async function main() {
       }, error);
       if (error.code) payload.errorCode = error.code;
       if (error.details) payload.errorDetails = error.details;
-      if (error.hint) payload.hint = error.hint;
+      // Don't let a stale per-error hint overwrite the canonical
+      // "Buy Spark Packs" hint that addCanonicalErrorFields already
+      // stamped via the insufficient_credits enrichment branch.
+      if (error.hint && !payload.purchaseAction) payload.hint = error.hint;
       payload.timestamp = new Date().toISOString();
       payload.node = process.versions.node;
       payload.cwd = process.cwd();

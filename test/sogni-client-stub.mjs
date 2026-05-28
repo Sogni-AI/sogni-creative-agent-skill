@@ -110,6 +110,13 @@ class SogniClientWrapper extends EventEmitter {
     if (process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR) {
       throw new Error(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR);
     }
+    if (process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON) {
+      // Simulate the SDK returning an error-shaped result (the path
+      // sogni-agent.mjs guards with `if (videoResult?.error || ...)`)
+      // instead of throwing. Used to exercise the structured-result
+      // failure branch end-to-end.
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON);
+    }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
     return { project: { id: 'proj-1' }, videoUrls: ['https://example.com/video.mp4'] };
   }
@@ -124,6 +131,9 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   async getBalance() {
+    if (process.env.SOGNI_AGENT_TEST_BALANCE_JSON) {
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_BALANCE_JSON);
+    }
     return {
       sogni: 100,
       spark: 100,

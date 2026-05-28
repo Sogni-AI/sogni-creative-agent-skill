@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.5] - 2026-05-29
+
+### Changed
+
+- Added an explicit **Output Path Convention** section to `SKILL.md` instructing agents to save generated images,
+  videos, and music to the user's current working directory (PWD) rather than `/tmp`. The directive includes a
+  short ✓/✗ example block so agents prefer `./cat.png` or a bare filename over an absolute `/tmp/…` path. Final
+  user-visible renders belong in the user's working directory; `/tmp` is reserved for transient intermediate
+  files (audio re-encodes, frame extraction, concat staging) the CLI cleans up itself.
+- Updated all 26 inline `-o /tmp/…` examples in `SKILL.md` and 2 in `README.md` to use relative paths so
+  agent transcripts model the recommended behavior.
+
 ## [3.3.4] - 2026-05-26
 
 ### Added

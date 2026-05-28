@@ -322,9 +322,9 @@ sogni-agent --api-workflow storyboard-video "10s neon city flyover"
 
 # Local segment + concat with external soundtrack
 sogni-agent --video --workflow v2v --ref-video dance.mp4 \
-  --video-start 10 --duration 8 --controlnet-name pose -o /tmp/clip-2.mp4 \
+  --video-start 10 --duration 8 --controlnet-name pose -o ./clip-2.mp4 \
   "robot dancing"
-sogni-agent --concat-videos /tmp/final.mp4 /tmp/clip-1.mp4 /tmp/clip-2.mp4 \
+sogni-agent --concat-videos ./final.mp4 ./clip-1.mp4 ./clip-2.mp4 \
   --concat-audio song.mp3 --concat-audio-start 0
 
 # Balances and help

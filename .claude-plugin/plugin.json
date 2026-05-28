@@ -1,6 +1,6 @@
 {
   "name": "sogni-creative-agent",
-  "version": "3.3.4",
+  "version": "3.3.5",
   "description": "Sogni Creative Agent: image, video, and music generation via Sogni AI's decentralized GPU network. Supports personas, persistent memories, style transfer, and multi-step creative workflows.",
   "author": {
     "name": "Sogni AI",

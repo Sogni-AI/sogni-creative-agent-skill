@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.3.4"
+  version: "3.3.5"
   homepage: https://sogni.ai
   clawdbot:
     emoji: "🎨"
@@ -110,6 +110,18 @@ ln -sfn node_modules/@sogni-ai/sogni-creative-agent-skill sogni-creative-agent-s
 
 When this skill is distributed via ClawHub, it bootstraps its local runtime dependencies from `skill-package.json` during install. That avoids relying on a root `package.json` being present in the published skill artifact.
 
+## Output Path Convention
+
+**Always save generated images, videos, and music to the user's current working directory (PWD), not `/tmp`.** Pass a relative path or bare filename to `-o`/`--output`:
+
+```bash
+sogni-agent -o ./cat.png "a cat wearing a hat"       # ✓ lands in PWD
+sogni-agent -o cat.png "a cat wearing a hat"         # ✓ lands in PWD
+sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't easily find it
+```
+
+`/tmp` (and `mkdtempSync(...)`) is reserved internally for transient intermediate files the CLI cleans up itself (audio re-encodes, intermediate clips during stitching). Final renders the user is asking for must remain inside their working directory unless they explicitly request a different location.
+
 ## Filesystem Paths and Overrides
 
 Default file paths used by this skill:
@@ -172,8 +184,8 @@ sogni-agent --video --ref hero.png -n 3 --duration 5 \
 # Token auto-fallback for native Sogni models (tries SPARK, falls back to SOGNI)
 sogni-agent --token-type auto "a cat wearing a hat"
 
-# Save to file
-sogni-agent -o /tmp/cat.png "a cat wearing a hat"
+# Save to file (relative paths land in the current working directory)
+sogni-agent -o ./cat.png "a cat wearing a hat"
 
 # JSON output (for scripting)
 sogni-agent --json "a cat wearing a hat"
@@ -185,7 +197,7 @@ sogni-agent --balance
 sogni-agent --json --balance
 
 # Quiet mode (suppress progress)
-sogni-agent -q -o /tmp/cat.png "a cat wearing a hat"
+sogni-agent -q -o ./cat.png "a cat wearing a hat"
 
 # Direct music/audio generation
 sogni-agent --music --duration 30 \
@@ -673,10 +685,10 @@ Uses SDXL Turbo (`coreml-sogniXLturbo_alpha1_ad`) at 1024x1024 by default. The f
 **Agent usage:**
 ```bash
 # Photobooth: stylize a face photo
-sogni-agent -q --photobooth --ref /path/to/face.jpg -o /tmp/stylized.png "80s fashion portrait"
+sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
 # Multiple photobooth outputs
-sogni-agent -q --photobooth --ref /path/to/face.jpg -n 4 -o /tmp/stylized.png "LinkedIn professional headshot"
+sogni-agent -q --photobooth --ref /path/to/face.jpg -n 4 -o ./stylized.png "LinkedIn professional headshot"
 ```
 
 ## Multiple Angles (Turnaround)
@@ -695,7 +707,7 @@ sogni-agent --angles-360 -c subject.jpg --distance medium --elevation eye-level 
   "studio portrait, same person"
 
 # 360 sweep video (looping mp4, uses i2v between angles; requires ffmpeg)
-sogni-agent --angles-360 --angles-360-video /tmp/turntable.mp4 \
+sogni-agent --angles-360 --angles-360-video ./turntable.mp4 \
   -c subject.jpg --distance medium --elevation eye-level \
   "studio portrait, same person"
 ```
@@ -725,7 +737,7 @@ When a user requests a "360 video", follow this workflow:
 
 4. **Example command**:
    ```bash
-   sogni-agent --angles-360 --angles-360-video /tmp/output.mp4 \
+   sogni-agent --angles-360 --angles-360-video ./output.mp4 \
      -c /path/to/image.png --elevation eye-level --distance medium \
      "description of subject"
    ```
@@ -929,35 +941,35 @@ When user asks to generate/draw/create an image:
 
 ```bash
 # Generate and save locally (use -Q for quality presets instead of memorizing model IDs)
-sogni-agent -q -Q fast -o /tmp/generated.png "user's prompt"
-sogni-agent -q -Q pro -o /tmp/generated.png "user's prompt"
+sogni-agent -q -Q fast -o ./generated.png "user's prompt"
+sogni-agent -q -Q pro -o ./generated.png "user's prompt"
 
 # Generate with prompt variations (diverse images in one call)
-sogni-agent -q -n 3 -o /tmp/cars.png "a {red|blue|green} sports car"
+sogni-agent -q -n 3 -o ./cars.png "a {red|blue|green} sports car"
 
 # Edit an existing image
-sogni-agent -q -c /path/to/input.jpg -o /tmp/edited.png "make it pop art style"
+sogni-agent -q -c /path/to/input.jpg -o ./edited.png "make it pop art style"
 
 # Generate video from image
-sogni-agent -q --video --ref /path/to/image.png -o /tmp/video.mp4 "A medium shot holds on the subject in soft late-afternoon light as fabric edges and background details remain clear and stable. The camera performs a slow push-in while the subject shifts weight subtly and turns slightly toward the lens, keeping the motion gentle and continuous. Leaves rustle softly in the background and the scene maintains smooth cinematic movement with no abrupt action changes."
+sogni-agent -q --video --ref /path/to/image.png -o ./video.mp4 "A medium shot holds on the subject in soft late-afternoon light as fabric edges and background details remain clear and stable. The camera performs a slow push-in while the subject shifts weight subtly and turns slightly toward the lens, keeping the motion gentle and continuous. Leaves rustle softly in the background and the scene maintains smooth cinematic movement with no abrupt action changes."
 
 # Generate text-to-video
-sogni-agent -q --video -o /tmp/video.mp4 "A wide cinematic shot opens on ocean waves rolling toward a rocky shoreline at sunset, golden light spreading across the water while sea mist drifts through the air. Foam patterns form and recede over the dark sand as the horizon glows orange and pink in the distance. The camera glides forward in one continuous movement, holding smooth stabilized motion and calm environmental detail throughout the scene."
+sogni-agent -q --video -o ./video.mp4 "A wide cinematic shot opens on ocean waves rolling toward a rocky shoreline at sunset, golden light spreading across the water while sea mist drifts through the air. Foam patterns form and recede over the dark sand as the horizon glows orange and pink in the distance. The camera glides forward in one continuous movement, holding smooth stabilized motion and calm environmental detail throughout the scene."
 
 # Generate direct music/audio
-sogni-agent -q --music --duration 30 -o /tmp/music.mp3 "uplifting cinematic synthwave theme for a product launch"
+sogni-agent -q --music --duration 30 -o ./music.mp3 "uplifting cinematic synthwave theme for a product launch"
 
 # HD / "4K" text-to-video: prefer LTX-2.3
-sogni-agent -q --video -m ltx23-22b-fp8_t2v_distilled -w 1920 -h 1088 -o /tmp/video.mp4 "A wide cinematic aerial shot opens over a rugged ocean coastline at golden hour, warm sunlight catching the cliff faces while white surf breaks against dark rock below. Low sea mist hangs over the water and bands of foam trace the shoreline as gulls wheel through the distance. The camera glides forward in one continuous pass, revealing the curve of the coast while wet stone flashes with reflected light and the scene keeps smooth stabilized motion from start to finish. The overall mood feels expansive and polished, with crisp environmental detail and steady travel-film energy."
+sogni-agent -q --video -m ltx23-22b-fp8_t2v_distilled -w 1920 -h 1088 -o ./video.mp4 "A wide cinematic aerial shot opens over a rugged ocean coastline at golden hour, warm sunlight catching the cliff faces while white surf breaks against dark rock below. Low sea mist hangs over the water and bands of foam trace the shoreline as gulls wheel through the distance. The camera glides forward in one continuous pass, revealing the curve of the coast while wet stone flashes with reflected light and the scene keeps smooth stabilized motion from start to finish. The overall mood feels expansive and polished, with crisp environmental detail and steady travel-film energy."
 
 # HD / "4K" image-to-video: prefer LTX i2v
-sogni-agent -q --video --ref /path/to/image.png -m ltx23-22b-fp8_i2v_distilled -w 1920 -h 1088 -o /tmp/video.mp4 "A medium cinematic shot holds on the scene with clean subject separation and stable environmental detail as directional light shapes the surfaces and background depth. The camera performs a slow push-in while the main subject makes one subtle continuous movement, keeping posture and identity consistent from start to finish. Ambient motion in the background stays gentle and the overall clip remains smooth, stabilized, and visually coherent."
+sogni-agent -q --video --ref /path/to/image.png -m ltx23-22b-fp8_i2v_distilled -w 1920 -h 1088 -o ./video.mp4 "A medium cinematic shot holds on the scene with clean subject separation and stable environmental detail as directional light shapes the surfaces and background depth. The camera performs a slow push-in while the main subject makes one subtle continuous movement, keeping posture and identity consistent from start to finish. Ambient motion in the background stays gentle and the overall clip remains smooth, stabilized, and visually coherent."
 
 # Photobooth: stylize a face photo
-sogni-agent -q --photobooth --ref /path/to/face.jpg -o /tmp/stylized.png "80s fashion portrait"
+sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
 # Token auto-fallback for native Sogni models (tries SPARK first, retries with SOGNI on insufficient balance)
-sogni-agent -q --token-type auto -o /tmp/generated.png "user's prompt"
+sogni-agent -q --token-type auto -o ./generated.png "user's prompt"
 
 # Check current SPARK/SOGNI balances (no prompt required)
 sogni-agent --json --balance
@@ -1028,7 +1040,7 @@ When a user asks to **animate between two images**, use `--ref` (first frame) an
 
 ```bash
 # Animate from image A to image B
-sogni-agent -q --video --ref /tmp/imageA.png --ref-end /tmp/imageB.png -o /tmp/transition.mp4 "descriptive prompt of the transition"
+sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition.mp4 "descriptive prompt of the transition"
 ```
 
 ### Animate a Video to an Image (Scene Continuation)
@@ -1037,15 +1049,15 @@ When a user asks to **animate from a video to an image** (or "continue" a video 
 
 1. **Extract the last frame** of the existing video using the built-in safe wrapper:
    ```bash
-   sogni-agent --extract-last-frame /tmp/existing.mp4 /tmp/lastframe.png
+   sogni-agent --extract-last-frame ./existing.mp4 ./lastframe.png
    ```
 2. **Generate a new video** using the last frame as `--ref` and the target image as `--ref-end`:
    ```bash
-   sogni-agent -q --video --ref /tmp/lastframe.png --ref-end /tmp/target.png -o /tmp/continuation.mp4 "scene transition prompt"
+   sogni-agent -q --video --ref ./lastframe.png --ref-end ./target.png -o ./continuation.mp4 "scene transition prompt"
    ```
 3. **Concatenate the videos** using the built-in safe wrapper:
    ```bash
-   sogni-agent --concat-videos /tmp/full_sequence.mp4 /tmp/existing.mp4 /tmp/continuation.mp4
+   sogni-agent --concat-videos ./full_sequence.mp4 ./existing.mp4 ./continuation.mp4
    ```
 
 This ensures visual continuity — the new clip picks up exactly where the previous one ended.
@@ -1069,7 +1081,7 @@ When the final stitched output needs a single external soundtrack, add `--concat
   "width": 512,
   "height": 512,
   "urls": ["https://..."],
-  "localPath": "/tmp/cat.png"
+  "localPath": "./cat.png"
 }
 ```
 
@@ -1122,7 +1134,7 @@ sogni-agent --persona-list --json
 sogni-agent --persona-resolve "me" --json
 
 # Generate using a persona (auto-injects photo as context)
-sogni-agent --persona "Mark" -o /tmp/hero.png "superhero in dramatic lighting"
+sogni-agent --persona "Mark" -o ./hero.png "superhero in dramatic lighting"
 
 # Remove a persona
 sogni-agent --persona-remove "Mark"
@@ -1183,13 +1195,13 @@ Apply artistic styles to existing images:
 
 ```bash
 # Apply a named artist style
-sogni-agent -c photo.jpg -o /tmp/styled.png "Apply style: Andy Warhol pop art with bold primary colors"
+sogni-agent -c photo.jpg -o ./styled.png "Apply style: Andy Warhol pop art with bold primary colors"
 
 # Studio Ghibli transformation
-sogni-agent -c photo.jpg -o /tmp/ghibli.png "Apply style: Studio Ghibli watercolor with soft pastel sky and lush greenery"
+sogni-agent -c photo.jpg -o ./ghibli.png "Apply style: Studio Ghibli watercolor with soft pastel sky and lush greenery"
 
 # For photos with people, always preserve identity
-sogni-agent -c portrait.jpg -o /tmp/styled.png "Apply style: oil painting in the style of Vermeer. Preserve all facial features, expressions, and identity."
+sogni-agent -c portrait.jpg -o ./styled.png "Apply style: oil painting in the style of Vermeer. Preserve all facial features, expressions, and identity."
 ```
 
 **Tips:** Reference artists and styles BY NAME for best results. Use positive phrasing. For photos with people, always append identity preservation instructions.

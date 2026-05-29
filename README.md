@@ -643,6 +643,15 @@ Reusable workflow rules should come from the shared Sogni runtime before they ar
 
 Public-skill regex should stay limited to CLI argument/fact extraction such as file paths, URLs, extensions, dimensions, durations, and explicit positions. Hosted-style decisions such as latest-video continuation, uploaded-video modification, image-selection waits, stitch-after-batch state, and repair/control routing belong upstream in typed planner/runtime fields before they are synced here.
 
+### Execution boundaries: local CLI vs. hosted surfaces
+
+`sogni-agent.mjs` is a **local command-line tool** (`#!/usr/bin/env node`, the package `bin`). It is the only place that may assume a local filesystem and a local `ffmpeg`/`ffprobe` binary. Flags like `--concat-videos`, `--remix-audio`, `--extract-first-frame`, `--extract-last-frame`, and `--angles-360-video` shell out to ffmpeg behind `ensureFfmpegAvailable()` and run only when those flags are passed.
+
+Hosted surfaces — including the chat.sogni.ai web app — do **not** run `sogni-agent.mjs`. They consume `@sogni-ai/sogni-intelligence-client` and the hosted `/v1/chat/completions` and `/v1/creative-agent/workflows` APIs, where there is no local ffmpeg and no local filesystem. Therefore:
+
+- Keep ffmpeg- and filesystem-dependent helpers (frame extraction, concat, audio remux, media listing) **local to `sogni-agent.mjs`**. Do not move them into the shared runtime or `@sogni-ai/sogni-intelligence-client`, and never make hosted code paths depend on a local binary.
+- Server-side equivalents of these capabilities (e.g. `stitch_video`, `overlay_video`, `extend_video`) live in the hosted creative-agent tool surface and belong upstream, not in the CLI.
+
 Issues and feature requests: [github.com/Sogni-AI/sogni-creative-agent-skill/issues](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues).
 
 ---

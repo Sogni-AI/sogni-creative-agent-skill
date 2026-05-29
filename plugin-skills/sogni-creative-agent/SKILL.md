@@ -9,8 +9,8 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 
 ## Setup
 
-1. Install the runtime (one-time): `npm i -g @sogni-ai/sogni-creative-agent-skill`
-2. Set `SOGNI_API_KEY` in the environment, or run `sogni-agent --login` for an interactive flow.
+1. Install everything (one-time): `npx setup-sogni-agent-skill` — installs the CLI globally and prompts for your API key. (Manual alternative: `npm i -g @sogni-ai/sogni-creative-agent-skill`.)
+2. Provide your Sogni API key (get one at https://dashboard.sogni.ai → account menu): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
 3. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
 
 **Uninstall:** run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge` — removes the skill, CLI, and `~/.config/sogni/` data after backing it up to `~/.config/sogni.backup-<timestamp>.tar.gz`. Tell the user the backup path; it holds their API key. Omit `--purge` to keep data.

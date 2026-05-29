@@ -142,6 +142,8 @@ openclaw plugins install sogni-creative-agent-skill
 
 The installed plugin loads its behavior from [`SKILL.md`](./SKILL.md) via [`openclaw.plugin.json`](./openclaw.plugin.json).
 
+> **API key under OpenClaw:** the plugin config holds non-secret defaults only (models, timeouts, paths) — it does **not** carry your API key. Provide `SOGNI_API_KEY` via the environment the OpenClaw gateway passes to the CLI, or save it to `~/.config/sogni/credentials` (`SOGNI_API_KEY=<your-key>`). This keeps your key out of plugin config files.
+
 For a local checkout that you want to update continuously, link the minimal OpenClaw surface (`.openclaw-link/`) — not the repository root, which contains development tests that OpenClaw correctly blocks during plugin safety scanning:
 
 ```bash

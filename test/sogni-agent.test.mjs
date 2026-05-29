@@ -431,6 +431,63 @@ test('rejected API key in --json mode emits structured error with hint', () => {
   assert.ok(payload.hint && payload.hint.includes('dashboard.sogni.ai'), `Expected dashboard hint, got: ${payload.hint}`);
 });
 
+// --- Credentials file parsing (idiotproofing) ---
+
+// Write a credentials file and return env overrides that make the CLI read it
+// (env SOGNI_API_KEY cleared so the file is the only source).
+function withCredentialsFile(contents) {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-creds-'));
+  const credPath = join(dir, 'credentials');
+  writeFileSync(credPath, contents);
+  return { SOGNI_API_KEY: '', SOGNI_CREDENTIALS_PATH: credPath };
+}
+
+test('credentials file: quoted value is accepted (quotes stripped)', () => {
+  const { exitCode, state } = runCli(['a cat'], withCredentialsFile('SOGNI_API_KEY="quoted-key-123"\n'));
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.apiKey, 'quoted-key-123');
+});
+
+test('credentials file: UTF-8 BOM is tolerated', () => {
+  const { exitCode, state } = runCli(['a cat'], withCredentialsFile('﻿SOGNI_API_KEY=bom-key-123\n'));
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.apiKey, 'bom-key-123');
+});
+
+test('credentials file: value containing "=" is preserved (split on first = only)', () => {
+  const { exitCode, state } = runCli(['a cat'], withCredentialsFile('SOGNI_API_KEY=ab=cd==ef\n'));
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.apiKey, 'ab=cd==ef');
+});
+
+test('credentials file: export prefix, comments, and blank lines are handled', () => {
+  const contents = '# my sogni key\n\nexport SOGNI_API_KEY=export-key-123\n';
+  const { exitCode, state } = runCli(['a cat'], withCredentialsFile(contents));
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.apiKey, 'export-key-123');
+});
+
+test('credentials file present but with no usable key gives a distinct hint', () => {
+  const { exitCode, stderr } = runCli(['a cat'], withCredentialsFile('# no key here\nFOO=bar\n'));
+  assert.equal(exitCode, 1);
+  assert.ok(/no usable/i.test(stderr), `Expected a 'no usable key' hint, got: ${stderr}`);
+  assert.ok(stderr.includes('dashboard.sogni.ai'), `Expected dashboard hint, got: ${stderr}`);
+});
+
+// --- Input validation (idiotproofing) ---
+
+test('whitespace-only prompt is rejected like an empty prompt', () => {
+  const { exitCode, stderr } = runCli(['   ']);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('No prompt provided'), `Expected 'No prompt provided', got: ${stderr}`);
+});
+
+test('absurdly large --width is rejected before any network call', () => {
+  const { exitCode, stderr } = runCli(['--width', '100000', 'a cat']);
+  assert.equal(exitCode, 1);
+  assert.ok(/must be <= 8192/.test(stderr), `Expected a max-dimension error, got: ${stderr}`);
+});
+
 test('missing required value for --width returns a validation error', () => {
   expectCliError(['--width'], '--width requires a value.');
 });

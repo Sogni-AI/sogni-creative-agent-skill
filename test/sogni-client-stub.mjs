@@ -73,6 +73,31 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   async connect() {
+    // Simulate the SDK rejecting connect() with a REST 401 (invalid API key).
+    if (process.env.SOGNI_AGENT_TEST_CONNECT_REST_401) {
+      const err = new Error('Invalid API key');
+      err.status = 401;
+      err.payload = { status: 'error', errorCode: 101, message: 'Invalid API key' };
+      throw err;
+    }
+    // Simulate the SDK's detached auth-failure cascade: a 401 tears down the
+    // socket and throws "WebSocket was closed before the connection was
+    // established" from a microtask that never reaches connect()'s awaiter.
+    // This is the case that previously crashed the process with a raw stack.
+    if (process.env.SOGNI_AGENT_TEST_CONNECT_WS_CRASH) {
+      queueMicrotask(() => {
+        const err = new Error('WebSocket was closed before the connection was established');
+        err.stack = [
+          'Error: WebSocket was closed before the connection was established',
+          '    at WebSocketClient.disconnect (sogni-client/WebSocketClient/index.js:100:16)',
+          '    at ApiClient.handleAuthUpdated (sogni-client/ApiClient/index.js:129:29)',
+          '    at ApiKeyAuthManager.clear (sogni-client/AuthManager/ApiKeyAuthManager.js:34:14)'
+        ].join('\n');
+        throw err;
+      });
+      // Never resolves: the process must survive on the global handler firing.
+      await new Promise(() => {});
+    }
     this.connected = true;
   }
 

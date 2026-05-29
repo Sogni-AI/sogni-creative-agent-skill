@@ -13,6 +13,8 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 2. Set `SOGNI_API_KEY` in the environment, or run `sogni-agent --login` for an interactive flow.
 3. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
 
+**Uninstall:** run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge` — removes the skill, CLI, and `~/.config/sogni/` data after backing it up to `~/.config/sogni.backup-<timestamp>.tar.gz`. Tell the user the backup path; it holds their API key. Omit `--purge` to keep data.
+
 ## Quick examples
 
 - Image: `sogni-agent "a cat on the moon, cinematic"`

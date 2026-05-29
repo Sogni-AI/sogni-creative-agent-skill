@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-05-30
+
+### Added
+
+- **Video finishing without raw ffmpeg.** `--concat-videos` now uses the concat *filter* (not the demuxer): it
+  probes each clip and normalizes fps/size/SAR/pixel-format and synthesizes silent audio for clips with no audio
+  track, fixing frozen video with continuing audio when clips differ in frame rate or stream layout. Adds
+  `--concat-fps`, `--extract-first-frame` (mirror of `--extract-last-frame`), and `--remix-audio` for looping a
+  bed (`--audio-loop`), fades (`--audio-fade-in/out`), and mixing one extra track (`--mix-audio/--mix-at/--mix-gain`)
+  without re-encoding video. External `--concat-audio` is now padded/trimmed to the video length.
+
+### Changed
+
+- Bumped `@sogni-ai/sogni-intelligence-client` to `^3.0.13` (pins `sogni-client 5.0.0-alpha.17`), keeping the
+  bundled creative-agent runtime in sync with the current shared prompt contracts and repair recipes.
+
+### Fixed
+
+- **Idiotproof first run.** Added a zero-dependency Node.js version guard that prints a clear "requires Node >= 22"
+  message before native modules load, `fetchWithTimeout` on every REST/download call (a black-holing proxy now
+  fails with `NETWORK_TIMEOUT` instead of hanging; override via `SOGNI_HTTP_TIMEOUT_MS`), `OUTPUT_WRITE_FAILED`
+  mapping for filesystem errors so a paid render isn't lost to a raw `EACCES`/`ENOSPC`, a friendly
+  `MEDIA_REFERENCE_NOT_FOUND` for missing `--ref`/`-c` files, and leading `~` expansion in file arguments.
+- **Invalid/rejected API key no longer crashes.** A bad or expired `SOGNI_API_KEY` previously threw from a
+  detached promise during connect and dumped a raw stack trace. Added invalid-key detection plus global
+  `uncaughtException`/`unhandledRejection` handlers that route fatals through the clean `Error:`/`Hint:` path
+  (JSON-aware, exit 1) with a dashboard.sogni.ai hint.
+- Routed source-preserving image edits away from photobooth and preserved structured project-result errors so
+  insufficient-funds responses consistently surface the Spark Packs guidance.
+
 ## [3.3.5] - 2026-05-29
 
 ### Changed

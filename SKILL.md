@@ -665,9 +665,17 @@ sogni-agent --last-image "make it more vibrant"
 
 When context images are provided without `-m`, defaults to `qwen_image_edit_2511_fp8_lightning`. Select `-m gpt-image-2` for GPT Image 2's higher reference-image limit and OpenAI-backed image editing.
 
+Use context-image editing for source-preserving edits. If the user says "use this image as the base", "keep everything the same", "only change the style", "anime version of this image", or asks to preserve pose, clothing, background, framing, or composition, use `-c/--context` with a Qwen image edit model instead of `--photobooth`. For stronger preservation than the lightning default, prefer:
+
+```bash
+sogni-agent -c photo.jpg -m qwen_image_edit_2511_fp8 "turn this into anime style; keep the same face, pose, clothing, background, framing, and composition"
+```
+
 ## Photobooth (Face Transfer)
 
-Generate stylized portraits from a face photo using InstantID ControlNet. When a user mentions "photobooth", wants a stylized portrait of themselves, or asks to transfer their face into a style, use `--photobooth` with `--ref` pointing to their face image.
+Generate new stylized portraits from a face photo using InstantID ControlNet. Use `--photobooth` with `--ref` when the user explicitly asks for photobooth/face-transfer mode, wants a new portrait or headshot based on their face, or asks to place their face identity into a different portrait concept.
+
+Do not use `--photobooth` for full-image style edits where the original photo must stay intact. `--photobooth` treats the input as a face reference, not as a base image, so it can change pose, clothing, background, framing, and composition. For "same image, different style" requests, route to Qwen context editing with `-c/--context`.
 
 ```bash
 # Basic photobooth
@@ -752,7 +760,9 @@ Use `--token-type auto` to automatically retry native Sogni models with SOGNI to
 
 When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply:
 
-"Insufficient funds. Claim 50 free daily Spark points at https://app.sogni.ai/"
+"Insufficient funds. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+
+Do not collect payment details, quote a custom price, or simulate a purchase in the terminal.
 
 ## Video Generation
 
@@ -877,10 +887,11 @@ sogni-agent --json --list-media images
 
 **Do NOT use `ls`, `cp`, or other shell commands to browse user files.** Always use `--list-media` to find inbound media.
 
-## IMPORTANT KEYWORD RULE
+## Photobooth Routing Rule
 
-- If the user message includes the word "photobooth" (case-insensitive), always use `--photobooth` mode with `--ref` set to the user-provided face image.
-- Prioritize this rule over generic image-edit flows (`-c`) for that request.
+- If the user explicitly asks to use "photobooth", "photobooth path", or "face transfer", use `--photobooth` with `--ref` set to the user-provided face image.
+- If the same request also requires preserving the whole source image (same pose, clothes, background, framing, composition, or "keep everything the same"), explain that photobooth is face-reference generation and prefer Qwen context editing unless the user insists on photobooth.
+- Do not route to `--photobooth` merely because the user asks to preserve a face in a style edit. Face-preserving full-image edits should use `-c/--context` with Qwen image edit.
 
 ## LTX-2.3 Prompt Rule
 
@@ -1017,7 +1028,7 @@ If clips need different source images, end frames, durations, audio windows, or 
 
 ### Token Auto-Fallback
 
-Use `--token-type auto` when the user's SPARK balance might be low. It tries SPARK first (free daily tokens) and automatically retries with SOGNI if insufficient.
+Use `--token-type auto` when the user's SPARK balance might be low. It tries SPARK first and automatically retries with SOGNI if insufficient.
 
 ## High-Res Video Routing
 

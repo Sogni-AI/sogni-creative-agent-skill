@@ -68,6 +68,19 @@ test('default contract runtime exposes policies, prompt contracts, and repair re
   assert.equal(runtime.repairRecipes.length, PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES.length);
 });
 
+test('public skill cost-limit repairs point users to Spark Packs', () => {
+  const costLimitRecipes = PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES.filter(
+    (recipe) => recipe.errorCode === 'COST_LIMIT_EXCEEDED'
+  );
+
+  assert.ok(costLimitRecipes.length > 0, 'expected cost-limit repair recipes');
+  for (const recipe of costLimitRecipes) {
+    assert.match(recipe.message, /Spark Packs/);
+    assert.match(recipe.message, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+    assert.doesNotMatch(recipe.message, /daily refill|free daily/i);
+  }
+});
+
 test('classifyPublicSkillTurn returns a stable turn policy with no session signals', () => {
   const runtime = createPublicSkillDefaultContractRuntime();
   const turnPolicy = classifyPublicSkillTurn({

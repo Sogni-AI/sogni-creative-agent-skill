@@ -430,6 +430,128 @@ test('auto token fallback does not treat freeform insufficient text as balance a
   assert.doesNotMatch(stderr, /retrying with SOGNI tokens/);
 });
 
+test('insufficient token balance offers Spark packs purchase link in json output', () => {
+  const { exitCode, state, stdout, stderr } = runCli([
+    '--json',
+    '--video',
+    '--token-type', 'auto',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({
+      spark: 0,
+      sogni: 0,
+      lastUpdated: new Date().toISOString()
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(state.clientConfigs.length, 2);
+  assert.match(stderr, /retrying with SOGNI tokens/);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorType, 'COST_LIMIT_EXCEEDED');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+  assert.doesNotMatch(payload.hint, /free daily/i);
+});
+
+test('SDK-returned insufficient funds preserves code and surfaces Spark Packs CTA in json output', () => {
+  // Simulates the realistic vendor path: the SDK returns an error-shaped
+  // project result (e.g. `{ error: "Debit Error: Insufficient funds",
+  // code: "INSUFFICIENT_BALANCE" }`) instead of throwing. Prior to the
+  // `buildProjectResultError` helper, the throw sites stripped `code`
+  // and the classifier never reached the `insufficient_credits` branch,
+  // so the new `purchaseAction`/`purchaseLabel`/`purchaseUrl` payload
+  // fields silently no-opped on this very common path.
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+  assert.doesNotMatch(payload.hint, /free daily/i);
+});
+
+test('SDK-returned insufficient funds prints Spark Packs hint in human output', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Error: Debit Error: Insufficient funds/);
+  assert.match(stderr, /Hint: Buy Spark Packs to continue: https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+  assert.doesNotMatch(stderr, /free daily/i);
+});
+
+test('SDK-returned insufficient funds from context image edit surfaces Spark Packs CTA', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '-c', SCREENSHOT_FIXTURE,
+    'turn this into anime style; keep everything the same'
+  ], {
+    SOGNI_AGENT_TEST_IMAGE_EDIT_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+});
+
+test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    'a cat wearing a hat'
+  ], {
+    SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+});
+
 test('invalid seed strategy returns a validation error', () => {
   expectCliError(['--seed-strategy', 'foo', 'a cat'], '--seed-strategy must be "random" or "prompt-hash".');
 });

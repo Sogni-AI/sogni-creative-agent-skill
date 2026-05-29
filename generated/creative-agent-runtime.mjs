@@ -556,7 +556,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "edit_image.cost_limit_exceeded",
@@ -565,7 +565,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "restore_photo.cost_limit_exceeded",
@@ -574,7 +574,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "apply_style.cost_limit_exceeded",
@@ -583,7 +583,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "refine_result.cost_limit_exceeded",
@@ -592,7 +592,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "animate_photo.cost_limit_exceeded",
@@ -601,7 +601,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "change_angle.cost_limit_exceeded",
@@ -610,7 +610,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "generate_video.cost_limit_exceeded",
@@ -619,7 +619,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "sound_to_video.cost_limit_exceeded",
@@ -628,7 +628,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "video_to_video.cost_limit_exceeded",
@@ -637,7 +637,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "generate_music.cost_limit_exceeded",
@@ -646,7 +646,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "extend_video.cost_limit_exceeded",
@@ -655,7 +655,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "replace_video_segment.cost_limit_exceeded",
@@ -664,7 +664,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "overlay_video.cost_limit_exceeded",
@@ -673,7 +673,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "add_subtitles.cost_limit_exceeded",
@@ -682,7 +682,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "stitch_video.cost_limit_exceeded",
@@ -691,7 +691,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "orbit_video.cost_limit_exceeded",
@@ -700,7 +700,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "dance_montage.cost_limit_exceeded",
@@ -709,7 +709,7 @@ const REPAIR_RECIPES = [
         "errorCode": "COST_LIMIT_EXCEEDED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
-        "repairNoteTemplate": "You have hit the credit limit for this turn. Top up credits or wait for the daily refill."
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
         "recipeId": "generate_image.asset_not_found",
@@ -2550,6 +2550,38 @@ const PROMPT_CONTRACTS = [
 // '../public-skill-runtime/index.js' (and downstream consumers that still
 // reference the creative-agent subpath) keep working unchanged.
 export * from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
+
+// PUBLIC_SKILL_SPARK_PACKS_COST_LIMIT_OVERRIDE
+import {
+  PUBLIC_SKILL_DEFAULT_POLICIES as SOGNI_PUBLIC_SKILL_DEFAULT_POLICIES,
+  PUBLIC_SKILL_DEFAULT_PROMPT_CONTRACTS as SOGNI_PUBLIC_SKILL_DEFAULT_PROMPT_CONTRACTS,
+  PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES as SOGNI_PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES,
+  createPublicSkillContractRuntime as createSogniPublicSkillContractRuntime,
+} from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
+
+export const PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES = SOGNI_PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES.map((recipe) =>
+  recipe.errorCode === 'COST_LIMIT_EXCEEDED'
+    ? { ...recipe, message: "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs" }
+    : recipe
+);
+
+export function createPublicSkillDefaultContractRuntime(input = {}) {
+  return createSogniPublicSkillContractRuntime({
+    policies: [
+      ...SOGNI_PUBLIC_SKILL_DEFAULT_POLICIES,
+      ...(input.policies ?? []),
+    ],
+    promptContracts: [
+      ...SOGNI_PUBLIC_SKILL_DEFAULT_PROMPT_CONTRACTS,
+      ...(input.promptContracts ?? []),
+    ],
+    repairRecipes: [
+      ...PUBLIC_SKILL_DEFAULT_REPAIR_RECIPES,
+      ...(input.repairRecipes ?? []),
+    ],
+  });
+}
+
 // Moved to @sogni-ai/sogni-intelligence-client/skill-runtime-source in Phase 8.4 follow-up.
 // This file is kept as a thin re-export so existing internal `testing/`
 // callers keep working. New code should import from the public mid-tier:

@@ -451,7 +451,7 @@ LTX-2.3 prompt: "A medium cinematic shot frames a woman in her 30s standing in a
 
 ## Photobooth (Face Transfer)
 
-Generate stylized portraits from a face photo using InstantID ControlNet:
+Generate new stylized portraits from a face photo using InstantID ControlNet:
 
 ```bash
 sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
@@ -459,6 +459,8 @@ sogni-agent --photobooth --ref face.jpg -n 4 "LinkedIn professional headshot"
 ```
 
 Uses SDXL Turbo (`coreml-sogniXLturbo_alpha1_ad`) at 1024×1024 by default. The face image is passed via `--ref` and styled by the prompt. Cannot be combined with `--video` or `-c` / `--context`.
+
+`--photobooth` is face-reference generation, not full-image editing. If the request is "same image, different style" — for example an anime version that must keep the same face, pose, clothing, background, framing, and composition — use Qwen image editing with `-c/--context` instead.
 
 Multi-angle mode (`--multi-angle` / `--angles-360`) auto-builds the `<sks>` prompt and applies the `multiple_angles` LoRA. `--angles-360-video` generates i2v clips between consecutive angles (including last → first) and concatenates them with `ffmpeg` into a seamless loop.
 
@@ -577,7 +579,7 @@ Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPAR
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first (free daily tokens), then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback.
+Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
 ---
 

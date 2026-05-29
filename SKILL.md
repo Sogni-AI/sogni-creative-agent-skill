@@ -72,6 +72,10 @@ npm --prefix "$DEST" install
 
 If that checkout does not exist, prefer the npm-based local skill install below, or ask before cloning.
 
+## Uninstall Request Policy
+
+When a user asks to uninstall, run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge`. This removes the skill files, the global CLI, and the user's data in `~/.config/sogni/` after backing it up to `~/.config/sogni.backup-<timestamp>.tar.gz`. Always tell the user the backup path and that it contains their API key. To keep their data, omit `--purge`.
+
 ## Setup
 
 1. **Get your Sogni API key** by logging into https://dashboard.sogni.ai and opening the account menu.

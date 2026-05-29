@@ -467,9 +467,19 @@ positions.
 | `--strict-size` | Do not auto-adjust i2v video size for reference resizing constraints | false |
 | `-q, --quiet` | No progress output | false |
 | `--extract-last-frame <video> <image>` | Extract last frame from video (safe ffmpeg wrapper) | - |
-| `--concat-videos <out> <clips...>` | Concatenate video clips (safe ffmpeg wrapper) | - |
+| `--extract-first-frame <video> <image>` | Extract first frame from video (safe ffmpeg wrapper) | - |
+| `--concat-videos <out> <clips...>` | Concatenate video clips; normalizes fps/size and fills silent audio so mismatched clips stitch cleanly (safe ffmpeg wrapper) | - |
+| `--concat-fps <n>` | Override target fps for `--concat-videos` | highest clip fps |
 | `--concat-audio <path>` | Optional audio track to mux over `--concat-videos` output | - |
 | `--concat-audio-start <sec>` | Start offset into `--concat-audio` | - |
+| `--remix-audio <in> <out>` | Rebuild a video's audio (loop/fade/mix) without re-encoding video (safe ffmpeg wrapper) | - |
+| `--bed-audio <path>` | Audio bed for `--remix-audio` (path or video; defaults to input's own audio) | - |
+| `--audio-loop` | Loop the bed to cover the full video duration (`--remix-audio`) | false |
+| `--audio-fade-in <sec>` | Fade the bed in over `<sec>` (`--remix-audio`) | - |
+| `--audio-fade-out <sec>` | Fade the bed out over `<sec>` at the tail (`--remix-audio`) | - |
+| `--mix-audio <path>` | Overlay one extra audio track, mixed with the bed (`--remix-audio`) | - |
+| `--mix-at <sec>` | Start offset for `--mix-audio` | 0 |
+| `--mix-gain <db>` | Gain in dB applied to `--mix-audio` | 0 |
 | `--list-media [type]` | List recent inbound media (images\|audio\|all) | images |
 | `--api-chat` | Call OpenAI-compatible `/v1/chat/completions`; CLI default sends the hosted `creative-agent` tool surface | - |
 | `--durable-chat` | Start and stream a durable `/v1/chat/runs` record through SDK transport; requires `SOGNI_SKILL_USE_SDK_TRANSPORT=1` | - |
@@ -756,7 +766,7 @@ When a user requests a "360 video", follow this workflow:
 
 ### Transition Video Rule
 
-For **any transition video work**, always use the **Sogni skill/plugin** (not raw ffmpeg or other shell commands). Use the built-in `--extract-last-frame`, `--concat-videos`, and `--looping` flags for video manipulation.
+For **any transition video work**, always use the **Sogni skill/plugin** (not raw ffmpeg or other shell commands). Use the built-in `--extract-last-frame`, `--extract-first-frame`, `--concat-videos`, `--remix-audio`, and `--looping` flags for video and audio manipulation.
 
 ### Insufficient Funds Handling
 
@@ -1047,7 +1057,7 @@ When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or *
 - Rewrite the user's request using the **LTX-2.3 Prompt Rule** before invoking the command. Do not send short slogan-style prompts to LTX.
 - Treat "4k" as a signal to use the highest practical LTX path exposed by this skill, even though the current wrapper caps non-WAN video dimensions at 2048px on the long side.
 
-**Security:** Agents must use the CLI's built-in flags (`--extract-last-frame`, `--concat-videos`, `--list-media`) for all file operations and video manipulation. Never run raw shell commands (`ffmpeg`, `ls`, `cp`, etc.) directly.
+**Security:** Agents must use the CLI's built-in flags (`--extract-last-frame`, `--extract-first-frame`, `--concat-videos`, `--remix-audio`, `--list-media`) for all file operations and video/audio manipulation. Never run raw shell commands (`ffmpeg`, `ls`, `cp`, etc.) directly.
 
 ## Animate Between Two Images (First-Frame / Last-Frame)
 
@@ -1085,6 +1095,50 @@ When the final stitched output needs a single external soundtrack, add `--concat
 - User says "animate image A to image B" → use `--ref A --ref-end B`
 - User says "animate this video to this image" → extract last frame, use as `--ref`, target image as `--ref-end`, then stitch
 - User says "continue this video" with a target image → same as above
+
+### Transition Between Two Videos (Bridge Clip)
+
+When a user asks to **create a transition between two existing videos** (A → B), bridge them with a generated clip anchored on both boundary frames:
+
+1. **Extract the last frame of video A** and the **first frame of video B**:
+   ```bash
+   sogni-agent --extract-last-frame ./videoA.mp4 ./A_last.png
+   sogni-agent --extract-first-frame ./videoB.mp4 ./B_first.png
+   ```
+2. **Generate the transition** with i2v, anchoring start→end so both seams are clean. Match `--fps` to the surrounding clips:
+   ```bash
+   sogni-agent -q --video -m wan_v2.2-14b-fp8_i2v_lightx2v \
+     --ref ./A_last.png --ref-end ./B_first.png --fps 24 \
+     -o ./transition.mp4 "descriptive morph between the two scenes"
+   ```
+3. **Concatenate A → transition → B**:
+   ```bash
+   sogni-agent --concat-videos ./merged.mp4 ./videoA.mp4 ./transition.mp4 ./videoB.mp4
+   ```
+
+> **i2v clips are silent and use the model's own frame rate** (often not 24). `--concat-videos` now normalizes fps/size and fills silent audio automatically, so mismatched clips stitch correctly — but passing `--fps` to the transition generation keeps things clean from the start. Use `--concat-fps <n>` to force a specific output frame rate.
+
+### Remix / Layer Audio After Stitching
+
+After concatenating, use `--remix-audio` to rebuild the audio track **without re-encoding the video** (it is stream-copied, so it is fast and lossless on the picture). Combine the audio flags:
+
+```bash
+# Loop one clip's audio across the whole merged video and fade it out at the end
+sogni-agent --remix-audio ./merged.mp4 ./final.mp4 \
+  --bed-audio ./clip1.mp4 --audio-loop --audio-fade-out 2
+
+# Same, but also layer a second clip's original audio back in starting at 18s
+sogni-agent --remix-audio ./merged.mp4 ./final.mp4 \
+  --bed-audio ./clip1.mp4 --audio-loop --audio-fade-out 2 \
+  --mix-audio ./clip3.mp4 --mix-at 18.01 --mix-gain -3
+```
+
+- `--bed-audio` accepts a video or audio file; if omitted, the input video's own audio is the bed.
+- `--audio-loop` loops the bed to cover the full video; `--audio-fade-in` / `--audio-fade-out` fade it.
+- `--mix-audio` overlays one extra track (mixed at full level with a peak limiter so it never clips); position it with `--mix-at` and adjust level with `--mix-gain` (dB).
+- To mix more than two layers, chain `--remix-audio` passes (each only re-encodes audio).
+
+**Do NOT run raw `ffmpeg` commands** for any of this. Use `--extract-first-frame`, `--extract-last-frame`, `--concat-videos`, and `--remix-audio`.
 
 ## JSON Output
 

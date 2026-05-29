@@ -366,6 +366,76 @@ function fatalCliError(message, opts = {}) {
   process.exit(1);
 }
 
+// Friendly guidance shown when the Sogni API key is missing or rejected.
+const INVALID_API_KEY_HINT =
+  'Your Sogni API key was rejected. Verify it — or generate a new one — by ' +
+  'logging into https://dashboard.sogni.ai and opening the account menu. ' +
+  "If you don't have a Sogni account yet, create one there first, then add its API key.";
+
+// Detect an invalid/rejected API key across the several shapes the SDK can
+// surface it in. The SDK reports the REST 401 directly (ApiError with
+// status/errorCode), but it can also cascade: a 401 triggers
+// ApiKeyAuthManager.clear(), which tears down the socket and re-throws as an
+// unhandled "WebSocket was closed before the connection was established"
+// error whose only auth fingerprint is the stack frame.
+function isInvalidApiKeyError(error) {
+  if (!error) return false;
+  const status = error.status ?? error.statusCode ?? error?.payload?.status;
+  const apiCode = error?.payload?.errorCode ?? error?.errorCode;
+  if (status === 401 || apiCode === 101) return true;
+  const message = (cliErrorMessage(error) || '').toLowerCase();
+  if (message.includes('invalid api key')) return true;
+  const stack = (typeof error?.stack === 'string' ? error.stack : '').toLowerCase();
+  if (stack.includes('apikeyauthmanager') || stack.includes('handleauthupdated')) return true;
+  return false;
+}
+
+// Last line of defense. The SDK can reject from a detached promise or emit an
+// unhandled 'error' event during connect, which escapes main()'s try/catch and
+// crashes the process with a raw stack trace. These handlers turn any such
+// fatal into the same clean `Error:`/`Hint:` (or JSON) output as every other
+// CLI error path, and exit 1.
+let __fatalReported = false;
+function reportFatalError(error) {
+  if (__fatalReported) {
+    try { process.exit(1); } catch (_) { /* already exiting */ }
+    return;
+  }
+  __fatalReported = true;
+  if (getEnv('SOGNI_DEBUG') || getEnv('DEBUG')) {
+    console.error(error?.stack || String(error));
+  }
+  if (isInvalidApiKeyError(error)) {
+    fatalCliError('Invalid Sogni API key.', {
+      code: 'INVALID_API_KEY',
+      hint: INVALID_API_KEY_HINT
+    });
+    return;
+  }
+  fatalCliError(cliErrorMessage(error), {
+    code: error?.code,
+    details: error?.details,
+    hint: error?.hint
+  });
+}
+process.on('uncaughtException', reportFatalError);
+process.on('unhandledRejection', reportFatalError);
+
+// Connect to Sogni, mapping a rejected connection into a clean auth error
+// where we can. (Detached SDK failures that never reach this await are caught
+// by the global handlers above.)
+async function connectSogniClient(client) {
+  try {
+    await client.connect();
+  } catch (error) {
+    if (isInvalidApiKeyError(error) && !error.hint) {
+      error.hint = INVALID_API_KEY_HINT;
+      if (!error.code) error.code = 'INVALID_API_KEY';
+    }
+    throw error;
+  }
+}
+
 function applyVideoPromptGuardrails() {
   if (!options.video || !options.prompt) return;
   if (options._literalPrompt) return;
@@ -7046,7 +7116,7 @@ async function main() {
       authType: 'apiKey'
     });
 
-    await client.connect();
+    await connectSogniClient(client);
     await disableLiveModelAvailabilityEvents(client);
     log('Connected.');
 
@@ -7875,7 +7945,7 @@ async function main() {
             apiKey: creds.SOGNI_API_KEY,
             authType: 'apiKey'
           });
-          await client2.connect();
+          await connectSogniClient(client2);
           await disableLiveModelAvailabilityEvents(client2);
 
           // Create second clip and wait for completion via events
@@ -8073,6 +8143,11 @@ async function main() {
       return main();
     }
 
+    if (isInvalidApiKeyError(error)) {
+      if (!error.hint) error.hint = INVALID_API_KEY_HINT;
+      if (!error.code) error.code = 'INVALID_API_KEY';
+    }
+
     exitCode = 1;
     const shouldJson = options.json || IS_OPENCLAW_INVOCATION;
     if (shouldJson) {
@@ -8137,8 +8212,5 @@ async function main() {
 
 main().then(
   () => process.exit(0),
-  (error) => {
-    console.error(`Error: ${error?.message || error}`);
-    process.exit(1);
-  }
+  (error) => reportFatalError(error)
 );

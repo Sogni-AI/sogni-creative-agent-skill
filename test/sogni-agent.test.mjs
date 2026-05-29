@@ -391,6 +391,46 @@ test('invalid seed returns a validation error', () => {
   assert.ok(stderr.includes('--seed must be an integer.'));
 });
 
+test('rejected API key (REST 401) exits cleanly with a dashboard hint', () => {
+  const { exitCode, stdout, stderr } = runCli(
+    ['a cat wearing a hat'],
+    { SOGNI_AGENT_TEST_CONNECT_REST_401: '1' }
+  );
+  assert.equal(exitCode, 1);
+  const combined = `${stdout}\n${stderr}`;
+  assert.ok(/invalid .*api key/i.test(combined), `Expected an invalid-API-key message, got: ${combined}`);
+  assert.ok(combined.includes('dashboard.sogni.ai'), `Expected a dashboard.sogni.ai hint, got: ${combined}`);
+  // No raw Node crash / stack trace should leak to the user.
+  assert.ok(!combined.includes("Unhandled 'error' event"), `Raw crash leaked: ${combined}`);
+  assert.ok(!combined.includes('node:events'), `Raw stack leaked: ${combined}`);
+});
+
+test('detached auth-failure cascade during connect is caught, not crashed', () => {
+  const { exitCode, stdout, stderr } = runCli(
+    ['a cat wearing a hat'],
+    { SOGNI_AGENT_TEST_CONNECT_WS_CRASH: '1' }
+  );
+  assert.equal(exitCode, 1);
+  const combined = `${stdout}\n${stderr}`;
+  assert.ok(/invalid .*api key/i.test(combined), `Expected an invalid-API-key message, got: ${combined}`);
+  assert.ok(combined.includes('dashboard.sogni.ai'), `Expected a dashboard.sogni.ai hint, got: ${combined}`);
+  assert.ok(!combined.includes("Unhandled 'error' event"), `Raw crash leaked: ${combined}`);
+  assert.ok(!combined.includes('WebSocket was closed'), `Internal SDK error leaked: ${combined}`);
+});
+
+test('rejected API key in --json mode emits structured error with hint', () => {
+  const { exitCode, stdout } = runCli(
+    ['--json', 'a cat wearing a hat'],
+    { SOGNI_AGENT_TEST_CONNECT_REST_401: '1' }
+  );
+  assert.equal(exitCode, 1);
+  const lastJsonLine = stdout.trim().split('\n').filter(Boolean).pop();
+  const payload = JSON.parse(lastJsonLine);
+  assert.equal(payload.success, false);
+  assert.ok(/invalid .*api key/i.test(payload.error), `Expected invalid-key error, got: ${payload.error}`);
+  assert.ok(payload.hint && payload.hint.includes('dashboard.sogni.ai'), `Expected dashboard hint, got: ${payload.hint}`);
+});
+
 test('missing required value for --width returns a validation error', () => {
   expectCliError(['--width'], '--width requires a value.');
 });

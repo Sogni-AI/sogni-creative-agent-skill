@@ -64,6 +64,7 @@
     "env.mjs",
     "ssrf-guard.mjs",
     "update-check.mjs",
+    "node-version-check.mjs",
     "generated/creative-agent-runtime.mjs",
     "sogni-agent.mjs"
   ],

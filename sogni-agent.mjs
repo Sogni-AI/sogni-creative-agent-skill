@@ -4,6 +4,10 @@
  * Usage: sogni-agent [options] "prompt"
  */
 
+// Must be first: a zero-dependency Node.js version guard that runs before
+// `sharp` / the Sogni SDK load, so an unsupported Node prints a clear message
+// instead of a cryptic native/ESM crash.
+import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
@@ -122,7 +126,9 @@ function sanitizePath(p, label) {
     err.code = 'INVALID_PATH';
     throw err;
   }
-  return p;
+  // Expand a leading `~`/`~/` so quoted paths (where the shell didn't expand it,
+  // e.g. --ref "~/face.jpg") and agent-passed literals resolve to the home dir.
+  return expandHomePath(p);
 }
 
 const DEFAULT_CREDENTIALS_PATH = join(homedir(), '.config', 'sogni', 'credentials');
@@ -765,7 +771,7 @@ function parseIntegerValue(raw, flagName) {
   return num;
 }
 
-function parsePositiveIntegerValue(raw, flagName, min = 1) {
+function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
   const num = parseIntegerValue(raw, flagName);
   if (num < min) {
     fatalCliError(`${flagName} must be >= ${min}.`, {
@@ -773,8 +779,19 @@ function parsePositiveIntegerValue(raw, flagName, min = 1) {
       details: { flag: flagName, value: raw, min }
     });
   }
+  if (num > max) {
+    fatalCliError(`${flagName} must be <= ${max}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: flagName, value: raw, max }
+    });
+  }
   return num;
 }
+
+// Sanity ceiling for image dimensions — well above any model's real maximum,
+// just large enough to catch obvious typos (e.g. a stray extra zero) before
+// they waste a round-trip or blow up local memory.
+const MAX_IMAGE_DIMENSION = 8192;
 
 function parseSeedValue(raw, flagName) {
   const num = parseIntegerValue(raw, flagName);
@@ -1241,6 +1258,9 @@ function loadOpenClawPluginConfig() {
     try {
       return JSON5.parse(openclawPluginConfig);
     } catch (e) {
+      // Warn (don't crash): a malformed inline config silently dropping all the
+      // user's defaults is a confusing trap.
+      console.error(`Warning: OPENCLAW_PLUGIN_CONFIG is not valid JSON5 (${e?.message || e}); ignoring it and using defaults.`);
       return null;
     }
   }
@@ -1250,6 +1270,7 @@ function loadOpenClawPluginConfig() {
     const parsed = JSON5.parse(raw);
     return parsed?.plugins?.entries?.['sogni-creative-agent-skill']?.config || null;
   } catch (e) {
+    console.error(`Warning: could not parse ${OPENCLAW_CONFIG_PATH} (${e?.message || e}); ignoring it and using defaults.`);
     return null;
   }
 }
@@ -1516,7 +1537,7 @@ for (let i = 0; i < args.length; i++) {
   if (arg === '-o' || arg === '--output') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.output = raw;
+    options.output = expandHomePath(raw);
     cliSet.output = true;
   } else if (arg === '-m' || arg === '--model') {
     const raw = requireFlagValue(args, i, arg);
@@ -1526,12 +1547,12 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '-w' || arg === '--width') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.width = parsePositiveIntegerValue(raw, arg);
+    options.width = parsePositiveIntegerValue(raw, arg, 1, MAX_IMAGE_DIMENSION);
     cliSet.width = true;
   } else if (arg === '-h' || arg === '--height') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.height = parsePositiveIntegerValue(raw, arg);
+    options.height = parsePositiveIntegerValue(raw, arg, 1, MAX_IMAGE_DIMENSION);
     cliSet.height = true;
   } else if (arg === '-n' || arg === '--count') {
     const raw = requireFlagValue(args, i, arg);
@@ -1752,17 +1773,17 @@ for (let i = 0; i < args.length; i++) {
     options.autoResizeVideoAssets = false;
     cliSet.autoResizeVideoAssets = true;
   } else if (arg === '--ref' || arg === '--reference') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     options.refImage = raw;
     cliSet.refImage = true;
   } else if (arg === '--ref-end' || arg === '--end') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     options.refImageEnd = raw;
     cliSet.refImageEnd = true;
   } else if (arg === '--ref-audio' || arg === '--audio') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     if (!options.refAudio) {
       options.refAudio = raw;
@@ -1782,7 +1803,7 @@ for (let i = 0; i < args.length; i++) {
     options.audioDuration = parseNonNegativeNumberValue(raw, arg);
     cliSet.audioDuration = true;
   } else if (arg === '--reference-audio-identity' || arg === '--voice-identity') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     options.referenceAudioIdentity = raw;
     cliSet.referenceAudioIdentity = true;
@@ -1792,7 +1813,7 @@ for (let i = 0; i < args.length; i++) {
     options.voicePersonaName = raw;
     cliSet.voicePersonaName = true;
   } else if (arg === '--ref-video') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     if (!options.refVideo) {
       options.refVideo = raw;
@@ -1810,7 +1831,7 @@ for (let i = 0; i < args.length; i++) {
     options.looping = true;
     cliSet.looping = true;
   } else if (arg === '-c' || arg === '--context') {
-    const raw = requireFlagValue(args, i, arg);
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
     options.contextImages.push(raw);
     cliSet.context = true;
@@ -2196,7 +2217,7 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--voice') {
     options.personaVoice = requireFlagValue(args, i, arg); i++;
   } else if (arg === '--voice-clip') {
-    options.personaVoiceClip = requireFlagValue(args, i, arg); i++;
+    options.personaVoiceClip = expandHomePath(requireFlagValue(args, i, arg)); i++;
   // --- Content filter ---
   } else if (arg === '--no-filter') {
     options.noFilter = true;
@@ -3135,6 +3156,11 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
+// Normalize a whitespace-only prompt to empty so the guard below treats it as
+// "no prompt" rather than silently sending blank text to the server.
+if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
+  options.prompt = '';
+}
 if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
@@ -3546,14 +3572,48 @@ if (commandUsesGenerationSeed && (options.seed === null || options.seed === unde
 }
 
 // Load credentials
-function loadCredentials() {
-  if (existsSync(CREDENTIALS_PATH)) {
-    const content = readFileSync(CREDENTIALS_PATH, 'utf8');
-    const creds = {};
-    for (const line of content.split('\n')) {
-      const [key, val] = line.split('=');
-      if (key && val) creds[key.trim()] = val.trim();
+// Parse a `KEY=value` credentials file robustly. Tolerates: a UTF-8 BOM, an
+// optional `export ` prefix, `#` comments, blank lines, CRLF endings, surrounding
+// whitespace, surrounding single/double quotes, and `=` characters inside the
+// value (only the first `=` splits). Hand-edited files are the norm here.
+function parseCredentialsFile(content) {
+  const creds = {};
+  const text = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content; // strip BOM
+  for (const rawLine of text.split('\n')) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('export ')) line = line.slice('export '.length).trim();
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+         (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1);
     }
+    if (key) creds[key] = value;
+  }
+  return creds;
+}
+
+function loadCredentials() {
+  let credentialsFileExisted = false;
+  if (existsSync(CREDENTIALS_PATH)) {
+    credentialsFileExisted = true;
+    let content;
+    try {
+      content = readFileSync(CREDENTIALS_PATH, 'utf8');
+    } catch (readErr) {
+      const err = new Error(`Could not read Sogni credentials file at ${CREDENTIALS_PATH}.`);
+      err.code = 'CREDENTIALS_UNREADABLE';
+      err.hint = readErr?.code === 'EACCES'
+        ? 'Fix the file permissions (e.g. `chmod 600 ' + CREDENTIALS_PATH + '`), or set SOGNI_API_KEY in the environment instead.'
+        : 'Check the file, or set SOGNI_API_KEY in the environment instead.';
+      err.details = { triedFile: CREDENTIALS_PATH, cause: readErr?.code || String(readErr) };
+      throw err;
+    }
+    const creds = parseCredentialsFile(content);
     if (creds.SOGNI_API_KEY) {
       return {
         SOGNI_API_KEY: creds.SOGNI_API_KEY
@@ -3567,12 +3627,17 @@ function loadCredentials() {
     };
   }
 
+  // Distinguish "file exists but has no usable key" from "no file at all" —
+  // the former is a common hand-edit mistake (typo, wrong line, stray quotes).
   const err = new Error('No Sogni API key found.');
   err.code = 'MISSING_CREDENTIALS';
-  err.hint = 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.';
+  err.hint = credentialsFileExisted
+    ? `Found ${CREDENTIALS_PATH} but it has no usable "SOGNI_API_KEY=..." line. Check for typos/extra quotes, or set SOGNI_API_KEY in the environment. Get your key at https://dashboard.sogni.ai (account menu).`
+    : 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.';
   err.details = {
     triedEnv: ['SOGNI_API_KEY'],
-    triedFile: CREDENTIALS_PATH
+    triedFile: CREDENTIALS_PATH,
+    credentialsFileExisted
   };
   throw err;
 }
@@ -3794,6 +3859,40 @@ async function dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action
   );
 }
 
+// Default HTTP timeout for plain REST calls and downloads. Without this, a
+// black-holing proxy / captive portal makes the CLI hang forever with no
+// output. Override via SOGNI_HTTP_TIMEOUT_MS. (The SDK generation wait is
+// governed separately by --timeout.)
+const DEFAULT_HTTP_TIMEOUT_MS = (() => {
+  const raw = Number.parseInt(getEnv('SOGNI_HTTP_TIMEOUT_MS') || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30000;
+})();
+
+// Uploads keep the timer running for the whole request-body send (the fetch
+// promise only resolves once the server responds), so they get a longer budget
+// than the connect-phase default that suffices for GET/download/stream calls.
+const UPLOAD_HTTP_TIMEOUT_MS = Math.max(DEFAULT_HTTP_TIMEOUT_MS, 120000);
+
+// fetch() with an AbortController-based timeout that maps a timeout/abort into a
+// clean, coded error instead of a hang or an opaque "aborted" stack.
+async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(resource, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const err = new Error(`Sogni network request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+      err.code = 'NETWORK_TIMEOUT';
+      err.hint = 'Check your internet connection. If you are behind a corporate proxy/VPN or firewall, it may be blocking api.sogni.ai. You can raise the limit with SOGNI_HTTP_TIMEOUT_MS.';
+      throw err;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, headers = {} } = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
@@ -3802,7 +3901,7 @@ async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, he
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   };
 
-  const response = await fetch(url, init);
+  const response = await fetchWithTimeout(url, init);
   const text = await response.text();
   let payload = {};
   if (text) {
@@ -3872,6 +3971,13 @@ function mimeTypeForMediaReference(ref) {
 
 function localApiMediaReferenceFile(ref) {
   const filePath = sanitizePath(String(ref.value || ''), `${ref.flag} media reference`);
+  if (!existsSync(filePath)) {
+    const err = new Error(`${ref.flag} file not found: ${filePath}`);
+    err.code = 'MEDIA_REFERENCE_NOT_FOUND';
+    err.hint = `Check the path is correct and relative to your current directory (${process.cwd()}). Use ~ for your home directory, or pass an http(s) URL.`;
+    err.details = { flag: ref.flag, path: filePath };
+    throw err;
+  }
   const stat = statSync(filePath);
   if (!stat.isFile()) {
     const err = new Error(`${ref.flag} must point to a file when using local API media references.`);
@@ -3972,10 +4078,10 @@ async function postApiMediaUploadForm(uploadPayload, file) {
   const body = file.buffer || readFileSync(file.filePath);
   form.append('file', new Blob([body], { type: file.mimeType }), file.filename);
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     body: form,
-  });
+  }, UPLOAD_HTTP_TIMEOUT_MS);
   if (!response.ok) {
     const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
     err.code = 'MEDIA_UPLOAD_FAILED';
@@ -3985,11 +4091,11 @@ async function postApiMediaUploadForm(uploadPayload, file) {
 }
 
 async function putApiMediaUpload(uploadUrl, file) {
-  const response = await fetch(uploadUrl, {
+  const response = await fetchWithTimeout(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': file.mimeType },
     body: file.buffer || readFileSync(file.filePath),
-  });
+  }, UPLOAD_HTTP_TIMEOUT_MS);
   if (!response.ok) {
     const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
     err.code = 'MEDIA_UPLOAD_FAILED';
@@ -5247,7 +5353,7 @@ function parseWorkflowSseChunk(raw) {
 async function streamApiWorkflowEvents(apiKey, workflowId) {
   const url = await buildSafeApiUrl(`/v1/creative-agent/workflows/${encodeURIComponent(workflowId)}/events/stream`);
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'GET',
     headers: apiRequestHeaders(apiKey, { Accept: 'text/event-stream' })
   });
@@ -5667,7 +5773,7 @@ function applyPersonaAndVoiceReferences() {
 async function fetchMediaBuffer(pathOrUrl) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
     await assertSafeUrl(pathOrUrl);
-    const response = await fetch(pathOrUrl);
+    const response = await fetchWithTimeout(pathOrUrl);
     if (!response.ok) {
       const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
       err.code = 'FETCH_FAILED';
@@ -5690,7 +5796,7 @@ async function fetchMediaBuffer(pathOrUrl) {
 async function fetchMediaBlob(pathOrUrl, fallbackMimeType = 'application/octet-stream') {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
     await assertSafeUrl(pathOrUrl);
-    const response = await fetch(pathOrUrl);
+    const response = await fetchWithTimeout(pathOrUrl);
     if (!response.ok) {
       const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
       err.code = 'FETCH_FAILED';
@@ -6148,13 +6254,41 @@ function resolveMultiAngleOutputConfig(outputPath, outputFormat) {
   return { dir, prefix, ext: ext.replace('.', '') || desiredExt };
 }
 
+// Write a generated result to disk, mapping common filesystem errors into
+// clear, coded messages. Losing a paid-for render to a raw "EACCES" is exactly
+// the kind of cryptic failure a first-time user can't recover from.
+function writeOutputFileSafe(filePath, buffer, label = 'output') {
+  try {
+    const dir = dirname(filePath);
+    if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(filePath, buffer);
+  } catch (e) {
+    const code = e?.code;
+    const err = new Error(`Could not write ${label} to ${filePath}.`);
+    err.code = 'OUTPUT_WRITE_FAILED';
+    if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+      err.hint = 'The output path is not writable. Choose a different --output location or fix the directory permissions.';
+    } else if (code === 'ENOSPC') {
+      err.hint = 'No space left on the device. Free up disk space or choose another --output location.';
+    } else if (code === 'ENOENT') {
+      err.hint = 'The output directory does not exist and could not be created. Check the --output path.';
+    } else if (code === 'EISDIR') {
+      err.hint = '--output points to a directory; pass a file path instead.';
+    } else {
+      err.hint = 'Check the --output path and permissions.';
+    }
+    err.details = { filePath, cause: code || String(e) };
+    throw err;
+  }
+}
+
 async function downloadUrlToFile(url, filePath) {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url);
   if (!response.ok) {
     throw new Error(`Failed to download image: ${response.statusText}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(filePath, buffer);
+  writeOutputFileSafe(filePath, buffer);
 }
 
 function removeClientListener(client, event, handler) {
@@ -6173,14 +6307,14 @@ async function loadExeca() {
   return execaPromise;
 }
 
-async function ensureFfmpegAvailable() {
+async function ensureFfmpegAvailable(operation = 'this audio/video operation') {
   const ffmpegPath = getEnv('FFMPEG_PATH') || 'ffmpeg';
   sanitizePath(ffmpegPath, 'FFMPEG_PATH');
   const result = await runCommand(ffmpegPath, ['-version'], { captureOutput: true });
   if (result.error || result.status !== 0) {
-    const err = new Error('ffmpeg is required for video assembly.');
+    const err = new Error(`ffmpeg is required for ${operation}.`);
     err.code = 'MISSING_FFMPEG';
-    err.hint = 'Install ffmpeg or set FFMPEG_PATH to a working ffmpeg binary.';
+    err.hint = 'Install ffmpeg (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFMPEG_PATH to a working ffmpeg binary.';
     err.details = { ffmpegPath };
     throw err;
   }
@@ -8242,7 +8376,7 @@ async function main() {
       
       // Save to file if requested
       if (options.output && urls[0]) {
-        const response = await fetch(urls[0]);
+        const response = await fetchWithTimeout(urls[0]);
         const buffer = Buffer.from(await response.arrayBuffer());
 
         const dir = dirname(options.output);
@@ -8319,7 +8453,7 @@ async function main() {
                 }
 
                 // Download second clip
-                const response2 = await fetch(clip2Url);
+                const response2 = await fetchWithTimeout(clip2Url);
                 const buffer2 = Buffer.from(await response2.arrayBuffer());
                 writeFileSync(clip2Path, buffer2);
 
@@ -8362,7 +8496,7 @@ async function main() {
           await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
           log(`Saved looping video to ${options.output}`);
         } else {
-          writeFileSync(options.output, buffer);
+          writeOutputFileSafe(options.output, buffer, options.video ? 'video' : options.music ? 'audio' : 'image');
           log(`Saved to ${options.output}`);
         }
       }

@@ -89,6 +89,9 @@ class SogniClientWrapper extends EventEmitter {
     this.lastImageProject = config;
     state.lastImageProject = config;
     persistState();
+    if (process.env.SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON) {
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON);
+    }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
     return { project: { id: 'proj-1' } };
   }
@@ -98,6 +101,9 @@ class SogniClientWrapper extends EventEmitter {
     this.lastEditProject = config;
     state.lastEditProject = config;
     persistState();
+    if (process.env.SOGNI_AGENT_TEST_IMAGE_EDIT_PROJECT_RESULT_JSON) {
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_IMAGE_EDIT_PROJECT_RESULT_JSON);
+    }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
     return { project: { id: 'proj-1' } };
   }

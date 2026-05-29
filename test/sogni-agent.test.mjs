@@ -490,6 +490,68 @@ test('SDK-returned insufficient funds preserves code and surfaces Spark Packs CT
   assert.doesNotMatch(payload.hint, /free daily/i);
 });
 
+test('SDK-returned insufficient funds prints Spark Packs hint in human output', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Error: Debit Error: Insufficient funds/);
+  assert.match(stderr, /Hint: Buy Spark Packs to continue: https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+  assert.doesNotMatch(stderr, /free daily/i);
+});
+
+test('SDK-returned insufficient funds from context image edit surfaces Spark Packs CTA', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '-c', SCREENSHOT_FIXTURE,
+    'turn this into anime style; keep everything the same'
+  ], {
+    SOGNI_AGENT_TEST_IMAGE_EDIT_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+});
+
+test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    'a cat wearing a hat'
+  ], {
+    SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Debit Error: Insufficient funds',
+      code: 'INSUFFICIENT_BALANCE'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+  assert.equal(payload.errorCategory, 'insufficient_credits');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Buy Spark Packs');
+  assert.equal(payload.purchaseUrl, 'https://docs.sogni.ai/pricing/#spark-packs');
+  assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
+});
+
 test('invalid seed strategy returns a validation error', () => {
   expectCliError(['--seed-strategy', 'foo', 'a cat'], '--seed-strategy must be "random" or "prompt-hash".');
 });

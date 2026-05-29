@@ -4,9 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const syncScript = process.env.SOGNI_CREATIVE_AGENT_SYNC_SCRIPT
-  ? process.env.SOGNI_CREATIVE_AGENT_SYNC_SCRIPT
-  : join(repoRoot, '..', 'sogni-creative-agent', 'scripts', 'sync-skill-runtime.mjs');
+const syncScript = join(repoRoot, 'scripts', 'sync-creative-agent-runtime.mjs');
 const generatedPath = join(repoRoot, 'generated', 'creative-agent-runtime.mjs');
 const generatedRelativePath = 'generated/creative-agent-runtime.mjs';
 

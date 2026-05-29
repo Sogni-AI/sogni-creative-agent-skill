@@ -758,6 +758,9 @@ function buildProjectResultError(projectResult) {
   if (projectResult?.code) err.code = projectResult.code;
   if (projectResult?.details) err.details = projectResult.details;
   if (projectResult?.hint) err.hint = projectResult.hint;
+  if (classifyCliError(err).category === 'insufficient_credits' && !err.hint) {
+    err.hint = SPARK_PACKS_PURCHASE_HINT;
+  }
   return err;
 }
 
@@ -7586,10 +7589,11 @@ async function main() {
         editConfig.seed = options.seed;
       }
       
-      if (isGptImage2ModelSelection(options.model)) {
-        await client.createImageProject(editConfig);
-      } else {
-        await client.createImageEditProject(editConfig);
+      const editResult = isGptImage2ModelSelection(options.model)
+        ? await client.createImageProject(editConfig)
+        : await client.createImageEditProject(editConfig);
+      if (editResult?.error || editResult?.message) {
+        throw buildProjectResultError(editResult);
       }
     } else if (options.photobooth) {
       // Photobooth: face transfer with InstantID ControlNet
@@ -7701,7 +7705,10 @@ async function main() {
           projectConfig.seed = options.seed;
         }
 
-        await client.createImageProject(projectConfig);
+        const imageResult = await client.createImageProject(projectConfig);
+        if (imageResult?.error || imageResult?.message) {
+          throw buildProjectResultError(imageResult);
+        }
       }
     }
     

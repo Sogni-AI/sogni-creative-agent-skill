@@ -8,7 +8,7 @@ import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync } from 'fs';
-import { join, dirname, basename, extname, sep } from 'path';
+import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
 import { getEnv, hasEnv } from './env.mjs';
@@ -1282,6 +1282,19 @@ const options = {
   concatVideosClips: null,
   concatAudio: null, // Optional audio file to mux over concatenated clips
   concatAudioStart: null,
+  concatFps: null, // --concat-fps <n>: override target fps for concat normalization
+  extractFirstFrame: null, // --extract-first-frame <video> <image>
+  extractFirstFrameOutput: null,
+  // Audio remix (--remix-audio <in_video> <out_video>): loop/fade/mix without re-encoding video
+  remixAudio: null,
+  remixAudioOutput: null,
+  bedAudio: null, // --bed-audio <path|video>: audio bed (defaults to input video's own audio)
+  audioLoop: false, // --audio-loop: loop the bed to cover the full video duration
+  audioFadeIn: null, // --audio-fade-in <sec>
+  audioFadeOut: null, // --audio-fade-out <sec>
+  mixAudio: null, // --mix-audio <path|video>: one extra track to overlay
+  mixAt: null, // --mix-at <sec>: offset for the mix track (default 0)
+  mixGain: null, // --mix-gain <db>: gain applied to the mix track (default 0)
   listMedia: null, // --list-media [images|audio|all]
   // Memory, personality, persona commands
   memoryAction: null, // set|get|list|remove
@@ -1814,6 +1827,50 @@ for (let i = 0; i < args.length; i++) {
     const raw = requireFlagValue(args, i, arg);
     i++;
     options.concatAudioStart = parseNonNegativeNumberValue(raw, arg);
+  } else if (arg === '--concat-fps') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.concatFps = parseNumberValue(raw, arg);
+  } else if (arg === '--extract-first-frame') {
+    const videoArg = requireFlagValue(args, i, arg);
+    i++;
+    const imageArg = requireFlagValue(args, i, arg + ' (output image)');
+    i++;
+    options.extractFirstFrame = videoArg;
+    options.extractFirstFrameOutput = imageArg;
+  } else if (arg === '--remix-audio') {
+    const inArg = requireFlagValue(args, i, arg + ' (input video)');
+    i++;
+    const outArg = requireFlagValue(args, i, arg + ' (output video)');
+    i++;
+    options.remixAudio = inArg;
+    options.remixAudioOutput = outArg;
+  } else if (arg === '--bed-audio') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.bedAudio = raw;
+  } else if (arg === '--audio-loop') {
+    options.audioLoop = true;
+  } else if (arg === '--audio-fade-in') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.audioFadeIn = parseNonNegativeNumberValue(raw, arg);
+  } else if (arg === '--audio-fade-out') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.audioFadeOut = parseNonNegativeNumberValue(raw, arg);
+  } else if (arg === '--mix-audio') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.mixAudio = raw;
+  } else if (arg === '--mix-at') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.mixAt = parseNonNegativeNumberValue(raw, arg);
+  } else if (arg === '--mix-gain') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.mixGain = parseNumberValue(raw, arg);
   } else if (arg === '--list-media') {
     // Optional type argument (images|audio|all), default: images
     const next = args[i + 1];
@@ -2260,9 +2317,21 @@ General:
   --no-update-check     Skip the once-daily npm update check for this run
   self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
   --extract-last-frame <video> <image>  Extract last frame from a video (safe ffmpeg wrapper)
-  --concat-videos <out> <clips...>      Concatenate video clips (safe ffmpeg wrapper, min 2 clips)
+  --extract-first-frame <video> <image> Extract first frame from a video (safe ffmpeg wrapper)
+  --concat-videos <out> <clips...>      Concatenate video clips (safe ffmpeg wrapper, min 2 clips).
+                        Normalizes fps/size and fills silent audio so mismatched clips stitch cleanly.
+  --concat-fps <n>      Override target fps for --concat-videos (default: highest clip fps)
   --concat-audio <path> Optional audio track to mux over --concat-videos output
   --concat-audio-start <sec> Start offset into --concat-audio
+  --remix-audio <in> <out>  Rebuild a video's audio without re-encoding video (safe ffmpeg wrapper).
+                        Combine with the audio flags below.
+  --bed-audio <path>    Audio bed for --remix-audio (path or video; defaults to input's own audio)
+  --audio-loop          Loop the bed to cover the full video duration (--remix-audio)
+  --audio-fade-in <sec> Fade the bed in over <sec> seconds (--remix-audio)
+  --audio-fade-out <sec> Fade the bed out over <sec> seconds at the tail (--remix-audio)
+  --mix-audio <path>    Overlay one extra audio track, mixed with the bed (--remix-audio)
+  --mix-at <sec>        Start offset for --mix-audio (default: 0)
+  --mix-gain <db>       Gain in dB applied to --mix-audio (default: 0)
   --list-media [type]   List recent inbound media files (images|audio|all, default: images)
   --no-filter           Disable NSFW content filter
   --last                Show last render info (JSON)
@@ -2983,7 +3052,9 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.showBalance &&
   !options.showVersion &&
   !options.extractLastFrame &&
+  !options.extractFirstFrame &&
   !options.concatVideos &&
+  !options.remixAudio &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -2994,7 +3065,7 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.concatVideos && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -6037,7 +6108,7 @@ async function ensureFfmpegAvailable() {
   sanitizePath(ffmpegPath, 'FFMPEG_PATH');
   const result = await runCommand(ffmpegPath, ['-version'], { captureOutput: true });
   if (result.error || result.status !== 0) {
-    const err = new Error('ffmpeg is required to assemble the 360 video.');
+    const err = new Error('ffmpeg is required for video assembly.');
     err.code = 'MISSING_FFMPEG';
     err.hint = 'Install ffmpeg or set FFMPEG_PATH to a working ffmpeg binary.';
     err.details = { ffmpegPath };
@@ -6055,15 +6126,22 @@ async function ensureFfmpegAvailable() {
   return ffmpegPath;
 }
 
+// ffmpeg's concat demuxer resolves relative `file` entries against the list
+// file's own directory, so always write absolute paths to avoid path doubling
+// (e.g. ./dir/out.concat.txt referencing ./dir/clip.mp4 -> ./dir/./dir/clip.mp4).
+function escapeConcatPath(p) {
+  return resolve(p).replace(/'/g, "'\\''");
+}
+
 function writeConcatList(filePath, frames, frameDuration) {
   const lines = [];
   frames.forEach((frame) => {
-    lines.push(`file '${frame.replace(/'/g, "'\\''")}'`);
+    lines.push(`file '${escapeConcatPath(frame)}'`);
     lines.push(`duration ${frameDuration}`);
   });
   if (frames.length > 0) {
     const last = frames[frames.length - 1];
-    lines.push(`file '${last.replace(/'/g, "'\\''")}'`);
+    lines.push(`file '${escapeConcatPath(last)}'`);
   }
   writeFileSync(filePath, lines.join('\n'));
 }
@@ -6139,23 +6217,8 @@ async function buildAngles360Video(outputPath, frames, fps) {
   }
 }
 
-async function extractLastFrameFromVideo(videoPath, outputImagePath) {
-  sanitizePath(videoPath, 'video path');
-  sanitizePath(outputImagePath, 'output image path');
+async function runFrameExtraction(args, { videoPath, outputImagePath, which }) {
   const ffmpegPath = await ensureFfmpegAvailable();
-
-  // Extract the last frame by reading through the video with update mode
-  // This processes all frames but only keeps the last one
-  const args = [
-    '-i', videoPath,
-    '-vf', 'select=gte(n\\,0)',  // Select all frames (just pass-through)
-    '-vsync', '0',
-    '-update', '1',  // Update same output file (keeps only last frame)
-    '-q:v', '1',  // Best quality
-    '-y',
-    outputImagePath
-  ];
-
   const result = await runCommand(ffmpegPath, args, { captureOutput: true });
 
   if (result.error || result.status !== 0 || !isNonEmptyFile(outputImagePath)) {
@@ -6173,43 +6236,167 @@ async function extractLastFrameFromVideo(videoPath, outputImagePath) {
       console.error('  Output file size:', statSync(outputImagePath).size);
     }
 
-    const err = new Error('Failed to extract last frame from video.');
+    const err = new Error(`Failed to extract ${which} frame from video.`);
     err.code = 'FFMPEG_EXTRACT_FAILED';
     err.details = { videoPath, outputImagePath, stderr, stdout, status: result.status };
     throw err;
   }
 }
 
-async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, audioStart = null } = {}) {
+async function extractLastFrameFromVideo(videoPath, outputImagePath) {
+  sanitizePath(videoPath, 'video path');
+  sanitizePath(outputImagePath, 'output image path');
+
+  // Seek to ~1s before the end so we only decode the tail of the video
+  // (vastly faster than decoding every frame), then keep updating the same
+  // output so the final write is the genuine last frame.
+  const args = [
+    '-sseof', '-1',
+    '-i', videoPath,
+    '-update', '1',  // Keep overwriting -> output is the last decoded frame
+    '-q:v', '1',  // Best quality
+    '-y',
+    outputImagePath
+  ];
+
+  await runFrameExtraction(args, { videoPath, outputImagePath, which: 'last' });
+}
+
+async function extractFirstFrameFromVideo(videoPath, outputImagePath) {
+  sanitizePath(videoPath, 'video path');
+  sanitizePath(outputImagePath, 'output image path');
+
+  // First decoded frame only.
+  const args = [
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-q:v', '1',  // Best quality
+    '-y',
+    outputImagePath
+  ];
+
+  await runFrameExtraction(args, { videoPath, outputImagePath, which: 'first' });
+}
+
+function parseFrameRate(raw) {
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null;
+  if (typeof raw !== 'string') return null;
+  if (!raw.includes('/')) {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  const [num, den] = raw.split('/').map(Number);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+  const v = num / den;
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+// Probe a media file's primary video stream + whether it has any audio.
+// Returns { width, height, fps, duration, hasAudio }. Fields are null when the
+// probe fails (e.g. ffprobe missing); callers fall back to safe defaults.
+async function probeVideoStreamInfo(filePath) {
+  const info = { width: null, height: null, fps: null, duration: null, hasAudio: false };
+  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
+  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const result = await runCommand(ffprobePath, [
+    '-v', 'error',
+    '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,r_frame_rate',
+    '-show_entries', 'format=duration',
+    '-of', 'json',
+    filePath,
+  ], { captureOutput: true });
+  if (result.error || result.status !== 0) return info;
+  let parsed;
+  try { parsed = JSON.parse(result.stdout || '{}'); } catch { return info; }
+  const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+  const video = streams.find((s) => s.codec_type === 'video');
+  info.hasAudio = streams.some((s) => s.codec_type === 'audio');
+  if (video) {
+    info.width = Number(video.width) || null;
+    info.height = Number(video.height) || null;
+    info.fps = parseFrameRate(video.avg_frame_rate) || parseFrameRate(video.r_frame_rate) || null;
+  }
+  const dur = Number(parsed?.format?.duration);
+  info.duration = Number.isFinite(dur) && dur > 0 ? dur : null;
+  return info;
+}
+
+// Concatenate clips using the concat *filter* (not the concat demuxer). The
+// demuxer corrupts timestamps when clips differ in fps/timebase and desyncs
+// audio when a clip has no audio track. Here we probe each clip, normalize every
+// video stream to a common fps/size/sar/pixel-format, and synthesize silent
+// audio for clips that have none, so heterogeneous clips stitch cleanly.
+async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, audioStart = null, targetFps = null } = {}) {
   sanitizePath(outputPath, '--output path');
   clips.forEach((c, i) => sanitizePath(c, `clip[${i}]`));
   if (audioPath) sanitizePath(audioPath, '--concat-audio');
   const ffmpegPath = await ensureFfmpegAvailable();
-  const tempListPath = outputPath.replace(/\.mp4$/i, '') + '.concat.txt';
-  const lines = clips.map((clip) => `file '${clip.replace(/'/g, "'\\''")}'`);
-  writeFileSync(tempListPath, lines.join('\n'));
 
-  const args = [
-    '-y',
-    '-f', 'concat',
-    '-safe', '0',
-    '-i', tempListPath,
-  ];
+  const infos = [];
+  for (const clip of clips) {
+    infos.push(await probeVideoStreamInfo(clip));
+  }
+  const widths = infos.map((x) => x.width).filter(Boolean);
+  const heights = infos.map((x) => x.height).filter(Boolean);
+  const fpsList = infos.map((x) => x.fps).filter(Boolean);
+  const targetW = widths.length ? widths[0] : 1280;
+  const targetH = heights.length ? heights[0] : 720;
+  let fps = Number.isFinite(targetFps) && targetFps > 0
+    ? targetFps
+    : (fpsList.length ? Math.max(...fpsList) : 24);
+  fps = Math.max(1, Math.round(fps));
+  const totalDuration = infos.reduce((sum, x) => sum + (x.duration || 0), 0);
+
+  const filterParts = [];
+  const concatInputs = [];
+  infos.forEach((info, idx) => {
+    filterParts.push(
+      `[${idx}:v]fps=${fps},scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,` +
+      `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v${idx}]`
+    );
+    if (info.hasAudio) {
+      filterParts.push(`[${idx}:a]aresample=async=1:first_pts=0,aformat=sample_rates=44100:channel_layouts=stereo[a${idx}]`);
+    } else {
+      const dur = info.duration && info.duration > 0 ? info.duration : (1 / fps);
+      filterParts.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=duration=${dur.toFixed(6)},asetpts=PTS-STARTPTS[a${idx}]`);
+    }
+    concatInputs.push(`[v${idx}][a${idx}]`);
+  });
+  filterParts.push(`${concatInputs.join('')}concat=n=${infos.length}:v=1:a=1[cv][ca]`);
+
+  const args = ['-y'];
+  clips.forEach((clip) => { args.push('-i', clip); });
+
+  let mapAudio = '[ca]';
   if (audioPath) {
+    // External soundtrack replaces the stitched audio. Pad/trim it to the video
+    // length so we never silently truncate the video (the old -shortest footgun).
     if (Number.isFinite(audioStart) && audioStart > 0) {
       args.push('-ss', String(audioStart));
     }
-    args.push('-i', audioPath, '-map', '0:v:0', '-map', '1:a:0');
+    args.push('-i', audioPath);
+    const extIdx = clips.length;
+    let extChain = `[${extIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,apad`;
+    if (totalDuration > 0) {
+      extChain += `,atrim=duration=${totalDuration.toFixed(6)},asetpts=PTS-STARTPTS`;
+    }
+    extChain += '[xa]';
+    filterParts.push(extChain);
+    mapAudio = '[xa]';
   }
+
+  args.push('-filter_complex', filterParts.join(';'));
+  args.push('-map', '[cv]', '-map', mapAudio);
   args.push(
     '-c:v', 'libx264',
+    '-crf', '18',
+    '-preset', 'medium',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac',
     '-b:a', '192k',
-    '-movflags', '+faststart'
+    '-movflags', '+faststart',
+    outputPath
   );
-  if (audioPath) args.push('-shortest');
-  args.push(outputPath);
 
   const result = await runCommand(ffmpegPath, args);
   if (result.error || result.status !== 0) {
@@ -6217,9 +6404,104 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
       console.warn('Warning: ffmpeg exited non-zero, but output video exists and is non-empty. Continuing.');
       return;
     }
-    const err = new Error('ffmpeg failed to concatenate 360 video clips.');
+    const err = new Error('ffmpeg failed to concatenate video clips.');
     err.code = 'FFMPEG_FAILED';
     err.details = { outputPath, clips: clips?.length ?? null };
+    throw err;
+  }
+}
+
+// Rebuild a video's audio track without re-encoding the video stream. Supports
+// an optional looping bed (the input's own audio by default, or --bed-audio),
+// fade in/out, and overlaying one extra track at an offset/gain. The video is
+// stream-copied, so this is cheap and lossless on the picture.
+async function remixVideoAudio(inputVideo, outputVideo, opts = {}) {
+  const {
+    bedAudio = null, loop = false, fadeIn = null, fadeOut = null,
+    mixAudio = null, mixAt = null, mixGain = null,
+  } = opts;
+  sanitizePath(inputVideo, '--remix-audio input');
+  sanitizePath(outputVideo, '--remix-audio output');
+  if (bedAudio) sanitizePath(bedAudio, '--bed-audio');
+  if (mixAudio) sanitizePath(mixAudio, '--mix-audio');
+  const ffmpegPath = await ensureFfmpegAvailable();
+
+  const info = await probeVideoStreamInfo(inputVideo);
+  const totalDuration = info.duration && info.duration > 0 ? info.duration : null;
+
+  const args = ['-y', '-i', inputVideo];
+
+  // Resolve the bed source. With --audio-loop we re-open the source as a
+  // -stream_loop input (the only robust, duration-based loop in ffmpeg).
+  let bedRef;
+  let nextIndex = 1;
+  const bedSourceFile = bedAudio || inputVideo;
+  if (loop) {
+    args.push('-stream_loop', '-1', '-i', bedSourceFile);
+    bedRef = `[${nextIndex}:a]`;
+    nextIndex += 1;
+  } else if (bedAudio) {
+    args.push('-i', bedAudio);
+    bedRef = `[${nextIndex}:a]`;
+    nextIndex += 1;
+  } else {
+    bedRef = '[0:a]';
+  }
+
+  let mixIndex = null;
+  if (mixAudio) {
+    mixIndex = nextIndex;
+    args.push('-i', mixAudio);
+    nextIndex += 1;
+  }
+
+  const filterParts = [];
+  let bed = `${bedRef}aformat=sample_rates=44100:channel_layouts=stereo`;
+  if (loop && totalDuration) {
+    bed += `,atrim=duration=${totalDuration.toFixed(6)},asetpts=PTS-STARTPTS`;
+  }
+  if (Number.isFinite(fadeIn) && fadeIn > 0) {
+    bed += `,afade=t=in:st=0:d=${fadeIn}`;
+  }
+  if (Number.isFinite(fadeOut) && fadeOut > 0 && totalDuration) {
+    const st = Math.max(0, totalDuration - fadeOut);
+    bed += `,afade=t=out:st=${st.toFixed(6)}:d=${fadeOut}`;
+  }
+  bed += '[bed]';
+  filterParts.push(bed);
+
+  let finalAudio = '[bed]';
+  if (mixAudio) {
+    let mix = `[${mixIndex}:a]aformat=sample_rates=44100:channel_layouts=stereo`;
+    if (Number.isFinite(mixGain) && mixGain !== 0) {
+      mix += `,volume=${mixGain}dB`;
+    }
+    const delayMs = Number.isFinite(mixAt) && mixAt > 0 ? Math.round(mixAt * 1000) : 0;
+    if (delayMs > 0) {
+      mix += `,adelay=${delayMs}|${delayMs}`;
+    }
+    mix += '[mix]';
+    filterParts.push(mix);
+    // normalize=0 keeps both tracks at full level; alimiter guards against clipping.
+    filterParts.push('[bed][mix]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[outa]');
+    finalAudio = '[outa]';
+  }
+
+  args.push('-filter_complex', filterParts.join(';'));
+  args.push('-map', '0:v:0', '-map', finalAudio);
+  args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart');
+  if (totalDuration) args.push('-t', totalDuration.toFixed(6));
+  args.push(outputVideo);
+
+  const result = await runCommand(ffmpegPath, args);
+  if (result.error || result.status !== 0) {
+    if (isNonEmptyFile(outputVideo)) {
+      console.warn('Warning: ffmpeg exited non-zero, but output video exists and is non-empty. Continuing.');
+      return;
+    }
+    const err = new Error('ffmpeg failed to remix audio.');
+    err.code = 'FFMPEG_FAILED';
+    err.details = { inputVideo, outputVideo };
     throw err;
   }
 }
@@ -6935,6 +7217,28 @@ async function main() {
       return;
     }
 
+    if (options.extractFirstFrame) {
+      const videoPath = sanitizePath(options.extractFirstFrame, '--extract-first-frame video');
+      const outputPath = sanitizePath(options.extractFirstFrameOutput, '--extract-first-frame output');
+      if (!existsSync(videoPath)) {
+        const err = new Error(`Video file not found: ${videoPath}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      await extractFirstFrameFromVideo(videoPath, outputPath);
+      if (options.json || JSON_ERROR_MODE) {
+        console.log(JSON.stringify({
+          success: true,
+          type: 'extract-first-frame',
+          outputPath,
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        console.log(`Extracted first frame to: ${outputPath}`);
+      }
+      return;
+    }
+
     if (options.concatVideos) {
       const outputPath = sanitizePath(options.concatVideos, '--concat-videos output');
       const clips = options.concatVideosClips.map((c, i) => sanitizePath(c, `clip[${i}]`));
@@ -6953,7 +7257,8 @@ async function main() {
       }
       await buildConcatVideoFromClips(outputPath, clips, {
         audioPath: concatAudio,
-        audioStart: options.concatAudioStart
+        audioStart: options.concatAudioStart,
+        targetFps: options.concatFps
       });
       if (options.json || JSON_ERROR_MODE) {
         console.log(JSON.stringify({
@@ -6963,10 +7268,60 @@ async function main() {
           clipCount: clips.length,
           audioPath: concatAudio || null,
           audioStart: options.concatAudioStart ?? null,
+          targetFps: options.concatFps ?? null,
           timestamp: new Date().toISOString()
         }));
       } else {
         console.log(`Concatenated ${clips.length} clips to: ${outputPath}${concatAudio ? ` with audio ${concatAudio}` : ''}`);
+      }
+      return;
+    }
+
+    if (options.remixAudio) {
+      const inputVideo = sanitizePath(options.remixAudio, '--remix-audio input');
+      const outputVideo = sanitizePath(options.remixAudioOutput, '--remix-audio output');
+      const bedAudio = options.bedAudio ? sanitizePath(options.bedAudio, '--bed-audio') : null;
+      const mixAudio = options.mixAudio ? sanitizePath(options.mixAudio, '--mix-audio') : null;
+      if (!existsSync(inputVideo)) {
+        const err = new Error(`Video file not found: ${inputVideo}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      if (bedAudio && !existsSync(bedAudio)) {
+        const err = new Error(`Bed audio file not found: ${bedAudio}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      if (mixAudio && !existsSync(mixAudio)) {
+        const err = new Error(`Mix audio file not found: ${mixAudio}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      await remixVideoAudio(inputVideo, outputVideo, {
+        bedAudio,
+        loop: options.audioLoop,
+        fadeIn: options.audioFadeIn,
+        fadeOut: options.audioFadeOut,
+        mixAudio,
+        mixAt: options.mixAt,
+        mixGain: options.mixGain
+      });
+      if (options.json || JSON_ERROR_MODE) {
+        console.log(JSON.stringify({
+          success: true,
+          type: 'remix-audio',
+          outputPath: outputVideo,
+          bedAudio: bedAudio || null,
+          loop: Boolean(options.audioLoop),
+          fadeIn: options.audioFadeIn ?? null,
+          fadeOut: options.audioFadeOut ?? null,
+          mixAudio: mixAudio || null,
+          mixAt: options.mixAt ?? null,
+          mixGain: options.mixGain ?? null,
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        console.log(`Remixed audio to: ${outputVideo}`);
       }
       return;
     }

@@ -2648,6 +2648,48 @@ test('--concat-audio flags are recognized with concat-videos', () => {
   assert.ok(!stderr.includes('Unknown option'), `Should recognize concat audio flags, got: ${stderr}`);
 });
 
+test('--concat-fps is recognized with concat-videos', () => {
+  const { stderr } = runCli([
+    '--concat-videos', '/tmp/out.mp4', '/tmp/missing-a.mp4', '/tmp/missing-b.mp4',
+    '--concat-fps', '30'
+  ]);
+  assert.ok(!stderr.includes('Unknown option'), `Should recognize --concat-fps, got: ${stderr}`);
+});
+
+test('--extract-first-frame requires both video and output args', () => {
+  expectCliError(['--extract-first-frame'], '--extract-first-frame requires a value.');
+});
+
+test('--extract-first-frame with non-existent video file returns an error', () => {
+  const { exitCode, stderr } = runCli(['--extract-first-frame', '/tmp/nonexistent_video_98765.mp4', '/tmp/frame.png']);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
+});
+
+test('--remix-audio requires both input and output args', () => {
+  expectCliError(['--remix-audio'], '--remix-audio (input video) requires a value.');
+});
+
+test('--remix-audio with non-existent input returns an error', () => {
+  const { exitCode, stderr } = runCli(['--remix-audio', '/tmp/nonexistent_video_55555.mp4', '/tmp/out.mp4']);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
+});
+
+test('--remix-audio audio flags are recognized', () => {
+  const { stderr } = runCli([
+    '--remix-audio', '/tmp/missing-in.mp4', '/tmp/out.mp4',
+    '--bed-audio', '/tmp/bed.mp3',
+    '--audio-loop',
+    '--audio-fade-in', '1.5',
+    '--audio-fade-out', '2',
+    '--mix-audio', '/tmp/mix.mp3',
+    '--mix-at', '18.01',
+    '--mix-gain', '-3'
+  ]);
+  assert.ok(!stderr.includes('Unknown option'), `Should recognize remix-audio flags, got: ${stderr}`);
+});
+
 test('--list-media with valid type is recognized', () => {
   const { exitCode, stderr } = runCli(['--json', '--list-media', 'images']);
   assert.equal(exitCode, 0);
@@ -2694,6 +2736,8 @@ test('new utility flags appear in --help output', () => {
   assert.equal(exitCode, 0);
   assert.ok(stdout.includes('--extract-last-frame'), 'Help should include --extract-last-frame');
   assert.ok(stdout.includes('--concat-videos'), 'Help should include --concat-videos');
+  assert.ok(stdout.includes('--extract-first-frame'), 'Help should include --extract-first-frame');
+  assert.ok(stdout.includes('--remix-audio'), 'Help should include --remix-audio');
   assert.ok(stdout.includes('--list-media'), 'Help should include --list-media');
   assert.ok(stdout.includes('--api-chat'), 'Help should include --api-chat');
   assert.ok(stdout.includes('--api-workflow'), 'Help should include --api-workflow');

@@ -2964,3 +2964,59 @@ test('--list-media prefers ~/.openclaw inbound dir when present', () => {
   assert.ok(stdout.includes('current-photo.png'), `openclaw inbound file should be listed, got: ${stdout}`);
   assert.ok(!stdout.includes('legacy-photo.png'), 'legacy dir should be ignored when the openclaw dir exists');
 });
+
+// --- doctor / upgrade UX -----------------------------------------------------
+
+test('--doctor --json reports healthy on a working install', () => {
+  const { exitCode, stdout } = runCli(['--doctor', '--json']);
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, true);
+  assert.equal(payload.type, 'doctor');
+  const byId = Object.fromEntries(payload.checks.map((check) => [check.id, check]));
+  assert.equal(byId.node.status, 'pass');
+  assert.equal(byId.credentials.status, 'pass');
+  assert.equal(byId.auth.status, 'pass');
+  assert.equal(byId['config-dir'].status, 'pass');
+});
+
+test('doctor subcommand form works without dashes', () => {
+  const { exitCode, stdout } = runCli(['doctor']);
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('Result: healthy'), `expected healthy result, got: ${stdout}`);
+});
+
+test('--doctor fails with a rejected API key and points at the dashboard', () => {
+  const { exitCode, stdout } = runCli(['--doctor', '--json'], { SOGNI_AGENT_TEST_CONNECT_REST_401: '1' });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, false);
+  const auth = payload.checks.find((check) => check.id === 'auth');
+  assert.equal(auth.status, 'fail');
+  assert.ok(auth.detail.includes('dashboard.sogni.ai'));
+});
+
+test('--doctor without credentials marks credentials failed and skips auth', () => {
+  const { exitCode, stdout } = runCli(['--doctor', '--json'], {
+    SOGNI_API_KEY: '',
+    SOGNI_CREDENTIALS_PATH: '/nonexistent/credentials'
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, false);
+  const byId = Object.fromEntries(payload.checks.map((check) => [check.id, check]));
+  assert.equal(byId.credentials.status, 'fail');
+  assert.equal(byId.auth.status, 'skip');
+});
+
+test('--whats-new prints the current version changelog entry', () => {
+  const { exitCode, stdout } = runCli(['--whats-new']);
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes(PACKAGE_VERSION), `expected ${PACKAGE_VERSION} entry, got: ${stdout.slice(0, 200)}`);
+});
+
+test('--snooze-update with no pending update is a friendly no-op', () => {
+  const { exitCode, stderr } = runCli(['--snooze-update']);
+  assert.equal(exitCode, 0);
+  assert.ok(stderr.includes('No pending update to snooze.'), `got: ${stderr}`);
+});

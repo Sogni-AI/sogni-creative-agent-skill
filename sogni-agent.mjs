@@ -24,7 +24,12 @@ import {
   maybeSpawnBackgroundCheck as maybeSpawnUpdateCheck,
   getQueuedNotice as getUpdateCheckNotice,
   runSelfUpdate as runSogniSelfUpdate,
+  snoozeUpdate as snoozeSogniUpdate,
+  runWhatsNew as runSogniWhatsNew,
+  readState as readUpdateCheckState,
+  compareSemver as compareSogniSemver,
 } from './update-check.mjs';
+import { fileURLToPath } from 'url';
 import {
   LTX23_WORKFLOW_MODELS,
   PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
@@ -169,6 +174,27 @@ if (RAW_ARGS[0] === UPDATE_CHECK_INTERNAL_FLAG) {
 // User-facing subcommand: `sogni-agent self-update`
 if (RAW_ARGS[0] === 'self-update') {
   process.exit(runSogniSelfUpdate({}));
+}
+// `--snooze-update`: pause reminders for the currently pending update
+// (escalating backoff: 1 day → 2 days → 1 week; a newer release resets it).
+if (RAW_ARGS[0] === '--snooze-update') {
+  const result = snoozeSogniUpdate({ currentVersion: PACKAGE_VERSION });
+  if (result.snoozed) {
+    console.error(`Update reminders for v${result.version} snoozed until ${new Date(result.until).toISOString()}.`);
+  } else {
+    console.error('No pending update to snooze.');
+  }
+  process.exit(0);
+}
+// `--whats-new [since-version]`: print the bundled CHANGELOG entries for the
+// installed version, or everything after <since-version>.
+if (RAW_ARGS[0] === '--whats-new') {
+  const sinceVersion = RAW_ARGS[1] && !RAW_ARGS[1].startsWith('-') ? RAW_ARGS[1] : null;
+  process.exit(runSogniWhatsNew({
+    changelogPath: join(dirname(fileURLToPath(import.meta.url)), 'CHANGELOG.md'),
+    currentVersion: PACKAGE_VERSION,
+    sinceVersion,
+  }));
 }
 // Fire-and-forget background check (no-op when throttled or skipped)
 try { maybeSpawnUpdateCheck({ cliPath: process.argv[1] }); } catch { /* never break the CLI */ }
@@ -1407,6 +1433,7 @@ const options = {
   estimateVideoCost: false,
   showBalance: false,
   showVersion: false,
+  doctor: false,
   angles360Video: null,
   refImage: null, // Reference image for video (start frame)
   refImageEnd: null, // End frame for video interpolation
@@ -2345,6 +2372,8 @@ for (let i = 0; i < args.length; i++) {
     options.showBalance = true;
   } else if (arg === '--version' || arg === '-V') {
     options.showVersion = true;
+  } else if (arg === '--doctor' || (arg === 'doctor' && i === 0)) {
+    options.doctor = true;
   } else if (arg === '--no-update-check') {
     // Update-check opt-out handled at module load; no-op here so the parser
     // doesn't reject it as an unknown option.
@@ -2492,6 +2521,9 @@ General:
   --guidance <num>      Override guidance (model-dependent)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
   --balance, --balances Show SPARK/SOGNI balances and exit
+  --doctor              Health check: Node, credentials, ffmpeg, auth, config, version
+  --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
+  --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
   --version, -V         Show sogni-agent version and exit
   --no-update-check     Skip the once-daily npm update check for this run
   self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
@@ -3230,6 +3262,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.estimateVideoCost &&
   !options.showBalance &&
   !options.showVersion &&
+  !options.doctor &&
   !options.extractLastFrame &&
   !options.extractFirstFrame &&
   !options.concatVideos &&
@@ -3249,7 +3282,7 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !opt
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7326,6 +7359,135 @@ if (_isAutoToken) {
 }
 const _allowAutoTokenFallback = _isAutoToken && !_requiresSparkOnlyToken;
 
+const DOCTOR_AUTH_TIMEOUT_MS = 15000;
+
+// `sogni-agent doctor` / `--doctor`: one deterministic install health check.
+// Agents are told to run this as the verification gate after installing.
+async function runDoctor() {
+  const checks = [];
+  const add = (id, status, detail) => { checks.push({ id, status, detail }); };
+
+  // The zero-dependency guard in node-version-check.mjs already hard-exits on
+  // unsupported Node, so reaching this line means the floor is satisfied.
+  add('node', 'pass', `v${process.versions.node} (>= 22.11.0 required)`);
+
+  let creds = null;
+  try {
+    creds = loadCredentials();
+    const fileHasKey = existsSync(CREDENTIALS_PATH) &&
+      Boolean(parseCredentialsFile(readFileSync(CREDENTIALS_PATH, 'utf8')).SOGNI_API_KEY);
+    add('credentials', 'pass', fileHasKey
+      ? `SOGNI_API_KEY found in ${CREDENTIALS_PATH}`
+      : 'SOGNI_API_KEY found in environment');
+  } catch (err) {
+    add('credentials', 'fail', `${err.message}${err.hint ? ` — ${err.hint}` : ''}`);
+  }
+
+  if (process.platform !== 'win32' && existsSync(CREDENTIALS_PATH)) {
+    try {
+      const mode = statSync(CREDENTIALS_PATH).mode & 0o777;
+      if (mode & 0o077) {
+        add('credentials-permissions', 'warn',
+          `file mode ${mode.toString(8)} is group/world accessible — run: chmod 600 ${CREDENTIALS_PATH}`);
+      } else {
+        add('credentials-permissions', 'pass', 'credentials file is private (600)');
+      }
+    } catch { /* permissions probe is best-effort */ }
+  }
+
+  const configDir = join(homedir(), '.config', 'sogni');
+  try {
+    mkdirSync(configDir, { recursive: true });
+    const probePath = join(configDir, `.doctor-probe-${process.pid}`);
+    writeFileSync(probePath, 'ok');
+    unlinkSync(probePath);
+    add('config-dir', 'pass', `${configDir} is writable`);
+  } catch (err) {
+    add('config-dir', 'fail', `${configDir} is not writable (${err?.code || err}) — personas/memories/last-render need it`);
+  }
+
+  try {
+    await ensureFfmpegAvailable('the doctor check');
+    add('ffmpeg', 'pass', 'found (used by --concat-videos, --remix-audio, --angles-360-video)');
+  } catch {
+    add('ffmpeg', 'warn', 'not found — optional; install ffmpeg or set FFMPEG_PATH for local video/audio utilities');
+  }
+
+  add('media-inbound', existsSync(MEDIA_INBOUND_DIR) ? 'pass' : 'warn',
+    existsSync(MEDIA_INBOUND_DIR)
+      ? MEDIA_INBOUND_DIR
+      : `${MEDIA_INBOUND_DIR} does not exist (only used by --list-media)`);
+
+  if (creds?.SOGNI_API_KEY) {
+    let doctorClient = null;
+    try {
+      doctorClient = new SogniClientWrapper({
+        appSource: SOGNI_APP_SOURCE,
+        network: openclawConfig?.defaultNetwork || 'fast',
+        autoConnect: false,
+        apiKey: creds.SOGNI_API_KEY,
+        authType: 'apiKey'
+      });
+      const authFlow = (async () => {
+        await connectSogniClient(doctorClient);
+        return doctorClient.getBalance();
+      })();
+      const balance = await Promise.race([
+        authFlow,
+        new Promise((_, reject) => setTimeout(
+          () => reject(Object.assign(new Error('timed out'), { code: 'DOCTOR_TIMEOUT' })),
+          DOCTOR_AUTH_TIMEOUT_MS
+        ))
+      ]);
+      const spark = Number.parseFloat(balance?.spark);
+      const sogni = Number.parseFloat(balance?.sogni);
+      add('auth', 'pass',
+        `API key accepted (SPARK ${Number.isFinite(spark) ? spark : '?'}, SOGNI ${Number.isFinite(sogni) ? sogni : '?'})`);
+    } catch (err) {
+      if (isInvalidApiKeyError(err)) {
+        add('auth', 'fail', 'API key rejected — get a fresh key at https://dashboard.sogni.ai (account menu)');
+      } else {
+        add('auth', 'warn', `could not verify the key (network?): ${err?.message || err}`);
+      }
+    } finally {
+      try {
+        if (doctorClient?.isConnected?.()) {
+          await Promise.race([doctorClient.disconnect(), new Promise(resolve => setTimeout(resolve, 1000))]);
+        }
+      } catch { /* ignore */ }
+    }
+  } else {
+    add('auth', 'skip', 'skipped — no API key to verify');
+  }
+
+  const updateState = readUpdateCheckState();
+  if (updateState?.lastKnownLatest && compareSogniSemver(updateState.lastKnownLatest, PACKAGE_VERSION) > 0) {
+    add('version', 'warn', `${PACKAGE_VERSION} installed; ${updateState.lastKnownLatest} available — run: sogni-agent self-update`);
+  } else {
+    add('version', 'pass', `${PACKAGE_VERSION}${updateState?.lastKnownLatest ? ` (latest known: ${updateState.lastKnownLatest})` : ''}`);
+  }
+
+  const healthy = checks.every((check) => check.status !== 'fail');
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify({
+      success: healthy,
+      type: 'doctor',
+      healthy,
+      checks,
+      version: PACKAGE_VERSION,
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    const icons = { pass: '✓', warn: '!', fail: '✗', skip: '-' };
+    console.log('sogni-agent doctor');
+    for (const check of checks) {
+      console.log(`  ${icons[check.status] || '?'} ${check.id.padEnd(25)} ${check.detail}`);
+    }
+    console.log(healthy ? 'Result: healthy' : 'Result: problems found (fix the ✗ items above)');
+  }
+  return healthy ? 0 : 1;
+}
+
 async function main() {
   let exitCode = 0;
   const log = options.quiet ? () => {} : console.error.bind(console);
@@ -7345,6 +7507,13 @@ async function main() {
         console.log(PACKAGE_VERSION);
       }
       return;
+    }
+
+    if (options.doctor) {
+      // runDoctor manages (and disconnects) its own client; exit directly so
+      // the success-path `process.exit(0)` in the main().then() tail cannot
+      // mask a failing health check.
+      process.exit(await runDoctor());
     }
 
     // --- Utility commands (no Sogni auth required) ---

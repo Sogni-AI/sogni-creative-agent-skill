@@ -52,6 +52,7 @@
   "files": [
     "LICENSE",
     "README.md",
+    "CHANGELOG.md",
     "SKILL.md",
     "llm.txt",
     "skill-package.json",

@@ -80,3 +80,5 @@ desktop-extension/server/package-lock.json
 
 # Generated OpenClaw link target
 .openclaw-link/
+
+.superpowers/

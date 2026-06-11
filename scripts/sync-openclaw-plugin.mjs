@@ -3,7 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const pluginRoot = join(repoRoot, '.openclaw-link');
+// SOGNI_OPENCLAW_LINK_DIR lets tests regenerate the link surface in a temp dir
+// instead of mutating the working tree.
+const pluginRoot = process.env.SOGNI_OPENCLAW_LINK_DIR || join(repoRoot, '.openclaw-link');
 
 mkdirSync(pluginRoot, { recursive: true });
 

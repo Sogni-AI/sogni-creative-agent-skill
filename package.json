@@ -54,6 +54,8 @@
     "README.md",
     "CHANGELOG.md",
     "SKILL.md",
+    "references/",
+    "skills/",
     "llm.txt",
     "skill-package.json",
     "scripts/check-creative-agent-runtime.mjs",

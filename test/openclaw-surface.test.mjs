@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,6 +18,12 @@ test('OpenClaw link surface stays in sync with root plugin files', async () => {
       const rootFile = readFileSync(join(repoRoot, filename), 'utf8');
       const linkFile = readFileSync(join(linkDir, filename), 'utf8');
       assert.equal(linkFile, rootFile, `${filename} is out of sync; run npm run openclaw:sync`);
+    }
+
+    for (const filename of readdirSync(join(repoRoot, 'references')).filter((name) => name.endsWith('.md'))) {
+      const rootFile = readFileSync(join(repoRoot, 'references', filename), 'utf8');
+      const linkFile = readFileSync(join(linkDir, 'references', filename), 'utf8');
+      assert.equal(linkFile, rootFile, `references/${filename} is out of sync; run npm run openclaw:sync`);
     }
 
     const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));

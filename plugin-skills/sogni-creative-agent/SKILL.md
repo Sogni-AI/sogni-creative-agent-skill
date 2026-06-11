@@ -11,7 +11,8 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 
 1. Install everything (one-time): `npx setup-sogni-agent-skill` — installs the CLI globally and prompts for your API key. (Manual alternative: `npm i -g @sogni-ai/sogni-creative-agent-skill`.)
 2. Provide your Sogni API key (get one at https://dashboard.sogni.ai → account menu): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
-3. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
+3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
+4. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
 
 **Uninstall:** run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge` — removes the skill, CLI, and `~/.config/sogni/` data after backing it up to `~/.config/sogni.backup-<timestamp>.tar.gz`. Tell the user the backup path; it holds their API key. Omit `--purge` to keep data.
 
@@ -22,7 +23,8 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 - Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"`
 - Music: `sogni-agent --music "ambient drone, 30 seconds"`
 - Hosted workflow: `sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "9:16 bakery launch video"`
-- List recent renders: `sogni-agent --list-media`
+- List inbound media the user sent (Telegram etc.): `sogni-agent --json --list-media`
+- Inspect the last render: `sogni-agent --last --json`
 - Full reference: `sogni-agent --help`
 
 ## When to invoke this skill
@@ -36,4 +38,4 @@ The user asks to:
 
 ## Full skill manifest
 
-The complete skill spec — every workflow, model default, persona schema, memory schema, and prompt-engineering note — lives in `SKILL.md` at the root of this plugin directory. Read it when the user's request needs detail beyond the quick examples above (e.g. choosing between video workflows, configuring persona references, planning a multi-step composition).
+The complete skill spec — every workflow, model default, persona schema, memory schema, and prompt-engineering note — lives at `${CLAUDE_PLUGIN_ROOT}/SKILL.md` (the root of this plugin), with deep-dive guides under `${CLAUDE_PLUGIN_ROOT}/references/`. Read them when the user's request needs detail beyond the quick examples above (e.g. choosing between video workflows, configuring persona references, planning a multi-step composition).

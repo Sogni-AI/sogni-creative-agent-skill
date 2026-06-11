@@ -9,6 +9,7 @@
   },
   "scripts": {
     "openclaw:sync": "node scripts/sync-openclaw-plugin.mjs",
+    "sync:version": "node scripts/sync-version.mjs",
     "sync:creative-agent-runtime": "node scripts/sync-creative-agent-runtime.mjs",
     "check:creative-agent-source": "node scripts/check-creative-agent-source.mjs",
     "check:creative-agent-source:strict": "node scripts/check-creative-agent-source.mjs --strict-network",

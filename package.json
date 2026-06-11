@@ -46,7 +46,7 @@
   },
   "homepage": "https://github.com/Sogni-AI/sogni-creative-agent-skill#readme",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.11.0"
   },
   "files": [
     "LICENSE",

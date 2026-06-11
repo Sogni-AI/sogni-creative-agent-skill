@@ -2849,3 +2849,118 @@ test('new utility flags appear in --help output', () => {
     'Help should show a shell-safe quoted voice identity example'
   );
 });
+
+// --- Phase-2 audit fixes: count cap, --last envelope, -- separator hint,
+// --- inline-# credentials warning, media inbound fallback -------------------
+
+test('-n above the safety cap is rejected with a SOGNI_MAX_COUNT hint', () => {
+  const { exitCode, stdout, stderr } = runCli(['--json', '-n', '17', 'a cat']);
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorCode, 'COUNT_LIMIT_EXCEEDED');
+  assert.ok(/SOGNI_MAX_COUNT/.test(`${payload.hint}${stderr}`), 'hint should mention SOGNI_MAX_COUNT');
+});
+
+test('-n within the default cap is accepted', () => {
+  const { exitCode, state } = runCli(['-n', '16', 'a cat']);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastImageProject.numberOfMedia, 16);
+});
+
+test('SOGNI_MAX_COUNT raises the -n cap deliberately', () => {
+  const { exitCode, state } = runCli(['-n', '17', 'a cat'], { SOGNI_MAX_COUNT: '32' });
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastImageProject.numberOfMedia, 17);
+});
+
+test('openclaw config defaultCount is clamped to the safety cap', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-openclaw-config-'));
+  const configPath = join(dir, 'openclaw.json');
+  writeFileSync(configPath, JSON.stringify({
+    plugins: {
+      entries: {
+        'sogni-creative-agent-skill': {
+          enabled: true,
+          config: { defaultCount: 50 }
+        }
+      }
+    }
+  }));
+  const { exitCode, state } = runCli(['a cat'], { OPENCLAW_CONFIG_PATH: configPath });
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastImageProject.numberOfMedia, 16, 'config count above cap should clamp to 16');
+});
+
+test('--last --json with no previous render returns a structured failure', () => {
+  const { exitCode, stdout } = runCli(['--last', '--json']);
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorCode, 'NO_LAST_RENDER');
+});
+
+test('--last --json wraps the record in a success envelope (order-independent)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-last-render-'));
+  const lastRenderPath = join(dir, 'last-render.json');
+  writeFileSync(lastRenderPath, JSON.stringify({ type: 'image', urls: ['https://example.com/x.png'] }));
+  // --last appears BEFORE --json on purpose: envelope must still apply.
+  const { exitCode, stdout } = runCli(['--last', '--json'], { SOGNI_LAST_RENDER_PATH: lastRenderPath });
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  assert.equal(payload.success, true);
+  assert.equal(payload.type, 'image');
+  assert.deepEqual(payload.urls, ['https://example.com/x.png']);
+});
+
+test('--last without --json still prints the raw record', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-last-render-'));
+  const lastRenderPath = join(dir, 'last-render.json');
+  writeFileSync(lastRenderPath, JSON.stringify({ type: 'image', urls: [] }, null, 2));
+  const { exitCode, stdout } = runCli(['--last'], { SOGNI_LAST_RENDER_PATH: lastRenderPath });
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('"type": "image"'), `raw record expected, got: ${stdout}`);
+});
+
+test('unknown option hint explains the -- separator for leading-dash prompts', () => {
+  const { exitCode, stderr } = runCli(['-isometric robot']);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('"--" separator'), `hint should mention the -- separator, got: ${stderr}`);
+});
+
+test('a leading-dash prompt works after a standalone -- separator', () => {
+  const { exitCode, state } = runCli(['--', '-5 degrees outside, frozen lake']);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastImageProject.positivePrompt, '-5 degrees outside, frozen lake');
+});
+
+test('credentials file: inline " #" in the value triggers a warning but is preserved', () => {
+  const { exitCode, state, stderr } = runCli(['a cat'], withCredentialsFile('SOGNI_API_KEY=abc123 # my key\n'));
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.apiKey, 'abc123 # my key');
+  assert.ok(/inline comments are not stripped/i.test(stderr), `expected inline-comment warning, got: ${stderr}`);
+});
+
+test('--list-media falls back to the legacy ~/.clawdbot inbound dir when only it exists', () => {
+  const home = mkdtempSync(join(tmpdir(), 'sogni-home-legacy-'));
+  const legacyDir = join(home, '.clawdbot', 'media', 'inbound');
+  mkdirSync(legacyDir, { recursive: true });
+  writeFileSync(join(legacyDir, 'legacy-photo.png'), 'x');
+  const { exitCode, stdout } = runCli(['--json', '--list-media'], { HOME: home, USERPROFILE: home });
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('legacy-photo.png'), `legacy inbound file should be listed, got: ${stdout}`);
+});
+
+test('--list-media prefers ~/.openclaw inbound dir when present', () => {
+  const home = mkdtempSync(join(tmpdir(), 'sogni-home-openclaw-'));
+  const openclawDir = join(home, '.openclaw', 'media', 'inbound');
+  const legacyDir = join(home, '.clawdbot', 'media', 'inbound');
+  mkdirSync(openclawDir, { recursive: true });
+  mkdirSync(legacyDir, { recursive: true });
+  writeFileSync(join(openclawDir, 'current-photo.png'), 'x');
+  writeFileSync(join(legacyDir, 'legacy-photo.png'), 'x');
+  const { exitCode, stdout } = runCli(['--json', '--list-media'], { HOME: home, USERPROFILE: home });
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('current-photo.png'), `openclaw inbound file should be listed, got: ${stdout}`);
+  assert.ok(!stdout.includes('legacy-photo.png'), 'legacy dir should be ignored when the openclaw dir exists');
+});

@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-06-12
+
+### Added
+
+- **Agents now surface update notices (gstack-style).** Update notices were previously suppressed exactly where
+  agents live — non-TTY stderr, `--json` mode, and OpenClaw plugin invocations — so Claude Code / Codex / Hermes /
+  OpenClaw users never learned a newer skill existed. Any command may now print a single advisory stderr line,
+  `[sogni-agent] Update available: <current> -> <latest> ...`, throttled to at most once per 24 hours, telling
+  the agent to finish the current task, relay the update to the user, and offer `sogni-agent self-update`
+  (`--snooze-update` on decline). Interactive TTY users keep the existing banner. stdout is never touched, so
+  `--json` output stays machine-parseable; SKILL.md instructs agents how to handle the line. Background version
+  checks now also run in agent contexts (still skipped for CI, tests, `--no-update-check`,
+  `SOGNI_NO_UPDATE_CHECK`, and dev checkouts).
+
 ## [3.5.1] - 2026-06-12
 
 ### Fixed

@@ -683,8 +683,10 @@ This skill is designed to be loaded into agent runtimes as a first-class capabil
 5. **Agent-safe install/upgrade**
    Prefer the `npm install -g` and `git -C "$DEST" pull --ff-only` paths above. Avoid generating clone-or-pull bootstrap scripts with `set -e`, `bash -c`, `sh -c`, or inline repository URLs — agent sandboxes correctly route those through approval and the install will stall.
 6. **Verify with `doctor`**
-   After any install or upgrade, run `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working. Each failed check carries a `detail` string with the fix.
-7. **SSRF / URL safety**
+   After any install or upgrade, run `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
+7. **Update notices for agents**
+   When a newer version exists, any command may print one advisory stderr line — `[sogni-agent] Update available: <current> -> <latest> ...` — at most once per day (stdout JSON is never touched). Agents should relay it to the user and offer `sogni-agent self-update`, or run `sogni-agent --snooze-update` if the user declines. Interactive TTY users get a banner instead. Each failed check carries a `detail` string with the fix.
+8. **SSRF / URL safety**
    The CLI validates every HTTP(S) media reference with an SSRF guard ([`ssrf-guard.mjs`](./ssrf-guard.mjs)) and re-validates each redirect hop on download. Localhost and private-network URLs are rejected; only public HTTPS references are forwarded as Seedance multimodal context.
 
 ---

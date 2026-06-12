@@ -11,20 +11,25 @@ import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
 import { getEnv, hasEnv } from './env.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
-import { assertSafeUrl } from './ssrf-guard.mjs';
+import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
   runForegroundCheck as runUpdateCheckForeground,
   maybeSpawnBackgroundCheck as maybeSpawnUpdateCheck,
   getQueuedNotice as getUpdateCheckNotice,
   runSelfUpdate as runSogniSelfUpdate,
+  snoozeUpdate as snoozeSogniUpdate,
+  runWhatsNew as runSogniWhatsNew,
+  readState as readUpdateCheckState,
+  compareSemver as compareSogniSemver,
 } from './update-check.mjs';
+import { fileURLToPath } from 'url';
 import {
   LTX23_WORKFLOW_MODELS,
   PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
@@ -134,7 +139,15 @@ function sanitizePath(p, label) {
 const DEFAULT_CREDENTIALS_PATH = join(homedir(), '.config', 'sogni', 'credentials');
 const DEFAULT_LAST_RENDER_PATH = join(homedir(), '.config', 'sogni', 'last-render.json');
 const DEFAULT_OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
-const DEFAULT_MEDIA_INBOUND_DIR = join(homedir(), '.clawdbot', 'media', 'inbound');
+// Current OpenClaw home, with a fallback to the legacy clawdbot-era directory
+// for installs that predate the rename. Only used when neither
+// SOGNI_MEDIA_INBOUND_DIR nor the OpenClaw plugin config overrides it.
+const OPENCLAW_MEDIA_INBOUND_DIR = join(homedir(), '.openclaw', 'media', 'inbound');
+const LEGACY_MEDIA_INBOUND_DIR = join(homedir(), '.clawdbot', 'media', 'inbound');
+const DEFAULT_MEDIA_INBOUND_DIR =
+  !existsSync(OPENCLAW_MEDIA_INBOUND_DIR) && existsSync(LEGACY_MEDIA_INBOUND_DIR)
+    ? LEGACY_MEDIA_INBOUND_DIR
+    : OPENCLAW_MEDIA_INBOUND_DIR;
 const DEFAULT_MEMORIES_PATH = join(homedir(), '.config', 'sogni', 'memories.json');
 const DEFAULT_PERSONALITY_PATH = join(homedir(), '.config', 'sogni', 'personality.txt');
 const DEFAULT_PERSONAS_DIR = join(homedir(), '.config', 'sogni', 'personas');
@@ -162,6 +175,27 @@ if (RAW_ARGS[0] === UPDATE_CHECK_INTERNAL_FLAG) {
 if (RAW_ARGS[0] === 'self-update') {
   process.exit(runSogniSelfUpdate({}));
 }
+// `--snooze-update`: pause reminders for the currently pending update
+// (escalating backoff: 1 day → 2 days → 1 week; a newer release resets it).
+if (RAW_ARGS[0] === '--snooze-update') {
+  const result = snoozeSogniUpdate({ currentVersion: PACKAGE_VERSION });
+  if (result.snoozed) {
+    console.error(`Update reminders for v${result.version} snoozed until ${new Date(result.until).toISOString()}.`);
+  } else {
+    console.error('No pending update to snooze.');
+  }
+  process.exit(0);
+}
+// `--whats-new [since-version]`: print the bundled CHANGELOG entries for the
+// installed version, or everything after <since-version>.
+if (RAW_ARGS[0] === '--whats-new') {
+  const sinceVersion = RAW_ARGS[1] && !RAW_ARGS[1].startsWith('-') ? RAW_ARGS[1] : null;
+  process.exit(runSogniWhatsNew({
+    changelogPath: join(dirname(fileURLToPath(import.meta.url)), 'CHANGELOG.md'),
+    currentVersion: PACKAGE_VERSION,
+    sinceVersion,
+  }));
+}
 // Fire-and-forget background check (no-op when throttled or skipped)
 try { maybeSpawnUpdateCheck({ cliPath: process.argv[1] }); } catch { /* never break the CLI */ }
 // Trailing notice on exit, if a newer version is on file
@@ -171,6 +205,36 @@ process.on('exit', () => {
     if (notice) process.stderr.write(notice + '\n');
   } catch { /* never break exit */ }
 });
+// --- Temp-dir lifecycle ------------------------------------------------------
+// Every transient directory the CLI creates is registered here and removed on
+// normal exit, fatal error, or signal. Ctrl-C during a long video job is the
+// common case that used to orphan directories under os.tmpdir().
+const TRACKED_TEMP_DIRS = new Set();
+
+function createTrackedTempDir(prefix) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  TRACKED_TEMP_DIRS.add(dir);
+  return dir;
+}
+
+function cleanupTrackedTempDirs() {
+  for (const dir of TRACKED_TEMP_DIRS) {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    TRACKED_TEMP_DIRS.delete(dir);
+  }
+}
+
+process.on('exit', cleanupTrackedTempDirs);
+// 128 + signal number is the conventional shell exit code for a signal death.
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+for (const signal of Object.keys(SIGNAL_EXIT_CODES)) {
+  process.on(signal, () => {
+    // process.exit() fires the 'exit' handlers above (temp cleanup + update
+    // notice); the OS tears down any open SDK socket with the process.
+    process.exit(SIGNAL_EXIT_CODES[signal]);
+  });
+}
+
 const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
@@ -338,6 +402,22 @@ function addCanonicalErrorFields(payload, error) {
     if (!payload.hint) payload.hint = SPARK_PACKS_PURCHASE_HINT;
   }
   return payload;
+}
+
+// Human-facing twin of addCanonicalErrorFields: print the classified, friendly
+// message (with the raw message as a detail line when it differs) so human
+// users get the same quality of error JSON consumers already receive.
+function printHumanError(error) {
+  let classified = null;
+  try { classified = classifyCliError(error); } catch { /* fall back to raw */ }
+  const message = classified?.message || error?.message || String(error);
+  console.error(`Error: ${message}`);
+  if (classified?.technicalError && classified.technicalError !== message) {
+    console.error(`Details: ${classified.technicalError}`);
+  }
+  const hint = error?.hint
+    || (classified?.category === 'insufficient_credits' ? SPARK_PACKS_PURCHASE_HINT : null);
+  if (hint) console.error(`Hint: ${hint}`);
 }
 
 function fatalCliError(message, opts = {}) {
@@ -792,6 +872,15 @@ function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
 // just large enough to catch obvious typos (e.g. a stray extra zero) before
 // they waste a round-trip or blow up local memory.
 const MAX_IMAGE_DIMENSION = 8192;
+
+// Safety cap for -n/--count: every output is a paid generation, so a typo like
+// `-n 1000` (meant `-n 10`) must not launch a thousand-render batch. Raise
+// deliberately with SOGNI_MAX_COUNT when a bigger batch is really wanted.
+const DEFAULT_MAX_COUNT = 16;
+const MAX_COUNT = (() => {
+  const raw = Number.parseInt(getEnv('SOGNI_MAX_COUNT') || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MAX_COUNT;
+})();
 
 function parseSeedValue(raw, flagName) {
   const num = parseIntegerValue(raw, flagName);
@@ -1344,6 +1433,7 @@ const options = {
   estimateVideoCost: false,
   showBalance: false,
   showVersion: false,
+  doctor: false,
   angles360Video: null,
   refImage: null, // Reference image for video (start frame)
   refImageEnd: null, // End frame for video interpolation
@@ -1557,7 +1647,15 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '-n' || arg === '--count') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.count = parsePositiveIntegerValue(raw, arg);
+    const parsedCount = parsePositiveIntegerValue(raw, arg);
+    if (parsedCount > MAX_COUNT) {
+      fatalCliError(`${arg} ${parsedCount} exceeds the safety cap of ${MAX_COUNT} outputs per invocation.`, {
+        code: 'COUNT_LIMIT_EXCEEDED',
+        details: { flag: arg, value: parsedCount, max: MAX_COUNT },
+        hint: `Each output is a paid generation. Set SOGNI_MAX_COUNT=${parsedCount} to raise the cap deliberately.`
+      });
+    }
+    options.count = parsedCount;
     cliSet.count = true;
   } else if (arg === '-t' || arg === '--timeout') {
     const raw = requireFlagValue(args, i, arg);
@@ -2237,13 +2335,30 @@ for (let i = 0; i < args.length; i++) {
       }
     }
   } else if (arg === '--last') {
-    // Show last render info
+    // Show last render info. Use CLI_WANTS_JSON (precomputed from raw argv)
+    // because --json may appear after --last in the argument list.
     if (existsSync(LAST_RENDER_PATH)) {
-      console.log(readFileSync(LAST_RENDER_PATH, 'utf8'));
+      const rawLastRender = readFileSync(LAST_RENDER_PATH, 'utf8');
+      if (CLI_WANTS_JSON) {
+        let lastRecord;
+        try { lastRecord = JSON.parse(rawLastRender); } catch { lastRecord = { raw: rawLastRender }; }
+        console.log(JSON.stringify({ success: true, ...lastRecord }));
+      } else {
+        console.log(rawLastRender);
+      }
+      process.exit(0);
+    }
+    if (CLI_WANTS_JSON) {
+      console.log(JSON.stringify({
+        success: false,
+        error: 'No previous render found.',
+        errorCode: 'NO_LAST_RENDER',
+        hint: 'Generate something first; the last render is recorded automatically.'
+      }));
     } else {
       console.error('No previous render found.');
     }
-    process.exit(0);
+    process.exit(1);
   } else if (arg === '--json') {
     options.json = true;
   } else if (arg === '--strict-size') {
@@ -2257,6 +2372,8 @@ for (let i = 0; i < args.length; i++) {
     options.showBalance = true;
   } else if (arg === '--version' || arg === '-V') {
     options.showVersion = true;
+  } else if (arg === '--doctor' || (arg === 'doctor' && i === 0)) {
+    options.doctor = true;
   } else if (arg === '--no-update-check') {
     // Update-check opt-out handled at module load; no-op here so the parser
     // doesn't reject it as an unknown option.
@@ -2404,6 +2521,9 @@ General:
   --guidance <num>      Override guidance (model-dependent)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
   --balance, --balances Show SPARK/SOGNI balances and exit
+  --doctor              Health check: Node, credentials, ffmpeg, auth, config, version
+  --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
+  --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
   --version, -V         Show sogni-agent version and exit
   --no-update-check     Skip the once-daily npm update check for this run
   self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
@@ -2534,7 +2654,7 @@ Examples:
   } else if (arg.startsWith('-')) {
     fatalCliError(`Unknown option: ${arg}`, {
       code: 'INVALID_ARGUMENT',
-      hint: 'Use --help to see supported options.'
+      hint: 'Use --help to see supported options. If your prompt itself begins with "-", pass it after a standalone "--" separator, e.g. sogni-agent -- "-5 degrees outside".'
     });
   } else if (!options.prompt) {
     options.prompt = arg;
@@ -2562,7 +2682,7 @@ if (openclawConfig) {
     heightFromConfig = true;
   }
   if (!cliSet.count && isNumber(openclawConfig.defaultCount)) {
-    options.count = openclawConfig.defaultCount;
+    options.count = Math.min(openclawConfig.defaultCount, MAX_COUNT);
   }
   if (!cliSet.tokenType && openclawConfig.defaultTokenType) {
     options.tokenType = openclawConfig.defaultTokenType;
@@ -3142,6 +3262,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.estimateVideoCost &&
   !options.showBalance &&
   !options.showVersion &&
+  !options.doctor &&
   !options.extractLastFrame &&
   !options.extractFirstFrame &&
   !options.concatVideos &&
@@ -3161,7 +3282,7 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !opt
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -3587,12 +3708,25 @@ function parseCredentialsFile(content) {
     if (eq === -1) continue;
     const key = line.slice(0, eq).trim();
     let value = line.slice(eq + 1).trim();
+    let quoted = false;
     if (value.length >= 2 &&
         ((value.startsWith('"') && value.endsWith('"')) ||
          (value.startsWith("'") && value.endsWith("'")))) {
       value = value.slice(1, -1);
+      quoted = true;
     }
-    if (key) creds[key] = value;
+    if (key) {
+      // Inline `#` is NOT treated as a comment (a key could legitimately
+      // contain one), but `VALUE # note` is almost always a dotenv habit that
+      // silently corrupts the key — warn instead of failing later with a 401.
+      if (!quoted && / #/.test(value)) {
+        process.stderr.write(
+          `Warning: the ${key} value in the credentials file contains " #". ` +
+          'Inline comments are not stripped — move the comment to its own line if that was the intent.\n'
+        );
+      }
+      creds[key] = value;
+    }
   }
   return creds;
 }
@@ -5318,7 +5452,14 @@ function printWorkflowSseFrames(raw) {
   for (const frame of frames) {
     const data = frame.data && typeof frame.data === 'object' ? frame.data : {};
     const suffix = data.status ? ` ${data.status}` : data.message ? ` ${data.message}` : '';
-    console.log(`[${frame.id || '-'}] ${frame.event}${suffix}`);
+    const line = `[${frame.id || '-'}] ${frame.event}${suffix}`;
+    // In JSON mode stdout must stay a single machine-parseable object, so
+    // human-readable progress frames go to stderr instead.
+    if (options.json || JSON_ERROR_MODE) {
+      process.stderr.write(line + '\n');
+    } else {
+      console.log(line);
+    }
   }
 }
 
@@ -5427,7 +5568,7 @@ async function runApiWorkflow() {
     }
     if (options.apiWorkflowAction === 'stream') {
       if (options.json) {
-        console.log(JSON.stringify({ success: true, type, action: 'stream', workflowId: id, note: 'Streaming writes SSE frames as text output.' }));
+        console.log(JSON.stringify({ success: true, type, action: 'stream', workflowId: id, note: 'SSE progress frames stream to stderr in JSON mode.' }));
       }
       await streamApiWorkflowEvents(apiKey, id);
       return;
@@ -5772,8 +5913,11 @@ function applyPersonaAndVoiceReferences() {
 // Fetch image as buffer
 async function fetchMediaBuffer(pathOrUrl) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    await assertSafeUrl(pathOrUrl);
-    const response = await fetchWithTimeout(pathOrUrl);
+    // fetchSafeUrl re-validates every redirect hop, so a vetted public URL
+    // cannot bounce the download to a private/metadata address.
+    const response = await fetchSafeUrl(pathOrUrl, {}, {
+      fetchImpl: (resource, init) => fetchWithTimeout(resource, init)
+    });
     if (!response.ok) {
       const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
       err.code = 'FETCH_FAILED';
@@ -5795,8 +5939,11 @@ async function fetchMediaBuffer(pathOrUrl) {
 
 async function fetchMediaBlob(pathOrUrl, fallbackMimeType = 'application/octet-stream') {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    await assertSafeUrl(pathOrUrl);
-    const response = await fetchWithTimeout(pathOrUrl);
+    // fetchSafeUrl re-validates every redirect hop, so a vetted public URL
+    // cannot bounce the download to a private/metadata address.
+    const response = await fetchSafeUrl(pathOrUrl, {}, {
+      fetchImpl: (resource, init) => fetchWithTimeout(resource, init)
+    });
     if (!response.ok) {
       const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
       err.code = 'FETCH_FAILED';
@@ -5817,7 +5964,7 @@ async function prepareReferenceAudioIdentityMedia(pathOrUrl) {
   if (!pathOrUrl.startsWith('http://') && !pathOrUrl.startsWith('https://') && (cleanExt === '.wav' || cleanExt === '.wave')) {
     const sourcePath = sanitizePath(pathOrUrl, '--reference-audio-identity');
     const ffmpegPath = await ensureFfmpegAvailable();
-    const tempDir = mkdtempSync(join(tmpdir(), 'sogni-audio-id-'));
+    const tempDir = createTrackedTempDir('sogni-audio-id-');
     const outputPath = join(tempDir, 'voice-identity.m4a');
     try {
       const result = await runCommand(ffmpegPath, [
@@ -5859,7 +6006,7 @@ function mediaTempInputPath(tempDir, sourceLabel, fallbackExt) {
 
 async function transcodeMp3ReferenceAudioBuffer(buffer, sourceLabel) {
   const ffmpegPath = await ensureFfmpegAvailable();
-  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-ref-audio-'));
+  const tempDir = createTrackedTempDir('sogni-ref-audio-');
   const inputPath = mediaTempInputPath(tempDir, sourceLabel, '.mp3');
   const outputPath = join(tempDir, 'reference-audio.m4a');
   try {
@@ -5948,7 +6095,7 @@ async function probeLocalMediaDurationSeconds(pathOrUrl) {
 
 async function transcodeSeedanceReferenceAudioToMp3(request) {
   const ffmpegPath = await ensureFfmpegAvailable();
-  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-audio-'));
+  const tempDir = createTrackedTempDir('sogni-seedance-audio-');
   const inputPath = mediaTempInputPath(tempDir, request.filename, '.audio');
   const outputPath = join(tempDir, 'reference-audio.mp3');
   try {
@@ -5984,7 +6131,7 @@ async function transcodeSeedanceReferenceAudioToMp3(request) {
 
 async function trimSeedanceReferenceAudioToMp3(request) {
   const ffmpegPath = await ensureFfmpegAvailable();
-  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-audio-'));
+  const tempDir = createTrackedTempDir('sogni-seedance-audio-');
   const inputPath = mediaTempInputPath(tempDir, request.filename, '.audio');
   const outputPath = join(tempDir, 'reference-audio.mp3');
   const start = Math.max(0, Number(request.start) || 0);
@@ -6140,7 +6287,7 @@ async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
 
 async function trimSeedanceV2VSourceVideoBuffer(buffer, sourceLabel, startOffset, requestedDuration) {
   const ffmpegPath = await ensureFfmpegAvailable();
-  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-seedance-v2v-'));
+  const tempDir = createTrackedTempDir('sogni-seedance-v2v-');
   const inputPath = mediaTempInputPath(tempDir, sourceLabel, '.mp4');
   const outputPath = join(tempDir, 'seedance-source.mp4');
   const start = Math.max(0, Number(startOffset) || 0);
@@ -6797,7 +6944,7 @@ async function runMultiAngleFlow(client, log) {
     console.error('Warning: Could not resolve output path for multi-angle output.');
   }
   if (options.angles360Video && !outputConfig) {
-    tempOutputDir = mkdtempSync(join(tmpdir(), 'sogni-angles-'));
+    tempOutputDir = createTrackedTempDir('sogni-angles-');
     outputConfig = {
       dir: tempOutputDir,
       prefix: 'angles-360',
@@ -6932,7 +7079,7 @@ async function runMultiAngleFlow(client, log) {
       err.hint = 'Ensure the frames were downloaded locally (provide --output dir or check permissions).';
       throw err;
     }
-    const clipDir = mkdtempSync(join(tmpdir(), 'sogni-angles-clips-'));
+    const clipDir = createTrackedTempDir('sogni-angles-clips-');
     videoModelId = resolveVideoModelAlias(options.videoModel || openclawConfig?.videoModels?.i2v || VIDEO_WORKFLOW_DEFAULT_MODELS.i2v, 'i2v');
     const videoDefaults = getModelDefaults(videoModelId, openclawConfig);
     const videoDimensionRules = videoDimensionRulesFromDefaults(videoDefaults, videoModelId);
@@ -7212,6 +7359,135 @@ if (_isAutoToken) {
 }
 const _allowAutoTokenFallback = _isAutoToken && !_requiresSparkOnlyToken;
 
+const DOCTOR_AUTH_TIMEOUT_MS = 15000;
+
+// `sogni-agent doctor` / `--doctor`: one deterministic install health check.
+// Agents are told to run this as the verification gate after installing.
+async function runDoctor() {
+  const checks = [];
+  const add = (id, status, detail) => { checks.push({ id, status, detail }); };
+
+  // The zero-dependency guard in node-version-check.mjs already hard-exits on
+  // unsupported Node, so reaching this line means the floor is satisfied.
+  add('node', 'pass', `v${process.versions.node} (>= 22.11.0 required)`);
+
+  let creds = null;
+  try {
+    creds = loadCredentials();
+    const fileHasKey = existsSync(CREDENTIALS_PATH) &&
+      Boolean(parseCredentialsFile(readFileSync(CREDENTIALS_PATH, 'utf8')).SOGNI_API_KEY);
+    add('credentials', 'pass', fileHasKey
+      ? `SOGNI_API_KEY found in ${CREDENTIALS_PATH}`
+      : 'SOGNI_API_KEY found in environment');
+  } catch (err) {
+    add('credentials', 'fail', `${err.message}${err.hint ? ` — ${err.hint}` : ''}`);
+  }
+
+  if (process.platform !== 'win32' && existsSync(CREDENTIALS_PATH)) {
+    try {
+      const mode = statSync(CREDENTIALS_PATH).mode & 0o777;
+      if (mode & 0o077) {
+        add('credentials-permissions', 'warn',
+          `file mode ${mode.toString(8)} is group/world accessible — run: chmod 600 ${CREDENTIALS_PATH}`);
+      } else {
+        add('credentials-permissions', 'pass', 'credentials file is private (600)');
+      }
+    } catch { /* permissions probe is best-effort */ }
+  }
+
+  const configDir = join(homedir(), '.config', 'sogni');
+  try {
+    mkdirSync(configDir, { recursive: true });
+    const probePath = join(configDir, `.doctor-probe-${process.pid}`);
+    writeFileSync(probePath, 'ok');
+    unlinkSync(probePath);
+    add('config-dir', 'pass', `${configDir} is writable`);
+  } catch (err) {
+    add('config-dir', 'fail', `${configDir} is not writable (${err?.code || err}) — personas/memories/last-render need it`);
+  }
+
+  try {
+    await ensureFfmpegAvailable('the doctor check');
+    add('ffmpeg', 'pass', 'found (used by --concat-videos, --remix-audio, --angles-360-video)');
+  } catch {
+    add('ffmpeg', 'warn', 'not found — optional; install ffmpeg or set FFMPEG_PATH for local video/audio utilities');
+  }
+
+  add('media-inbound', existsSync(MEDIA_INBOUND_DIR) ? 'pass' : 'warn',
+    existsSync(MEDIA_INBOUND_DIR)
+      ? MEDIA_INBOUND_DIR
+      : `${MEDIA_INBOUND_DIR} does not exist (only used by --list-media)`);
+
+  if (creds?.SOGNI_API_KEY) {
+    let doctorClient = null;
+    try {
+      doctorClient = new SogniClientWrapper({
+        appSource: SOGNI_APP_SOURCE,
+        network: openclawConfig?.defaultNetwork || 'fast',
+        autoConnect: false,
+        apiKey: creds.SOGNI_API_KEY,
+        authType: 'apiKey'
+      });
+      const authFlow = (async () => {
+        await connectSogniClient(doctorClient);
+        return doctorClient.getBalance();
+      })();
+      const balance = await Promise.race([
+        authFlow,
+        new Promise((_, reject) => setTimeout(
+          () => reject(Object.assign(new Error('timed out'), { code: 'DOCTOR_TIMEOUT' })),
+          DOCTOR_AUTH_TIMEOUT_MS
+        ))
+      ]);
+      const spark = Number.parseFloat(balance?.spark);
+      const sogni = Number.parseFloat(balance?.sogni);
+      add('auth', 'pass',
+        `API key accepted (SPARK ${Number.isFinite(spark) ? spark : '?'}, SOGNI ${Number.isFinite(sogni) ? sogni : '?'})`);
+    } catch (err) {
+      if (isInvalidApiKeyError(err)) {
+        add('auth', 'fail', 'API key rejected — get a fresh key at https://dashboard.sogni.ai (account menu)');
+      } else {
+        add('auth', 'warn', `could not verify the key (network?): ${err?.message || err}`);
+      }
+    } finally {
+      try {
+        if (doctorClient?.isConnected?.()) {
+          await Promise.race([doctorClient.disconnect(), new Promise(resolve => setTimeout(resolve, 1000))]);
+        }
+      } catch { /* ignore */ }
+    }
+  } else {
+    add('auth', 'skip', 'skipped — no API key to verify');
+  }
+
+  const updateState = readUpdateCheckState();
+  if (updateState?.lastKnownLatest && compareSogniSemver(updateState.lastKnownLatest, PACKAGE_VERSION) > 0) {
+    add('version', 'warn', `${PACKAGE_VERSION} installed; ${updateState.lastKnownLatest} available — run: sogni-agent self-update`);
+  } else {
+    add('version', 'pass', `${PACKAGE_VERSION}${updateState?.lastKnownLatest ? ` (latest known: ${updateState.lastKnownLatest})` : ''}`);
+  }
+
+  const healthy = checks.every((check) => check.status !== 'fail');
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify({
+      success: healthy,
+      type: 'doctor',
+      healthy,
+      checks,
+      version: PACKAGE_VERSION,
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    const icons = { pass: '✓', warn: '!', fail: '✗', skip: '-' };
+    console.log('sogni-agent doctor');
+    for (const check of checks) {
+      console.log(`  ${icons[check.status] || '?'} ${check.id.padEnd(25)} ${check.detail}`);
+    }
+    console.log(healthy ? 'Result: healthy' : 'Result: problems found (fix the ✗ items above)');
+  }
+  return healthy ? 0 : 1;
+}
+
 async function main() {
   let exitCode = 0;
   const log = options.quiet ? () => {} : console.error.bind(console);
@@ -7231,6 +7507,13 @@ async function main() {
         console.log(PACKAGE_VERSION);
       }
       return;
+    }
+
+    if (options.doctor) {
+      // runDoctor manages (and disconnects) its own client; exit directly so
+      // the success-path `process.exit(0)` in the main().then() tail cannot
+      // mask a failing health check.
+      process.exit(await runDoctor());
     }
 
     // --- Utility commands (no Sogni auth required) ---
@@ -8387,7 +8670,7 @@ async function main() {
           log('Creating looping video (A→B→A)...');
 
           // Save first clip temporarily
-          const tempDir = mkdtempSync(join(tmpdir(), 'sogni-loop-'));
+          const tempDir = createTrackedTempDir('sogni-loop-');
           const clip1Path = join(tempDir, 'clip1.mp4');
           const lastFramePath = join(tempDir, 'last-frame.png');
           const clip2Path = join(tempDir, 'clip2.mp4');
@@ -8679,12 +8962,10 @@ async function main() {
       if (IS_OPENCLAW_INVOCATION) payload.openclaw = true;
       console.log(JSON.stringify(payload));
       if (!options.json) {
-        console.error(`Error: ${error.message}`);
-        if (error.hint) console.error(`Hint: ${error.hint}`);
+        printHumanError(error);
       }
     } else {
-      console.error(`Error: ${error.message}`);
-      if (error.hint) console.error(`Hint: ${error.hint}`);
+      printHumanError(error);
     }
   } finally {
     try {

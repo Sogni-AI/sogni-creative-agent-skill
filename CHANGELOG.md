@@ -5,6 +5,66 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-06-11
+
+### Added
+
+- **`sogni-agent doctor` (also `--doctor`).** One deterministic install health check: Node floor, credentials
+  presence and file permissions, config-dir writability, ffmpeg discovery, a live auth + balance probe with a
+  timeout, and version freshness. `--json` emits a structured `checks` array; exit 1 when a required check fails.
+  Every install path in the docs now ends with `sogni-agent doctor` as the verification gate.
+- **Upgrade UX.** `--whats-new [since-version]` prints the bundled CHANGELOG entries (CHANGELOG.md now ships in
+  the npm tarball and `self-update` points at it after upgrading), and `--snooze-update` pauses the update
+  reminder with escalating backoff (1 day → 2 days → 1 week, reset by a newer release) instead of re-nagging
+  every 24 hours.
+- **SSRF-guarded downloads.** New `fetchSafeUrl` in `ssrf-guard.mjs` fetches with manual redirects and re-validates
+  every hop, so a vetted public media URL can no longer redirect a download to a private/metadata address. Remote
+  `--ref`/`--ref-audio`/`--ref-video` fetches use it.
+- **CI.** GitHub Actions workflow running the unit suite on Node 22.11.0 and 24, verifying npm tarball contents,
+  and validating the plugin manifests. `npm run sync:version` stamps the package.json version into every manifest
+  (`version.mjs`, `SKILL.md`, `.claude-plugin/plugin.json`, `openclaw.plugin.json`), enforced by a new
+  docs-consistency test suite that also fails on any documented flag missing from the CLI parser.
+
+### Changed
+
+- **SKILL.md restructured for progressive disclosure.** The always-loaded core shrank from 1,338 lines (~10k
+  words) to ~300 lines (~2.6k words) — every routing rule (photobooth-vs-context-edit, LTX prompt rewrite,
+  high-res routing, PWD output convention, insufficient-funds script, media/shell security rules) stays inline,
+  while deep guides moved to `references/` (video-prompting, video-editing, hosted-api, models, personas-memory,
+  openclaw-config) read on demand. `references/` and `skills/` now ship in the npm tarball, the Claude plugin,
+  and the OpenClaw link surface. Verified with a 7-scenario agent battery against the new layout.
+- **Install docs are now accurate per platform.** Added the missing OpenAI Codex CLI section
+  (`~/.codex/skills/`), a real Hermes Agent section (`~/.hermes/skills/media/` + `/reset`), the ChatGPT
+  Custom-GPT path the installer prints, an explicit note that the npx installer does not configure OpenClaw, and
+  "pick one registration" guidance for Claude Code (plugin or personal skill, not both). The OpenClaw install
+  command is now `openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill` — the bare unscoped name
+  never resolved the scoped npm package.
+- **OpenClaw branding modernized.** Frontmatter metadata key `clawdbot:` → `openclaw:`; `--list-media` now
+  defaults to `~/.openclaw/media/inbound` with automatic fallback to the legacy `~/.clawdbot/media/inbound`;
+  the ClawHub install hook no longer overwrites `package.json` in a git checkout (guarded copy).
+- **`--json` stdout is now strictly machine-parseable.** Durable-workflow SSE progress frames stream to stderr in
+  JSON mode; `--last --json` wraps the record in a `{ "success": true, ... }` envelope and exits 1 with
+  `errorCode: "NO_LAST_RENDER"` when nothing has been rendered (previously raw record / exit 0). Human-mode
+  errors now print the same classified, friendly message JSON consumers get.
+- **Paid-batch safety cap.** `-n/--count` is capped at 16 outputs per invocation (a typo like `-n 1000` no longer
+  launches a thousand paid renders); raise deliberately with `SOGNI_MAX_COUNT`. OpenClaw `defaultCount` is
+  clamped the same way.
+- `npm test` now runs the offline unit suites only and works without the private `sogni-creative-agent` sibling
+  (the runtime freshness check skips with a warning; publishing still hard-requires it via `prepack`).
+  Integration tests are strictly opt-in: `SOGNI_INTEGRATION=1` / `npm run test:integration` — a `SOGNI_API_KEY`
+  in the environment no longer causes plain `npm test` to submit real paid GPU jobs.
+- `engines.node` raised to `>=22.11.0` to match the runtime guard (Node 22.0–22.10 previously passed `npm
+  install` and then hard-exited at first run).
+
+### Fixed
+
+- **Ctrl-C and temp-file hygiene.** The CLI now handles SIGINT/SIGTERM/SIGHUP (conventional exit codes) and
+  removes every temporary directory it created on exit — interrupting a long video job no longer orphans
+  directories under the OS temp dir, and the multi-angle / loop flows no longer leak a temp dir on every run.
+- Credentials file values containing an inline ` #` comment now trigger a clear warning instead of silently
+  corrupting the API key into a confusing 401; prompts that begin with `-` get a hint about the standalone `--`
+  separator.
+
 ## [3.4.0] - 2026-05-30
 
 ### Added

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.11.0 is the enforced runtime floor; 24 is current LTS.
+        node: ['22.11.0', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The private sogni-creative-agent sibling is not available in CI;
+      # check:creative-agent-runtime skips with a warning and the suite runs
+      # against the committed generated runtime. Paid integration tests are
+      # opt-in (SOGNI_INTEGRATION=1) and never run here.
+      - run: npm test
+
+  package:
+    name: Package contents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # --ignore-scripts: prepack's private-source gate is publish-only and
+      # cannot run in CI. This validates the tarball file list instead.
+      - name: Verify npm tarball contents
+        run: |
+          npm pack --dry-run --ignore-scripts 2>&1 | tee pack.txt
+          for required in SKILL.md README.md CHANGELOG.md llm.txt sogni-agent.mjs ssrf-guard.mjs update-check.mjs generated/creative-agent-runtime.mjs references/video-prompting.md skills/README.md; do
+            grep -q "$required" pack.txt || { echo "MISSING from tarball: $required"; exit 1; }
+          done
+      - name: Validate JSON manifests
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json','utf8')); console.log('plugin.json ok')"
+          node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/marketplace.json','utf8')); console.log('marketplace.json ok')"
+          node -e "JSON.parse(require('fs').readFileSync('openclaw.plugin.json','utf8')); console.log('openclaw.plugin.json ok')"

@@ -1,23 +1,37 @@
 # sogni-creative-agent-skill
 
 Agent skill and CLI for Sogni AI image, video, and music generation. Works as
-a skill source for Claude Code, OpenClaw, Hermes Agent, Manus AI, and other
-agent runtimes.
+a skill source for Claude Code, OpenAI Codex CLI, Hermes Agent, OpenClaw,
+Manus AI, and other SKILL.md-aware agent runtimes.
 
 ## Install (pick the integration that matches your environment)
 
 ```bash
-# Agent-safe CLI install or upgrade
+# One-command install: detects Claude Code, Codex CLI, and Hermes; installs the
+# CLI globally; prompts for the API key; prints ChatGPT Custom-GPT instructions.
+# (Does NOT configure OpenClaw — see below.)
+npx setup-sogni-agent-skill
+
+# Agent-safe manual CLI install or upgrade
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 sogni-agent --version
 
-# Claude Code plugin (requires the CLI install above; the plugin shells out to sogni-agent).
-# Run both slash commands from inside Claude Code:
+# Claude Code plugin (requires the CLI install above; the plugin shells out to
+# sogni-agent). Run both slash commands from inside Claude Code:
 #   /plugin marketplace add Sogni-AI/sogni-creative-agent-skill
 #   /plugin install sogni-creative-agent@sogni
+# Pick ONE Claude Code registration: the plugin OR the ~/.claude/skills install
+# from the npx installer — not both.
 
-# OpenClaw plugin
-openclaw plugins install sogni-creative-agent-skill
+# OpenAI Codex CLI (writes ~/.codex/skills/sogni-creative-agent-skill/)
+npx setup-sogni-agent-skill --only=codex
+
+# Hermes Agent (writes ~/.hermes/skills/media/sogni-creative-agent-skill/),
+# then /reset the Hermes session
+npx setup-sogni-agent-skill --only=hermes
+
+# OpenClaw plugin (the npm package is scoped — use the npm: source prefix)
+openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill
 
 # OpenClaw local linked checkout (for continuous updates)
 cd /path/to/sogni-creative-agent-skill
@@ -27,22 +41,13 @@ npm run openclaw:sync
 openclaw plugins install -l "$PWD/.openclaw-link"
 openclaw gateway restart
 
-# Update OpenClaw local linked checkout
-cd /path/to/sogni-creative-agent-skill
-git pull --ff-only
-npm install
-npm link
-npm run openclaw:sync
-openclaw gateway restart
-
 # Agent-safe existing checkout update
 DEST="$HOME/Documents/git/sogni/sogni-creative-agent-skill"
 git -C "$DEST" pull --ff-only
 npm --prefix "$DEST" install
 
-# Hermes Agent / Manus / other agent frameworks
-# Point the agent at the Sogni-AI/sogni-creative-agent-skill repository.
-# Use SKILL.md as the behavior source and invoke the CLI.
+# Verify any install (agents: use --json and check "success": true)
+sogni-agent doctor
 ```
 
 When operating inside an agent runtime, do not generate clone-or-pull shell
@@ -52,10 +57,8 @@ ask before cloning.
 
 ## Configure Sogni API key
 
-Once-only setup, used by every integration above:
-
-The API key can always be found by logging into https://dashboard.sogni.ai and
-opening the account menu.
+Once-only setup, used by every integration above. The API key can always be
+found by logging into https://dashboard.sogni.ai and opening the account menu.
 
 ```bash
 mkdir -p ~/.config/sogni
@@ -65,34 +68,27 @@ EOF
 chmod 600 ~/.config/sogni/credentials
 ```
 
-You can also export `SOGNI_API_KEY` instead of writing the file.
+You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
+`sogni-agent doctor`.
 
-Hosted API modes require `SOGNI_API_KEY`: use `sogni-agent --api-chat "prompt"`
-for `/v1/chat/completions` with rich creative-agent tools and sanitized
-message forwarding, or
-`sogni-agent --api-workflow --video-prompt "motion" "image prompt"`
-for durable `/v1/creative-agent/workflows` execution.
-Use `SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat "prompt"` for
-durable `/v1/chat/runs` execution with SSE assistant deltas and per-job
-progress / ETA / result events.
-Sogni Intelligence utilities are available with `--list-api-models`,
-`--get-api-model <id>`, `--task-profile general|coding|reasoning`,
-`--max-tokens <n>`, `--thinking` / `--no-thinking`, `--list-replays [n]`,
-`--get-replay <id>`, and `--ingest-replay <json|@path>` (use `@path` to load JSON from a file).
-Hosted API modes forward media references from `-c`, `--ref`, `--ref-end`,
-`--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
-`media_references`; API chat also attaches image refs as vision inputs. Local
-file references are uploaded to Sogni media storage first and then forwarded as
-retrievable URLs. Workflow JSON can bind those refs with
-`sourceStepId: "$input_media"`. Use `--workflow-max-cost`, `--confirm-cost`,
-or `--no-confirm-cost` for durable workflow cost policy. JSON errors include
-canonical `errorType`, `errorCategory`, and retryability when classified.
+## Hosted API modes (require SOGNI_API_KEY)
 
-Reusable hosted workflow behavior belongs in `../sogni-creative-agent` before it
-is synced into this public skill. Use typed planner/runtime contracts for media
-routing and repair decisions; keep skill-local regex limited to CLI fact
-extraction such as paths, URLs, extensions, dimensions, durations, and explicit
-positions.
+- `sogni-agent --api-chat "prompt"` — `/v1/chat/completions` with hosted
+  creative-agent tools and sanitized message forwarding.
+- `sogni-agent --api-workflow --video-prompt "motion" "image prompt"` —
+  durable `/v1/creative-agent/workflows` execution.
+- `SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat "prompt"` —
+  durable `/v1/chat/runs` with SSE assistant deltas and per-job progress.
+- Utilities: `--list-api-models`, `--get-api-model <id>`,
+  `--task-profile general|coding|reasoning`, `--max-tokens <n>`,
+  `--thinking` / `--no-thinking`, `--list-replays [n]`, `--get-replay <id>`,
+  `--ingest-replay <json|@path>`.
+- Media references from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
+  `--reference-audio-identity`, and `--ref-video` are uploaded and forwarded as
+  `media_references`; API chat also attaches image refs as vision inputs.
+  Workflow JSON can bind refs with `sourceStepId: "$input_media"`.
+- Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.
+- JSON errors include canonical `errorType`, `errorCategory`, and `retryable`.
 
 ## Repo
 
@@ -101,6 +97,7 @@ Sogni-AI/sogni-creative-agent-skill
 ## Key files
 
 - `SKILL.md` — agent behavior and usage rules (load this into your agent)
+- `references/` — deep-dive guides SKILL.md points at (video prompting,
+  hosted API, models, personas, video editing)
 - `openclaw.plugin.json` — OpenClaw plugin manifest and config schema
-- `.openclaw-link/` — generated OpenClaw link target for local development only
-- `sogni-agent.mjs` — CLI used by the skill
+- `sogni-agent.mjs` — CLI used by the skill (`sogni-agent --help` is canonical)

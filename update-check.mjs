@@ -12,6 +12,10 @@
  *   maybeSpawnBackgroundCheck(opts) → 'spawned' | 'skipped' | 'fresh'
  *   getQueuedNotice(opts)           → string | null
  *   runSelfUpdate(opts)             → number (exit code)
+ *   snoozeUpdate(opts)              → { snoozed, version?, level?, until? }
+ *   extractChangelogEntries(text)   → [{ version, heading, body }]  (pure)
+ *   formatWhatsNew(opts)            → string | null                  (pure)
+ *   runWhatsNew(opts)               → number (exit code)
  */
 
 import { spawn, spawnSync } from 'child_process';
@@ -265,17 +269,126 @@ export function getQueuedNotice({
   currentVersion,
   statePath = DEFAULT_STATE_PATH,
   env = process.env,
+  now = Date.now,
 } = {}) {
   if (shouldSkipForEnvironment({ env })) return null;
   const state = readState(statePath);
   if (!state || typeof state.lastKnownLatest !== 'string') return null;
   if (compareSemver(state.lastKnownLatest, currentVersion) <= 0) return null;
+  // Respect an active snooze for this specific target version. A newer
+  // release than the snoozed one starts nagging again immediately.
+  if (
+    state.snooze &&
+    state.snooze.version === state.lastKnownLatest &&
+    typeof state.snooze.until === 'number' &&
+    now() < state.snooze.until
+  ) {
+    return null;
+  }
   const { installCmd } = detectPackageManager(env);
   return formatUpdateNotice({
     currentVersion,
     latestVersion: state.lastKnownLatest,
     installCmd,
   });
+}
+
+// Escalating snooze backoff: declining the same update nags less and less
+// (1 day → 2 days → 1 week), and a new release resets the ladder.
+export const SNOOZE_LEVELS_MS = [
+  24 * 60 * 60 * 1000,
+  48 * 60 * 60 * 1000,
+  7 * 24 * 60 * 60 * 1000,
+];
+
+export function snoozeUpdate({
+  currentVersion,
+  statePath = DEFAULT_STATE_PATH,
+  now = Date.now,
+} = {}) {
+  const state = readState(statePath) || {};
+  const target = typeof state.lastKnownLatest === 'string' ? state.lastKnownLatest : null;
+  if (!target || compareSemver(target, currentVersion) <= 0) {
+    return { snoozed: false, reason: 'no-pending-update' };
+  }
+  const priorLevel = state.snooze && state.snooze.version === target ? (state.snooze.level || 0) : 0;
+  const level = Math.min(priorLevel + 1, SNOOZE_LEVELS_MS.length);
+  const until = now() + SNOOZE_LEVELS_MS[level - 1];
+  writeState(statePath, { ...state, snooze: { version: target, level, until } });
+  return { snoozed: true, version: target, level, until };
+}
+
+// ---------- what's new (CHANGELOG summaries) ----------
+
+// Parses keep-a-changelog style sections: `## [x.y.z] - date` headings.
+export function extractChangelogEntries(changelogText) {
+  const entries = [];
+  const lines = String(changelogText || '').split('\n');
+  let current = null;
+  for (const line of lines) {
+    const heading = line.match(/^##\s+\[?(\d+\.\d+\.\d+)\]?(.*)$/);
+    if (heading) {
+      if (current) entries.push(current);
+      current = { version: heading[1], heading: line.trim(), body: [] };
+      continue;
+    }
+    if (current) current.body.push(line);
+  }
+  if (current) entries.push(current);
+  return entries.map((entry) => ({
+    version: entry.version,
+    heading: entry.heading,
+    body: entry.body.join('\n').trim(),
+  }));
+}
+
+export function formatWhatsNew({
+  changelogText,
+  currentVersion,
+  sinceVersion = null,
+  maxEntries = 10,
+} = {}) {
+  const entries = extractChangelogEntries(changelogText);
+  if (entries.length === 0) return null;
+  let selected;
+  if (sinceVersion) {
+    selected = entries.filter((entry) =>
+      compareSemver(entry.version, sinceVersion) > 0 &&
+      (!currentVersion || compareSemver(entry.version, currentVersion) <= 0));
+  } else {
+    selected = entries.filter((entry) => entry.version === currentVersion);
+    if (selected.length === 0) selected = [entries[0]];
+  }
+  if (selected.length === 0) return null;
+  const sections = selected.slice(0, maxEntries).map((entry) =>
+    `${entry.heading}\n\n${entry.body}`.trim());
+  return sections.join('\n\n');
+}
+
+export function runWhatsNew({
+  changelogPath,
+  currentVersion,
+  sinceVersion = null,
+  stdout = process.stdout,
+  stderr = process.stderr,
+} = {}) {
+  let changelogText;
+  try {
+    changelogText = readFileSync(changelogPath, 'utf8');
+  } catch {
+    stderr.write(`No CHANGELOG.md found at ${changelogPath}.\n`);
+    stderr.write(`See https://github.com/Sogni-AI/sogni-creative-agent-skill/blob/main/CHANGELOG.md\n`);
+    return 1;
+  }
+  const summary = formatWhatsNew({ changelogText, currentVersion, sinceVersion });
+  if (!summary) {
+    stderr.write(sinceVersion
+      ? `No changelog entries found after ${sinceVersion}.\n`
+      : 'No changelog entries found.\n');
+    return 1;
+  }
+  stdout.write(summary + '\n');
+  return 0;
 }
 
 export function runSelfUpdate({
@@ -299,5 +412,6 @@ export function runSelfUpdate({
     return result.status;
   }
   clearState(statePath);
+  console.error('Updated. Run `sogni-agent --whats-new` to see what changed.');
   return 0;
 }

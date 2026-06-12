@@ -15,6 +15,11 @@ import {
   runForegroundCheck,
   maybeSpawnBackgroundCheck,
   getQueuedNotice,
+  snoozeUpdate,
+  SNOOZE_LEVELS_MS,
+  extractChangelogEntries,
+  formatWhatsNew,
+  runWhatsNew,
   INTERNAL_FLAG,
   PACKAGE_NAME,
 } from '../update-check.mjs';
@@ -221,4 +226,114 @@ test('getQueuedNotice — null when env opts out even if newer version on disk',
     env: { CI: 'true' },
   });
   assert.equal(result, null);
+});
+
+// --- snooze (escalating backoff) ---
+
+test('snoozeUpdate — no pending update is a no-op', () => {
+  const statePath = makeStatePath();
+  writeState(statePath, { lastCheckedAt: 1, lastKnownLatest: '1.0.0' });
+  const result = snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 1000 });
+  assert.equal(result.snoozed, false);
+  assert.equal(result.reason, 'no-pending-update');
+});
+
+test('snoozeUpdate — escalates 1 day → 2 days → 1 week and caps', () => {
+  const statePath = makeStatePath();
+  writeState(statePath, { lastCheckedAt: 1, lastKnownLatest: '2.0.0' });
+  const now = () => 0;
+  const first = snoozeUpdate({ currentVersion: '1.0.0', statePath, now });
+  assert.deepEqual([first.level, first.until], [1, SNOOZE_LEVELS_MS[0]]);
+  const second = snoozeUpdate({ currentVersion: '1.0.0', statePath, now });
+  assert.deepEqual([second.level, second.until], [2, SNOOZE_LEVELS_MS[1]]);
+  const third = snoozeUpdate({ currentVersion: '1.0.0', statePath, now });
+  assert.deepEqual([third.level, third.until], [3, SNOOZE_LEVELS_MS[2]]);
+  const fourth = snoozeUpdate({ currentVersion: '1.0.0', statePath, now });
+  assert.deepEqual([fourth.level, fourth.until], [3, SNOOZE_LEVELS_MS[2]], 'level caps at the last rung');
+});
+
+test('snoozeUpdate — a newer release resets the ladder', () => {
+  const statePath = makeStatePath();
+  writeState(statePath, { lastCheckedAt: 1, lastKnownLatest: '2.0.0' });
+  snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 0 });
+  snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 0 });
+  writeState(statePath, { ...readState(statePath), lastKnownLatest: '3.0.0' });
+  const result = snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 0 });
+  assert.equal(result.level, 1, 'new target version starts back at level 1');
+});
+
+test('getQueuedNotice — suppressed while snoozed, returns after expiry', () => {
+  const statePath = makeStatePath();
+  writeState(statePath, { lastCheckedAt: 1, lastKnownLatest: '2.0.0' });
+  snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 1000 });
+  const env = {};
+  const during = getQueuedNotice({ currentVersion: '1.0.0', statePath, env, now: () => 1000 + 1 });
+  assert.equal(during, null, 'notice suppressed during the snooze window');
+  const after = getQueuedNotice({ currentVersion: '1.0.0', statePath, env, now: () => 1000 + SNOOZE_LEVELS_MS[0] + 1 });
+  assert.ok(after && after.includes('2.0.0'), 'notice returns once the snooze expires');
+});
+
+test('getQueuedNotice — snooze for an older version does not mute a newer one', () => {
+  const statePath = makeStatePath();
+  writeState(statePath, { lastCheckedAt: 1, lastKnownLatest: '2.0.0' });
+  snoozeUpdate({ currentVersion: '1.0.0', statePath, now: () => 0 });
+  writeState(statePath, { ...readState(statePath), lastKnownLatest: '2.1.0' });
+  const notice = getQueuedNotice({ currentVersion: '1.0.0', statePath, env: {}, now: () => 1 });
+  assert.ok(notice && notice.includes('2.1.0'));
+});
+
+// --- what's new (CHANGELOG parsing) ---
+
+const SAMPLE_CHANGELOG = `# Changelog
+
+## [3.4.0] - 2026-05-30
+
+### Added
+- Video stitching.
+
+## [3.3.5] - 2026-05-20
+
+### Fixed
+- Photobooth routing.
+
+## [3.3.0] - 2026-05-01
+
+### Added
+- Music generation.
+`;
+
+test('extractChangelogEntries parses keep-a-changelog headings', () => {
+  const entries = extractChangelogEntries(SAMPLE_CHANGELOG);
+  assert.deepEqual(entries.map((entry) => entry.version), ['3.4.0', '3.3.5', '3.3.0']);
+  assert.ok(entries[0].body.includes('Video stitching.'));
+});
+
+test('formatWhatsNew — current version entry by default', () => {
+  const out = formatWhatsNew({ changelogText: SAMPLE_CHANGELOG, currentVersion: '3.3.5' });
+  assert.ok(out.includes('[3.3.5]'));
+  assert.ok(!out.includes('[3.4.0]'));
+});
+
+test('formatWhatsNew — falls back to the newest entry for unknown versions', () => {
+  const out = formatWhatsNew({ changelogText: SAMPLE_CHANGELOG, currentVersion: '9.9.9' });
+  assert.ok(out.includes('[3.4.0]'));
+});
+
+test('formatWhatsNew — sinceVersion selects everything after it up to current', () => {
+  const out = formatWhatsNew({ changelogText: SAMPLE_CHANGELOG, currentVersion: '3.4.0', sinceVersion: '3.3.0' });
+  assert.ok(out.includes('[3.4.0]'));
+  assert.ok(out.includes('[3.3.5]'));
+  assert.ok(!out.includes('[3.3.0]'));
+});
+
+test('runWhatsNew — missing changelog fails with a pointer', () => {
+  const stderrChunks = [];
+  const code = runWhatsNew({
+    changelogPath: '/nonexistent/CHANGELOG.md',
+    currentVersion: '1.0.0',
+    stdout: { write: () => {} },
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
+  });
+  assert.equal(code, 1);
+  assert.ok(stderrChunks.join('').includes('No CHANGELOG.md found'));
 });

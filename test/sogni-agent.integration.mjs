@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import JSON5 from 'json5';
@@ -30,9 +30,11 @@ async function getSogniClientWrapper() {
   return SogniClientWrapper;
 }
 
+// Paid integration tests are strictly opt-in: they submit real GPU jobs and
+// spend Spark. Run them with SOGNI_INTEGRATION=1 (npm run test:integration).
 const integrationFlag = process.env.SOGNI_INTEGRATION;
 const shouldRun = integrationFlag === undefined
-  ? true
+  ? false
   : ['1', 'true', 'yes'].includes(integrationFlag.toLowerCase());
 const credentialsPath = join(homedir(), '.config', 'sogni', 'credentials');
 const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH || join(homedir(), '.openclaw', 'openclaw.json');
@@ -46,6 +48,30 @@ const ARTIFACT_LOG_PATH = process.env.SOGNI_ARTIFACT_LOG_PATH || join(
   'logs',
   `sogni-agent-integration-artifacts-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`
 );
+const ARTIFACT_LOG_KEEP = 10;
+
+// Each run appends a new timestamped artifact file forever; keep only the most
+// recent few so logs/ does not grow without bound.
+function pruneOldArtifactLogs() {
+  const logsDir = join(process.cwd(), 'logs');
+  if (!existsSync(logsDir)) return;
+  let entries;
+  try {
+    entries = readdirSync(logsDir)
+      .filter((name) => /^sogni-agent-integration-artifacts-.*\.jsonl$/.test(name))
+      .map((name) => {
+        const filePath = join(logsDir, name);
+        return { filePath, mtimeMs: statSync(filePath).mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  } catch {
+    return;
+  }
+  for (const entry of entries.slice(ARTIFACT_LOG_KEEP)) {
+    try { unlinkSync(entry.filePath); } catch { /* best effort */ }
+  }
+}
+pruneOldArtifactLogs();
 
 const TESTS = [
   { key: 't2i', name: 'Text-to-image 512x512' },
@@ -495,7 +521,7 @@ async function runSubtest(t, status, key, name, fn) {
 }
 
 if (!shouldRun) {
-  test('integration: generate image + videos (skipped)', { skip: 'Set SOGNI_INTEGRATION=0 to skip integration tests.' }, () => {});
+  test('integration: generate image + videos (skipped)', { skip: 'Paid integration tests are opt-in: set SOGNI_INTEGRATION=1 (they submit real GPU jobs).' }, () => {});
 } else if (!hasCreds) {
   test('integration: generate image + videos (skipped)', { skip: 'Provide SOGNI_API_KEY or a ~/.config/sogni/credentials file containing SOGNI_API_KEY.' }, () => {});
 } else if (sogniClientImportError?.code === 'ERR_UNSUPPORTED_DIR_IMPORT') {

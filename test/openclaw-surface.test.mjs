@@ -1,23 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const repoRoot = process.cwd();
 
 test('OpenClaw link surface stays in sync with root plugin files', async () => {
-  await import('../scripts/sync-openclaw-plugin.mjs');
+  // Generate into a temp dir so running the tests never mutates the
+  // working-tree .openclaw-link/ output.
+  const linkDir = mkdtempSync(join(tmpdir(), 'sogni-openclaw-link-'));
+  process.env.SOGNI_OPENCLAW_LINK_DIR = linkDir;
+  try {
+    await import('../scripts/sync-openclaw-plugin.mjs');
 
-  for (const filename of ['SKILL.md', 'openclaw.plugin.json', 'openclaw-plugin.mjs']) {
-    const rootFile = readFileSync(join(repoRoot, filename), 'utf8');
-    const linkFile = readFileSync(join(repoRoot, '.openclaw-link', filename), 'utf8');
-    assert.equal(linkFile, rootFile, `${filename} is out of sync; run npm run openclaw:sync`);
+    for (const filename of ['SKILL.md', 'openclaw.plugin.json', 'openclaw-plugin.mjs']) {
+      const rootFile = readFileSync(join(repoRoot, filename), 'utf8');
+      const linkFile = readFileSync(join(linkDir, filename), 'utf8');
+      assert.equal(linkFile, rootFile, `${filename} is out of sync; run npm run openclaw:sync`);
+    }
+
+    for (const filename of readdirSync(join(repoRoot, 'references')).filter((name) => name.endsWith('.md'))) {
+      const rootFile = readFileSync(join(repoRoot, 'references', filename), 'utf8');
+      const linkFile = readFileSync(join(linkDir, 'references', filename), 'utf8');
+      assert.equal(linkFile, rootFile, `references/${filename} is out of sync; run npm run openclaw:sync`);
+    }
+
+    const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+    const linkPackage = JSON.parse(readFileSync(join(linkDir, 'package.json'), 'utf8'));
+    assert.equal(linkPackage.version, rootPackage.version);
+    assert.deepEqual(linkPackage.openclaw?.extensions, ['./openclaw-plugin.mjs']);
+  } finally {
+    delete process.env.SOGNI_OPENCLAW_LINK_DIR;
   }
-
-  const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
-  const linkPackage = JSON.parse(readFileSync(join(repoRoot, '.openclaw-link', 'package.json'), 'utf8'));
-  assert.equal(linkPackage.version, rootPackage.version);
-  assert.deepEqual(linkPackage.openclaw?.extensions, ['./openclaw-plugin.mjs']);
 });
 
 test('non-OpenClaw skill distribution keeps a single root skill source', () => {

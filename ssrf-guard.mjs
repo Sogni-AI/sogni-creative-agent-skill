@@ -1,8 +1,18 @@
 /**
- * SSRF Guard (ESM) — server-side URL validator to prevent Server-Side Request Forgery.
+ * SSRF Guard (ESM) — URL validator + guarded fetch to prevent Server-Side Request Forgery.
  *
- * Blocks non-http(s) schemes, credentials in URLs, loopback / RFC1918 / link-local /
- * CGNAT / multicast / reserved IP ranges, cloud metadata endpoints, and DNS rebinding.
+ * `assertSafeUrl` blocks non-http(s) schemes, credentials in URLs, loopback /
+ * RFC1918 / link-local / CGNAT / multicast / reserved IP ranges, and cloud
+ * metadata endpoints, validating every A/AAAA record a hostname resolves to.
+ *
+ * Known limitations (use `fetchSafeUrl` to close the first two):
+ *  - `assertSafeUrl` alone does not constrain what a later `fetch()` does:
+ *    a vetted public URL can 30x-redirect to a private address. `fetchSafeUrl`
+ *    fetches with `redirect: 'manual'` and re-validates every hop.
+ *  - `fetch()` performs its own DNS lookup after validation, so a rebinding
+ *    record that flips between the guard's lookup and the connect is a
+ *    residual TOCTOU window. Re-validating per hop narrows but cannot fully
+ *    eliminate it without a pinned-IP HTTP agent.
  */
 
 import dns from 'node:dns';
@@ -153,6 +163,54 @@ export async function assertSafeUrl(input, options = {}) {
   }
 
   return parsed;
+}
+
+/**
+ * fetch() a validated URL without trusting redirects: every hop is re-run
+ * through `assertSafeUrl` before it is followed, so a public host cannot
+ * bounce the request to a private/metadata address.
+ *
+ * Intended for GET-style media downloads (redirect responses are followed as
+ * GETs, matching standard fetch semantics for 301/302/303 on bodyless
+ * requests).
+ *
+ * @param {string} input
+ * @param {RequestInit} [init]
+ * @param {object} [options]
+ * @param {Function} [options.fetchImpl=fetch] - injectable for tests/timeouts
+ * @param {number} [options.maxRedirects=5]
+ * @param {string[]} [options.allowedProtocols]
+ * @param {string[]} [options.allowedHosts]
+ * @returns {Promise<Response>}
+ */
+export async function fetchSafeUrl(input, init = {}, options = {}) {
+  const {
+    fetchImpl = fetch,
+    maxRedirects = 5,
+    allowedProtocols,
+    allowedHosts,
+  } = options;
+  const guardOptions = {};
+  if (allowedProtocols) guardOptions.allowedProtocols = allowedProtocols;
+  if (allowedHosts) guardOptions.allowedHosts = allowedHosts;
+
+  let current = (await assertSafeUrl(input, guardOptions)).toString();
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const response = await fetchImpl(current, { ...init, redirect: 'manual' });
+    const status = response.status;
+    if (status < 300 || status >= 400) return response;
+    const location = response.headers.get('location');
+    if (!location) return response;
+    let nextUrl;
+    try {
+      nextUrl = new URL(location, current).toString();
+    } catch {
+      throw new Error('SSRF guard: redirect to an invalid URL');
+    }
+    await assertSafeUrl(nextUrl, guardOptions);
+    current = nextUrl;
+  }
+  throw new Error(`SSRF guard: too many redirects (more than ${maxRedirects})`);
 }
 
 export { isBlockedIp };

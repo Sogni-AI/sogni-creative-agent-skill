@@ -170,7 +170,13 @@ Then `/reset` your Hermes session so it picks up the new skill. (You can also in
 
 ### OpenClaw plugin
 
-The npm package is scoped, so install it through OpenClaw's `npm:` source prefix (a bare `openclaw plugins install sogni-creative-agent-skill` will not resolve the scoped package):
+The skill is published on ClawHub, so the simplest install is:
+
+```bash
+openclaw skills install sogni-creative-agent-skill
+```
+
+To install as a code plugin instead, use OpenClaw's `npm:` source prefix (the npm package is scoped, so a bare `openclaw plugins install sogni-creative-agent-skill` will not resolve it):
 
 ```bash
 openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill

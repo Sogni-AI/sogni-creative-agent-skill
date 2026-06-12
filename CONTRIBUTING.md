@@ -90,6 +90,7 @@ and it will version from conventional-commit history, so coordinate first.)
 4. Commit: `chore(release): prepare skill x.y.z update`, tag `vx.y.z`, push with tags.
 5. Publish: `npm publish` (prepack enforces the strict private-source + runtime-freshness gates).
 6. Verify: `npx -y @sogni-ai/sogni-creative-agent-skill@latest --version` and `sogni-agent doctor` on a clean machine.
+7. ClawHub (slug `sogni-creative-agent-skill`, makes `openclaw skills install sogni-creative-agent-skill` resolve): stage a skill-only folder — SKILL.md, references/, skills/, llm.txt, README, LICENSE, CHANGELOG.md, skill-package.json, the CLI runtime files (`sogni-agent.mjs`, `env.mjs`, `ssrf-guard.mjs`, `update-check.mjs`, `node-version-check.mjs`, `version.mjs`, `generated/`) and **no** `openclaw.plugin.json` / `openclaw-plugin.mjs` / `package.json` (their presence makes ClawHub classify the artifact as a code plugin, which requires scoped names and extra `openclaw.compat`/`openclaw.build` manifest fields) — then `npx -y clawhub@latest publish <staged-dir> --slug sogni-creative-agent-skill --version x.y.z --changelog "..."`.
 
 ## CI
 

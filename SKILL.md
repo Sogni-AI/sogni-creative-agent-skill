@@ -2,29 +2,20 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.5.0"
+  version: "3.5.1"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
     primaryEnv: "SOGNI_API_KEY"
     os: ["darwin", "linux", "win32"]
+    # Only hard requirements belong here: OpenClaw marks the skill "missing"
+    # until every entry is satisfied. The API key comes from the credentials
+    # file (primaryEnv is the env-var alternative), and the SOGNI_*/OPENCLAW_*
+    # override variables are optional — they are documented in the body under
+    # "Filesystem Paths and Overrides", not required for the skill to work.
     requires:
       bins: ["node"]
       anyBins: ["ffmpeg"]
-      env:
-        - "SOGNI_API_KEY"
-        - "SOGNI_CREDENTIALS_PATH"
-        - "SOGNI_LAST_RENDER_PATH"
-        - "SOGNI_MEDIA_INBOUND_DIR"
-        - "OPENCLAW_CONFIG_PATH"
-        - "OPENCLAW_PLUGIN_CONFIG"
-        - "FFMPEG_PATH"
-      config:
-        - "~/.config/sogni/credentials"
-        - "~/.openclaw/openclaw.json"
-        - "~/.openclaw/media/inbound"
-        - "~/.config/sogni/last-render.json"
-        - "~/Downloads/sogni"
     install:
       - id: npm
         kind: exec

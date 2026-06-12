@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-06-12
+
+### Fixed
+
+- **OpenClaw no longer marks the skill "missing".** The SKILL.md frontmatter listed every optional override
+  variable (`SOGNI_CREDENTIALS_PATH`, `OPENCLAW_CONFIG_PATH`, `FFMPEG_PATH`, …) and optional config path
+  (including `~/Downloads/sogni`) under `metadata.openclaw.requires`, so OpenClaw treated them all as hard
+  requirements that could never be satisfied and flagged the skill `✗ missing` on every install. Requirements
+  are now just `bins: node` + `anyBins: ffmpeg`; the API key still comes from the credentials file or
+  `primaryEnv`, and the override variables remain documented in "Filesystem Paths and Overrides". Verified
+  live: `openclaw skills check` flips from missing to `✓ ready`.
+
 ## [3.5.0] - 2026-06-11
 
 ### Added

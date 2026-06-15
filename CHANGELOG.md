@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-06-15
+
+### Changed
+
+- **Hosted-API guidance now recommends client-side planning over hosted re-planning.** The skill is driven by a
+  frontier LLM that out-plans Sogni's hosted planning model, so steering it to delegate planning through
+  `--api-chat` was a downgrade. `SKILL.md`, `references/hosted-api.md`, and `README.md` now tell the calling agent
+  to plan and select tools itself, use `--api-workflow` with an explicit `--workflow-input` step graph for durable
+  multi-step work (the server executes the authored plan without re-planning), and reserve `--api-chat` /
+  `--durable-chat` for deliberately offloading a long server-side loop or uploading several local files in one
+  turn. `--api-chat` and all hosted modes remain fully supported — only the recommended default changed.
+
+### Fixed
+
+- **Local Seedance reference images via `-c`/`--context` now auto-upload in direct CLI mode.** Local
+  loose-reference images were rejected with an HTTPS-only error that pushed users onto the unreliable
+  `--api-chat` / `--durable-chat` path; local `--ref-audio` and `--ref-video` already auto-uploaded through the
+  `/v2` presigned-POST flow, so images were the only modality missing it and one broken branch cascaded into
+  downstream failures (vision 1024px cap, HTTP timeout, no-content, missing durable SDK package). Local
+  `-c`/`--context` images now upload through the same `/v2/image` presigned flow and forward as Sogni-hosted URLs.
+  MIME type is resolved by magic-byte sniffing (falling back to extension), and the accepted set
+  (PNG/JPEG/WebP/GIF) mirrors the backend's `allowedContentTypes`. Adds local-PNG-upload and mislabeled-WebP
+  byte-sniff regression tests; verified end-to-end with a real Seedance 2.0 render from a local `-c` PNG.
+
 ## [3.6.0] - 2026-06-12
 
 ### Added

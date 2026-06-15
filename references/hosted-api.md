@@ -7,35 +7,46 @@ All hosted modes require `SOGNI_API_KEY`.
 
 ## When to prefer the hosted path
 
-For any natural-language creative request that benefits from tool selection,
-repair, or durable workflows, prefer the hosted Sogni Intelligence endpoints
-over direct-to-SDK media flags. They are the canonical home for
-OpenAI-compatible chat, server-side creative tool dispatch, Structured
-Contracts v1 (gating policies, repair recipes, prompt contracts), durable chat
-runs, durable workflows, workflow templates, replay, and asset-manifest
-mapping.
+The thing calling this API is usually a frontier LLM that is **more capable
+than Sogni's hosted planning model**. So the default split is: *you* do the
+planning and tool selection, and the hosted endpoints do what only the server
+can — run on the GPU network, persist assets/manifests, orchestrate durable
+multi-step runs with replay, and apply Structured Contracts v1 (gating
+policies, repair recipes, prompt contracts). Routing a request through
+`--api-chat` so a weaker model re-plans it is usually a downgrade; reach for the
+hosted *planner* deliberately, not by default.
+
+- **You already know the single tool + args** → direct-to-SDK flags. Lowest
+  latency/cost, no LLM round-trip.
+- **Multi-step, durable, resumable** → `--api-workflow` with an explicit
+  `--workflow-input` step graph that *you* author (`steps[]` with `toolName`,
+  `arguments`, and `dependsOn` bindings). The server executes and repairs it
+  deterministically with replay/resumability and **no hosted-LLM re-planning**.
+  This is the best fit when a frontier client drives the work.
+- **You want the hosted model to own a long loop** → `--api-chat` /
+  `--durable-chat`. Worth it when offloading a long async tool loop server-side
+  saves client round-trips, when structured-contract repair should govern, or
+  when several local files must be uploaded for one turn (only supported here).
 
 ```bash
-# Natural-language creative request (LLM picks the tool, dispatches, repairs)
+# You author the exact durable plan; the server executes it (no hosted re-planning)
+sogni-agent --api-workflow --workflow-input @plan.json
+
+# Storyboard → GPT Image 2 sheet → Seedance, all server-side (preset plan)
+sogni-agent --api-workflow storyboard-video --storyboard-frames 6 -Q hq \
+  "Create a 9:16 bakery launch video with a neon street-window reveal"
+
+# Deliberately hand planning to the hosted model (long async job / multi local-file upload)
 sogni-agent --api-chat "Turn the attached product photo into a launch poster" --ref product.jpg
 
 # Durable hosted chat run (persisted event log + SSE stream)
 SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat \
   "Create a four-shot launch campaign, generate the key art, and animate the hero clip"
-
-# Multi-step durable workflow (resumable, replay-friendly, server-orchestrated)
-sogni-agent --api-workflow \
-  --video-prompt "The camera slowly pushes in" \
-  "A graphite robot sketch on a drafting table"
-
-# Storyboard → GPT Image 2 sheet → Seedance, all server-side
-sogni-agent --api-workflow storyboard-video --storyboard-frames 6 -Q hq \
-  "Create a 9:16 bakery launch video with a neon street-window reveal"
 ```
 
-The direct-to-SDK flags remain available for explicit one-shot generation when
-you already know the exact model, dimensions, and prompt and don't need LLM
-planning — use them when latency or cost rules out the LLM round-trip.
+The direct-to-SDK flags remain the right call for explicit one-shot generation
+when you already know the exact model, dimensions, and prompt — use them
+whenever latency or cost rules out an LLM round-trip.
 
 ## --api-chat (`POST /v1/chat/completions`)
 

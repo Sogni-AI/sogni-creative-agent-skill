@@ -98,27 +98,30 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 - Media listing for `--list-media` (read): `~/.openclaw/media/inbound`, falling back to the legacy `~/.clawdbot/media/inbound` when only it exists (`SOGNI_MEDIA_INBOUND_DIR`)
 - Custom ffmpeg binary: `FFMPEG_PATH`
 
-## Recommended path: hosted Sogni Intelligence endpoints
+## Recommended path: you plan, Sogni executes
 
-For any natural-language creative request that should be planned, multi-step, resumable, or benefit from server-side tool selection and repair, prefer the hosted endpoints over direct-to-SDK flags — **read [`references/hosted-api.md`](./references/hosted-api.md) first** for the full contract (tool surfaces, durable workflows, templates, replays, Seedance reference modes, media-reference uploads, cost controls):
+You (the calling LLM) are almost always more capable than Sogni's hosted planning model, so **do the planning and tool selection yourself** and let the hosted endpoints do what only the server can — run on the GPU network, persist assets/manifests, orchestrate durable multi-step runs with replay, and apply structured-contract repair. Don't flatten a rich request into a single natural-language string and hand planning back to a weaker model. Match the mode to the work:
+
+- **One-shot generation** → direct-to-SDK flags (the Core Commands below). You already know the tool, model, and prompt — just run it. No LLM round-trip, lowest latency/cost.
+- **Multi-step / durable / resumable** → `--api-workflow` with an explicit step graph via `--workflow-input <json|@path>`. *You* author the exact plan — `steps[]` with `toolName`, `arguments`, and `dependsOn` bindings (e.g. `sourceStepId`, `targetArgument`, `transform: "artifact_url"`) — and the server executes it durably with replay/resumability, **without re-planning through the hosted LLM**. Presets like `--api-workflow storyboard-video` are fine when they already match the request.
+- **`--api-chat` / `--durable-chat` (hosted LLM owns the loop)** → reserve for when you deliberately *want* the hosted model to drive a long server-side tool loop (saves client round-trips on long async jobs), when structured-contract repair recipes should govern, or when several local files must be uploaded for a single turn (multi-file local upload is only supported here). These delegate planning to the hosted model — choose them on purpose, not by default.
+
+**Read [`references/hosted-api.md`](./references/hosted-api.md) first** for the full hosted contract (tool surfaces, durable workflows, templates, replays, Seedance reference modes, media-reference uploads, cost controls).
 
 ```bash
-# Natural-language creative request (LLM picks the tool, dispatches, repairs)
-sogni-agent --api-chat "Turn the attached product photo into a launch poster" --ref product.jpg
+# One-shot: you pick the tool, the server just executes (see Core Commands below)
+sogni-agent -q -Q hq -o ./poster.png "Turn the product photo into a launch poster"
 
-# Durable hosted chat run (persisted event log + SSE stream)
-SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat "Create a launch campaign and animate the hero clip"
-
-# Durable workflow (resumable, server-orchestrated)
-sogni-agent --api-workflow --video-prompt "The camera slowly pushes in" "A graphite robot sketch on a drafting table"
-
-# Storyboard → GPT Image 2 sheet → Seedance video, all server-side
+# Multi-step durable: you author the step graph, the server executes it (no hosted re-planning)
+sogni-agent --api-workflow --workflow-input @plan.json
 sogni-agent --api-workflow storyboard-video --storyboard-frames 6 -Q hq "9:16 bakery launch video"
+
+# Deliberately hand the whole loop to the hosted model (long async job, or multi local-file upload)
+sogni-agent --api-chat "Turn the attached product photo into a launch poster" --ref product.jpg
+SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat "Create a launch campaign and animate the hero clip"
 ```
 
 Hosted modes require `SOGNI_API_KEY`. Local file references are uploaded to Sogni media storage and forwarded as retrievable URLs — **use direct CLI mode for private media that must not leave the local machine.**
-
-Use the direct-to-SDK commands below for explicit one-shot generation when you already know the model, dimensions, and prompt.
 
 ## Core Commands (direct-to-SDK)
 

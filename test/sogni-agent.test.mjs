@@ -1152,6 +1152,75 @@ test('seedance direct video uploads local MP3 reference audio to v2 media URLs',
   });
 });
 
+test('seedance direct video uploads local loose-reference -c image to v2 image URLs', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-image-'));
+  const imagePath = join(tempDir, 'lumina.png');
+  // Minimal valid PNG (signature + IHDR) so buffer mime-sniffing detects image/png.
+  writeFileSync(imagePath, Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+  ]));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, state } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video',
+      '--workflow', 't2v',
+      '-m', 'seedance2-fast',
+      '-c', imagePath,
+      '--duration', '4',
+      'Use @Image1 for the product bottle design while generating a fresh scene.'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+    assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
+    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/image/uploadUrl')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/contextImage1/')).length, 1);
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/image/downloadUrl')).length, 1);
+    assert.match(requests.find(item => item.url.startsWith('/v2/image/uploadUrl')).url, /contentType=image%2Fpng/);
+  });
+});
+
+test('seedance direct video uploads a local WebP loose-reference image (sniffed by magic bytes)', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-webp-'));
+  // Deliberately mislabel the extension (.png) to prove byte-sniffing wins over
+  // the file extension — the bytes are a valid WebP (RIFF....WEBP) header.
+  const imagePath = join(tempDir, 'product.png');
+  writeFileSync(imagePath, Buffer.from([
+    0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, // "RIFF" + size
+    0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20, // "WEBP" + "VP8 "
+    0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ]));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, state } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video',
+      '--workflow', 't2v',
+      '-m', 'seedance2-fast',
+      '-c', imagePath,
+      '--duration', '4',
+      'Use @Image1 for the product design.'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
+    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//);
+    // contentType is the sniffed WebP, not the misleading .png extension.
+    assert.match(requests.find(item => item.url.startsWith('/v2/image/uploadUrl')).url, /contentType=image%2Fwebp/);
+  });
+});
+
 test('seedance v2v uploads local source video to v2 media URLs', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-video-'));
   const videoPath = join(tempDir, 'source.mp4');

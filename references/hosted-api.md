@@ -156,19 +156,24 @@ per video request:
 - **Loose reference mode — `-c/--context` plus optional `--ref-audio` and
   `--ref-video` extras.** Anchor frame intent in the prompt with `@Image1` /
   `@Video1` / `@Audio1` etc. (e.g. *"Use @Image1 as the opening shot
-  reference"*). Supports up to 9 image refs, 3 video refs, 3 audio refs, and
-  12 total reference assets per request (canonical caps come from
+  reference"*). Each `-c/--context` image may be a **local file or an HTTPS
+  URL** (PNG, JPEG, WebP, or GIF) — local files are uploaded to Sogni media
+  storage automatically, so you do **not** need `--api-chat` / `--durable-chat`
+  just to attach a local loose-reference image. Supports up to 9 image refs, 3 video refs, 3 audio
+  refs, and 12 total reference assets per request (canonical caps come from
   `SEEDANCE_REFERENCE_LIMITS` / `validateSeedanceReferenceCounts()` in
   `@sogni-ai/sogni-intelligence-client/tools`).
 
 Combining `--ref` / `--ref-end` with `-c/--context` on Seedance is rejected
-client-side with an error pointing at the correct mode. In CLI direct-gen
-mode, additional `--ref-audio` / `--ref-video` entries beyond the first must
-be HTTPS URLs (the primary entry can still be a local file); for local
-multi-file Seedance uploads, use `--api-chat` / `--durable-chat` instead.
-Seedance accepts public HTTPS image, video, and audio references that pass the
-CLI URL safety checks; localhost and private-network URLs are rejected before
-forwarding. Audio references must be paired with an image or video reference.
+client-side with an error pointing at the correct mode. In CLI direct-gen mode,
+local `-c/--context` images and the primary `--ref-audio` / `--ref-video` are
+uploaded to Sogni media storage automatically and forwarded as HTTPS URLs; only
+*additional* `--ref-audio` / `--ref-video` entries beyond the first must already
+be HTTPS URLs (use `--api-chat` / `--durable-chat` when you need to attach
+several local audio or video files in one request). Seedance accepts public
+HTTPS image, video, and audio references that pass the CLI URL safety checks;
+localhost and private-network URLs are rejected before forwarding. Audio
+references must be paired with an image or video reference.
 
 ## Models, replays, and contract debugging
 

@@ -4242,6 +4242,8 @@ function extensionForApiMediaReference(mimeType, kind) {
   const normalized = String(mimeType || '').split(';')[0].trim().toLowerCase();
   if (normalized === 'image/jpeg' || normalized === 'image/jpg') return 'jpg';
   if (normalized === 'image/png') return 'png';
+  if (normalized === 'image/webp') return 'webp';
+  if (normalized === 'image/gif') return 'gif';
   if (normalized === 'audio/mpeg' || normalized === 'audio/mp3') return 'mp3';
   if (normalized === 'audio/mp4' || normalized === 'audio/m4a' || normalized === 'audio/x-m4a') return 'm4a';
   if (normalized === 'audio/wav' || normalized === 'audio/x-wav' || normalized === 'audio/wave') return 'wav';
@@ -6285,6 +6287,84 @@ async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
   return uploaded.url;
 }
 
+// Content types the Sogni media pipeline accepts for image references, mirroring
+// the `allowedContentTypes` the /v2/image/uploadUrl presigned-POST endpoint
+// returns. Kept as a constant so the skill validates exactly what the backend
+// will store rather than imposing a narrower client-side policy.
+const SEEDANCE_REFERENCE_IMAGE_MIME_TYPES = Object.freeze([
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+]);
+
+// Identify an image's MIME type from its leading bytes (magic numbers). Reliable
+// because we already hold the buffer, so it works regardless of file extension.
+function sniffSeedanceReferenceImageMimeType(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'image/png';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  if (
+    buffer.length >= 12
+    && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+    && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+  ) return 'image/webp';
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) return 'image/gif';
+  return null;
+}
+
+// Resolve a Seedance loose-reference image's MIME type from its bytes first,
+// falling back to the file extension. Unsupported files fail fast with an
+// actionable message instead of uploading bytes the render backend will reject.
+function seedanceReferenceImageMimeType(pathOrUrl, buffer) {
+  const sniffed = sniffSeedanceReferenceImageMimeType(buffer);
+  if (sniffed) return sniffed;
+  const byPath = mimeTypeForPath(pathOrUrl, '');
+  const normalizedByPath = byPath === 'image/jpg' ? 'image/jpeg' : byPath;
+  if (SEEDANCE_REFERENCE_IMAGE_MIME_TYPES.includes(normalizedByPath)) return normalizedByPath;
+  const err = new Error(
+    `Seedance reference image "${pathOrUrl}" must be a PNG, JPEG, WebP, or GIF file (or an HTTPS URL to one).`,
+  );
+  err.code = 'UNSUPPORTED_MEDIA_TYPE';
+  err.hint = 'Convert the image to PNG, JPEG, or WebP, or pass an HTTPS URL.';
+  err.details = { source: pathOrUrl };
+  throw err;
+}
+
+async function prepareSeedanceReferenceImageUploadFile(pathOrUrl, buffer) {
+  const data = Buffer.from(buffer);
+  const mimeType = seedanceReferenceImageMimeType(pathOrUrl, data);
+  const filename = withMediaExtension(
+    mediaFilenameFromSource(pathOrUrl, 'reference-image'),
+    extensionForApiMediaReference(mimeType, 'image'),
+  );
+  const maxBytes = apiMediaReferenceMaxBytes();
+  if (data.length > maxBytes) {
+    const err = new Error(
+      `Seedance reference image "${pathOrUrl}" is ${data.length} bytes, above the ${maxBytes} byte upload limit.`,
+    );
+    err.code = 'MEDIA_REFERENCE_TOO_LARGE';
+    err.details = { source: pathOrUrl, byteLength: data.length, maxBytes };
+    throw err;
+  }
+  return {
+    buffer: data,
+    filename,
+    byteLength: data.length,
+    mimeType,
+  };
+}
+
+// Upload a local (non-HTTPS) Seedance loose-reference image and return its
+// hosted HTTPS download URL. The Client SDK's loose-reference arrays accept only
+// URL strings, so this is what lets `-c <local image>` work in direct generation
+// without forcing the user onto the --api-chat / --durable-chat path. Mirrors
+// uploadSeedanceReferenceAudioUrl / uploadSeedanceReferenceVideoUrl.
+async function uploadSeedanceReferenceImageUrl(pathOrUrl, apiKey, index = 0) {
+  const ref = { flag: '-c/--context', value: pathOrUrl, kind: 'image' };
+  const buffer = await fetchMediaBuffer(pathOrUrl);
+  const file = await prepareSeedanceReferenceImageUploadFile(pathOrUrl, buffer);
+  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  return uploaded.url;
+}
+
 async function trimSeedanceV2VSourceVideoBuffer(buffer, sourceLabel, startOffset, requestedDuration) {
   const ffmpegPath = await ensureFfmpegAvailable();
   const tempDir = createTrackedTempDir('sogni-seedance-v2v-');
@@ -8086,19 +8166,24 @@ async function main() {
       // Seedance loose-reference extras: -c/--context images beyond start/end,
       // plus repeated --ref-audio / --ref-video entries past the first. The
       // Sogni Client SDK accepts only URL arrays for these (createJobRequestMessage),
-      // so extras MUST be HTTPS URLs. For multi-file local uploads, use --api-chat /
-      // --durable-chat where the LLM upload pipeline handles per-file uploads.
+      // so each entry must resolve to an HTTPS URL. HTTPS inputs are forwarded as-is
+      // (SSRF-validated); local files are uploaded to a Sogni-hosted URL first, the
+      // same way the primary --ref-audio / --ref-video locals are handled. This lets
+      // `-c <local image>` work in direct generation without a detour through
+      // --api-chat / --durable-chat.
       if (isSeedanceVideo) {
-        for (const ctxImage of (Array.isArray(options.contextImages) ? options.contextImages : [])) {
+        for (const [ctxIndex, ctxImage] of (Array.isArray(options.contextImages) ? options.contextImages : []).entries()) {
           if (!ctxImage) continue;
-          if (!isHttpsUrl(ctxImage)) {
-            fatalCliError(
-              `Seedance extra image reference "${ctxImage}" must be an HTTPS URL. ` +
-              'Local file uploads beyond --ref / --ref-end are only supported in --api-chat / --durable-chat mode.',
-              { code: 'INVALID_ARGUMENT', details: { flag: '-c/--context', value: ctxImage } },
+          if (isHttpsUrl(ctxImage)) {
+            await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Seedance image reference');
+          } else {
+            const uploadedImageUrl = await uploadSeedanceReferenceImageUrl(
+              ctxImage,
+              creds.SOGNI_API_KEY,
+              ctxIndex,
             );
+            seedanceReferenceImageUrls.push(uploadedImageUrl);
           }
-          await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Seedance image reference');
         }
         for (const [extraAudioIndex, extraAudio] of options.refAudios.entries()) {
           if (!isHttpsUrl(extraAudio)) {

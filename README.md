@@ -60,6 +60,7 @@ With this skill, an agent can:
 - [Hosted API Modes](#hosted-api-modes)
 - [Dynamic Prompt Variations](#dynamic-prompt-variations)
 - [Token Auto-Fallback](#token-auto-fallback)
+- [Sogni Unlimited Subscription](#sogni-unlimited-subscription)
 - [Error Reporting & Output](#error-reporting--output)
 - [For AI Agents](#for-ai-agents)
 - [Development](#development)
@@ -592,12 +593,77 @@ sogni-agent --token-type auto "a dragon eating tacos"
 
 Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
+On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the plan instead of spending tokens — see the next section.
+
+---
+
+## Sogni Unlimited Subscription
+
+[Sogni Unlimited](https://docs.sogni.ai/pricing/unlimited-plan-details) is a flat-rate subscription that covers Sogni-hosted (Supernet) image, video, and music generation under a fair-use policy, instead of spending Spark or SOGNI per render. Manage subscriptions where they were purchased — the Stripe billing portal for web checkouts, or the App Store / Google Play account settings for mobile.
+
+### Plans
+
+| Plan | Monthly | Annual |
+| --- | --- | --- |
+| **Unlimited** | $20 / mo | $199 / yr |
+| **Unlimited Pro** | $50 / mo | $498 / yr |
+
+App Store and Google Play prices may differ from web pricing due to platform fees. A 3-day free trial is available once per account (a payment method is required and the subscription converts to paid when the trial ends unless cancelled first).
+
+### What the subscription covers
+
+- **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
+- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`) and **Seedance 2.0 / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-fast`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
+- **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
+
+The CLI never sends `billingMode`/coverage hints itself; the server decides coverage from the account's verified entitlement and the resolved model. A subscription claim is never honored without a server-verified entitlement.
+
+### Free-trial usage limits
+
+Trials include anti-abuse evaluation limits so the full plan experience is reserved for paid periods. As shipped (server-tunable): up to **30 jobs per UTC day**, a **100-render lifetime trial allowance**, images up to **~1.1 MP**, video up to **5 s / 720p**, and — for programmatic/API callers — a single allowed model (Z-Image Turbo). Full plan limits apply once the trial converts to paid. Cancelling during the trial ends Unlimited access immediately and prevents the first charge.
+
+### Fair-use throttling
+
+Unlimited is fair-use, not unmetered. Limits are per UTC day and reset at UTC midnight; only successfully completed renders count toward the daily thresholds (failed / cancelled / retried renders do not).
+
+- **Concurrent renders (base):** Unlimited — 4 images / 1 video in flight; Unlimited Pro — 16 images / 4 videos. Up to 512 jobs may be queued per account.
+- **Daily slot decay** (active-concurrency ceiling drops as completed renders climb, per UTC day):
+  - Unlimited images: 4 → 2 → 1 → 0 at 1024 / 2048 / 3072 completed.
+  - Unlimited video: 1 → 0 at 32 completed.
+  - Unlimited Pro images: 16 → 8 → 4 → 1 at 2048 / 4096 / 6144 completed (never fully cut off).
+  - Unlimited Pro video: 4 → 2 → 1 → 0 at 32 / 64 / 128 completed.
+- **Queue priority:** paid Spark and SOGNI jobs are dispatched ahead of subscription jobs; Unlimited Pro outranks Unlimited, which outranks free Spark. When a subscription exceeds its fast-lane fair-use allowance, further jobs run best-effort in the lowest-priority standard queue until capacity resets — they still complete, just later. Subscription jobs cannot target specific workers.
+
+### Billing states & cancellation
+
+- **Active / trialing:** covered renders run normally.
+- **Cancellation (paid):** Unlimited access continues until the end of the period already paid for; it simply does not renew.
+- **Cancellation (during trial):** access ends immediately and no charge is made.
+- **Grace / payment retry:** if a renewal payment fails, the provider retries it and **Unlimited access is paused** during the retry window — covered renders are declined with a renewal-retry error, and access resumes automatically once payment succeeds. You can keep rendering with Spark or SOGNI in the meantime.
+- **Refunds:** mid-term refunds are not offered by default; App Store / Google Play purchases follow the store's refund process, and Stripe (web) refunds are handled by Sogni support.
+
+### Subscription billing errors
+
+When a generation cannot bill to the subscription, the CLI surfaces a structured error (`--json` includes `errorCode`, `errorCategory`, and a `hint`):
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance), or reconnect and retry for a transient entitlement read. |
+| `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
+| `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
+| `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |
+
+### Worker revenue share
+
+Sogni workers that power subscription-covered jobs earn from a separate monthly pool — 51% of net subscription revenue — settled per UTC month and claimable in USDC on Base. Subscription jobs are excluded from the regular Spark/SOGNI token-economy leaderboard (they do not spend tokens) and accrue to this pool instead.
+
 ---
 
 ## Error Reporting & Output
 
 - **Exit codes:** failures use a non-zero exit code with human-readable stderr.
 - **Structured output:** add `--json` when an agent needs machine-parseable success/error data, or `--last` to inspect the last render. JSON failures include canonical `errorType`, `errorCategory`, and `retryable` fields where the shared runtime can classify the error.
+- **Subscription billing errors:** subscription-billing failures carry `errorCode` `4078` / `4079` / `4080` / `4081`, `errorCategory: "subscription_billing"`, and an actionable `hint`. See [Subscription billing errors](#subscription-billing-errors) for what each means; in particular, do not auto-retry a `4080` (grace / renewal-retry) covered job — pay with Spark or SOGNI instead.
 - **Output files:** use `-o <path>` to save locally; otherwise the CLI prints a result URL.
 - **Quiet mode:** `-q` / `--quiet` suppresses progress output without changing exit semantics.
 

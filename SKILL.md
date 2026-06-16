@@ -778,6 +778,21 @@ When you see **"Debit Error: Insufficient funds"** even with auto-fallback, repl
 
 Do not collect payment details, quote a custom price, or simulate a purchase in the terminal.
 
+### Sogni Unlimited Subscription & Billing Errors
+
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2** and **Seedance 2.0 / Fast** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+
+Unlimited is fair-use, not unmetered: per-UTC-day concurrency ceilings step down as completed renders climb (and reset at UTC midnight), and once a plan's fast-lane allowance is exceeded, further jobs run best-effort in a lower-priority standard queue until capacity resets. Describe this as **fair use** / a **standard (throttled) queue** — never as "relaxed."
+
+When a generation cannot bill to the subscription, the CLI returns a structured error (`errorCategory: "subscription_billing"`). Respond by the `errorCode`, and **do not** collect payment details or simulate a purchase:
+
+- **`4078` — Unlimited billing unavailable for this generation.** Either a vendor model the subscription never covers (use Premium Spark for GPT Image 2 / Seedance), or no verified entitlement right now (reconnect and retry). Offer the Premium Spark / `--token-type` path; do not claim the subscription will cover a vendor model.
+- **`4079` — Maximum queued jobs reached.** Ask the user to wait for queued jobs to finish before submitting more; this resolves on its own.
+- **`4080` — Renewal payment is being retried; access is paused.** Tell the user Unlimited resumes automatically once the renewal succeeds and that they can render now with Spark or SOGNI (`--token-type spark` / `sogni`). **Never auto-retry the covered job in a loop** — it will keep failing until billing recovers.
+- **`4081` — Higher plan required.** Suggest upgrading to Unlimited Pro.
+
+Cancelling a paid subscription keeps access until the end of the paid period; cancelling during the trial ends access immediately. Manage billing where it was purchased (Stripe portal for web, App Store / Google Play settings for mobile) — the CLI does not change plans.
+
 ## Video Generation
 
 Generate videos from a reference image:

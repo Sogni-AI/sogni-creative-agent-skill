@@ -587,6 +587,51 @@ test('SDK-returned insufficient funds preserves code and surfaces Spark Packs CT
   assert.doesNotMatch(payload.hint, /free daily/i);
 });
 
+test('subscription grace billing error (4080) surfaces subscription_billing guidance, not Buy Spark Packs', () => {
+  // Renewal-retry grace: Unlimited access is paused. This is NOT a "buy credits"
+  // situation — no purchase CTA, no generic Buy Spark Packs copy, and the agent
+  // must not auto-retry the covered job (retryable false).
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Unlimited plan renewal payment is being retried — unlimited access resumes once renewal succeeds. You can keep rendering with Spark or SOGNI in the meantime.',
+      code: '4080'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, '4080');
+  assert.equal(payload.errorCategory, 'subscription_billing');
+  assert.equal(payload.retryable, false);
+  assert.notEqual(payload.purchaseAction, true);
+  assert.match(payload.hint, /Spark or SOGNI/i);
+  assert.doesNotMatch(payload.hint, /Buy Spark Packs/i);
+});
+
+test('subscription not-covered billing error (4078) offers Premium Spark, not generic credits', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    'a goat'
+  ], {
+    SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'Unlimited billing is not available for this generation. Use Premium Spark or reconnect and try again.',
+      code: '4078'
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, '4078');
+  assert.equal(payload.errorCategory, 'subscription_billing');
+  assert.equal(payload.purchaseAction, true);
+  assert.equal(payload.purchaseLabel, 'Get Premium Spark');
+  assert.match(payload.hint, /Premium Spark/i);
+});
+
 test('SDK-returned insufficient funds prints Spark Packs hint in human output', () => {
   const { exitCode, stderr } = runCli([
     '--video',

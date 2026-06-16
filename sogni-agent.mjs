@@ -85,6 +85,86 @@ import {
 const SPARK_PACKS_PURCHASE_URL = 'https://docs.sogni.ai/pricing/#spark-packs';
 const SPARK_PACKS_PURCHASE_HINT = `Buy Spark Packs to continue: ${SPARK_PACKS_PURCHASE_URL}`;
 
+const UNLIMITED_PLAN_URL = 'https://docs.sogni.ai/pricing/unlimited-plan-details';
+
+// Skill-local fallback guidance for Sogni Unlimited subscription billing errors,
+// keyed on the canonical socket error code (a structured fact, not an English
+// message). Mirrors the `insufficient_credits` enrichment below: it adds an
+// actionable hint/category so an agent responds correctly instead of looping a
+// covered job that cannot bill. Codes are the source of truth in
+// sogni-socket/constants/errorCodes.js (4078-4081).
+const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081']);
+
+function subscriptionBillingFallback(code) {
+  if (code === undefined || code === null) return null;
+  const key = String(code);
+  if (!SUBSCRIPTION_BILLING_ERROR_CODES.has(key)) return null;
+  switch (key) {
+    case '4078':
+      // Vendor model the subscription never covers, or no verified entitlement.
+      return {
+        retryable: false,
+        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
+        purchaseLabel: 'Get Premium Spark',
+        purchaseUrl: SPARK_PACKS_PURCHASE_URL,
+      };
+    case '4079':
+      // Per-plan queued-job ceiling reached.
+      return {
+        retryable: true,
+        hint: 'Unlimited plan: maximum queued jobs reached. Wait for queued jobs to finish before submitting more.',
+      };
+    case '4080':
+      // Renewal payment retry — Unlimited access paused. Do NOT auto-retry the
+      // covered job; it will keep failing until billing recovers.
+      return {
+        retryable: false,
+        hint: 'Unlimited renewal payment is being retried and access is paused. Render now with Spark or SOGNI (--token-type spark|sogni); Unlimited resumes automatically once the renewal succeeds. Do not auto-retry the covered job.',
+      };
+    case '4081':
+      // Feature requires a higher subscription tier.
+      return {
+        retryable: false,
+        hint: `This feature requires a higher subscription plan. Upgrade to Unlimited Pro: ${UNLIMITED_PLAN_URL}`,
+        purchaseLabel: 'Upgrade to Unlimited Pro',
+        purchaseUrl: UNLIMITED_PLAN_URL,
+      };
+    default:
+      return null;
+  }
+}
+
+// Apply subscription-billing fallback enrichment to an error payload. Returns
+// true when the code matched (so callers skip the generic insufficient_credits
+// branch — subscription denials get subscription-specific guidance, never a bare
+// "Buy Spark Packs"). Extracts the code from the canonical shapes the SDK and
+// socket surface it in.
+function applySubscriptionBillingEnrichment(payload, code) {
+  const fallback = subscriptionBillingFallback(code);
+  if (!fallback) return false;
+  payload.errorCode = String(code);
+  payload.errorCategory = 'subscription_billing';
+  payload.retryable = fallback.retryable;
+  if (!payload.hint) payload.hint = fallback.hint;
+  if (fallback.purchaseUrl) {
+    payload.purchaseAction = true;
+    payload.purchaseLabel = fallback.purchaseLabel;
+    payload.purchaseUrl = fallback.purchaseUrl;
+    payload.purchaseReason = fallback.hint;
+  }
+  return true;
+}
+
+function subscriptionBillingCodeFromError(error) {
+  if (!error || typeof error !== 'object') return undefined;
+  const record = error;
+  return record.code
+    ?? record.errorCode
+    ?? record.error_code
+    ?? record.payload?.errorCode
+    ?? record.payload?.error_code;
+}
+
 const require = createRequire(import.meta.url);
 const rootClientModule = process.env.SOGNI_AGENT_TEST_STATE_PATH
   ? await import('@sogni-ai/sogni-intelligence-client')
@@ -251,7 +331,10 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   if (code) payload.errorCode = code;
   if (details) payload.errorDetails = details;
   if (hint) payload.hint = hint;
-  if (classified.category === 'insufficient_credits') {
+  if (applySubscriptionBillingEnrichment(payload, code)) {
+    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // guidance; skip the generic "Buy Spark Packs" credits branch.
+  } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
     payload.purchaseLabel = 'Buy Spark Packs';
     payload.purchaseUrl = SPARK_PACKS_PURCHASE_URL;
@@ -330,7 +413,11 @@ function addCanonicalErrorFields(payload, error) {
   if (classified.technicalError && classified.technicalError !== classified.message) {
     payload.technicalError = classified.technicalError;
   }
-  if (classified.category === 'insufficient_credits') {
+  const subscriptionCode = subscriptionBillingCodeFromError(error);
+  if (applySubscriptionBillingEnrichment(payload, subscriptionCode)) {
+    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // guidance; skip the generic "Buy Spark Packs" credits branch.
+  } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
     payload.purchaseLabel = 'Buy Spark Packs';
     payload.purchaseUrl = SPARK_PACKS_PURCHASE_URL;

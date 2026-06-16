@@ -94,6 +94,26 @@ routing and repair decisions; keep skill-local regex limited to CLI fact
 extraction such as paths, URLs, extensions, dimensions, durations, and explicit
 positions.
 
+## Sogni Unlimited subscription
+
+Sogni Unlimited is a flat-rate subscription that covers Sogni-hosted (Supernet)
+image, video, and music generation under a fair-use policy instead of spending
+Spark or SOGNI per render. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro
+($50/mo, $498/yr), with a one-per-account 3-day free trial (trial usage is
+capped). External-vendor models — GPT Image 2 (`gpt-image-2`) and Seedance 2.0 /
+Fast (`seedance-2-0`, `seedance-2-0-fast`) — are never covered and always need
+Premium Spark; selecting SOGNI opts a job out of coverage. The server decides
+coverage from the verified entitlement + resolved model; the CLI never asserts
+coverage. Fair-use throttling lowers per-UTC-day concurrency as completed renders
+climb (resets UTC midnight) and demotes over-allowance jobs to a lower-priority
+standard queue — describe this as fair use / standard queue, never "relaxed".
+Subscription-billing failures use `errorCategory: "subscription_billing"` with
+`errorCode` 4078 (vendor/no-entitlement -> use Premium Spark or reconnect), 4079
+(queue cap -> wait), 4080 (renewal retry, access paused -> pay with Spark/SOGNI,
+do NOT auto-retry the covered job), or 4081 (higher plan -> upgrade to Pro). Paid
+cancellation keeps access until period end; cancelling during the trial ends
+access immediately.
+
 ## Repo
 
 Sogni-AI/sogni-creative-agent-skill

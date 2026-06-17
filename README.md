@@ -43,9 +43,13 @@ With this skill, an agent can:
 - [Installation](#installation)
   - [Node CLI (default)](#node-cli-default)
   - [Claude Code plugin](#claude-code-plugin)
+  - [OpenAI Codex CLI](#openai-codex-cli)
+  - [Hermes Agent](#hermes-agent)
   - [OpenClaw plugin](#openclaw-plugin)
-  - [Hermes Agent / Manus / other frameworks](#hermes-agent--manus--other-frameworks)
+  - [ChatGPT (Custom GPT)](#chatgpt-custom-gpt)
+  - [Manus / other SKILL.md frameworks](#manus--other-skillmd-frameworks)
   - [Manual install from source](#manual-install-from-source)
+  - [Verify your install](#verify-your-install)
   - [Upgrading safely from inside an agent](#upgrading-safely-from-inside-an-agent)
 - [Setup (Sogni API key)](#setup-sogni-api-key)
 - [Usage](#usage)
@@ -77,8 +81,10 @@ With this skill, an agent can:
    npx setup-sogni-agent-skill
    ```
 
-   This auto-detects Claude Code, Codex CLI, and Hermes; installs the CLI globally;
-   registers the skill into each detected runtime; and prompts for your API key.
+   This auto-detects Claude Code, OpenAI Codex CLI, and Hermes Agent; installs the
+   CLI globally; registers the skill into each detected runtime; prompts for your
+   API key; and prints ChatGPT Custom-GPT setup instructions. (It does **not**
+   configure OpenClaw — see the [OpenClaw plugin](#openclaw-plugin) section.)
 
    Prefer to do it manually? Install the CLI directly:
 
@@ -88,6 +94,12 @@ With this skill, an agent can:
    ```
 
    Then point your agent runtime at this repository's [`SKILL.md`](./SKILL.md).
+
+3. Verify the install:
+
+   ```bash
+   sogni-agent doctor
+   ```
 
 Then ask your agent to do something:
 
@@ -133,15 +145,45 @@ The Claude Code plugin shells out to the `sogni-agent` CLI installed above, so b
 
 The first command registers a `sogni` marketplace with one plugin entry (`sogni-creative-agent`) backed by a lean Claude-Code-focused [`plugin-skills/sogni-creative-agent/SKILL.md`](./plugin-skills/sogni-creative-agent/SKILL.md); the second installs the plugin into Claude Code. The full skill spec still lives at the repository root [`SKILL.md`](./SKILL.md).
 
-### OpenClaw plugin
+> **Pick one registration per machine.** Install either this plugin **or** the personal skill that `npx setup-sogni-agent-skill` writes to `~/.claude/skills/` — not both. With both installed, Claude Code lists two near-identical skills, which wastes context and makes skill selection ambiguous.
 
-For the published plugin:
+### OpenAI Codex CLI
+
+The `npx` installer writes the skill to `~/.codex/skills/sogni-creative-agent-skill/`, which the Codex CLI discovers automatically:
 
 ```bash
-openclaw plugins install sogni-creative-agent-skill
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+npx setup-sogni-agent-skill --only=codex
 ```
 
-The installed plugin loads its behavior from [`SKILL.md`](./SKILL.md) via [`openclaw.plugin.json`](./openclaw.plugin.json).
+Restart Codex (or start a new session) and ask it to "generate an image of a sunset" — the skill shells out to the globally installed `sogni-agent`. To remove it later: `npx setup-sogni-agent-skill --uninstall --only=codex`.
+
+### Hermes Agent
+
+[Hermes Agent](https://hermes-agent.nousresearch.com/) loads skills from `~/.hermes/skills/<category>/<name>/SKILL.md`. The `npx` installer places this skill at `~/.hermes/skills/media/sogni-creative-agent-skill/`:
+
+```bash
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+npx setup-sogni-agent-skill --only=hermes
+```
+
+Then `/reset` your Hermes session so it picks up the new skill. (You can also install manually: copy [`SKILL.md`](./SKILL.md) into `~/.hermes/skills/media/sogni-creative-agent-skill/SKILL.md`, or use `hermes skills install` if your build supports it.)
+
+### OpenClaw plugin
+
+The skill is published on ClawHub, so the simplest install is:
+
+```bash
+openclaw skills install sogni-creative-agent-skill
+```
+
+To install as a code plugin instead, use OpenClaw's `npm:` source prefix (the npm package is scoped, so a bare `openclaw plugins install sogni-creative-agent-skill` will not resolve it):
+
+```bash
+openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill
+```
+
+The installed plugin loads its behavior from [`SKILL.md`](./SKILL.md) via [`openclaw.plugin.json`](./openclaw.plugin.json). The `npx setup-sogni-agent-skill` installer does **not** configure OpenClaw — use the command above (or the local-link flow below) instead.
 
 > **API key under OpenClaw:** the plugin config holds non-secret defaults only (models, timeouts, paths) — it does **not** carry your API key. Provide `SOGNI_API_KEY` via the environment the OpenClaw gateway passes to the CLI, or save it to `~/.config/sogni/credentials` (`SOGNI_API_KEY=<your-key>`). This keeps your key out of plugin config files.
 
@@ -173,7 +215,11 @@ The generated `.openclaw-link/` directory is only for OpenClaw; Hermes, Manus, a
 
 When loaded through OpenClaw, this skill reads plugin defaults from OpenClaw config; CLI flags always override them. The supported config schema is defined in [`openclaw.plugin.json`](./openclaw.plugin.json) and includes default models, video workflow models, hosted API defaults (`apiBaseUrl`, `defaultLlmModel`, `defaultTaskProfile`, `defaultApiMaxTokens`, `defaultApiThinking`, `defaultApiToolMode`, workflow cost defaults), token type, seed strategy, timeouts, and media paths. If your OpenClaw config lives elsewhere, set `OPENCLAW_CONFIG_PATH`.
 
-### Hermes Agent / Manus / other frameworks
+### ChatGPT (Custom GPT)
+
+Running `npx setup-sogni-agent-skill` also prints step-by-step instructions for creating a ChatGPT Custom GPT whose Instructions embed this skill. Note that ChatGPT cannot run the local CLI; the Custom GPT path covers prompt-side behavior only.
+
+### Manus / other SKILL.md frameworks
 
 Point the agent at this repository's [`SKILL.md`](./SKILL.md) for behavior guidance and [`llm.txt`](https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/llm.txt) for install/setup help. The agent should invoke the globally installed `sogni-agent` CLI by default.
 
@@ -184,6 +230,16 @@ gh repo clone Sogni-AI/sogni-creative-agent-skill
 cd sogni-creative-agent-skill
 npm install
 ```
+
+### Verify your install
+
+Every install path above ends the same way — run the built-in health check:
+
+```bash
+sogni-agent doctor
+```
+
+It verifies the Node version, API credentials (and their file permissions), config-dir writability, `ffmpeg` availability, live authentication, and whether a newer version is available. `sogni-agent doctor --json` emits the same checks for agents. If anything is marked `✗`, the detail line says exactly how to fix it.
 
 ### Upgrading safely from inside an agent
 
@@ -382,6 +438,14 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--last`, `--last-image` | Inspect last render / reuse last image as context or video reference |
 | `--strict-size` | Fail instead of auto-adjusting video size |
 | `--json` | Emit structured output for agents |
+| `-n <count>` | Multiple outputs per call (safety-capped at 16; raise deliberately with `SOGNI_MAX_COUNT`) |
+| `doctor` / `--doctor` | Install health check: Node, credentials, ffmpeg, auth, version (`--json` for agents) |
+| `self-update` | Upgrade the CLI via the detected package manager |
+| `--whats-new [version]` | Show bundled CHANGELOG entries (everything after `<version>` if given) |
+| `--snooze-update` | Snooze the pending-update reminder (1 day → 2 days → 1 week) |
+| `--no-update-check` | Disable the background update check for this run (`SOGNI_NO_UPDATE_CHECK=1` to disable always) |
+| `--video-model <id>` | Override the i2v model used by `--angles-360-video` |
+| `--memory-category <c>` | Category for `--memory-set`: `preference` (default), `fact`, or `context` |
 
 ### Quality presets
 
@@ -537,7 +601,9 @@ Stored at `~/.config/sogni/personality.txt`.
 
 Hosted API modes require `SOGNI_API_KEY`.
 
-- **`--api-chat`** targets `/v1/chat/completions` with Sogni creative-agent tools — best for text-first natural-language workflows. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|creative-tools|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
+**Choosing a mode.** Whatever is driving this CLI is usually a more capable planner than Sogni's hosted model, so prefer to plan yourself and let the server execute: direct-to-SDK flags for one-shot work, and `--api-workflow` with an explicit `--workflow-input` step graph for multi-step/durable work (you author the plan; the server runs it durably with replay — no hosted re-planning). Use `--api-chat` / `--durable-chat` when you deliberately want the hosted model to own a long server-side loop, or when several local files must be uploaded for one turn.
+
+- **`--api-chat`** targets `/v1/chat/completions` with Sogni creative-agent tools and **delegates planning/tool-selection to the hosted model** — reach for it when the caller is a thin client, when you want the hosted model to drive a long server-side tool loop, or when several local files must be uploaded for one turn. The CLI sanitizes prompt-injection markers before forwarding messages and can use the current server-side creative-agent media tools, including video extension, segment replacement, overlays, subtitles, stitch/orbit/dance composition, and generated artifact indexing. Tune with `--api-tools creative-agent|creative-tools|none`, `--no-api-tool-execution`, `--llm-model`, and `--system`.
 - **Sogni Intelligence controls** include `--task-profile general|coding|reasoning`, `--max-tokens`, and `--thinking` / `--no-thinking`, which forward to `/v1/chat/completions` as `task_profile`, `max_tokens`, and `chat_template_kwargs.enable_thinking`. Use `--list-api-models` or `--get-api-model <id>` to inspect `/v1/models`.
 - **`--durable-chat`** starts a hosted `/v1/chat/runs` record through the SDK transport. Set `SOGNI_SKILL_USE_SDK_TRANSPORT=1` before using it. The CLI streams assistant deltas and de-duplicated per-job progress / ETA / result lines from hosted run events.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Requests carry `input.steps` plus snake_case controls such as `token_type`, `media_references`, `max_estimated_capacity_units`, and `confirm_cost`.
@@ -552,8 +618,6 @@ Override the API origin with `--api-base-url`, `SOGNI_API_BASE_URL`, or `SOGNI_R
 Hosted API credentials are only sent to `https://api.sogni.ai` by default. Add trusted custom
 hosts with `SOGNI_API_ALLOWED_HOSTS`; loopback or non-HTTPS local testing requires
 `SOGNI_ALLOW_UNSAFE_API_BASE_URL=1`.
-
-> The public skill consumes generated storyboard adapters from `../sogni-creative-agent`: `compileForModel()` now works in the bundled runtime for Seedance, GPT Image 2, LTX-2.3, and WAN storyboard stages.
 
 ---
 
@@ -664,8 +728,10 @@ Sogni workers that power subscription-covered jobs earn from a separate monthly 
 - **Exit codes:** failures use a non-zero exit code with human-readable stderr.
 - **Structured output:** add `--json` when an agent needs machine-parseable success/error data, or `--last` to inspect the last render. JSON failures include canonical `errorType`, `errorCategory`, and `retryable` fields where the shared runtime can classify the error.
 - **Subscription billing errors:** subscription-billing failures carry `errorCode` `4078` / `4079` / `4080` / `4081`, `errorCategory: "subscription_billing"`, and an actionable `hint`. See [Subscription billing errors](#subscription-billing-errors) for what each means; in particular, do not auto-retry a `4080` (grace / renewal-retry) covered job — pay with Spark or SOGNI instead.
+- **stdout stays parseable in `--json` mode:** progress lines, SSE workflow frames, and warnings go to stderr; stdout carries exactly one JSON object. `--last --json` wraps the record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered yet.
 - **Output files:** use `-o <path>` to save locally; otherwise the CLI prints a result URL.
 - **Quiet mode:** `-q` / `--quiet` suppresses progress output without changing exit semantics.
+- **Interrupts:** Ctrl-C exits with the conventional signal code and cleans up the CLI's temporary files.
 
 ---
 
@@ -684,41 +750,26 @@ This skill is designed to be loaded into agent runtimes as a first-class capabil
    Use `--json` for machine-readable success/error payloads. Use `--last` to read the previous render's metadata.
 5. **Agent-safe install/upgrade**
    Prefer the `npm install -g` and `git -C "$DEST" pull --ff-only` paths above. Avoid generating clone-or-pull bootstrap scripts with `set -e`, `bash -c`, `sh -c`, or inline repository URLs — agent sandboxes correctly route those through approval and the install will stall.
-6. **SSRF / URL safety**
-   The CLI runs an SSRF guard ([`ssrf-guard.mjs`](./ssrf-guard.mjs)) before forwarding any HTTP(S) reference to hosted models. Localhost and private-network URLs are rejected; only public HTTPS references are forwarded as Seedance multimodal context.
+6. **Verify with `doctor`**
+   After any install or upgrade, run `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
+7. **Update notices for agents**
+   When a newer version exists, any command may print one advisory stderr line — `[sogni-agent] Update available: <current> -> <latest> ...` — at most once per day (stdout JSON is never touched). Agents should relay it to the user and offer `sogni-agent self-update`, or run `sogni-agent --snooze-update` if the user declines. Interactive TTY users get a banner instead. Each failed check carries a `detail` string with the fix.
+8. **SSRF / URL safety**
+   The CLI validates every HTTP(S) media reference with an SSRF guard ([`ssrf-guard.mjs`](./ssrf-guard.mjs)) and re-validates each redirect hop on download. Localhost and private-network URLs are rejected; only public HTTPS references are forwarded as Seedance multimodal context.
 
 ---
 
 ## Development
 
-The public skill keeps CLI/runtime glue in this repo, but Sogni model routing, video workflow defaults, quality tiers, and prompt guardrails are generated from the private `sogni-creative-agent` repo. The generated runtime is committed at [`generated/creative-agent-runtime.mjs`](./generated/creative-agent-runtime.mjs) so public installs do not need access to the private repo.
-
-Run the test suite:
+Run the unit test suite (works without any Sogni credentials or private repos):
 
 ```bash
 npm test
 ```
 
-`npm test` first runs `npm run check:creative-agent-runtime`, which regenerates the runtime file and fails if it differs from the committed copy.
+Paid integration tests are opt-in: `npm run test:integration` (requires a Sogni API key and submits real GPU jobs).
 
-With both repos checked out as siblings, refresh the generated runtime before publishing:
-
-```bash
-npm run sync:creative-agent-runtime
-```
-
-Reusable workflow rules should come from the shared Sogni runtime before they are synced into this public package. Keep storyboard planning, tool argument validation, prompt linting, media-routing decisions, chat-run progress extraction, and repair/control behavior aligned with the hosted `/v1/chat/completions` and `/v1/creative-agent/workflows` APIs. Prefer typed helpers exported by `@sogni-ai/sogni-intelligence-client` or the generated runtime over new skill-local regex guards.
-
-Public-skill regex should stay limited to CLI argument/fact extraction such as file paths, URLs, extensions, dimensions, durations, and explicit positions. Hosted-style decisions such as latest-video continuation, uploaded-video modification, image-selection waits, stitch-after-batch state, and repair/control routing belong upstream in typed planner/runtime fields before they are synced here.
-
-### Execution boundaries: local CLI vs. hosted surfaces
-
-`sogni-agent.mjs` is a **local command-line tool** (`#!/usr/bin/env node`, the package `bin`). It is the only place that may assume a local filesystem and a local `ffmpeg`/`ffprobe` binary. Flags like `--concat-videos`, `--remix-audio`, `--extract-first-frame`, `--extract-last-frame`, and `--angles-360-video` shell out to ffmpeg behind `ensureFfmpegAvailable()` and run only when those flags are passed.
-
-Hosted surfaces — including the chat.sogni.ai web app — do **not** run `sogni-agent.mjs`. They consume `@sogni-ai/sogni-intelligence-client` and the hosted `/v1/chat/completions` and `/v1/creative-agent/workflows` APIs, where there is no local ffmpeg and no local filesystem. Therefore:
-
-- Keep ffmpeg- and filesystem-dependent helpers (frame extraction, concat, audio remux, media listing) **local to `sogni-agent.mjs`**. Do not move them into the shared runtime or `@sogni-ai/sogni-intelligence-client`, and never make hosted code paths depend on a local binary.
-- Server-side equivalents of these capabilities (e.g. `stitch_video`, `overlay_video`, `extend_video`) live in the hosted creative-agent tool surface and belong upstream, not in the CLI.
+Architecture notes, the private-runtime sync workflow, code-placement policy, and the release process live in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 Issues and feature requests: [github.com/Sogni-AI/sogni-creative-agent-skill/issues](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues).
 

@@ -29,6 +29,26 @@ if (!existsSync(generatedPath)) {
   process.exit(1);
 }
 
+// The freshness check needs the private sogni-creative-agent repo to
+// regenerate the bundle. External contributors don't have it — the committed
+// bundle is the source of truth for them, so skip instead of blocking every
+// `npm test`. Publishing stays gated: prepack sets SOGNI_REQUIRE_RUNTIME_SYNC=1.
+const upstreamSyncScript = process.env.SOGNI_CREATIVE_AGENT_SYNC_SCRIPT
+  || join(repoRoot, '..', 'sogni-creative-agent', 'scripts', 'sync-skill-runtime.mjs');
+const requireRuntimeSync = ['1', 'true', 'yes'].includes(
+  String(process.env.SOGNI_REQUIRE_RUNTIME_SYNC || '').toLowerCase()
+);
+if (!existsSync(upstreamSyncScript)) {
+  if (requireRuntimeSync) {
+    console.error(`Missing upstream runtime sync script: ${upstreamSyncScript}`);
+    console.error('SOGNI_REQUIRE_RUNTIME_SYNC=1 is set (publish gate) — the private sogni-creative-agent checkout is required.');
+    process.exit(1);
+  }
+  console.warn('SKIPPING runtime freshness check: the private sogni-creative-agent repo is not available.');
+  console.warn(`Tests will run against the committed ${generatedRelativePath}.`);
+  process.exit(0);
+}
+
 const beforeSync = readFileSync(generatedPath, 'utf8');
 const syncResult = run(process.execPath, [syncScript], {
   env: {

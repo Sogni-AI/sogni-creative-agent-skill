@@ -1,14 +1,24 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const pluginRoot = join(repoRoot, '.openclaw-link');
+// SOGNI_OPENCLAW_LINK_DIR lets tests regenerate the link surface in a temp dir
+// instead of mutating the working tree.
+const pluginRoot = process.env.SOGNI_OPENCLAW_LINK_DIR || join(repoRoot, '.openclaw-link');
 
 mkdirSync(pluginRoot, { recursive: true });
 
 for (const filename of ['SKILL.md', 'openclaw.plugin.json', 'openclaw-plugin.mjs']) {
   copyFileSync(join(repoRoot, filename), join(pluginRoot, filename));
+}
+
+// SKILL.md defers deep guides to references/ — ship them with the plugin so
+// the pointers resolve inside OpenClaw installs too.
+mkdirSync(join(pluginRoot, 'references'), { recursive: true });
+for (const filename of readdirSync(join(repoRoot, 'references'))) {
+  if (!filename.endsWith('.md')) continue;
+  copyFileSync(join(repoRoot, 'references', filename), join(pluginRoot, 'references', filename));
 }
 
 const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));

@@ -2,7 +2,7 @@
   "id": "sogni-creative-agent-skill",
   "name": "Sogni Creative Agent Skill — Image, Video & Music Generation",
   "description": "Agent skill and CLI for Sogni AI image, video, and music generation.",
-  "version": "3.4.0",
+  "version": "3.6.1",
   "skills": [
     "."
   ],
@@ -183,8 +183,8 @@
       },
       "mediaInboundDir": {
         "type": "string",
-        "default": "~/.clawdbot/media/inbound",
-        "description": "Directory used by --list-media (can also set SOGNI_MEDIA_INBOUND_DIR)."
+        "default": "~/.openclaw/media/inbound",
+        "description": "Directory used by --list-media (can also set SOGNI_MEDIA_INBOUND_DIR). When unset, the CLI prefers ~/.openclaw/media/inbound and falls back to the legacy ~/.clawdbot/media/inbound if only that exists."
       }
     }
   }

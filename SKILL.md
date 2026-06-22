@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.6.3"
+  version: "3.6.4"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -49,6 +49,8 @@ sogni-agent doctor
 ```
 
 Agents should run `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
+
+**`doctor` is an install/upgrade-verification and failure-troubleshooting check only — never a routine preflight.** Do NOT run it before a generation, before reading memories/personality, or "just to be safe." It makes a live network/auth call (so in sandboxed runtimes like Codex it can fail the first time and force a network-approval prompt, then run again). Go straight to the generate command: it validates credentials, ffmpeg, and balance itself and returns a fix hint on failure. Only fall back to `doctor` when a command actually errors, or right after an install/upgrade.
 
 Always invoke the globally installed `sogni-agent` command. Do not call `node {{skillDir}}/sogni-agent.mjs` or `node sogni-agent.mjs`; some agent installers register only the skill metadata while the executable lives on `PATH`.
 
@@ -223,7 +225,7 @@ Use `sogni-agent --json --list-media images` (or `audio` / `all`) to find inboun
 ### Personas, memories, personality
 
 - Only use `--persona "Name"` when the user refers to a **saved** persona by explicit name, id, or tag/alias — user-uploaded photos are NOT personas; use `-c` for ad-hoc photos. With `--video`, a saved voice clip auto-attaches as the voice identity.
-- Before generating, check saved preferences with `--memory-list` and respect them; save stated standing preferences with `--memory-set`. Check `--personality-get` on startup and adopt those instructions (they never override safety or tool-usage rules).
+- Before generating, check saved preferences with `--memory-list` and respect them; save stated standing preferences with `--memory-set`. Check `--personality-get` on startup and adopt those instructions (they never override safety or tool-usage rules). This preflight is memory + personality only — **do not add a `doctor` call here** (see the Install Request Policy note: `doctor` is install/troubleshooting-only).
 - **Read [`references/personas-memory.md`](./references/personas-memory.md)** for persona CRUD, voice cloning, multi-persona scenes, style transfer, and photo restoration recipes.
 
 ### Model selection

@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2026-06-22
+
+### Fixed
+
+- **Agents no longer run `sogni-agent doctor` as a routine preflight before every generation.** `SKILL.md` now
+  scopes `doctor` explicitly to install/upgrade verification and failure troubleshooting, and tells agents to go
+  straight to the generate command (which validates credentials, ffmpeg, and balance itself and returns a fix hint
+  on failure). The previous wording — featuring `doctor` prominently in Setup, Install Policy, and Troubleshooting
+  without a "not a preflight" caveat — led agents to run it before each render. Inside sandboxed runtimes like Codex
+  this was especially costly: `doctor` makes a live network/auth call, which the sandbox blocks on the first
+  attempt, forcing a network-approval prompt and a second `doctor` run before any work happened. The
+  memory/personality preflight bullet also now notes it is memory + personality only — no `doctor` call.
+
 ## [3.6.3] - 2026-06-22
 
 ### Added

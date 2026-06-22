@@ -473,8 +473,8 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
-| Direct music generation | `ace_step_1.5_turbo` (or `--music-model turbo`) |
-| Music with stronger lyric handling | `ace_step_1.5_sft` (or `--music-model sft`) |
+| Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
+| Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
@@ -499,9 +499,12 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but ref becomes `1024×1535`). `sogni-agent` detects this for local refs and auto-adjusts to a nearby safe size.
+- **LTX-2.3 two-keyframe morph:** when the LTX-2.3 i2v model `ltx23-22b-fp8_i2v_distilled` gets **both** a start frame (`--ref`) and an end frame (`--ref-end`), it auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`, strength ~1.0) and morphs the first image into the last in a single render — no bridge clip or `--concat-videos` needed. The sogni-client SDK example feeds the two frames as its `image` / `end-image` arguments and additionally exposes manual `transition` / `transition-strength` SDK arguments.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 
 V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. Audio references must be paired with an image or video reference.
+
+The LTX-2.3 v2v model `ltx23-22b-fp8_v2v_distilled` also supports two extra control modes: **`outpaint`** extends/expands the video canvas (e.g. make a vertical clip widescreen, or add space in a direction) — it is positional and mask-free, anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio (`16:9|9:16|1:1|4:3|3:4|21:9`), and the canvas only grows, never crops; **`inpaint`** regenerates a masked region of the source video and **requires a mask image** (white pixels = region to regenerate). The hosted `video_to_video` tool selects these with `controlMode` `outpaint`/`inpaint`; the sogni-client SDK example exposes them via its `control-type` argument (`canny|pose|depth|detailer|outpaint|inpaint`) with `outpaint-position` for outpaint and `mask` for inpaint. See `references/video-editing.md` for details.
 
 ---
 

@@ -212,7 +212,7 @@ For "hd" / "1080p" / "4k" / "uhd" requests: use `-m ltx23-22b-fp8_t2v_distilled`
 
 ### Video editing, stitching, 360 turnarounds
 
-Trigger patterns — "animate image A to image B" (`--ref A --ref-end B`), "continue this video" (extract last frame → i2v → concat), "transition between two videos" (bridge clip), "360 video" (`--angles-360 --angles-360-video`), "add/replace the soundtrack" (`--concat-audio` / `--remix-audio`). **Read [`references/video-editing.md`](./references/video-editing.md) for the step-by-step recipes.**
+Trigger patterns — "animate/morph image A to image B" (`--ref A --ref-end B`; on LTX-2.3 i2v this is a single render — the transition/morph LoRA auto-applies, no bridge clip), "continue this video" (extract last frame → i2v → concat), "transition between two videos" (bridge clip between two *finished videos*), "360 video" (`--angles-360 --angles-360-video`), "add/replace the soundtrack" (`--concat-audio` / `--remix-audio`). **Read [`references/video-editing.md`](./references/video-editing.md) for the step-by-step recipes.**
 
 **Security: never run raw shell commands (`ffmpeg`, `ls`, `cp`, etc.) for file operations or video/audio manipulation.** Always use the CLI's built-in safe wrappers: `--extract-first-frame`, `--extract-last-frame`, `--concat-videos`, `--remix-audio`, `--list-media`, `--video-start`, `--audio-start`, `--audio-duration`, `--looping`.
 

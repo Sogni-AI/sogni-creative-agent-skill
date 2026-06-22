@@ -23,6 +23,20 @@ sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition
 - User says "animate this video to this image" → extract last frame, use as `--ref`, target image as `--ref-end`, then stitch
 - User says "continue this video" with a target image → same as above
 
+> **LTX-2.3 transition / morph LoRA (auto-applied).** When an LTX-2.3
+> image-to-video render (`ltx23-22b-fp8_i2v_distilled`) is given **both** a start
+> image (`--ref`) and an end image (`--ref-end`) — two keyframes — it
+> automatically applies the ValiantCat transition/morph LoRA (lora id
+> `transition`, trigger word `zhuanchang`, strength ~1.0), morphing the first
+> image smoothly into the end image. This is a **single model-level render**, not
+> a stitch — no extra flags are required for the two-frame LTX i2v path. The
+> sogni-client SDK example uses `image <first>` and `end-image <last>` to supply
+> the two frames (the morph LoRA engages automatically), and additionally exposes
+> manual `transition` / `transition-strength` SDK arguments for the SDK path. Do
+> **not** confuse this single-render morph with the manual "Transition Between Two
+> Videos (Bridge Clip)" recipe below, which bridges two *finished videos* with a
+> separately generated clip and `--concat-videos`.
+
 ## Animate a Video to an Image (Scene Continuation)
 
 1. **Extract the last frame** of the existing video:
@@ -43,6 +57,11 @@ This ensures visual continuity — the new clip picks up exactly where the previ
 When the final stitched output needs a single external soundtrack, add `--concat-audio /path/to/audio.mp3` and optional `--concat-audio-start <sec>` to the same `--concat-videos` command. This is the local-agent advantage over browser-only workflows: generate clips with Sogni, then stitch and mux audio locally.
 
 ## Transition Between Two Videos (Bridge Clip)
+
+This recipe transitions between two **finished videos**. To morph between two
+**still images** in a single render, use the LTX-2.3 two-keyframe i2v path with
+its auto-applied transition/morph LoRA (see "Animate Between Two Images" above) —
+do not build a bridge clip for that case.
 
 To **create a transition between two existing videos** (A → B), bridge them with a generated clip anchored on both boundary frames:
 
@@ -159,6 +178,34 @@ sogni-agent --video --workflow v2v -m seedance2-v2v \
 ```
 
 ControlNet types: `canny` (edges), `pose` (body pose), `depth` (depth map), `detailer` (detail enhancement). Default strengths are tuned from Sogni Chat: `canny`/`pose`/`depth` use `0.85` plus detailer assist; `detailer` uses `1.0` for preservation. For Seedance V2V, use `-m seedance2-v2v` and omit ControlNet. Audio references must be paired with an image or video reference.
+
+### V2V Outpaint (Canvas Extension) and Inpaint (Masked Region)
+
+The LTX-2.3 v2v model `ltx23-22b-fp8_v2v_distilled` adds two control modes
+beyond `canny`/`pose`/`depth`/`detailer`:
+
+- **`outpaint`** — extend/expand the video canvas (for example, make a vertical
+  clip widescreen, or add space in one direction). Outpaint is **positional and
+  mask-free**: it anchors the original frame inside a larger canvas. The anchor
+  position is `center`, `top`, `bottom`, `left`, or `right` (where the original
+  frame sits in the expanded canvas — `left` keeps the original on the left and
+  grows to the right; `center` expands all sides). An optional target aspect
+  ratio (`16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`) shapes the expanded
+  canvas. The canvas only grows — it never crops. **No mask is needed.**
+- **`inpaint`** — regenerate a masked region of the source video (for example,
+  "replace what's behind the subject"). Inpaint **requires a mask image** where
+  **white pixels mark the region to regenerate**.
+
+These modes run as Sogni Projects on the v2v surface. In the hosted
+`video_to_video` tool the control mode is selected with `controlMode` set to
+`outpaint` or `inpaint` (with `outpaintPosition` / optional
+`outpaintAspectRatio` for outpaint, or `maskImageIndex` for inpaint). The
+underlying sogni-client SDK example exposes them as `control-type`
+(`canny|pose|depth|detailer|outpaint|inpaint`), with `mask <image>` for inpaint
+(white = region to regenerate) and `outpaint-position`
+(`center|top|bottom|left|right`, required for outpaint — outpaint is positional
+and takes no mask, inpaint requires the mask). These extension/inpaint controls
+are video-only.
 
 ## Music-to-Video Pipeline
 

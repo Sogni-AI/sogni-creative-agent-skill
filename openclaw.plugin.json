@@ -27,7 +27,7 @@
       },
       "defaultMusicModel": {
         "type": "string",
-        "default": "ace_step_1.5_turbo",
+        "default": "ace_step_1.5_xl_turbo",
         "description": "Default model for direct music/audio generation."
       },
       "videoModels": {

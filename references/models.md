@@ -40,11 +40,16 @@ support up to 3).
 
 | Model | Use Case |
 |-------|----------|
-| `ace_step_1.5_turbo` | Default direct music generation model |
-| `ace_step_1.5_sft` | Experimental option with stronger lyric handling |
+| `ace_step_1.5_xl_turbo` | Default direct music generation model (ACE-Step 1.5 XL Turbo) |
+| `ace_step_1.5_xl_sft` | Quality variant (ACE-Step 1.5 XL SFT) with stronger lyric handling |
+
+The `--music-model` keys are unchanged — `turbo` (default) and `sft` — but they
+now map to the ACE-Step XL ids (`turbo` → `ace_step_1.5_xl_turbo`, `sft` →
+`ace_step_1.5_xl_sft`). The legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft`
+models are no longer the default.
 
 Use `--music` for direct audio-only generation. Defaults: 30 seconds, `mp3`,
-`ace_step_1.5_turbo`, 8 steps, `euler` sampler, `simple` scheduler. Keep
+`ace_step_1.5_xl_turbo`, 8 steps, `euler` sampler, `simple` scheduler. Keep
 `--audio` for video reference audio (`--ref-audio` alias); do not use it for
 direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 (30-300), `--keyscale`, `--timesig` (2|3|4|6), `--composer-mode`,
@@ -59,7 +64,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio |
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
-| `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet |
+| `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
 | `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio |
 | `seedance2-fast` | Variable | Fast Seedance 2.0 text-to-video |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
@@ -93,8 +98,8 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
-| Direct music generation | `ace_step_1.5_turbo` (or `--music-model turbo`) |
-| Music with stronger lyric handling | `ace_step_1.5_sft` (or `--music-model sft`) |
+| Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
+| Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |

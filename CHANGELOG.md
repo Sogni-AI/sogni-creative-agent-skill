@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **ACE-Step 1.5 XL is now the default music model.** `generate_music` / `--music` now default to
+  ACE-Step 1.5 XL Turbo (`ace_step_1.5_xl_turbo`), with ACE-Step 1.5 XL SFT (`ace_step_1.5_xl_sft`) as the
+  quality variant. The `--music-model` keys are unchanged — `turbo` (default) and `sft` — but they now map to the
+  XL ids; the legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft` ids are no longer the default. The 8-step / `euler`
+  / `simple` turbo defaults are unchanged. Updated `references/models.md`, `README.md`,
+  `references/openclaw-config.md`, and the `defaultMusicModel` default in `openclaw.plugin.json`.
+
+### Added
+
+- **LTX-2.3 video-to-video outpaint and inpaint control modes** documented for `ltx23-22b-fp8_v2v_distilled`.
+  Outpaint extends/expands the video canvas (e.g. vertical → widescreen) and is positional and mask-free —
+  anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio
+  (`16:9|9:16|1:1|4:3|3:4|21:9`), growing the canvas without cropping. Inpaint regenerates a masked region and
+  requires a mask image (white pixels = region to regenerate). Added a V2V outpaint/inpaint subsection to
+  `references/video-editing.md` and capability prose to `references/models.md` and `README.md`.
+- **LTX-2.3 two-keyframe transition / morph LoRA** documented for image-to-video. When the LTX-2.3 i2v model
+  `ltx23-22b-fp8_i2v_distilled` receives both a start frame (`--ref`) and an end frame (`--ref-end`), it
+  auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`,
+  strength ~1.0) and morphs the first image into the last in a single render — distinct from the manual
+  bridge-clip "transition between two videos" recipe. Added notes to `references/video-editing.md`, `SKILL.md`,
+  and `README.md`.
+
 ## [3.6.3] - 2026-06-22
 
 ### Added

@@ -21,7 +21,7 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
           "defaultImageModel": "z_image_turbo_bf16",
           "defaultEditModel": "qwen_image_edit_2511_fp8_lightning",
           "defaultPhotoboothModel": "coreml-sogniXLturbo_alpha1_ad",
-          "defaultMusicModel": "ace_step_1.5_turbo",
+          "defaultMusicModel": "ace_step_1.5_xl_turbo",
           "videoModels": {
             "t2v": "ltx23-22b-fp8_t2v_distilled",
             "i2v": "wan_v2.2-14b-fp8_i2v_lightx2v",

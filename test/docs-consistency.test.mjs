@@ -91,6 +91,41 @@ test('quality preset tables match the generated runtime QUALITY_TIERS', () => {
   }
 });
 
+test('installer docs describe ChatGPT setup as explicit, not default', () => {
+  const checkedFiles = ['README.md', 'llm.txt'];
+  const staleClaims = [];
+  for (const docFile of checkedFiles) {
+    const text = read(docFile);
+    if (!text.includes('npx setup-sogni-agent-skill --only=chatgpt')) {
+      staleClaims.push(`${docFile}: missing explicit --only=chatgpt setup command`);
+    }
+    if (/npx setup-sogni-agent-skill[` ]+.*prints ChatGPT Custom-GPT instructions/i.test(text)) {
+      staleClaims.push(`${docFile}: implies the default setup run prints ChatGPT instructions`);
+    }
+  }
+  assert.deepEqual(staleClaims, [], staleClaims.join('\n'));
+});
+
+test('installer docs mention explicit local-only setup requires existing runtime config dirs', () => {
+  const readme = read('README.md');
+  const llm = read('llm.txt');
+
+  assert.match(readme, /Start Codex once before running the installer so `~\/\.codex\/` exists/);
+  assert.match(readme, /Start Hermes once before running the installer so `~\/\.hermes\/` exists/);
+  assert.match(readme, /selected local runtime is not detected, setup exits before installing anything/);
+  assert.match(llm, /start Codex once first so ~\/\.codex\/ exists/);
+  assert.match(llm, /start Hermes once first so ~\/\.hermes\/ exists/);
+});
+
+test('Claude plugin skill does not tell agents to install a duplicate personal Claude skill', () => {
+  const pluginSkill = read('plugin-skills/sogni-creative-agent/SKILL.md');
+
+  assert.match(pluginSkill, /npm install -g @sogni-ai\/sogni-creative-agent-skill@latest/);
+  assert.doesNotMatch(pluginSkill, /Install everything.*npx setup-sogni-agent-skill/);
+  assert.match(pluginSkill, /separate personal skill registration in `~\/\.claude\/skills\/`/);
+  assert.match(pluginSkill, /cleanup command does not uninstall the Claude Code plugin itself/);
+});
+
 test('plugin and marketplace manifests are valid JSON with the expected shape', () => {
   const plugin = JSON.parse(read('.claude-plugin/plugin.json'));
   assert.equal(plugin.name, 'sogni-creative-agent');

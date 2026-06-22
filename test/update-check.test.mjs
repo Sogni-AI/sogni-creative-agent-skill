@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   compareSemver,
   detectPackageManager,
+  formatSelfUpdatePermissionHint,
   shouldSkipForEnvironment,
   formatUpdateNotice,
   readState,
@@ -22,6 +23,7 @@ import {
   extractChangelogEntries,
   formatWhatsNew,
   runWhatsNew,
+  runSelfUpdate,
   INTERNAL_FLAG,
   PACKAGE_NAME,
 } from '../update-check.mjs';
@@ -67,6 +69,17 @@ test('detectPackageManager — pnpm / yarn / bun', () => {
   assert.match(detectPackageManager({ npm_config_user_agent: 'yarn/4.3.0' }).installCmd, /^yarn global add /);
   assert.equal(detectPackageManager({ npm_config_user_agent: 'bun/1.1.20 linux x64' }).manager, 'bun');
   assert.match(detectPackageManager({ npm_config_user_agent: 'bun/1.1.20' }).installCmd, /^bun add -g /);
+});
+
+test('formatSelfUpdatePermissionHint — platform-specific rerun guidance', () => {
+  assert.match(
+    formatSelfUpdatePermissionHint({ manager: 'npm', platform: 'darwin' }),
+    /sudo sogni-agent self-update/
+  );
+  assert.match(
+    formatSelfUpdatePermissionHint({ manager: 'npm', platform: 'win32' }),
+    /Administrator/
+  );
 });
 
 test('shouldSkipForEnvironment — hard opt-outs', () => {
@@ -439,4 +452,23 @@ test('runWhatsNew — missing changelog fails with a pointer', () => {
   });
   assert.equal(code, 1);
   assert.ok(stderrChunks.join('').includes('No CHANGELOG.md found'));
+});
+
+test('runSelfUpdate — nonzero npm exit prints permission recovery hint', () => {
+  const logs = [];
+  const code = runSelfUpdate({
+    env: {},
+    stdio: 'pipe',
+    platform: 'darwin',
+    log: (line) => logs.push(line),
+    spawnSyncFn: (command, args) => {
+      assert.equal(command, 'npm');
+      assert.deepEqual(args, ['install', '-g', PACKAGE_NAME]);
+      return { status: 1, stderr: Buffer.from('npm error code EACCES\n') };
+    },
+  });
+  const output = logs.join('\n');
+  assert.equal(code, 1);
+  assert.match(output, /exited with code 1/);
+  assert.match(output, /sudo sogni-agent self-update/);
 });

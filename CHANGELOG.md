@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-06-22
+
+### Added
+
+- **Sogni Unlimited subscription guidance.** README, SKILL.md, and `llm.txt` now document the Unlimited plan,
+  and the CLI includes friendlier billing-error fallbacks for subscription-related failures.
+
+### Fixed
+
+- **`sogni-agent self-update` now gives clearer recovery guidance after failed global package updates.** When the
+  package manager exits nonzero, the CLI reports the failing exit code and prints platform-specific permission
+  guidance (for example, `sudo sogni-agent self-update` on macOS/Linux or an Administrator terminal on Windows)
+  instead of leaving users with only raw npm output.
+- **Codex and Hermes setup docs now mention the target app must be started once before targeted installer runs.**
+  `README.md` and `llm.txt` now match the setup installer preflight: `--only=codex` and `--only=hermes` exit
+  before installing anything if `~/.codex/` or `~/.hermes/` has not been created yet.
+- **Claude plugin setup guidance no longer tells agents to create a duplicate personal Claude skill.** The
+  plugin-bundled skill now installs only the global CLI, tells agents not to run the default setup installer from
+  inside the plugin, and clarifies that setup cleanup does not uninstall the Claude Code plugin itself.
+
 ## [3.6.1] - 2026-06-15
 
 ### Changed

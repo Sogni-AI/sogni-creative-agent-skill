@@ -9,12 +9,14 @@ Generate **images, videos, and music** via Sogni AI's decentralized GPU network 
 
 ## Setup
 
-1. Install everything (one-time): `npx setup-sogni-agent-skill` — installs the CLI globally and prompts for your API key. (Manual alternative: `npm i -g @sogni-ai/sogni-creative-agent-skill`.)
+1. Install the CLI (one-time): `npm install -g @sogni-ai/sogni-creative-agent-skill@latest`.
 2. Provide your Sogni API key (get one at https://dashboard.sogni.ai → account menu): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
 3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
 4. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
 
-**Uninstall:** run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge` — removes the skill, CLI, and `~/.config/sogni/` data after backing it up to `~/.config/sogni.backup-<timestamp>.tar.gz`. Tell the user the backup path; it holds their API key. Omit `--purge` to keep data.
+Do not run the default `npx setup-sogni-agent-skill` from this plugin unless the user wants a separate personal skill registration in `~/.claude/skills/`; using both creates duplicate Claude Code skills.
+
+**Uninstall:** remove `sogni-creative-agent@sogni` with Claude Code's plugin manager. To also remove the global CLI and Sogni data, run `npx setup-sogni-agent-skill --uninstall --remove-cli --purge` after the plugin is removed; it backs up `~/.config/sogni/` to `~/.config/sogni.backup-<timestamp>.tar.gz` first. Tell the user the backup path; it holds their API key. Omit `--purge` to keep data. This cleanup command does not uninstall the Claude Code plugin itself.
 
 ## Quick examples
 

@@ -8,9 +8,12 @@ Manus AI, and other SKILL.md-aware agent runtimes.
 
 ```bash
 # One-command install: detects Claude Code, Codex CLI, and Hermes; installs the
-# CLI globally; prompts for the API key; prints ChatGPT Custom-GPT instructions.
+# CLI globally; prompts for the API key; points to ChatGPT Custom-GPT setup.
 # (Does NOT configure OpenClaw — see below.)
 npx setup-sogni-agent-skill
+
+# Print ChatGPT Custom-GPT instructions explicitly.
+npx setup-sogni-agent-skill --only=chatgpt
 
 # Agent-safe manual CLI install or upgrade
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
@@ -23,11 +26,11 @@ sogni-agent --version
 # Pick ONE Claude Code registration: the plugin OR the ~/.claude/skills install
 # from the npx installer — not both.
 
-# OpenAI Codex CLI (writes ~/.codex/skills/sogni-creative-agent-skill/)
+# OpenAI Codex CLI (start Codex once first so ~/.codex/ exists)
 npx setup-sogni-agent-skill --only=codex
 
-# Hermes Agent (writes ~/.hermes/skills/media/sogni-creative-agent-skill/),
-# then /reset the Hermes session
+# Hermes Agent (start Hermes once first so ~/.hermes/ exists), then /reset the
+# Hermes session
 npx setup-sogni-agent-skill --only=hermes
 
 # OpenClaw plugin (the npm package is scoped — use the npm: source prefix)

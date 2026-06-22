@@ -24,7 +24,7 @@
 import { spawn, spawnSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { dirname, join } from 'path';
-import { homedir } from 'os';
+import { homedir, platform as osPlatform } from 'os';
 import https from 'https';
 
 export const PACKAGE_NAME = '@sogni-ai/sogni-creative-agent-skill';
@@ -71,6 +71,20 @@ export function detectPackageManager(env = process.env) {
     return { manager: 'bun', installCmd: `bun add -g ${PACKAGE_NAME}` };
   }
   return { manager: 'npm', installCmd: `npm install -g ${PACKAGE_NAME}` };
+}
+
+function isPermissionErrorText(text) {
+  return /EACCES|EPERM|permission denied|operation not permitted/i.test(String(text || ''));
+}
+
+export function formatSelfUpdatePermissionHint({ manager = 'npm', platform = osPlatform() } = {}) {
+  const rerun = platform === 'win32'
+    ? 'open a terminal as Administrator and run `sogni-agent self-update` again'
+    : 'run `sudo sogni-agent self-update`';
+  if (manager === 'npm') {
+    return `Hint: if npm reported a permissions error, ${rerun}, or install Node with a version manager (nvm/fnm/volta).`;
+  }
+  return `Hint: if ${manager} reported a permissions error, ${rerun}, or fix your global ${manager} install permissions.`;
 }
 
 // Hard opt-outs only. Notices are deliberately NOT skipped for non-TTY
@@ -432,22 +446,29 @@ export function runSelfUpdate({
   statePath = DEFAULT_STATE_PATH,
   spawnSyncFn = spawnSync,
   stdio = 'inherit',
+  platform = osPlatform(),
+  log = console.error,
 } = {}) {
   const { manager, installCmd } = detectPackageManager(env);
   const [command, ...args] = installCmd.split(' ');
-  console.error(`Running: ${installCmd}`);
+  log(`Running: ${installCmd}`);
   const result = spawnSyncFn(command, args, { stdio, env });
   if (result.error) {
-    console.error(`self-update failed: ${result.error.message}`);
+    log(`self-update failed: ${result.error.message}`);
     if (manager === 'npm' && /EACCES|EPERM/i.test(result.error.message)) {
-      console.error('Hint: re-run with sudo, or install with a Node version manager (nvm/fnm/volta).');
+      log(formatSelfUpdatePermissionHint({ manager, platform }));
     }
     return 1;
   }
   if (typeof result.status === 'number' && result.status !== 0) {
+    log(`self-update failed: ${installCmd} exited with code ${result.status}.`);
+    const stderr = result.stderr ? result.stderr.toString('utf8') : '';
+    if (manager === 'npm' || isPermissionErrorText(stderr)) {
+      log(formatSelfUpdatePermissionHint({ manager, platform }));
+    }
     return result.status;
   }
   clearState(statePath);
-  console.error('Updated. Run `sogni-agent --whats-new` to see what changed.');
+  log('Updated. Run `sogni-agent --whats-new` to see what changed.');
   return 0;
 }

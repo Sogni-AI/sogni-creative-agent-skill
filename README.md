@@ -83,8 +83,9 @@ With this skill, an agent can:
 
    This auto-detects Claude Code, OpenAI Codex CLI, and Hermes Agent; installs the
    CLI globally; registers the skill into each detected runtime; prompts for your
-   API key; and prints ChatGPT Custom-GPT setup instructions. (It does **not**
-   configure OpenClaw — see the [OpenClaw plugin](#openclaw-plugin) section.)
+   API key; and tells you how to request ChatGPT Custom-GPT setup instructions.
+   (It does **not** configure OpenClaw — see the [OpenClaw plugin](#openclaw-plugin)
+   section.)
 
    Prefer to do it manually? Install the CLI directly:
 
@@ -152,9 +153,10 @@ The first command registers a `sogni` marketplace with one plugin entry (`sogni-
 The `npx` installer writes the skill to `~/.codex/skills/sogni-creative-agent-skill/`, which the Codex CLI discovers automatically:
 
 ```bash
-npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 npx setup-sogni-agent-skill --only=codex
 ```
+
+Start Codex once before running the installer so `~/.codex/` exists. If the selected local runtime is not detected, setup exits before installing anything.
 
 Restart Codex (or start a new session) and ask it to "generate an image of a sunset" — the skill shells out to the globally installed `sogni-agent`. To remove it later: `npx setup-sogni-agent-skill --uninstall --only=codex`.
 
@@ -163,9 +165,10 @@ Restart Codex (or start a new session) and ask it to "generate an image of a sun
 [Hermes Agent](https://hermes-agent.nousresearch.com/) loads skills from `~/.hermes/skills/<category>/<name>/SKILL.md`. The `npx` installer places this skill at `~/.hermes/skills/media/sogni-creative-agent-skill/`:
 
 ```bash
-npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 npx setup-sogni-agent-skill --only=hermes
 ```
+
+Start Hermes once before running the installer so `~/.hermes/` exists. If the selected local runtime is not detected, setup exits before installing anything.
 
 Then `/reset` your Hermes session so it picks up the new skill. (You can also install manually: copy [`SKILL.md`](./SKILL.md) into `~/.hermes/skills/media/sogni-creative-agent-skill/SKILL.md`, or use `hermes skills install` if your build supports it.)
 
@@ -217,7 +220,7 @@ When loaded through OpenClaw, this skill reads plugin defaults from OpenClaw con
 
 ### ChatGPT (Custom GPT)
 
-Running `npx setup-sogni-agent-skill` also prints step-by-step instructions for creating a ChatGPT Custom GPT whose Instructions embed this skill. Note that ChatGPT cannot run the local CLI; the Custom GPT path covers prompt-side behavior only.
+Run `npx setup-sogni-agent-skill --only=chatgpt` to print step-by-step instructions for creating a ChatGPT Custom GPT whose Instructions embed this skill. Note that ChatGPT cannot run the local CLI; the Custom GPT path covers prompt-side behavior only.
 
 ### Manus / other SKILL.md frameworks
 

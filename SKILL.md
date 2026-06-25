@@ -154,8 +154,8 @@ sogni-agent --video --ref-audio song.mp3 "abstract audio-reactive visualizer"
 sogni-agent -q --music --duration 30 -o ./music.mp3 "uplifting cinematic synthwave theme"
 sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale "C major" "bright indie pop chorus"
 
-# Seedance 2.0 (4-15s vendor video with native audio)
-sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with native ambient sound"
+# Seedance 2.0 4K (4-15s vendor video with native audio)
+sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
@@ -180,7 +180,7 @@ sogni-agent doctor --json
 | `--workflow <t>` | Force `t2v\|i2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `--ref-end`, `--ref-audio`, `--ref-video` | Start frame / end frame / audio / video references | - |
 | `--duration <sec>` | Video or music length | video 5, music 30 |
-| `--target-resolution <px>` | Short-side target preserving aspect ratio (use for bare "720p") | - |
+| `--target-resolution <px>` | Short-side target preserving aspect ratio (use `2160` for Seedance 4K) | - |
 | `--photobooth` | Face transfer mode (with `--ref`) | - |
 | `--persona <name>` | Use a saved persona (photo + voice auto-attach) | - |
 | `--token-type spark\|sogni\|auto` | `auto` retries native models with SOGNI when SPARK is low | spark |
@@ -210,7 +210,7 @@ Whenever the chosen video model is in the LTX family (including the default t2v)
 
 ### High-res video
 
-For "hd" / "1080p" / "4k" / "uhd" requests: use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
+For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-fast` for 4K; it remains capped to the fast lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
 ### Video editing, stitching, 360 turnarounds
 
@@ -307,7 +307,7 @@ Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-ef
 
 | Read this | When the task involves |
 |-----------|------------------------|
-| [`references/video-prompting.md`](./references/video-prompting.md) | Writing any LTX video prompt; "hd/1080p/4k" requests; orientation/aspect mapping; camera language |
+| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/hosted-api.md`](./references/hosted-api.md) | `--api-chat`, `--durable-chat`, `--api-workflow`, workflow templates, replays, Seedance reference modes, cost controls |
 | [`references/models.md`](./references/models.md) | Choosing models, sizing/divisibility rules, gpt-image-2 limits, music model options |

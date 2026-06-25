@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Seedance 2.0 4K routing is now documented and available through the current Sogni dependency stack.**
+  The full `seedance2` model can be selected for native 4K/2160p output with `--target-resolution 2160`;
+  `seedance2-fast` remains the lower-resolution fast path. The bundled runtime and
+  `@sogni-ai/sogni-intelligence-client` dependency now consume the published Seedance 4K tool metadata.
 - **ACE-Step 1.5 XL is now the default music model.** `generate_music` / `--music` now default to
   ACE-Step 1.5 XL Turbo (`ace_step_1.5_xl_turbo`), with ACE-Step 1.5 XL SFT (`ace_step_1.5_xl_sft`) as the
   quality variant. The `--music-model` keys are unchanged — `turbo` (default) and `sft` — but they now map to the

@@ -315,8 +315,8 @@ sogni-agent --video 'A narrator says "welcome to the story" as ocean waves crash
 sogni-agent --video --target-resolution 768 \
   "A calm cinematic shot of lanterns drifting across a night lake"
 
-# Seedance 2.0 (4-15s vendor video path with native audio)
-sogni-agent --video -m seedance2 --duration 8 \
+# Seedance 2.0 4K (4-15s vendor video path with native audio)
+sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 \
   "A polished product reveal with native ambient sound"
 
 # Seedance multimodal context with public HTTPS references
@@ -479,7 +479,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
-| Seedance text-to-video | `seedance2` or `seedance2-fast` |
+| Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-fast` for the lower-resolution fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
@@ -493,7 +493,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-fast` remains capped to the fast lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
 - The script auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.

@@ -65,8 +65,8 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
 | `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
-| `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio |
-| `seedance2-fast` | Variable | Fast Seedance 2.0 text-to-video |
+| `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio, up to native 4K |
+| `seedance2-fast` | Variable | Fast Seedance 2.0 text-to-video, lower-resolution fast path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | Simple image-to-video |
@@ -112,7 +112,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-fast` remains capped to the fast lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.

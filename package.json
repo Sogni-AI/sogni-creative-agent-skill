@@ -1,6 +1,6 @@
 {
   "name": "@sogni-ai/sogni-creative-agent-skill",
-  "version": "3.6.4",
+  "version": "3.7.0",
   "description": "Sogni Creative Agent Skill: agent skill and CLI for Sogni AI image, video, and music generation.",
   "type": "module",
   "main": "sogni-agent.mjs",

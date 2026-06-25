@@ -1,3 +1,10 @@
+# [3.7.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.6.4...v3.7.0) (2026-06-25)
+
+
+### Features
+
+* **video:** document Seedance 4K skill support ([0f3c150](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/0f3c1509801fcdb15741e6adb94514f38fead0e5))
+
 # Changelog
 
 All notable changes to this project are documented in this file.

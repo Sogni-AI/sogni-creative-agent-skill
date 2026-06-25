@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.6.4"
+  version: "3.7.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -210,7 +210,7 @@ Whenever the chosen video model is in the LTX family (including the default t2v)
 
 ### High-res video
 
-For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-fast` for 4K; it remains capped to the fast lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
+For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini` or `seedance2-fast` for 4K; both remain capped to the 720p lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
 ### Video editing, stitching, 360 turnarounds
 
@@ -242,7 +242,7 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 ### Sogni Unlimited Subscription & Billing Errors
 
-On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2** and **Seedance 2.0 / Fast** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2** and **Seedance 2.0 / Mini / Fast** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
 
 Unlimited is fair-use, not unmetered: per-UTC-day concurrency ceilings step down as completed renders climb (and reset at UTC midnight), and once a plan's fast-lane allowance is exceeded, further jobs run best-effort in a lower-priority standard queue until capacity resets. Describe this as **fair use** / a **standard (throttled) queue** — never as "relaxed."
 

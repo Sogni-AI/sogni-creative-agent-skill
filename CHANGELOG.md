@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-06-25
+
+### Changed
+
+- **Seedance 2.0 Mini is now available through the bundled runtime.** Mini is the default lower-cost
+  720p Seedance path, while `seedance2-fast` remains available as an explicit legacy selection.
+- Bumped `@sogni-ai/sogni-intelligence-client` to `3.3.0` so the skill consumes the published
+  Seedance Mini runtime, tool metadata, and Sogni Client `5.1.0-alpha.14` dependency stack.
+
 ### Changed
 
 - **Seedance 2.0 4K routing is now documented and available through the current Sogni dependency stack.**

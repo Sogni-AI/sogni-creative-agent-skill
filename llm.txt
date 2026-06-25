@@ -100,7 +100,7 @@ image, video, and music generation under a fair-use policy instead of spending
 Spark or SOGNI per render. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro
 ($50/mo, $498/yr), with a one-per-account 3-day free trial (trial usage is
 capped). External-vendor models — GPT Image 2 (`gpt-image-2`) and Seedance 2.0 /
-Fast (`seedance-2-0`, `seedance-2-0-fast`) — are never covered and always need
+Mini / Fast (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`) — are never covered and always need
 Premium Spark; selecting SOGNI opts a job out of coverage. The server decides
 coverage from the verified entitlement + resolved model; the CLI never asserts
 coverage. Fair-use throttling lowers per-UTC-day concurrency as completed renders

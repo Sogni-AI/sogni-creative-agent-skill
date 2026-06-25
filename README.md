@@ -479,7 +479,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
-| Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-fast` for the lower-resolution fast path |
+| Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-mini` for the lower-cost 720p path; `seedance2-fast` for the legacy 720p fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
@@ -493,7 +493,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-fast` remains capped to the fast lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
 - The script auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
@@ -683,7 +683,7 @@ App Store and Google Play prices may differ from web pricing due to platform fee
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`) and **Seedance 2.0 / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-fast`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
+- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`) and **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 The CLI never sends `billingMode`/coverage hints itself; the server decides coverage from the account's verified entitlement and the resolved model. A subscription claim is never honored without a server-verified entitlement.

@@ -158,7 +158,7 @@ private media that must not leave the local machine.**
 
 ## Seedance reference modes (mutually exclusive)
 
-When `--video -m seedance2` or `-m seedance2-fast` is selected, pick one mode
+When `--video -m seedance2`, `-m seedance2-mini`, or `-m seedance2-fast` is selected, pick one mode
 per video request:
 
 - **Dedicated frame mode — `--ref` and/or `--ref-end`.** First-class

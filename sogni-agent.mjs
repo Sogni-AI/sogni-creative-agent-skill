@@ -2546,7 +2546,7 @@ Video Options:
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen. On LTX/WAN: single primary for animate/v2v workflows.
 
-Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-fast):
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; max 2 images.
   - LOOSE REFERENCE MODE: -c/--context image refs plus optional --ref-audio /
@@ -2682,7 +2682,8 @@ Music Models:
 
 Seedance 2.0 Video Model Selectors:
   seedance2                         Text-to-video, 4-15s, native audio, HTTPS multimodal refs
-  seedance2-fast                    Fast 720p-capped text-to-video
+  seedance2-mini                    Lower-cost 720p-capped text-to-video
+  seedance2-fast                    Legacy fast 720p-capped text-to-video
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet
 
@@ -3504,13 +3505,13 @@ if (options.video) {
   // they only support a single primary --ref-audio / --ref-video each.
   if (!isSeedanceVideo) {
     if (Array.isArray(options.refAudios) && options.refAudios.length > 0) {
-      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refAudios },
       });
     }
     if (Array.isArray(options.refVideos) && options.refVideos.length > 0) {
-      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refVideos },
       });

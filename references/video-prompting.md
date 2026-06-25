@@ -63,7 +63,7 @@ Use this shape instead: "A medium cinematic shot frames a woman in her 30s stand
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
-- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-fast` for 4K.
+- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini` or `seedance2-fast` for 4K.
 - For **non-vendor HD / 1080p text-to-video**, use `-m ltx23-22b-fp8_t2v_distilled`.
 - For **non-vendor HD / 1080p image-to-video**, use `-m ltx23-22b-fp8_i2v_distilled`.
 - Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.

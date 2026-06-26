@@ -1299,16 +1299,22 @@ function videoDurationLimitsLikeWrapper(modelId) {
   return { min: 1, max: 10 };
 }
 
-// Default video dimensions for models the shared intel video-model registry does
-// not carry, so `getModelDefaults` returns null and the CLI would otherwise fall
-// back to the 512x512 square. Parallels `videoDurationLimitsLikeWrapper`.
-// HappyHorse 1.1 gets a premium 16:9 default (1280x720, which sits inside the
-// default 480-1536 / multiple-of-16 video rules so it is not re-clamped). These
-// are defaults only — explicit -w/-h/--target-resolution, config, and
-// prompt-derived dimensions still win (see the video preflight defaults block).
+// Default video dimensions (and dimension rules) for models the shared intel
+// video-model registry does not carry, so `getModelDefaults` returns null and
+// the CLI would otherwise fall back to the 512x512 square.
+// Parallels `videoDurationLimitsLikeWrapper`.
+//
+// HappyHorse 1.1 spec default is 1080P (1920x1080, 16:9). The intelligence
+// client registers dimensionDivisor=1 and maxDimension=1920 for HappyHorse, so
+// we mirror those here via `maxDimension` and `dimensionMultiple` so that
+// `videoDimensionRulesFromDefaults` applies the correct clamp for the model
+// instead of the generic 480-1536 / multiple-of-16 rules (which would reduce
+// 1920x1080 to 1536x864 and round 1080 to 1072). These are defaults only —
+// explicit -w/-h/--target-resolution, config, and prompt-derived dimensions
+// still win (see the video preflight defaults block).
 function videoModelDimensionDefaultsLikeWrapper(modelId) {
   if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
-    return { defaultWidth: 1280, defaultHeight: 720 };
+    return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
   }
   return null;
 }
@@ -1319,11 +1325,15 @@ function wrapperMaxVideoDimension(modelId) {
 
 function videoDimensionRulesFromDefaults(modelDefaults, modelId) {
   const wrapperMax = wrapperMaxVideoDimension(modelId);
-  const configuredMax = modelDefaults?.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  // Fall back to skill-local dimension rules for models the intel registry does
+  // not carry (e.g. HappyHorse), so their model-specific maxDimension and
+  // dimensionMultiple are applied instead of the generic 1536 / 16 defaults.
+  const localFallback = videoModelDimensionDefaultsLikeWrapper(modelId);
+  const configuredMax = modelDefaults?.maxDimension || localFallback?.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
   return {
     minDimension: modelDefaults?.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension,
     maxDimension: Math.min(configuredMax, wrapperMax),
-    dimensionMultiple: modelDefaults?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
+    dimensionMultiple: modelDefaults?.dimensionMultiple || localFallback?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
   };
 }
 

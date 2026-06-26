@@ -1336,7 +1336,7 @@ test('happyhorse-1.1-t2v explicit selection routes to HappyHorse text-to-video',
   assert.equal(state.lastVideoProject.fps, 24);
 });
 
-test('happyhorse video defaults to a premium 16:9 size, not the 512x512 square', () => {
+test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', () => {
   const { exitCode, state } = runCli([
     '--video',
     '-m', 'happyhorse',
@@ -1345,10 +1345,12 @@ test('happyhorse video defaults to a premium 16:9 size, not the 512x512 square',
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
-  // HappyHorse has no entry in the intel video-model registry, so getModelDefaults
-  // returns null; without a skill-local default it would fall back to 512x512.
-  assert.equal(state.lastVideoProject.width, 1280);
-  assert.equal(state.lastVideoProject.height, 720);
+  // HappyHorse spec default is 1080P (1920x1080, 16:9). The intel registry does
+  // not carry HappyHorse, so getModelDefaults returns null; the skill-local
+  // fallback supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1
+  // (matching HappyHorse's dimensionDivisor:1 / maxDimension:1920 in the client).
+  assert.equal(state.lastVideoProject.width, 1920);
+  assert.equal(state.lastVideoProject.height, 1080);
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {

@@ -1336,6 +1336,35 @@ test('happyhorse-1.1-t2v explicit selection routes to HappyHorse text-to-video',
   assert.equal(state.lastVideoProject.fps, 24);
 });
 
+test('happyhorse video defaults to a premium 16:9 size, not the 512x512 square', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    'a calm forest river at golden hour'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  // HappyHorse has no entry in the intel video-model registry, so getModelDefaults
+  // returns null; without a skill-local default it would fall back to 512x512.
+  assert.equal(state.lastVideoProject.width, 1280);
+  assert.equal(state.lastVideoProject.height, 720);
+});
+
+test('happyhorse video honors explicit -w/-h over the new default', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '--width', '720',
+    '--height', '1280',
+    'a vertical clip of a calm forest river'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.width, 720);
+  assert.equal(state.lastVideoProject.height, 1280);
+});
+
 test('happyhorse forces Spark token type even when SOGNI is requested', () => {
   const { exitCode, state } = runCli([
     '--video',
@@ -2738,6 +2767,32 @@ test('json error: seedance invalid audio format is parameter invalid and friendl
   assert.match(payload.error, /audio reference format/);
   assert.doesNotMatch(payload.error, /content\[3\]|cgt-audio/);
   assert.match(payload.technicalError, /content\[3\]/);
+});
+
+test('json error: happyhorse vendor failure classifies as happyhorse, not seedance', () => {
+  // Vendor-agnostic socket failure text (no "seedance"/"happyhorse" mention) that
+  // BOTH the generic Seedance generation matcher and the HappyHorse generation
+  // matcher accept. Because the failing model is HappyHorse, the HappyHorse
+  // matcher must win — otherwise the error is misattributed to Seedance.
+  const vendorError = 'Vendor job failed: Vendor task hh-task-1 ended with status=failed: {"output":{"task_status":"FAILED","code":"InternalError","message":"The generated video failed."}}';
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '-m', 'happyhorse-1.1-t2v',
+    'a glowing jellyfish drifts through a neon city'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: vendorError
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.metadata.error, 'happyhorse_generation_failed');
+  assert.doesNotMatch(payload.metadata.error, /seedance/);
+  assert.equal(payload.errorType, 'GPU_WORKER_FAILED');
+  assert.equal(payload.errorCategory, 'transient_failure');
+  assert.equal(payload.retryable, true);
+  assert.match(payload.error, /HappyHorse/);
+  assert.doesNotMatch(payload.error, /Seedance/);
 });
 
 test('json error: i2v rejects mismatched explicit size and suggests a compatible 16-multiple aspect', () => {

@@ -443,8 +443,74 @@ function seedanceFriendlyGenerationMessage(payload) {
   return payload?.message || 'Seedance could not complete this video.';
 }
 
-function classifyCliError(error) {
+// Classify a HappyHorse terminal policy / generation-failure error into the
+// canonical CLI error shape, or null when neither HappyHorse matcher applies.
+// Factored out so it can run either AFTER the Seedance matchers (default order)
+// or BEFORE them when the failing model is known to be HappyHorse (see
+// classifyCliError).
+function classifyHappyHorseCliError(error, rawMessage) {
+  const happyhorsePolicyPayload = happyhorseTerminalPolicyPayloadFromError(error);
+  if (happyhorsePolicyPayload) {
+    return {
+      error_type: 'SAFETY_REJECTED',
+      category: 'content_refused',
+      message: happyhorsePolicyPayload.message,
+      retryable: false,
+      metadata: happyhorsePolicyPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  const happyhorseGenerationPayload = happyhorseTerminalGenerationFailurePayloadFromError(error);
+  if (happyhorseGenerationPayload) {
+    const vendorCode = happyhorseGenerationPayload.vendorErrorCode;
+    const isInvalidParameter = vendorCode === 'InvalidParameter' ||
+      happyhorseGenerationPayload.error === 'happyhorse_input_download_failed';
+    return {
+      error_type: isInvalidParameter ? 'PARAMETER_INVALID' : 'GPU_WORKER_FAILED',
+      category: isInvalidParameter ? 'schema_validation' : 'transient_failure',
+      message: happyhorseGenerationPayload.message || 'HappyHorse could not complete this video.',
+      retryable: !isInvalidParameter,
+      metadata: happyhorseGenerationPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  return null;
+}
+
+function classifyCliError(error, context = {}) {
   const rawMessage = cliErrorMessage(error);
+
+  // Client-side CLI rejections are the plain `{ message, code }` shape built by
+  // buildCliErrorPayload (never an Error instance and never a vendor poll body).
+  // They are argument-validation failures, so skip the HappyHorse terminal
+  // matchers — the HappyHorse generation matcher keys off a bare "happyhorse"
+  // mention and would otherwise re-wrap a validation message (e.g. "HappyHorse
+  // models do not support ControlNet") as a retryable vendor generation failure.
+  const isClientSideCliPayload = error
+    && typeof error === 'object'
+    && !(error instanceof Error)
+    && typeof error.message === 'string'
+    && !('output' in error)
+    && !('vendorError' in error)
+    && !('vendorErrorCode' in error);
+
+  // When the failing model is HappyHorse, run the HappyHorse matchers BEFORE the
+  // generic Seedance generation matcher. That matcher keys off vendor-agnostic
+  // socket failure text ("All N video generation jobs failed", "Vendor task ...
+  // status=failed", "Vendor job failed"), which a HappyHorse failure also
+  // produces, so without this model-aware reordering a HappyHorse vendor failure
+  // would be misattributed to Seedance. The client-side-payload guard still
+  // applies so a CLI validation message that merely names HappyHorse is not
+  // re-wrapped as a retryable vendor failure.
+  const modelHint = context?.modelId;
+  const preferHappyHorse = isHappyHorseModel(modelHint) || isHappyHorseModelSelectionLocal(modelHint);
+  if (preferHappyHorse && !isClientSideCliPayload) {
+    const happyhorseClassified = classifyHappyHorseCliError(error, rawMessage);
+    if (happyhorseClassified) return happyhorseClassified;
+  }
+
   const seedancePolicyPayload = seedanceTerminalPolicyPayloadFromError(error);
   if (seedancePolicyPayload) {
     return {
@@ -472,54 +538,19 @@ function classifyCliError(error) {
     };
   }
 
-  // Client-side CLI rejections are the plain `{ message, code }` shape built by
-  // buildCliErrorPayload (never an Error instance and never a vendor poll body).
-  // They are argument-validation failures, so skip the HappyHorse terminal
-  // matchers — the HappyHorse generation matcher keys off a bare "happyhorse"
-  // mention and would otherwise re-wrap a validation message (e.g. "HappyHorse
-  // models do not support ControlNet") as a retryable vendor generation failure.
-  const isClientSideCliPayload = error
-    && typeof error === 'object'
-    && !(error instanceof Error)
-    && typeof error.message === 'string'
-    && !('output' in error)
-    && !('vendorError' in error)
-    && !('vendorErrorCode' in error);
-
-  if (!isClientSideCliPayload) {
-    const happyhorsePolicyPayload = happyhorseTerminalPolicyPayloadFromError(error);
-    if (happyhorsePolicyPayload) {
-      return {
-        error_type: 'SAFETY_REJECTED',
-        category: 'content_refused',
-        message: happyhorsePolicyPayload.message,
-        retryable: false,
-        metadata: happyhorsePolicyPayload,
-        technicalError: rawMessage
-      };
-    }
-
-    const happyhorseGenerationPayload = happyhorseTerminalGenerationFailurePayloadFromError(error);
-    if (happyhorseGenerationPayload) {
-      const vendorCode = happyhorseGenerationPayload.vendorErrorCode;
-      const isInvalidParameter = vendorCode === 'InvalidParameter' ||
-        happyhorseGenerationPayload.error === 'happyhorse_input_download_failed';
-      return {
-        error_type: isInvalidParameter ? 'PARAMETER_INVALID' : 'GPU_WORKER_FAILED',
-        category: isInvalidParameter ? 'schema_validation' : 'transient_failure',
-        message: happyhorseGenerationPayload.message || 'HappyHorse could not complete this video.',
-        retryable: !isInvalidParameter,
-        metadata: happyhorseGenerationPayload,
-        technicalError: rawMessage
-      };
-    }
+  // Default order: when the model is not known to be HappyHorse, run the
+  // HappyHorse matchers after the Seedance matchers (preferHappyHorse already
+  // ran them above when the model hint matched).
+  if (!preferHappyHorse && !isClientSideCliPayload) {
+    const happyhorseClassified = classifyHappyHorseCliError(error, rawMessage);
+    if (happyhorseClassified) return happyhorseClassified;
   }
 
   return classifySkillError(error);
 }
 
-function addCanonicalErrorFields(payload, error) {
-  const classified = classifyCliError(error);
+function addCanonicalErrorFields(payload, error, context = {}) {
+  const classified = classifyCliError(error, context);
   payload.error = classified.message;
   payload.errorType = classified.error_type;
   payload.errorCategory = classified.category;
@@ -545,9 +576,9 @@ function addCanonicalErrorFields(payload, error) {
 // Human-facing twin of addCanonicalErrorFields: print the classified, friendly
 // message (with the raw message as a detail line when it differs) so human
 // users get the same quality of error JSON consumers already receive.
-function printHumanError(error) {
+function printHumanError(error, context = {}) {
   let classified = null;
-  try { classified = classifyCliError(error); } catch { /* fall back to raw */ }
+  try { classified = classifyCliError(error, context); } catch { /* fall back to raw */ }
   const message = classified?.message || error?.message || String(error);
   console.error(`Error: ${message}`);
   if (classified?.technicalError && classified.technicalError !== message) {
@@ -1266,6 +1297,20 @@ function videoDurationLimitsLikeWrapper(modelId) {
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
   if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
   return { min: 1, max: 10 };
+}
+
+// Default video dimensions for models the shared intel video-model registry does
+// not carry, so `getModelDefaults` returns null and the CLI would otherwise fall
+// back to the 512x512 square. Parallels `videoDurationLimitsLikeWrapper`.
+// HappyHorse 1.1 gets a premium 16:9 default (1280x720, which sits inside the
+// default 480-1536 / multiple-of-16 video rules so it is not re-clamped). These
+// are defaults only — explicit -w/-h/--target-resolution, config, and
+// prompt-derived dimensions still win (see the video preflight defaults block).
+function videoModelDimensionDefaultsLikeWrapper(modelId) {
+  if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
+    return { defaultWidth: 1280, defaultHeight: 720 };
+  }
+  return null;
 }
 
 function wrapperMaxVideoDimension(modelId) {
@@ -3332,12 +3377,22 @@ if (options.music) {
   options.model = options.model || selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig) || 'wan_v2.2-14b-fp8_i2v_lightx2v';
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
+  // Fall back to skill-local defaults for models the intel registry does not
+  // carry (e.g. HappyHorse), so they get a sensible 16:9 default instead of the
+  // 512x512 square. Registry defaults still take precedence when present.
+  const videoModelDimensionFallback = videoModelDimensionDefaultsLikeWrapper(options.model);
+  const defaultVideoWidth = Number.isFinite(videoModelDefaults?.defaultWidth)
+    ? videoModelDefaults.defaultWidth
+    : videoModelDimensionFallback?.defaultWidth;
+  const defaultVideoHeight = Number.isFinite(videoModelDefaults?.defaultHeight)
+    ? videoModelDefaults.defaultHeight
+    : videoModelDimensionFallback?.defaultHeight;
   const isSeedanceVideo = isSeedanceModel(options.model);
-  if (!cliSet.width && !widthFromConfig && !widthFromPrompt && Number.isFinite(videoModelDefaults?.defaultWidth)) {
-    options.width = videoModelDefaults.defaultWidth;
+  if (!cliSet.width && !widthFromConfig && !widthFromPrompt && Number.isFinite(defaultVideoWidth)) {
+    options.width = defaultVideoWidth;
   }
-  if (!cliSet.height && !heightFromConfig && !heightFromPrompt && Number.isFinite(videoModelDefaults?.defaultHeight)) {
-    options.height = videoModelDefaults.defaultHeight;
+  if (!cliSet.height && !heightFromConfig && !heightFromPrompt && Number.isFinite(defaultVideoHeight)) {
+    options.height = defaultVideoHeight;
   }
   if (!cliSet.fps && !fpsFromConfig && Number.isFinite(videoModelDefaults?.fps)) {
     options.fps = videoModelDefaults.fps;
@@ -9296,7 +9351,7 @@ async function main() {
         success: false,
         error: error.message,
         prompt: options.prompt ?? null
-      }, error);
+      }, error, { modelId: options.model });
       if (error.code) payload.errorCode = error.code;
       if (error.details) payload.errorDetails = error.details;
       // Don't let a stale per-error hint overwrite the canonical
@@ -9331,10 +9386,10 @@ async function main() {
       if (IS_OPENCLAW_INVOCATION) payload.openclaw = true;
       console.log(JSON.stringify(payload));
       if (!options.json) {
-        printHumanError(error);
+        printHumanError(error, { modelId: options.model });
       }
     } else {
-      printHumanError(error);
+      printHumanError(error, { modelId: options.model });
     }
   } finally {
     try {

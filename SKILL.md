@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.7.0"
   homepage: https://sogni.ai
@@ -157,6 +157,12 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
+# HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
+# i2v from one first-frame image (--ref); r2v from 1-9 reference images (-c).
+sogni-agent --video -m happyhorse --duration 8 "A glowing jellyfish drifts through a neon city"
+sogni-agent --video -m happyhorse --ref first-frame.png "Bring the scene to life"
+sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the references into one continuous shot"
+
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
 sogni-agent --last --json
@@ -230,11 +236,11 @@ Use `sogni-agent --json --list-media images` (or `audio` / `all`) to find inboun
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance native audio, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance or HappyHorse native audio, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
 
 ### Insufficient funds
 
-Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, GPT Image 2) require Premium Spark eligibility and never fall back to SOGNI. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
+Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, HappyHorse, GPT Image 2) require Premium Spark eligibility and never fall back to SOGNI. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
 
 "Insufficient funds. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
 
@@ -242,13 +248,13 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 ### Sogni Unlimited Subscription & Billing Errors
 
-On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2** and **Seedance 2.0 / Mini / Fast** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast**, and **HappyHorse 1.1** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
 
 Unlimited is fair-use, not unmetered: per-UTC-day concurrency ceilings step down as completed renders climb (and reset at UTC midnight), and once a plan's fast-lane allowance is exceeded, further jobs run best-effort in a lower-priority standard queue until capacity resets. Describe this as **fair use** / a **standard (throttled) queue** — never as "relaxed."
 
 When a generation cannot bill to the subscription, the CLI returns a structured error (`errorCategory: "subscription_billing"`). Respond by the `errorCode`, and **do not** collect payment details or simulate a purchase:
 
-- **`4078` — Unlimited billing unavailable for this generation.** Either a vendor model the subscription never covers (use Premium Spark for GPT Image 2 / Seedance), or no verified entitlement right now (reconnect and retry). Offer the Premium Spark / `--token-type` path; do not claim the subscription will cover a vendor model.
+- **`4078` — Unlimited billing unavailable for this generation.** Either a vendor model the subscription never covers (use Premium Spark for GPT Image 2 / Seedance / HappyHorse), or no verified entitlement right now (reconnect and retry). Offer the Premium Spark / `--token-type` path; do not claim the subscription will cover a vendor model.
 - **`4079` — Maximum queued jobs reached.** Ask the user to wait for queued jobs to finish before submitting more; this resolves on its own.
 - **`4080` — Renewal payment is being retried; access is paused.** Tell the user Unlimited resumes automatically once the renewal succeeds and that they can render now with Spark or SOGNI (`--token-type spark` / `sogni`). **Never auto-retry the covered job in a loop** — it will keep failing until billing recovers.
 - **`4081` — Higher plan required.** Suggest upgrading to Unlimited Pro.
@@ -293,7 +299,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 
 ## Cost
 
-Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance and GPT Image 2 are vendor models requiring Premium Spark eligibility.
+Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance, HappyHorse, and GPT Image 2 are vendor models requiring Premium Spark eligibility.
 
 ## Troubleshooting
 

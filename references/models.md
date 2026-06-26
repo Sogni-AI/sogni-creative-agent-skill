@@ -70,12 +70,33 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
+| `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
+| `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
+| `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | Simple image-to-video |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
 | `wan_v2.2-14b-fp8_s2v_lightx2v` | Fast | Face lip-sync with uploaded audio |
 | `wan_v2.2-14b-fp8_animate-move_lightx2v` | Fast | Animate-move |
 | `wan_v2.2-14b-fp8_animate-replace_lightx2v` | Fast | Animate-replace |
+
+## HappyHorse 1.1 models
+
+Alibaba HappyHorse 1.1 is a Premium-Spark vendor video family (three discrete
+models, no mini/fast variants). Every mode renders at a fixed 24 fps with an
+always-on natively synchronized audio track (no negative prompt, no ControlNet),
+supports 3–15 second durations, and targets 720P or 1080P output. The bare
+`happyhorse` selector resolves to the mode inferred from your references.
+
+| Model | Mode | Use Case |
+|-------|------|----------|
+| `happyhorse-1.1-t2v` | Text-to-video | Prompt-only clip with native audio (default for `-m happyhorse`) |
+| `happyhorse-1.1-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
+| `happyhorse-1.1-r2v` | Reference-to-video | Compose from 1–9 reference images passed with `-c`/`--context` |
+
+HappyHorse takes image references only — it does not accept reference video or
+reference audio (audio is generated natively). i2v uses exactly one first-frame
+image; r2v accepts up to nine reference images.
 
 ## LTX-2 / LTX-2.3 models
 
@@ -107,6 +128,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
+| HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
+| HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
+| HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
@@ -114,6 +138,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.

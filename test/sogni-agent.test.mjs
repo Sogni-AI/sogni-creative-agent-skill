@@ -1312,6 +1312,160 @@ test('non-seedance video rejects multiple --ref-audio entries', () => {
   );
 });
 
+test('happyhorse alias selects HappyHorse T2V at fixed 24fps without step overrides', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    'a glowing jellyfish drifts through a neon city at night'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
+});
+
+test('happyhorse-1.1-t2v explicit selection routes to HappyHorse text-to-video', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse-1.1-t2v',
+    'a polished product reveal with native ambient sound'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+});
+
+test('happyhorse forces Spark token type even when SOGNI is requested', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--token-type', 'sogni',
+    '-m', 'happyhorse',
+    'cinematic product reveal with native audio'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.tokenType, 'spark');
+});
+
+test('happyhorse i2v forwards a single HTTPS first-frame image as a URL array', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '--fps', '30',
+    '--ref', 'https://example.com/first.png',
+    'bring the scene to life'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-i2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/first.png']);
+  assert.equal(state.lastVideoProject.referenceImage, undefined);
+  assert.equal(state.lastVideoProject.referenceVideoUrls, undefined);
+  assert.equal(state.lastVideoProject.referenceAudioUrls, undefined);
+});
+
+test('happyhorse i2v forwards a single local first-frame image as an inline buffer', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse-1.1-i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    'animate this photo'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-i2v');
+  assert.equal(state.lastVideoProject.referenceImage != null, true);
+  assert.equal(state.lastVideoProject.referenceImageUrls, undefined);
+});
+
+test('happyhorse r2v forwards 1-9 HTTPS reference images as a URL array', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '-c', 'https://example.com/a.png',
+    '-c', 'https://example.com/b.png',
+    '-c', 'https://example.com/c.png',
+    'blend these references into one continuous shot'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-r2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, [
+    'https://example.com/a.png',
+    'https://example.com/b.png',
+    'https://example.com/c.png',
+  ]);
+});
+
+test('happyhorse r2v enforces the 9 image-reference cap with a canonical message', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-r2v',
+      ...Array.from({ length: 10 }).flatMap((_, i) => ['-c', `https://example.com/${i}.png`]),
+      'too many references',
+    ],
+    'HappyHorse (happyhorse-1.1-r2v) can use up to 9 image references per video; this request included 10.'
+  );
+});
+
+test('happyhorse i2v rejects an end frame (single first-frame image only)', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-i2v',
+      '--ref', 'https://example.com/first.png',
+      '--ref-end', 'https://example.com/last.png',
+      'morph between frames',
+    ],
+    'HappyHorse i2v accepts only a single first-frame image'
+  );
+});
+
+test('happyhorse r2v rejects dedicated --ref frames in favor of -c/--context', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-r2v',
+      '-c', 'https://example.com/a.png',
+      '--ref', 'https://example.com/first.png',
+      'mix dedicated and loose refs',
+    ],
+    'HappyHorse r2v takes reference images via -c/--context, not --ref/--ref-end.'
+  );
+});
+
+test('happyhorse rejects ControlNet', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse', '--controlnet-name', 'pose', 'apply controlnet'],
+    'HappyHorse video models do not support ControlNet.'
+  );
+});
+
+test('happyhorse rejects reference audio (audio is rendered natively)', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse', '--ref-audio', 'https://example.com/music.mp3', 'music-led clip'],
+    'does not accept reference'
+  );
+});
+
+test('happyhorse clamps duration to the 3-15s range', () => {
+  const low = runCli(['--video', '-m', 'happyhorse', '--duration', '1', 'too short']);
+  assert.equal(low.exitCode, 0);
+  assert.equal(low.state.lastVideoProject.duration, 3);
+
+  const high = runCli(['--video', '-m', 'happyhorse', '--duration', '30', 'too long']);
+  assert.equal(high.exitCode, 0);
+  assert.equal(high.state.lastVideoProject.duration, 15);
+});
+
+test('happyhorse rejects a workflow that contradicts the concrete model id', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse-1.1-i2v', '--workflow', 't2v', '--ref', 'https://example.com/first.png', 'mismatch'],
+    'does not match model "happyhorse-1.1-i2v"'
+  );
+});
+
 test('looping is only supported with i2v workflow', () => {
   expectCliError(['--video', '--workflow', 't2v', '--looping', 'a cat'], '--looping is only supported with i2v workflow.');
 });

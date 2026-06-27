@@ -98,6 +98,43 @@ HappyHorse takes image references only — it does not accept reference video or
 reference audio (audio is generated natively). i2v uses exactly one first-frame
 image; r2v accepts up to nine reference images.
 
+### HappyHorse 1.1 prompting tips
+
+HappyHorse rewards short, concrete scene direction — roughly 15–30 words for a
+simple shot. One subject, one action, one setting, and one strong visual or
+camera cue is the sweet spot; over-long prompts reduce face and hand fidelity, so
+simplify before adding detail.
+
+**What to include:**
+
+- **Observable visual detail**: "overcast daylight", "wet asphalt", "warm amber
+  backlight", "shallow depth of field" — not evaluative filler like "cinematic",
+  "beautiful", "stunning", "epic", or "masterpiece".
+- **One cinematography idea**: put the camera move last and be specific — "slow
+  dolly-in", "lateral orbit with parallax", "locked-off wide". Prefer one exact
+  color over stacked synonyms.
+- **Plain prose only**: no tag lists, JSON, or weighting syntax; HappyHorse
+  ignores negative prompts.
+
+**Multi-beat clips:** use a timecoded shot list rather than "first X then Y" —
+for example: *"Shot 1 (wide establishing, 0–2 s): …; Shot 2 (mid tracking,
+2–5 s): …"*
+
+**By mode:**
+
+- **t2v** — describe the whole scene compactly in a single prompt.
+- **i2v** — prompt only the *deltas*: motion, camera move, or lighting change.
+  The first frame already fixes subject, wardrobe, and background; don't restate
+  them.
+- **r2v** — give each `[Image N]` a clear role, then state composition + action
+  + one camera/lighting cue for the resulting clip.
+
+HappyHorse excels at camera moves, atmospheric light and reflections,
+wind-driven motion (hair, fabric, flags), fire, wide and aerial shots, mirrors,
+and short in-scene text.
+
+*Source: fal "Happy Horse Prompting Guide" — <https://fal.ai/learn/tools/prompting-happy-horse>*
+
 ## LTX-2 / LTX-2.3 models
 
 | Model | Speed | Use Case |

@@ -25,6 +25,7 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `flux2_dev_fp8` | Slow (~2min) | High quality |
+| `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
 | `chroma-v.46-flash_fp8` | Medium | Balanced |
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |

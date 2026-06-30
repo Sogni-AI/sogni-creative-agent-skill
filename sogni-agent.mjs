@@ -117,7 +117,7 @@ function subscriptionBillingFallback(code) {
       // Vendor model the subscription never covers, or no verified entitlement.
       return {
         retryable: false,
-        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
+        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance, HappyHorse) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
         purchaseLabel: 'Get Premium Spark',
         purchaseUrl: SPARK_PACKS_PURCHASE_URL,
       };
@@ -327,14 +327,27 @@ const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
 const MUSIC_MODEL_IDS = {
-  turbo: 'ace_step_1.5_turbo',
-  speed: 'ace_step_1.5_turbo',
-  fast: 'ace_step_1.5_turbo',
-  sft: 'ace_step_1.5_sft',
-  lyrics: 'ace_step_1.5_sft',
-  lyric: 'ace_step_1.5_sft'
+  turbo: 'ace_step_1.5_xl_turbo',
+  speed: 'ace_step_1.5_xl_turbo',
+  fast: 'ace_step_1.5_xl_turbo',
+  sft: 'ace_step_1.5_xl_sft',
+  lyrics: 'ace_step_1.5_xl_sft',
+  lyric: 'ace_step_1.5_xl_sft'
 };
 const MUSIC_MODEL_DEFAULTS = {
+  'ace_step_1.5_xl_turbo': {
+    steps: { min: 4, max: 16, default: 8 },
+    shift: { min: 1, max: 6, default: 3 },
+    sampler: { allowed: ['euler', 'euler_ancestral'], default: 'euler' },
+    scheduler: { allowed: ['simple'], default: 'simple' }
+  },
+  'ace_step_1.5_xl_sft': {
+    steps: { min: 10, max: 100, default: 50 },
+    guidance: { min: 1, max: 15, default: 5 },
+    shift: { min: 1, max: 6, default: 3 },
+    sampler: { allowed: ['euler', 'euler_ancestral', 'er_sde'], default: 'er_sde' },
+    scheduler: { allowed: ['simple', 'linear_quadratic'], default: 'linear_quadratic' }
+  },
   'ace_step_1.5_turbo': {
     steps: { min: 4, max: 16, default: 8 },
     shift: { min: 1, max: 6, default: 3 },
@@ -2643,7 +2656,7 @@ Photobooth (Face Transfer):
 
 Music Options:
   --music               Generate music/audio instead of image
-  --music-model <id>    Music model: turbo|sft|ace_step_1.5_turbo|ace_step_1.5_sft
+  --music-model <id>    Music model: turbo|sft|ace_step_1.5_xl_turbo|ace_step_1.5_xl_sft
   --lyrics <text>       Optional song lyrics (omit for instrumental)
   --language <code>     Lyrics language code (default: en)
   --duration <sec>      Music duration in seconds (10-600, default: 30)
@@ -2800,6 +2813,7 @@ Personas (named people with reference photos):
 Image Models:
   z_image_turbo_bf16              Fast, general purpose (default)
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
+  krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   flux1-schnell-fp8               Very fast
   flux2_dev_fp8                   High quality (slow)
   qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
@@ -2813,8 +2827,10 @@ Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
 
 Music Models:
-  ace_step_1.5_turbo              Default direct music generation
-  ace_step_1.5_sft                Experimental model with stronger lyric handling
+  ace_step_1.5_xl_turbo           Default direct music generation
+  ace_step_1.5_xl_sft             Quality variant with stronger lyric handling
+  ace_step_1.5_turbo              Legacy direct music generation
+  ace_step_1.5_sft                Legacy lyric-focused music generation
 
 Seedance 2.0 Video Model Selectors:
   seedance2                         Text-to-video, 4-15s, native audio, HTTPS multimodal refs
@@ -3353,7 +3369,7 @@ if (options.music) {
   const configuredMusicModel = options.model || openclawConfig?.defaultMusicModel || 'turbo';
   options.model = normalizeMusicModelId(configuredMusicModel);
   if (!options.model) {
-    fatalCliError(`Unknown music model "${configuredMusicModel}". Use turbo, sft, ace_step_1.5_turbo, or ace_step_1.5_sft.`, {
+    fatalCliError(`Unknown music model "${configuredMusicModel}". Use turbo, sft, ace_step_1.5_xl_turbo, or ace_step_1.5_xl_sft.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: cliSet.model ? '--model' : 'defaultMusicModel', value: configuredMusicModel }
     });

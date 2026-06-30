@@ -31,6 +31,10 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
 
+For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
+`krea-2-turbo`; direct CLI `-m` uses the worker model ID
+`krea2_turbo_fp8_scaled`.
+
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through
 `8,294,400`; the API snaps dimensions to valid multiples of 16. For image

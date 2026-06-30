@@ -715,7 +715,7 @@ test('default music generation uses ACE-Step turbo defaults and prompt', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastAudioProject, 'createAudioProject was called');
-  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_turbo');
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_turbo');
   assert.equal(state.lastAudioProject.positivePrompt, 'uplifting cinematic synthwave theme');
   assert.equal(state.lastAudioProject.duration, 30);
   assert.equal(state.lastAudioProject.steps, 8);
@@ -756,7 +756,7 @@ test('advanced music options are forwarded to audio project generation', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastAudioProject, 'createAudioProject was called');
-  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_sft');
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_sft');
   assert.equal(state.lastAudioProject.numberOfMedia, 2);
   assert.equal(state.lastAudioProject.seed, 42);
   assert.equal(state.lastAudioProject.duration, 90);

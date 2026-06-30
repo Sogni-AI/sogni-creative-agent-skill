@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Music generation now defaults to ACE-Step 1.5 XL in the CLI.** The `turbo` and `sft` music aliases resolve to
+  the XL model IDs, while the legacy ACE-Step 1.5 model IDs remain available for explicit selection.
+- **Model guidance now reflects the current Premium Spark vendor catalog.** README, LLM-facing docs, skill
+  routing notes, and CLI billing guidance now list HappyHorse 1.1 alongside GPT Image 2 and Seedance as
+  Premium-Spark-only vendor paths.
+- **Krea 2 Turbo discovery is clearer.** CLI help and model references now list the direct worker model ID
+  `krea2_turbo_fp8_scaled` and note the hosted/chat selector `krea-2-turbo`.
+- **Updated the bundled Sogni intelligence client to `3.5.1`.** The skill now consumes the current Sogni Client
+  stack and model metadata used by the refreshed video, image, and music catalog.
+
 ## [3.7.0] - 2026-06-25
 
 ### Changed

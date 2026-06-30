@@ -26,7 +26,7 @@ It ships three ways:
 With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
-- create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0)
+- create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0, HappyHorse 1.1)
 - generate instrumental music or full songs with lyrics
 - run hosted creative workflows including storyboard-driven video
 - save personas, preferences, and last-render state across sessions
@@ -661,7 +661,7 @@ Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPAR
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
+Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, and HappyHorse require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
 On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the plan instead of spending tokens — see the next section.
 
@@ -683,7 +683,7 @@ App Store and Google Play prices may differ from web pricing due to platform fee
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`) and **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
+- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`), and **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 The CLI never sends `billingMode`/coverage hints itself; the server decides coverage from the account's verified entitlement and the resolved model. A subscription claim is never honored without a server-verified entitlement.
@@ -718,7 +718,7 @@ When a generation cannot bill to the subscription, the CLI surfaces a structured
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
-| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance), or reconnect and retry for a transient entitlement read. |
+| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance / HappyHorse), or reconnect and retry for a transient entitlement read. |
 | `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
 | `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
 | `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |

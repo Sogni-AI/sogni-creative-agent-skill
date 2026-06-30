@@ -1,3 +1,10 @@
+# [3.9.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.8.0...v3.9.0) (2026-06-30)
+
+
+### Features
+
+* wire ltx23 lora video controls ([968aa9a](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/968aa9aca2bf5cfc30d7f73b513f4ff0afb9cf94))
+
 # [3.7.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.6.4...v3.7.0) (2026-06-25)
 
 

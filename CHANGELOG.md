@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-06-30
+
 ### Changed
 
 - **Music generation now defaults to ACE-Step 1.5 XL in the CLI.** The `turbo` and `sft` music aliases resolve to

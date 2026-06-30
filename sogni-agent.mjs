@@ -1555,6 +1555,14 @@ const MULTI_ANGLE_DISTANCE_ALIASES = new Map([
   ['wide shot', 'wide']
 ]);
 
+const VIDEO_CONTROLNET_NAMES = ['canny', 'pose', 'depth', 'detailer', 'outpaint', 'inpaint'];
+const VIDEO_CONTROLNET_NAME_SET = new Set(VIDEO_CONTROLNET_NAMES);
+const OUTPAINT_POSITIONS = ['center', 'top', 'bottom', 'left', 'right'];
+const OUTPAINT_POSITION_SET = new Set(OUTPAINT_POSITIONS);
+const LTX_TRANSITION_LORA_ID = 'transition';
+const LTX_TRANSITION_TRIGGER = 'zhuanchang';
+const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
+
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/_/g, '-').replace(/\s+/g, ' ').trim();
@@ -1575,6 +1583,123 @@ function buildMultiAnglePrompt({ azimuth, elevation, distance, description }) {
   const parts = ['<sks>', azimuthPrompt, elevationPrompt, distancePrompt].filter(Boolean);
   if (description) parts.push(description);
   return parts.join(' ');
+}
+
+function normalizeVideoControlNetName(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/_/g, '-');
+  return normalized || null;
+}
+
+function normalizeOutpaintPositionValue(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/_/g, '-');
+  return OUTPAINT_POSITION_SET.has(normalized) ? normalized : null;
+}
+
+function parseOutpaintAspectRatio(value) {
+  if (!value) return null;
+  const match = String(value).trim().match(/^(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)$/i);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return width / height;
+}
+
+function isLtx23V2VModelId(modelId) {
+  return !!modelId && modelId.includes('ltx23') && /_v2v(_|$)/.test(modelId);
+}
+
+function isLtxI2vTransitionModelId(modelId) {
+  return !!modelId && modelId.includes('ltx') && /_i2v(_|$)/.test(modelId);
+}
+
+function applyLtxTransitionLora(projectConfig, modelId, hasStartFrame, hasEndFrame) {
+  if (!hasStartFrame || !hasEndFrame || !isLtxI2vTransitionModelId(modelId)) {
+    return;
+  }
+  const loras = Array.isArray(projectConfig.loras) ? [...projectConfig.loras] : [];
+  const loraStrengths = Array.isArray(projectConfig.loraStrengths) ? [...projectConfig.loraStrengths] : [];
+  if (!loras.includes(LTX_TRANSITION_LORA_ID)) {
+    loras.push(LTX_TRANSITION_LORA_ID);
+    loraStrengths.push(LTX_TRANSITION_DEFAULT_STRENGTH);
+  }
+  projectConfig.loras = loras;
+  projectConfig.loraStrengths = loraStrengths;
+  const prompt = String(projectConfig.positivePrompt || '');
+  if (!new RegExp(`\\b${LTX_TRANSITION_TRIGGER}\\b`, 'i').test(prompt)) {
+    projectConfig.positivePrompt = prompt ? `${prompt}, ${LTX_TRANSITION_TRIGGER}` : LTX_TRANSITION_TRIGGER;
+  }
+}
+
+function computeOutpaintCanvas(sourceWidth, sourceHeight, aspectRatioArg, position, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
+  const step = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const minD = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxD = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  let srcW = Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 1920;
+  let srcH = Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : 1088;
+  if (srcW > maxD || srcH > maxD) {
+    const scale = Math.min(maxD / srcW, maxD / srcH);
+    srcW *= scale;
+    srcH *= scale;
+  }
+
+  let targetW = srcW;
+  let targetH = srcH;
+  const parsedAspect = parseOutpaintAspectRatio(aspectRatioArg);
+  if (parsedAspect) {
+    const srcAspect = srcW / srcH;
+    if (parsedAspect > srcAspect) targetW = srcH * parsedAspect;
+    else if (parsedAspect < srcAspect) targetH = srcW / parsedAspect;
+  } else {
+    const factor = 1.5;
+    if (position === 'left' || position === 'right') targetW = srcW * factor;
+    else if (position === 'top' || position === 'bottom') targetH = srcH * factor;
+    else {
+      targetW = srcW * factor;
+      targetH = srcH * factor;
+    }
+  }
+
+  const snapUp = (value) => Math.ceil(value / step) * step;
+  let width = Math.min(maxD, Math.max(minD, snapUp(targetW)));
+  let height = Math.min(maxD, Math.max(minD, snapUp(targetH)));
+  width = Math.max(width, Math.min(maxD, snapUp(srcW)));
+  height = Math.max(height, Math.min(maxD, snapUp(srcH)));
+  return { width, height };
+}
+
+function computeSourceAspectCanvas(sourceWidth, sourceHeight, rules = DEFAULT_VIDEO_DIMENSION_RULES, targetResolution = null) {
+  const step = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const minD = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxD = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  let width = Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 1920;
+  let height = Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : 1088;
+  if (Number.isFinite(targetResolution) && targetResolution > 0) {
+    const roundedTarget = Math.max(minD, Math.round(targetResolution / step) * step);
+    if (width <= height) {
+      height = Math.round((height * roundedTarget) / width / step) * step;
+      width = roundedTarget;
+    } else {
+      width = Math.round((width * roundedTarget) / height / step) * step;
+      height = roundedTarget;
+    }
+  }
+  if (width > maxD || height > maxD) {
+    const scale = Math.min(maxD / width, maxD / height);
+    width *= scale;
+    height *= scale;
+  }
+  if (width < minD || height < minD) {
+    const scale = Math.max(minD / width, minD / height);
+    width *= scale;
+    height *= scale;
+  }
+  return {
+    width: Math.max(minD, Math.min(maxD, Math.round(width / step) * step)),
+    height: Math.max(minD, Math.min(maxD, Math.round(height / step) * step))
+  };
 }
 
 function loadOpenClawPluginConfig() {
@@ -1682,6 +1807,9 @@ const options = {
   refVideo: null, // Reference video for animate workflows (primary)
   refVideos: [], // Additional Seedance loose video refs; first --ref-video fills refVideo, subsequent calls append here
   videoStart: null, // Optional start offset into reference video
+  refMask: null, // Inpaint mask image for LTX-2.3 v2v inpaint
+  outpaintPosition: null, // LTX-2.3 v2v outpaint canvas anchor
+  outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
   photobooth: false, // Photobooth mode (InstantID face transfer)
@@ -1826,6 +1954,9 @@ const cliSet = {
   refVideo: false,
   refVideos: false,
   videoStart: false,
+  refMask: false,
+  outpaintPosition: false,
+  outpaintAspectRatio: false,
   context: false,
   looping: false,
   photobooth: false,
@@ -2182,16 +2313,31 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.cnGuidanceEnd = parseNumberValue(raw, arg);
     cliSet.cnGuidanceEnd = true;
-  } else if (arg === '--controlnet-name') {
+  } else if (arg === '--controlnet-name' || arg === '--control-type') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.videoControlNetName = raw;
+    options.videoControlNetName = normalizeVideoControlNetName(raw);
     cliSet.videoControlNetName = true;
   } else if (arg === '--controlnet-strength') {
     const raw = requireFlagValue(args, i, arg);
     i++;
     options.videoControlNetStrength = parseNumberValue(raw, arg);
     cliSet.videoControlNetStrength = true;
+  } else if (arg === '--mask' || arg === '--ref-mask' || arg === '--reference-mask') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.refMask = raw;
+    cliSet.refMask = true;
+  } else if (arg === '--outpaint-position') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.outpaintPosition = raw;
+    cliSet.outpaintPosition = true;
+  } else if (arg === '--outpaint-aspect-ratio' || arg === '--outpaint-ratio') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.outpaintAspectRatio = raw;
+    cliSet.outpaintAspectRatio = true;
   } else if (arg === '--sam2-coordinates') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -2706,8 +2852,12 @@ Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / see
   All three modalities pull caps from the canonical
   @sogni-ai/sogni-protocol seedance-reference-limits catalog.
   --video-start <sec>   Start offset into --ref-video for segmented V2V/animate
-  --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer
+  --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer|outpaint|inpaint
+  --control-type <n>    Alias for --controlnet-name
   --controlnet-strength <n>  ControlNet strength for v2v (0.0-1.0, default: 0.8)
+  --mask <path|url>     Inpaint mask image for LTX-2.3 v2v inpaint (white = regenerate)
+  --outpaint-position <p> LTX-2.3 outpaint anchor: center|top|bottom|left|right
+  --outpaint-aspect-ratio <r> LTX-2.3 outpaint target ratio, e.g. 16:9 or 9:16
   --sam2-coordinates <coords>  SAM2 click coords for animate-replace (x,y or x1,y1;x2,y2)
   --trim-end-frame      Trim last frame for seamless video stitching
   --first-frame-strength <n>  Keyframe strength for start frame (0.0-1.0)
@@ -3583,8 +3733,8 @@ if (options.apiChat && !options.prompt && getApiModeMediaReferences().length ===
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null)) {
-  fatalCliError('Video-only options (--workflow/--frames/--target-resolution/--ref-audio/--ref-video/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -3689,7 +3839,7 @@ if (options.video) {
       fatalCliError('v2v requires --ref-video.', { code: 'INVALID_ARGUMENT' });
     }
     if (!options.videoControlNetName && !isSeedanceModel(options.model)) {
-      fatalCliError('v2v requires --controlnet-name (canny|pose|depth|detailer).', { code: 'INVALID_ARGUMENT' });
+      fatalCliError(`v2v requires --controlnet-name/--control-type (${VIDEO_CONTROLNET_NAMES.join('|')}).`, { code: 'INVALID_ARGUMENT' });
     }
     if (!isSeedanceVideo && options.refAudio) {
       fatalCliError('v2v does not accept reference audio.', { code: 'INVALID_ARGUMENT' });
@@ -3766,11 +3916,61 @@ if (options.video) {
 
   // Validate controlnet-name values
   if (options.videoControlNetName) {
-    const validControlNets = ['canny', 'pose', 'depth', 'detailer'];
-    if (!validControlNets.includes(options.videoControlNetName)) {
-      fatalCliError(`Unknown --controlnet-name "${options.videoControlNetName}". Use: ${validControlNets.join('|')}`, {
+    if (!VIDEO_CONTROLNET_NAME_SET.has(options.videoControlNetName)) {
+      fatalCliError(`Unknown --controlnet-name "${options.videoControlNetName}". Use: ${VIDEO_CONTROLNET_NAMES.join('|')}`, {
         code: 'INVALID_ARGUMENT',
-        details: { flag: '--controlnet-name', value: options.videoControlNetName, allowed: validControlNets }
+        details: { flag: '--controlnet-name', value: options.videoControlNetName, allowed: VIDEO_CONTROLNET_NAMES }
+      });
+    }
+    if ((options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint') && !isLtx23V2VModelId(options.model)) {
+      fatalCliError(`${options.videoControlNetName} control requires the LTX-2.3 v2v model.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { controlNetName: options.videoControlNetName, model: options.model },
+        hint: 'Use --workflow v2v -m ltx23 --control-type ' + options.videoControlNetName
+      });
+    }
+    if (options.videoControlNetName === 'inpaint' && !options.refMask) {
+      fatalCliError('LTX-2.3 v2v inpaint requires --mask <image> (white pixels = region to regenerate).', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    if (options.videoControlNetName === 'outpaint' && !options.outpaintPosition) {
+      options.outpaintPosition = 'center';
+    }
+  }
+
+  if (options.refMask && options.videoControlNetName !== 'inpaint') {
+    fatalCliError('--mask is only supported with --control-type inpaint.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+
+  if (options.outpaintPosition) {
+    const normalizedOutpaintPosition = normalizeOutpaintPositionValue(options.outpaintPosition);
+    if (!normalizedOutpaintPosition) {
+      fatalCliError(`Invalid --outpaint-position "${options.outpaintPosition}". Use: ${OUTPAINT_POSITIONS.join('|')}`, {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--outpaint-position', value: options.outpaintPosition, allowed: OUTPAINT_POSITIONS }
+      });
+    }
+    if (options.videoControlNetName !== 'outpaint') {
+      fatalCliError('--outpaint-position is only supported with --control-type outpaint.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    options.outpaintPosition = normalizedOutpaintPosition;
+  }
+
+  if (options.outpaintAspectRatio) {
+    if (!parseOutpaintAspectRatio(options.outpaintAspectRatio)) {
+      fatalCliError(`Invalid --outpaint-aspect-ratio "${options.outpaintAspectRatio}". Use a ratio like 16:9 or 9:16.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--outpaint-aspect-ratio', value: options.outpaintAspectRatio }
+      });
+    }
+    if (options.videoControlNetName !== 'outpaint') {
+      fatalCliError('--outpaint-aspect-ratio is only supported with --control-type outpaint.', {
+        code: 'INVALID_ARGUMENT'
       });
     }
   }
@@ -4393,6 +4593,7 @@ function getApiModeMediaReferences() {
   for (const value of options.refVideos || []) {
     if (value) refs.push({ flag: '--ref-video', value, kind: 'video' });
   }
+  if (options.refMask) refs.push({ flag: '--mask', value: options.refMask, kind: 'image' });
   return refs;
 }
 
@@ -4460,6 +4661,7 @@ function apiMediaReferenceUploadType(ref, index) {
   if (ref.kind === 'audio') return 'referenceAudio';
   if (ref.kind === 'video') return 'referenceVideo';
   if (ref.flag === '--ref-end') return 'referenceImageEnd';
+  if (ref.flag === '--mask') return `contextImage${Math.min(index + 1, 16)}`;
   if (ref.flag === '-c/--context') return `contextImage${Math.min(index + 1, 16)}`;
   return 'referenceImage';
 }
@@ -8588,6 +8790,7 @@ async function main() {
       let endImageBuffer = options.refImageEnd && !useRefImageEndUrl ? await fetchMediaBuffer(options.refImageEnd) : undefined;
       let audioBuffer = options.refAudio && !useRefAudioUrl ? await fetchMediaBuffer(options.refAudio) : undefined;
       let videoBuffer = options.refVideo && !useRefVideoUrl ? await fetchMediaBuffer(options.refVideo) : undefined;
+      let maskBuffer = options.refMask ? await fetchMediaBuffer(options.refMask) : undefined;
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
       }
@@ -8617,6 +8820,62 @@ async function main() {
         : undefined;
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const videoDimensionRules = videoDimensionRulesFromDefaults(modelDefaults, options.model);
+
+      if (
+        options.videoWorkflow === 'v2v' &&
+        (options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint')
+      ) {
+        let sourceVideoDimensions = null;
+        if (options.refVideo && !isHttpUrl(options.refVideo) && existsSync(options.refVideo)) {
+          const probed = await probeVideoStreamInfo(options.refVideo);
+          if (probed.width && probed.height) {
+            sourceVideoDimensions = { width: probed.width, height: probed.height };
+          }
+        }
+
+        if (options.videoControlNetName === 'outpaint') {
+          const outpaintDimensions = computeOutpaintCanvas(
+            sourceVideoDimensions?.width ?? options.width,
+            sourceVideoDimensions?.height ?? options.height,
+            options.outpaintAspectRatio,
+            options.outpaintPosition || 'center',
+            videoDimensionRules
+          );
+          if (outpaintDimensions.width !== options.width || outpaintDimensions.height !== options.height) {
+            if (!options.quiet) {
+              const ratioLabel = options.outpaintAspectRatio ? ` for ${options.outpaintAspectRatio}` : '';
+              console.error(
+                `Adjusted outpaint canvas from ${options.width}x${options.height} ` +
+                `to ${outpaintDimensions.width}x${outpaintDimensions.height}${ratioLabel}.`
+              );
+            }
+            options.width = outpaintDimensions.width;
+            options.height = outpaintDimensions.height;
+          }
+        } else if (options.videoControlNetName === 'inpaint' && sourceVideoDimensions) {
+          const hasExplicitVideoDimensions =
+            (cliSet.width || widthFromConfig || widthFromPrompt) &&
+            (cliSet.height || heightFromConfig || heightFromPrompt);
+          if (!hasExplicitVideoDimensions) {
+            const inpaintDimensions = computeSourceAspectCanvas(
+              sourceVideoDimensions.width,
+              sourceVideoDimensions.height,
+              videoDimensionRules,
+              options.targetResolution
+            );
+            if (inpaintDimensions.width !== options.width || inpaintDimensions.height !== options.height) {
+              if (!options.quiet) {
+                console.error(
+                  `Adjusted inpaint canvas from ${options.width}x${options.height} ` +
+                  `to ${inpaintDimensions.width}x${inpaintDimensions.height} to match the source video aspect.`
+                );
+              }
+              options.width = inpaintDimensions.width;
+              options.height = inpaintDimensions.height;
+            }
+          }
+        }
+      }
 
       // Pre-resize reference images to model-compatible dimensions if needed for i2v workflow.
       if (options.videoWorkflow === 'i2v' && imageBuffer && options._needsRefResize) {
@@ -8685,6 +8944,12 @@ async function main() {
       if (endImageBuffer) {
         projectConfig.referenceImageEnd = endImageBuffer;
       }
+      applyLtxTransitionLora(
+        projectConfig,
+        options.model,
+        Boolean(projectConfig.referenceImage),
+        Boolean(projectConfig.referenceImageEnd)
+      );
       if (audioBuffer) {
         projectConfig.referenceAudio = audioBuffer;
       }
@@ -8733,13 +8998,19 @@ async function main() {
         projectConfig.shift = modelDefaults.shift;
       }
       if (options.videoControlNetName && !isSeedanceModel(options.model)) {
-        const controlNetStrength = resolveVideoControlNetStrength(options.videoControlNetName, options.videoControlNetStrength);
+        const isInOutpaintControl = options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint';
         projectConfig.controlNet = {
           name: options.videoControlNetName,
-          strength: controlNetStrength
+          strength: isInOutpaintControl ? 1.0 : resolveVideoControlNetStrength(options.videoControlNetName, options.videoControlNetStrength)
         };
-        if (options.videoControlNetName !== 'detailer') {
+        if (!isInOutpaintControl && options.videoControlNetName !== 'detailer') {
           projectConfig.detailerStrength = 0.6;
+        }
+        if (options.videoControlNetName === 'inpaint' && maskBuffer) {
+          projectConfig.referenceMask = maskBuffer;
+        }
+        if (options.videoControlNetName === 'outpaint') {
+          projectConfig.outpaintPosition = options.outpaintPosition || 'center';
         }
       } else if (options.videoControlNetName && isSeedanceModel(options.model) && !options.quiet) {
         console.error('Warning: --controlnet-name ignored for Seedance V2V models.');

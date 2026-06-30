@@ -87,7 +87,7 @@ You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
   `--thinking` / `--no-thinking`, `--list-replays [n]`, `--get-replay <id>`,
   `--ingest-replay <json|@path>`.
 - Media references from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
-  `--reference-audio-identity`, and `--ref-video` are uploaded and forwarded as
+  `--reference-audio-identity`, `--ref-video`, and `--mask` are uploaded and forwarded as
   `media_references`; API chat also attaches image refs as vision inputs.
   Workflow JSON can bind refs with `sourceStepId: "$input_media"`.
 - Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.

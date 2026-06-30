@@ -2994,6 +2994,73 @@ test('detailer ControlNet defaults to full preservation strength', () => {
   assert.equal(state.lastVideoProject.detailerStrength, undefined);
 });
 
+test('LTX i2v with first and end frames auto-attaches transition LoRA', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'ltx23',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'morph the opening frame into the final frame'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v_distilled');
+  assert.deepEqual(state.lastVideoProject.loras, ['transition']);
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+  assert.match(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+});
+
+test('LTX v2v outpaint forwards IC-LoRA control and positional canvas options', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'ltx23',
+    '--ref-video', SCREENSHOT_FIXTURE,
+    '--control-type', 'outpaint',
+    '--outpaint-position', 'right',
+    '--outpaint-aspect-ratio', '16:9',
+    'extend the street scene into the new area'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_v2v_distilled');
+  assert.deepEqual(state.lastVideoProject.controlNet, { name: 'outpaint', strength: 1.0 });
+  assert.equal(state.lastVideoProject.outpaintPosition, 'right');
+  assert.equal(state.lastVideoProject.detailerStrength, undefined);
+  assert.equal(state.lastVideoProject.width % 64, 0);
+  assert.equal(state.lastVideoProject.height % 64, 0);
+});
+
+test('LTX v2v inpaint forwards mask image without detailer sidecar', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'ltx23',
+    '--ref-video', SCREENSHOT_FIXTURE,
+    '--control-type', 'inpaint',
+    '--mask', SCREENSHOT_FIXTURE,
+    'make the masked region clean'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_v2v_distilled');
+  assert.deepEqual(state.lastVideoProject.controlNet, { name: 'inpaint', strength: 1.0 });
+  assert.ok(state.lastVideoProject.referenceMask, 'referenceMask was forwarded');
+  assert.equal(state.lastVideoProject.detailerStrength, undefined);
+});
+
+test('LTX v2v inpaint requires a direct CLI mask image', () => {
+  expectCliError(
+    [
+      '--video',
+      '--workflow', 'v2v',
+      '-m', 'ltx23',
+      '--ref-video', SCREENSHOT_FIXTURE,
+      '--control-type', 'inpaint',
+      'make the masked region clean'
+    ],
+    'LTX-2.3 v2v inpaint requires --mask'
+  );
+});
+
 test('audio and video start offsets are passed to video projects', () => {
   const audioRun = runCli([
     '--video',

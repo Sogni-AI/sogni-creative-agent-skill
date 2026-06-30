@@ -199,13 +199,25 @@ beyond `canny`/`pose`/`depth`/`detailer`:
 These modes run as Sogni Projects on the v2v surface. In the hosted
 `video_to_video` tool the control mode is selected with `controlMode` set to
 `outpaint` or `inpaint` (with `outpaintPosition` / optional
-`outpaintAspectRatio` for outpaint, or `maskImageIndex` for inpaint). The
-underlying sogni-client SDK example exposes them as `control-type`
-(`canny|pose|depth|detailer|outpaint|inpaint`), with `mask <image>` for inpaint
-(white = region to regenerate) and `outpaint-position`
-(`center|top|bottom|left|right`, required for outpaint — outpaint is positional
-and takes no mask, inpaint requires the mask). These extension/inpaint controls
-are video-only.
+`outpaintAspectRatio` for outpaint, or `maskImageIndex` for inpaint). Hosted
+execution can derive an inpaint mask if the user did not upload one. The direct
+CLI and underlying sogni-client SDK example expose them as `--control-type` /
+`control-type` (`canny|pose|depth|detailer|outpaint|inpaint`), with `--mask`
+for direct inpaint (white = region to regenerate), `--outpaint-position`
+(`center|top|bottom|left|right`), and optional `--outpaint-aspect-ratio`
+(`16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9`) for direct outpaint. These
+extension/inpaint controls are video-only.
+
+```bash
+sogni-agent -q --video --workflow v2v -m ltx23 \
+  --ref-video ./source.mp4 --control-type outpaint \
+  --outpaint-position center --outpaint-aspect-ratio 16:9 \
+  -o ./outpainted.mp4 "Extend the surrounding scene naturally"
+
+sogni-agent -q --video --workflow v2v -m ltx23 \
+  --ref-video ./source.mp4 --control-type inpaint --mask ./mask.png \
+  -o ./inpainted.mp4 "Replace the masked region with clean matching detail"
+```
 
 ## Music-to-Video Pipeline
 

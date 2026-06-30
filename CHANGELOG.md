@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **LTX-2.3 LoRA controls are now wired through the public CLI.** Direct `sogni-agent` video generation now
+  supports `--control-type outpaint` with `--outpaint-position` / `--outpaint-aspect-ratio`,
+  `--control-type inpaint --mask <image>`, and automatic `transition` LoRA attachment for LTX-2.3 i2v jobs
+  that provide both `--ref` and `--ref-end`.
+
 ## [3.8.0] - 2026-06-30
 
 ### Changed

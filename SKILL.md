@@ -184,7 +184,8 @@ sogni-agent doctor --json
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
 | `--video`, `--music` | Generate video / music instead of image | - |
 | `--workflow <t>` | Force `t2v\|i2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
-| `--ref`, `--ref-end`, `--ref-audio`, `--ref-video` | Start frame / end frame / audio / video references | - |
+| `--ref`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Start frame / end frame / audio / video / inpaint mask references | - |
+| `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX-2.3 v2v control mode and outpaint canvas controls | - |
 | `--duration <sec>` | Video or music length | video 5, music 30 |
 | `--target-resolution <px>` | Short-side target preserving aspect ratio (use `2160` for Seedance 4K) | - |
 | `--photobooth` | Face transfer mode (with `--ref`) | - |

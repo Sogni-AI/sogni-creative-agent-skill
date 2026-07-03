@@ -82,3 +82,5 @@ desktop-extension/server/package-lock.json
 .openclaw-link/
 
 .superpowers/
+
+dist/

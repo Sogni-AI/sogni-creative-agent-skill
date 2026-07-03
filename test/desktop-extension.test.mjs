@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync as fsExistsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -291,4 +291,16 @@ test('unknown method returns -32601; parse error returns -32700', async (t) => {
   await new Promise((r) => setTimeout(r, 200));
   const parseErr = client.notifications.find((m) => m.error?.code === -32700);
   assert.ok(parseErr, 'expected a -32700 response');
+});
+
+test('manifest.json version matches package.json and entry point exists', () => {
+  const root = join(HERE, '..');
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(join(root, 'desktop-extension', 'manifest.json'), 'utf8'));
+  assert.equal(manifest.version, pkg.version);
+  assert.equal(manifest.manifest_version, '0.3');
+  assert.equal(manifest.server.type, 'node');
+  assert.ok(fsExistsSync(join(root, 'desktop-extension', manifest.server.entry_point)));
+  assert.deepEqual(manifest.server.mcp_config.args, ['${__dirname}/server/index.mjs']);
+  assert.ok(pkg.files.includes('desktop-extension/'));
 });

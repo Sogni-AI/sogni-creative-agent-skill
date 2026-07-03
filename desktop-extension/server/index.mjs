@@ -1,0 +1,156 @@
+#!/usr/bin/env node
+// desktop-extension/server/index.mjs
+// Dependency-free MCP stdio server for Claude Desktop. Translates tool calls
+// into sogni-agent CLI invocations. Protocol: JSON-RPC 2.0, one message per
+// line over stdio. IMPORTANT: stdout is protocol-only — log to stderr.
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TOOLS, getTool } from './tools.mjs';
+import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PROTOCOL_FALLBACK = '2025-06-18';
+const HARD_KILL_MS = 15 * 60 * 1000; // generation ceiling; CLI enforces its own -t timeouts sooner
+const PROGRESS_INTERVAL_MS = 10_000;
+const MAX_RESULT_CHARS = 20_000;
+
+let VERSION = '0.0.0';
+try {
+  VERSION = JSON.parse(readFileSync(join(HERE, '..', 'manifest.json'), 'utf8')).version;
+} catch {
+  // Running outside a packaged layout (e.g. unit tests before Task 4); harmless.
+}
+
+function send(msg) {
+  process.stdout.write(JSON.stringify(msg) + '\n');
+}
+
+function textResult(text, isError = false) {
+  return { content: [{ type: 'text', text }], isError };
+}
+
+async function callTool(name, input, progressToken) {
+  const tool = getTool(name);
+  if (!tool) return textResult(`Unknown tool: ${name}`, true);
+
+  const agentPath = resolveAgentPath();
+  if (!agentPath) {
+    return textResult(
+      'The sogni-agent CLI is not installed. Open a terminal, run `npx setup-sogni-agent-skill`, then retry.',
+      true,
+    );
+  }
+
+  let args;
+  try {
+    args = tool.buildArgs(input ?? {});
+  } catch (err) {
+    return textResult(err.message, true);
+  }
+
+  const env = buildChildEnv({ agentPath, ffmpegPath: resolveFfmpegPath() });
+
+  return await new Promise((resolve) => {
+    const child = spawn(process.execPath, [agentPath, ...args], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+
+    const started = Date.now();
+    const ticker = progressToken == null
+      ? null
+      : setInterval(() => {
+          send({
+            jsonrpc: '2.0',
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress: Math.round((Date.now() - started) / 1000),
+              message: `sogni-agent ${name} running…`,
+            },
+          });
+        }, PROGRESS_INTERVAL_MS);
+    const killer = setTimeout(() => child.kill('SIGKILL'), HARD_KILL_MS);
+
+    const finish = (result) => {
+      if (ticker) clearInterval(ticker);
+      clearTimeout(killer);
+      resolve(result);
+    };
+
+    child.on('error', (err) => finish(textResult(`Failed to launch sogni-agent: ${err.message}`, true)));
+    child.on('close', (code) => {
+      const text = [stdout.trim(), code === 0 ? '' : stderr.trim()].filter(Boolean).join('\n')
+        || `sogni-agent exited with code ${code}`;
+      finish(textResult(text.slice(-MAX_RESULT_CHARS), code !== 0));
+    });
+  });
+}
+
+async function dispatch(msg) {
+  const { id, method, params } = msg;
+  const isRequest = id !== undefined && id !== null;
+
+  if (method === 'initialize') {
+    send({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        protocolVersion: params?.protocolVersion ?? PROTOCOL_FALLBACK,
+        capabilities: { tools: {} },
+        serverInfo: { name: 'sogni-creative-agent', version: VERSION },
+      },
+    });
+    return;
+  }
+  if (method === 'ping') {
+    send({ jsonrpc: '2.0', id, result: {} });
+    return;
+  }
+  if (method === 'tools/list') {
+    send({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+      },
+    });
+    return;
+  }
+  if (method === 'tools/call') {
+    const result = await callTool(params?.name, params?.arguments, params?._meta?.progressToken);
+    send({ jsonrpc: '2.0', id, result });
+    return;
+  }
+  if (!isRequest || method?.startsWith('notifications/')) {
+    return; // notifications need no response
+  }
+  send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
+}
+
+const rl = createInterface({ input: process.stdin, terminal: false });
+rl.on('line', (line) => {
+  if (!line.trim()) return;
+  let msg;
+  try {
+    msg = JSON.parse(line);
+  } catch {
+    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    return;
+  }
+  dispatch(msg).catch((err) => {
+    if (msg.id !== undefined && msg.id !== null) {
+      send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: err.message } });
+    } else {
+      process.stderr.write(`sogni desktop server error: ${err.stack}\n`);
+    }
+  });
+});
+rl.on('close', () => process.exit(0));

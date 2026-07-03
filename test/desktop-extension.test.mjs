@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, delimiter } from 'node:path';
+import { join, delimiter, dirname } from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   resolveAgentPath, resolveFfmpegPath, buildChildEnv,
 } from '../desktop-extension/server/resolve.mjs';
@@ -175,4 +177,118 @@ test('doctor, balance, list_media argv', () => {
   assert.deepEqual(getTool('account_balance').buildArgs({}), ['--balances', '--json', '--no-update-check']);
   assert.deepEqual(getTool('list_media').buildArgs({}), ['--json', '--no-update-check', '--list-media', 'images']);
   assert.deepEqual(getTool('list_media').buildArgs({ type: 'audio' }), ['--json', '--no-update-check', '--list-media', 'audio']);
+});
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SERVER = join(HERE, '..', 'desktop-extension', 'server', 'index.mjs');
+const FAKE_AGENT = join(HERE, 'fixtures', 'fake-sogni-agent.mjs');
+
+// Minimal line-delimited JSON-RPC client for driving the server under test.
+class McpClient {
+  constructor(extraEnv = {}) {
+    this.child = spawn(process.execPath, [SERVER], {
+      env: { ...process.env, SOGNI_AGENT_PATH: FAKE_AGENT, ...extraEnv },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    this.pending = new Map();
+    this.notifications = [];
+    this.nextId = 1;
+    let buf = '';
+    this.child.stdout.on('data', (d) => {
+      buf += d;
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line);
+        if (msg.id != null && this.pending.has(msg.id)) {
+          this.pending.get(msg.id)(msg);
+          this.pending.delete(msg.id);
+        } else {
+          this.notifications.push(msg);
+        }
+      }
+    });
+  }
+  request(method, params) {
+    const id = this.nextId++;
+    const p = new Promise((resolve) => this.pending.set(id, resolve));
+    this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
+    return p;
+  }
+  raw(text) {
+    this.child.stdin.write(text + '\n');
+  }
+  close() {
+    this.child.kill();
+  }
+}
+
+test('initialize handshake returns serverInfo and tools capability', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'test', version: '0' },
+  });
+  assert.equal(res.result.protocolVersion, '2025-06-18');
+  assert.equal(res.result.serverInfo.name, 'sogni-creative-agent');
+  assert.ok(res.result.capabilities.tools);
+});
+
+test('tools/list returns all registered tools', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('tools/list', {});
+  assert.equal(res.result.tools.length, TOOLS.length);
+  assert.ok(res.result.tools.every((tool) => tool.name && tool.description && tool.inputSchema));
+});
+
+test('tools/call spawns the CLI with built argv and returns its stdout', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('tools/call', {
+    name: 'generate_image',
+    arguments: { prompt: 'a red fox', quality: 'fast' },
+  });
+  assert.equal(res.result.isError ?? false, false);
+  const echoed = JSON.parse(res.result.content[0].text);
+  assert.deepEqual(echoed.argv, ['--json', '-q', '--no-update-check', '-Q', 'fast', 'a red fox']);
+});
+
+test('tools/call surfaces CLI failure as isError with stderr included', async (t) => {
+  const client = new McpClient({ FAKE_AGENT_EXIT: '3', FAKE_AGENT_STDERR: 'boom: no credentials' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'sogni_doctor', arguments: {} });
+  assert.equal(res.result.isError, true);
+  assert.match(res.result.content[0].text, /boom: no credentials/);
+});
+
+test('tools/call with invalid input returns isError without spawning', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'photobooth', arguments: { prompt: 'x' } });
+  assert.equal(res.result.isError, true);
+  assert.match(res.result.content[0].text, /ref/);
+});
+
+test('missing CLI yields a setup hint, not a crash', async (t) => {
+  const client = new McpClient({ SOGNI_AGENT_PATH: '/nonexistent/sogni-agent.mjs' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'account_balance', arguments: {} });
+  assert.equal(res.result.isError, true);
+  assert.match(res.result.content[0].text, /setup-sogni-agent-skill/);
+});
+
+test('unknown method returns -32601; parse error returns -32700', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('bogus/method', {});
+  assert.equal(res.error.code, -32601);
+  client.raw('{not json');
+  await new Promise((r) => setTimeout(r, 200));
+  const parseErr = client.notifications.find((m) => m.error?.code === -32700);
+  assert.ok(parseErr, 'expected a -32700 response');
 });

@@ -6100,10 +6100,11 @@ async function runApiWorkflow() {
       await streamApiWorkflowEvents(apiKey, id);
       return;
     }
-    // Prefer SDK transport when opted-in. `resume` has no SDK
-    // equivalent yet (it lives on the API; the SDK exposes
-    // cancel/get/events/streamEvents). For resume we fall through to
-    // the legacy fetch path.
+    // Prefer SDK transport when opted-in. `resume` exists in the SDK
+    // (sogni-client CreativeWorkflows.resume) since 5.1.0-alpha.16 but
+    // is not wired here yet, so resume still falls through to the
+    // legacy fetch path. Wiring it (plus reseed, which the SDK also
+    // ships) is tracked in the workflows MASTER plan, Phase 4.4.
     let sdkPayload = null;
     if (
       options.apiWorkflowAction === 'get'

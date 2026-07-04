@@ -76,7 +76,7 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   });
   assert.equal(compiled.stage, 'scene_clip');
   assert.match(compiled.prompt, /red sneaker|Product reveal/i);
-  assert.equal(compiled.args.videoModel, 'seedance2-fast');
+  assert.equal(compiled.args.videoModel, 'seedance2-mini');
   assert.equal(compiled.args.expandPrompt, false);
 });
 

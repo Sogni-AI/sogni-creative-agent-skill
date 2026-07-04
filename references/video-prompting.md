@@ -2,7 +2,7 @@
 
 Read this before writing any text-to-video or image-to-video prompt for LTX
 models, and whenever the user asks for "hd", "1080p", "4k", "uhd", or
-"high-res" video.
+"high-res" video so you can choose between the LTX and Seedance paths.
 
 ## LTX-2.3 Prompt Rule
 
@@ -63,28 +63,31 @@ Use this shape instead: "A medium cinematic shot frames a woman in her 30s stand
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
-- For **text-to-video**, use `-m ltx23-22b-fp8_t2v_distilled`.
-- For **image-to-video**, use `-m ltx23-22b-fp8_i2v_distilled`.
-- Prefer LTX-sized dimensions such as `-w 1920 -h 1088`.
+- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini` or `seedance2-fast` for 4K.
+- For **non-vendor HD / 1080p text-to-video**, use `-m ltx23-22b-fp8_t2v_distilled`.
+- For **non-vendor HD / 1080p image-to-video**, use `-m ltx23-22b-fp8_i2v_distilled`.
+- Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.
 - For bare named resolutions such as "720p" without orientation or exact pixels, prefer `--target-resolution 768` or the closest requested short side instead of forcing landscape dimensions.
 - When the prompt combines a named resolution with an aspect ratio, such as "720p 9:16", let the CLI infer both instead of forcing manual `-w`/`-h` unless the user gave exact pixels.
 - If the user explicitly asks for `vertical`, `portrait`, `story`, `reel`, `tiktok`, `square`, or `4:3`, apply the matching dimensions from the **Orientation Mapping** rules instead of defaulting to 16:9.
-- Rewrite the user's request using the **LTX-2.3 Prompt Rule** before invoking the command. Do not send short slogan-style prompts to LTX.
-- Treat "4k" as a signal to use the highest practical LTX path exposed by this skill, even though the current wrapper caps non-WAN video dimensions at 2048px on the long side.
+- Rewrite the user's request using the **LTX-2.3 Prompt Rule** only when invoking an LTX model. Do not send short slogan-style prompts to LTX.
 
 ## Agent-ready command shapes
 
 ```bash
-# HD / "4K" text-to-video: prefer LTX-2.3 (prompt must already be rewritten as above)
+# Native Seedance 4K / UHD text-to-video
+sogni-agent -q --video -m seedance2 --target-resolution 2160 -o ./video.mp4 "A polished cinematic product reveal with native ambient sound"
+
+# HD / 1080p text-to-video without the Seedance vendor path: prefer LTX-2.3
 sogni-agent -q --video -m ltx23-22b-fp8_t2v_distilled -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
 
-# HD / "4K" image-to-video: prefer LTX i2v
+# HD / 1080p image-to-video without the Seedance vendor path: prefer LTX i2v
 sogni-agent -q --video --ref /path/to/image.png -m ltx23-22b-fp8_i2v_distilled -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
 
 # LTX-2.3 voice identity / persona
 sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
 
-# Seedance 2.0 (4-15s vendor video path with native audio)
+# Seedance 2.0 standard (4-15s vendor video path with native audio)
 sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with native ambient sound"
 ```
 

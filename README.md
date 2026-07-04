@@ -26,7 +26,7 @@ It ships three ways:
 With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
-- create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0)
+- create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0, HappyHorse 1.1)
 - generate instrumental music or full songs with lyrics
 - run hosted creative workflows including storyboard-driven video
 - save personas, preferences, and last-render state across sessions
@@ -333,8 +333,8 @@ sogni-agent --video 'A narrator says "welcome to the story" as ocean waves crash
 sogni-agent --video --target-resolution 768 \
   "A calm cinematic shot of lanterns drifting across a night lake"
 
-# Seedance 2.0 (4-15s vendor video path with native audio)
-sogni-agent --video -m seedance2 --duration 8 \
+# Seedance 2.0 4K (4-15s vendor video path with native audio)
+sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 \
   "A polished product reveal with native ambient sound"
 
 # Seedance multimodal context with public HTTPS references
@@ -491,13 +491,13 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
-| Direct music generation | `ace_step_1.5_turbo` (or `--music-model turbo`) |
-| Music with stronger lyric handling | `ace_step_1.5_sft` (or `--music-model sft`) |
+| Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
+| Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
-| Seedance text-to-video | `seedance2` or `seedance2-fast` |
+| Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-mini` for the lower-cost 720p path; `seedance2-fast` for the legacy 720p fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
@@ -511,15 +511,18 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
 - The script auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but ref becomes `1024×1535`). `sogni-agent` detects this for local refs and auto-adjusts to a nearby safe size.
+- **LTX-2.3 two-keyframe morph:** when the LTX-2.3 i2v model `ltx23-22b-fp8_i2v_distilled` gets **both** a start frame (`--ref`) and an end frame (`--ref-end`), it auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`, strength ~1.0) and morphs the first image into the last in a single render — no bridge clip or `--concat-videos` needed. The sogni-client SDK example feeds the two frames as its `image` / `end-image` arguments and additionally exposes manual `transition` / `transition-strength` SDK arguments.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 
 V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. Audio references must be paired with an image or video reference.
+
+The LTX-2.3 v2v model `ltx23-22b-fp8_v2v_distilled` also supports two extra control modes: **`outpaint`** extends/expands the video canvas (e.g. make a vertical clip widescreen, or add space in a direction) — it is positional and mask-free, anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio (`16:9|9:16|1:1|4:3|3:4|21:9`), and the canvas only grows, never crops; **`inpaint`** regenerates a masked region of the source video and **requires a mask image** (white pixels = region to regenerate) in direct CLI/SDK mode. The hosted `video_to_video` tool selects these with `controlMode` `outpaint`/`inpaint` and can derive an inpaint mask when the user did not upload one. The direct CLI and sogni-client SDK example expose them via `--control-type` / `control-type` (`canny|pose|depth|detailer|outpaint|inpaint`), with `--outpaint-position` for outpaint and `--mask` for inpaint. See `references/video-editing.md` for details.
 
 ---
 
@@ -676,7 +679,7 @@ Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPAR
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as Seedance and GPT Image 2 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
+Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, and HappyHorse require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
 On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the plan instead of spending tokens — see the next section.
 
@@ -698,7 +701,7 @@ App Store and Google Play prices may differ from web pricing due to platform fee
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`) and **Seedance 2.0 / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-fast`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
+- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`), and **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 The CLI never sends `billingMode`/coverage hints itself; the server decides coverage from the account's verified entitlement and the resolved model. A subscription claim is never honored without a server-verified entitlement.
@@ -733,7 +736,7 @@ When a generation cannot bill to the subscription, the CLI surfaces a structured
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
-| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance), or reconnect and retry for a transient entitlement read. |
+| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance / HappyHorse), or reconnect and retry for a transient entitlement read. |
 | `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
 | `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
 | `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |

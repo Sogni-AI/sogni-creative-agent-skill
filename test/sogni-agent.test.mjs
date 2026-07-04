@@ -715,7 +715,7 @@ test('default music generation uses ACE-Step turbo defaults and prompt', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastAudioProject, 'createAudioProject was called');
-  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_turbo');
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_turbo');
   assert.equal(state.lastAudioProject.positivePrompt, 'uplifting cinematic synthwave theme');
   assert.equal(state.lastAudioProject.duration, 30);
   assert.equal(state.lastAudioProject.steps, 8);
@@ -756,7 +756,7 @@ test('advanced music options are forwarded to audio project generation', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastAudioProject, 'createAudioProject was called');
-  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_sft');
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_sft');
   assert.equal(state.lastAudioProject.numberOfMedia, 2);
   assert.equal(state.lastAudioProject.seed, 42);
   assert.equal(state.lastAudioProject.duration, 90);
@@ -1309,6 +1309,191 @@ test('non-seedance video rejects multiple --ref-audio entries', () => {
       'LTX should reject multi-audio.',
     ],
     'Multiple --ref-audio entries are only supported for Seedance models'
+  );
+});
+
+test('happyhorse alias selects HappyHorse T2V at fixed 24fps without step overrides', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    'a glowing jellyfish drifts through a neon city at night'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
+});
+
+test('happyhorse-1.1-t2v explicit selection routes to HappyHorse text-to-video', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse-1.1-t2v',
+    'a polished product reveal with native ambient sound'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+});
+
+test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    'a calm forest river at golden hour'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  // HappyHorse spec default is 1080P (1920x1080, 16:9). The intel registry does
+  // not carry HappyHorse, so getModelDefaults returns null; the skill-local
+  // fallback supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1
+  // (matching HappyHorse's dimensionDivisor:1 / maxDimension:1920 in the client).
+  assert.equal(state.lastVideoProject.width, 1920);
+  assert.equal(state.lastVideoProject.height, 1080);
+});
+
+test('happyhorse video honors explicit -w/-h over the new default', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '--width', '720',
+    '--height', '1280',
+    'a vertical clip of a calm forest river'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.width, 720);
+  assert.equal(state.lastVideoProject.height, 1280);
+});
+
+test('happyhorse forces Spark token type even when SOGNI is requested', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--token-type', 'sogni',
+    '-m', 'happyhorse',
+    'cinematic product reveal with native audio'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
+  assert.equal(state.lastVideoProject.tokenType, 'spark');
+});
+
+test('happyhorse i2v forwards a single HTTPS first-frame image as a URL array', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '--fps', '30',
+    '--ref', 'https://example.com/first.png',
+    'bring the scene to life'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-i2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/first.png']);
+  assert.equal(state.lastVideoProject.referenceImage, undefined);
+  assert.equal(state.lastVideoProject.referenceVideoUrls, undefined);
+  assert.equal(state.lastVideoProject.referenceAudioUrls, undefined);
+});
+
+test('happyhorse i2v forwards a single local first-frame image as an inline buffer', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse-1.1-i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    'animate this photo'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-i2v');
+  assert.equal(state.lastVideoProject.referenceImage != null, true);
+  assert.equal(state.lastVideoProject.referenceImageUrls, undefined);
+});
+
+test('happyhorse r2v forwards 1-9 HTTPS reference images as a URL array', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'happyhorse',
+    '-c', 'https://example.com/a.png',
+    '-c', 'https://example.com/b.png',
+    '-c', 'https://example.com/c.png',
+    'blend these references into one continuous shot'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-r2v');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, [
+    'https://example.com/a.png',
+    'https://example.com/b.png',
+    'https://example.com/c.png',
+  ]);
+});
+
+test('happyhorse r2v enforces the 9 image-reference cap with a canonical message', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-r2v',
+      ...Array.from({ length: 10 }).flatMap((_, i) => ['-c', `https://example.com/${i}.png`]),
+      'too many references',
+    ],
+    'HappyHorse (happyhorse-1.1-r2v) can use up to 9 image references per video; this request included 10.'
+  );
+});
+
+test('happyhorse i2v rejects an end frame (single first-frame image only)', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-i2v',
+      '--ref', 'https://example.com/first.png',
+      '--ref-end', 'https://example.com/last.png',
+      'morph between frames',
+    ],
+    'HappyHorse i2v accepts only a single first-frame image'
+  );
+});
+
+test('happyhorse r2v rejects dedicated --ref frames in favor of -c/--context', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'happyhorse-1.1-r2v',
+      '-c', 'https://example.com/a.png',
+      '--ref', 'https://example.com/first.png',
+      'mix dedicated and loose refs',
+    ],
+    'HappyHorse r2v takes reference images via -c/--context, not --ref/--ref-end.'
+  );
+});
+
+test('happyhorse rejects ControlNet', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse', '--controlnet-name', 'pose', 'apply controlnet'],
+    'HappyHorse video models do not support ControlNet.'
+  );
+});
+
+test('happyhorse rejects reference audio (audio is rendered natively)', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse', '--ref-audio', 'https://example.com/music.mp3', 'music-led clip'],
+    'does not accept reference'
+  );
+});
+
+test('happyhorse clamps duration to the 3-15s range', () => {
+  const low = runCli(['--video', '-m', 'happyhorse', '--duration', '1', 'too short']);
+  assert.equal(low.exitCode, 0);
+  assert.equal(low.state.lastVideoProject.duration, 3);
+
+  const high = runCli(['--video', '-m', 'happyhorse', '--duration', '30', 'too long']);
+  assert.equal(high.exitCode, 0);
+  assert.equal(high.state.lastVideoProject.duration, 15);
+});
+
+test('happyhorse rejects a workflow that contradicts the concrete model id', () => {
+  expectCliError(
+    ['--video', '-m', 'happyhorse-1.1-i2v', '--workflow', 't2v', '--ref', 'https://example.com/first.png', 'mismatch'],
+    'does not match model "happyhorse-1.1-i2v"'
   );
 });
 
@@ -2586,6 +2771,32 @@ test('json error: seedance invalid audio format is parameter invalid and friendl
   assert.match(payload.technicalError, /content\[3\]/);
 });
 
+test('json error: happyhorse vendor failure classifies as happyhorse, not seedance', () => {
+  // Vendor-agnostic socket failure text (no "seedance"/"happyhorse" mention) that
+  // BOTH the generic Seedance generation matcher and the HappyHorse generation
+  // matcher accept. Because the failing model is HappyHorse, the HappyHorse
+  // matcher must win — otherwise the error is misattributed to Seedance.
+  const vendorError = 'Vendor job failed: Vendor task hh-task-1 ended with status=failed: {"output":{"task_status":"FAILED","code":"InternalError","message":"The generated video failed."}}';
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '-m', 'happyhorse-1.1-t2v',
+    'a glowing jellyfish drifts through a neon city'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: vendorError
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.metadata.error, 'happyhorse_generation_failed');
+  assert.doesNotMatch(payload.metadata.error, /seedance/);
+  assert.equal(payload.errorType, 'GPU_WORKER_FAILED');
+  assert.equal(payload.errorCategory, 'transient_failure');
+  assert.equal(payload.retryable, true);
+  assert.match(payload.error, /HappyHorse/);
+  assert.doesNotMatch(payload.error, /Seedance/);
+});
+
 test('json error: i2v rejects mismatched explicit size and suggests a compatible 16-multiple aspect', () => {
   const { exitCode, stdout } = runCli([
     '--json',
@@ -2781,6 +2992,73 @@ test('detailer ControlNet defaults to full preservation strength', () => {
   assert.equal(state.lastVideoProject.controlNet.name, 'detailer');
   assert.equal(state.lastVideoProject.controlNet.strength, 1.0);
   assert.equal(state.lastVideoProject.detailerStrength, undefined);
+});
+
+test('LTX i2v with first and end frames auto-attaches transition LoRA', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'ltx23',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'morph the opening frame into the final frame'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v_distilled');
+  assert.deepEqual(state.lastVideoProject.loras, ['transition']);
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+  assert.match(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+});
+
+test('LTX v2v outpaint forwards IC-LoRA control and positional canvas options', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'ltx23',
+    '--ref-video', SCREENSHOT_FIXTURE,
+    '--control-type', 'outpaint',
+    '--outpaint-position', 'right',
+    '--outpaint-aspect-ratio', '16:9',
+    'extend the street scene into the new area'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_v2v_distilled');
+  assert.deepEqual(state.lastVideoProject.controlNet, { name: 'outpaint', strength: 1.0 });
+  assert.equal(state.lastVideoProject.outpaintPosition, 'right');
+  assert.equal(state.lastVideoProject.detailerStrength, undefined);
+  assert.equal(state.lastVideoProject.width % 64, 0);
+  assert.equal(state.lastVideoProject.height % 64, 0);
+});
+
+test('LTX v2v inpaint forwards mask image without detailer sidecar', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'ltx23',
+    '--ref-video', SCREENSHOT_FIXTURE,
+    '--control-type', 'inpaint',
+    '--mask', SCREENSHOT_FIXTURE,
+    'make the masked region clean'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_v2v_distilled');
+  assert.deepEqual(state.lastVideoProject.controlNet, { name: 'inpaint', strength: 1.0 });
+  assert.ok(state.lastVideoProject.referenceMask, 'referenceMask was forwarded');
+  assert.equal(state.lastVideoProject.detailerStrength, undefined);
+});
+
+test('LTX v2v inpaint requires a direct CLI mask image', () => {
+  expectCliError(
+    [
+      '--video',
+      '--workflow', 'v2v',
+      '-m', 'ltx23',
+      '--ref-video', SCREENSHOT_FIXTURE,
+      '--control-type', 'inpaint',
+      'make the masked region clean'
+    ],
+    'LTX-2.3 v2v inpaint requires --mask'
+  );
 });
 
 test('audio and video start offsets are passed to video projects', () => {

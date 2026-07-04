@@ -1,9 +1,83 @@
+# [3.9.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.8.0...v3.9.0) (2026-06-30)
+
+
+### Features
+
+* wire ltx23 lora video controls ([968aa9a](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/968aa9aca2bf5cfc30d7f73b513f4ff0afb9cf94))
+
+# [3.7.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.6.4...v3.7.0) (2026-06-25)
+
+
+### Features
+
+* **video:** document Seedance 4K skill support ([0f3c150](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/0f3c1509801fcdb15741e6adb94514f38fead0e5))
+
 # Changelog
 
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- **LTX-2.3 LoRA controls are now wired through the public CLI.** Direct `sogni-agent` video generation now
+  supports `--control-type outpaint` with `--outpaint-position` / `--outpaint-aspect-ratio`,
+  `--control-type inpaint --mask <image>`, and automatic `transition` LoRA attachment for LTX-2.3 i2v jobs
+  that provide both `--ref` and `--ref-end`.
+
+## [3.8.0] - 2026-06-30
+
+### Changed
+
+- **Music generation now defaults to ACE-Step 1.5 XL in the CLI.** The `turbo` and `sft` music aliases resolve to
+  the XL model IDs, while the legacy ACE-Step 1.5 model IDs remain available for explicit selection.
+- **Model guidance now reflects the current Premium Spark vendor catalog.** README, LLM-facing docs, skill
+  routing notes, and CLI billing guidance now list HappyHorse 1.1 alongside GPT Image 2 and Seedance as
+  Premium-Spark-only vendor paths.
+- **Krea 2 Turbo discovery is clearer.** CLI help and model references now list the direct worker model ID
+  `krea2_turbo_fp8_scaled` and note the hosted/chat selector `krea-2-turbo`.
+- **Updated the bundled Sogni intelligence client to `3.5.1`.** The skill now consumes the current Sogni Client
+  stack and model metadata used by the refreshed video, image, and music catalog.
+
+## [3.7.0] - 2026-06-25
+
+### Changed
+
+- **Seedance 2.0 Mini is now available through the bundled runtime.** Mini is the default lower-cost
+  720p Seedance path, while `seedance2-fast` remains available as an explicit legacy selection.
+- Bumped `@sogni-ai/sogni-intelligence-client` to `3.3.0` so the skill consumes the published
+  Seedance Mini runtime, tool metadata, and Sogni Client `5.1.0-alpha.14` dependency stack.
+
+### Changed
+
+- **Seedance 2.0 4K routing is now documented and available through the current Sogni dependency stack.**
+  The full `seedance2` model can be selected for native 4K/2160p output with `--target-resolution 2160`;
+  `seedance2-fast` remains the lower-resolution fast path. The bundled runtime and
+  `@sogni-ai/sogni-intelligence-client` dependency now consume the published Seedance 4K tool metadata.
+- **ACE-Step 1.5 XL is now the default music model.** `generate_music` / `--music` now default to
+  ACE-Step 1.5 XL Turbo (`ace_step_1.5_xl_turbo`), with ACE-Step 1.5 XL SFT (`ace_step_1.5_xl_sft`) as the
+  quality variant. The `--music-model` keys are unchanged — `turbo` (default) and `sft` — but they now map to the
+  XL ids; the legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft` ids are no longer the default. The 8-step / `euler`
+  / `simple` turbo defaults are unchanged. Updated `references/models.md`, `README.md`,
+  `references/openclaw-config.md`, and the `defaultMusicModel` default in `openclaw.plugin.json`.
+
+### Added
+
+- **LTX-2.3 video-to-video outpaint and inpaint control modes** documented for `ltx23-22b-fp8_v2v_distilled`.
+  Outpaint extends/expands the video canvas (e.g. vertical → widescreen) and is positional and mask-free —
+  anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio
+  (`16:9|9:16|1:1|4:3|3:4|21:9`), growing the canvas without cropping. Inpaint regenerates a masked region and
+  requires a mask image (white pixels = region to regenerate). Added a V2V outpaint/inpaint subsection to
+  `references/video-editing.md` and capability prose to `references/models.md` and `README.md`.
+- **LTX-2.3 two-keyframe transition / morph LoRA** documented for image-to-video. When the LTX-2.3 i2v model
+  `ltx23-22b-fp8_i2v_distilled` receives both a start frame (`--ref`) and an end frame (`--ref-end`), it
+  auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`,
+  strength ~1.0) and morphs the first image into the last in a single render — distinct from the manual
+  bridge-clip "transition between two videos" recipe. Added notes to `references/video-editing.md`, `SKILL.md`,
+  and `README.md`.
 
 ## [3.6.4] - 2026-06-22
 

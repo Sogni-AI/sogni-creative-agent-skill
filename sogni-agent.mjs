@@ -53,6 +53,8 @@ import {
   getVideoPromptGuardrailPlan,
   inferVideoWorkflowFromAssets,
   inferVideoWorkflowFromModel,
+  isHappyHorseModel,
+  isHappyHorseModelSelection,
   isLtx2Model,
   isSeedanceModel,
   isSeedanceModelSelection,
@@ -80,10 +82,16 @@ import {
   prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
+  HAPPYHORSE_REFERENCE_LIMITS,
+  HappyHorseReferenceLimitError,
   SEEDANCE_REFERENCE_LIMITS,
   SeedanceReferenceLimitError,
+  getHappyHorseReferenceLimits,
+  happyhorseTerminalGenerationFailurePayloadFromError,
+  happyhorseTerminalPolicyPayloadFromError,
   seedanceTerminalGenerationFailurePayloadFromError,
   seedanceTerminalPolicyPayloadFromError,
+  validateHappyHorseReferenceCounts,
   validateSeedanceReferenceCounts
 } from '@sogni-ai/sogni-intelligence-client/tools';
 
@@ -109,7 +117,7 @@ function subscriptionBillingFallback(code) {
       // Vendor model the subscription never covers, or no verified entitlement.
       return {
         retryable: false,
-        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
+        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance, HappyHorse) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
         purchaseLabel: 'Get Premium Spark',
         purchaseUrl: SPARK_PACKS_PURCHASE_URL,
       };
@@ -319,14 +327,27 @@ const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
 const MUSIC_MODEL_IDS = {
-  turbo: 'ace_step_1.5_turbo',
-  speed: 'ace_step_1.5_turbo',
-  fast: 'ace_step_1.5_turbo',
-  sft: 'ace_step_1.5_sft',
-  lyrics: 'ace_step_1.5_sft',
-  lyric: 'ace_step_1.5_sft'
+  turbo: 'ace_step_1.5_xl_turbo',
+  speed: 'ace_step_1.5_xl_turbo',
+  fast: 'ace_step_1.5_xl_turbo',
+  sft: 'ace_step_1.5_xl_sft',
+  lyrics: 'ace_step_1.5_xl_sft',
+  lyric: 'ace_step_1.5_xl_sft'
 };
 const MUSIC_MODEL_DEFAULTS = {
+  'ace_step_1.5_xl_turbo': {
+    steps: { min: 4, max: 16, default: 8 },
+    shift: { min: 1, max: 6, default: 3 },
+    sampler: { allowed: ['euler', 'euler_ancestral'], default: 'euler' },
+    scheduler: { allowed: ['simple'], default: 'simple' }
+  },
+  'ace_step_1.5_xl_sft': {
+    steps: { min: 10, max: 100, default: 50 },
+    guidance: { min: 1, max: 15, default: 5 },
+    shift: { min: 1, max: 6, default: 3 },
+    sampler: { allowed: ['euler', 'euler_ancestral', 'er_sde'], default: 'er_sde' },
+    scheduler: { allowed: ['simple', 'linear_quadratic'], default: 'linear_quadratic' }
+  },
   'ace_step_1.5_turbo': {
     steps: { min: 4, max: 16, default: 8 },
     shift: { min: 1, max: 6, default: 3 },
@@ -435,8 +456,74 @@ function seedanceFriendlyGenerationMessage(payload) {
   return payload?.message || 'Seedance could not complete this video.';
 }
 
-function classifyCliError(error) {
+// Classify a HappyHorse terminal policy / generation-failure error into the
+// canonical CLI error shape, or null when neither HappyHorse matcher applies.
+// Factored out so it can run either AFTER the Seedance matchers (default order)
+// or BEFORE them when the failing model is known to be HappyHorse (see
+// classifyCliError).
+function classifyHappyHorseCliError(error, rawMessage) {
+  const happyhorsePolicyPayload = happyhorseTerminalPolicyPayloadFromError(error);
+  if (happyhorsePolicyPayload) {
+    return {
+      error_type: 'SAFETY_REJECTED',
+      category: 'content_refused',
+      message: happyhorsePolicyPayload.message,
+      retryable: false,
+      metadata: happyhorsePolicyPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  const happyhorseGenerationPayload = happyhorseTerminalGenerationFailurePayloadFromError(error);
+  if (happyhorseGenerationPayload) {
+    const vendorCode = happyhorseGenerationPayload.vendorErrorCode;
+    const isInvalidParameter = vendorCode === 'InvalidParameter' ||
+      happyhorseGenerationPayload.error === 'happyhorse_input_download_failed';
+    return {
+      error_type: isInvalidParameter ? 'PARAMETER_INVALID' : 'GPU_WORKER_FAILED',
+      category: isInvalidParameter ? 'schema_validation' : 'transient_failure',
+      message: happyhorseGenerationPayload.message || 'HappyHorse could not complete this video.',
+      retryable: !isInvalidParameter,
+      metadata: happyhorseGenerationPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  return null;
+}
+
+function classifyCliError(error, context = {}) {
   const rawMessage = cliErrorMessage(error);
+
+  // Client-side CLI rejections are the plain `{ message, code }` shape built by
+  // buildCliErrorPayload (never an Error instance and never a vendor poll body).
+  // They are argument-validation failures, so skip the HappyHorse terminal
+  // matchers — the HappyHorse generation matcher keys off a bare "happyhorse"
+  // mention and would otherwise re-wrap a validation message (e.g. "HappyHorse
+  // models do not support ControlNet") as a retryable vendor generation failure.
+  const isClientSideCliPayload = error
+    && typeof error === 'object'
+    && !(error instanceof Error)
+    && typeof error.message === 'string'
+    && !('output' in error)
+    && !('vendorError' in error)
+    && !('vendorErrorCode' in error);
+
+  // When the failing model is HappyHorse, run the HappyHorse matchers BEFORE the
+  // generic Seedance generation matcher. That matcher keys off vendor-agnostic
+  // socket failure text ("All N video generation jobs failed", "Vendor task ...
+  // status=failed", "Vendor job failed"), which a HappyHorse failure also
+  // produces, so without this model-aware reordering a HappyHorse vendor failure
+  // would be misattributed to Seedance. The client-side-payload guard still
+  // applies so a CLI validation message that merely names HappyHorse is not
+  // re-wrapped as a retryable vendor failure.
+  const modelHint = context?.modelId;
+  const preferHappyHorse = isHappyHorseModel(modelHint) || isHappyHorseModelSelectionLocal(modelHint);
+  if (preferHappyHorse && !isClientSideCliPayload) {
+    const happyhorseClassified = classifyHappyHorseCliError(error, rawMessage);
+    if (happyhorseClassified) return happyhorseClassified;
+  }
+
   const seedancePolicyPayload = seedanceTerminalPolicyPayloadFromError(error);
   if (seedancePolicyPayload) {
     return {
@@ -464,11 +551,19 @@ function classifyCliError(error) {
     };
   }
 
+  // Default order: when the model is not known to be HappyHorse, run the
+  // HappyHorse matchers after the Seedance matchers (preferHappyHorse already
+  // ran them above when the model hint matched).
+  if (!preferHappyHorse && !isClientSideCliPayload) {
+    const happyhorseClassified = classifyHappyHorseCliError(error, rawMessage);
+    if (happyhorseClassified) return happyhorseClassified;
+  }
+
   return classifySkillError(error);
 }
 
-function addCanonicalErrorFields(payload, error) {
-  const classified = classifyCliError(error);
+function addCanonicalErrorFields(payload, error, context = {}) {
+  const classified = classifyCliError(error, context);
   payload.error = classified.message;
   payload.errorType = classified.error_type;
   payload.errorCategory = classified.category;
@@ -494,9 +589,9 @@ function addCanonicalErrorFields(payload, error) {
 // Human-facing twin of addCanonicalErrorFields: print the classified, friendly
 // message (with the raw message as a detail line when it differs) so human
 // users get the same quality of error JSON consumers already receive.
-function printHumanError(error) {
+function printHumanError(error, context = {}) {
   let classified = null;
-  try { classified = classifyCliError(error); } catch { /* fall back to raw */ }
+  try { classified = classifyCliError(error, context); } catch { /* fall back to raw */ }
   const message = classified?.message || error?.message || String(error);
   console.error(`Error: ${message}`);
   if (classified?.technicalError && classified.technicalError !== message) {
@@ -1173,7 +1268,36 @@ function normalizeMusicTimeSignature(value) {
 }
 
 function requiresSparkOnlyToken(modelId) {
-  return isGptImage2ModelSelection(modelId) || isSeedanceModel(modelId);
+  return isGptImage2ModelSelection(modelId) || isSeedanceModel(modelId) || isHappyHorseModel(modelId);
+}
+
+// HappyHorse 1.1 ships three discrete vendor models (no mini/fast). The shared
+// intel client only resolves the fully-qualified ids; accept the bare
+// `happyhorse` / `happyhorse-1.1` selector here so `-m happyhorse` works the way
+// `-m seedance2` does, and pin the concrete per-mode model id.
+const HAPPYHORSE_VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v']);
+
+function isHappyHorseModelSelectionLocal(modelId) {
+  if (isHappyHorseModelSelection(modelId)) return true;
+  const key = String(modelId || '').trim().toLowerCase();
+  return key === 'happyhorse' || key === 'happyhorse-1.1';
+}
+
+function resolveHappyHorseModelId(modelId, workflow) {
+  if (!isHappyHorseModelSelectionLocal(modelId)) return modelId;
+  const key = String(modelId || '').trim().toLowerCase();
+  if (key === 'happyhorse' || key === 'happyhorse-1.1') {
+    const mode = HAPPYHORSE_VIDEO_MODES.has(workflow) ? workflow : 't2v';
+    return `happyhorse-1.1-${mode}`;
+  }
+  return modelId;
+}
+
+// The per-mode workflow pinned by a concrete `happyhorse-1.1-<mode>` model id, or
+// null for the bare `happyhorse` / `happyhorse-1.1` alias (mode inferred from refs).
+function happyHorseModeFromModelId(modelId) {
+  const match = String(modelId || '').trim().toLowerCase().match(/^happyhorse-1\.1-(t2v|i2v|r2v)$/);
+  return match ? match[1] : null;
 }
 
 function getMaxContextImages(modelId) {
@@ -1183,8 +1307,29 @@ function getMaxContextImages(modelId) {
 
 function videoDurationLimitsLikeWrapper(modelId) {
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
+  if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
   if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
   return { min: 1, max: 10 };
+}
+
+// Default video dimensions (and dimension rules) for models the shared intel
+// video-model registry does not carry, so `getModelDefaults` returns null and
+// the CLI would otherwise fall back to the 512x512 square.
+// Parallels `videoDurationLimitsLikeWrapper`.
+//
+// HappyHorse 1.1 spec default is 1080P (1920x1080, 16:9). The intelligence
+// client registers dimensionDivisor=1 and maxDimension=1920 for HappyHorse, so
+// we mirror those here via `maxDimension` and `dimensionMultiple` so that
+// `videoDimensionRulesFromDefaults` applies the correct clamp for the model
+// instead of the generic 480-1536 / multiple-of-16 rules (which would reduce
+// 1920x1080 to 1536x864 and round 1080 to 1072). These are defaults only —
+// explicit -w/-h/--target-resolution, config, and prompt-derived dimensions
+// still win (see the video preflight defaults block).
+function videoModelDimensionDefaultsLikeWrapper(modelId) {
+  if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
+    return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
+  }
+  return null;
 }
 
 function wrapperMaxVideoDimension(modelId) {
@@ -1193,11 +1338,15 @@ function wrapperMaxVideoDimension(modelId) {
 
 function videoDimensionRulesFromDefaults(modelDefaults, modelId) {
   const wrapperMax = wrapperMaxVideoDimension(modelId);
-  const configuredMax = modelDefaults?.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  // Fall back to skill-local dimension rules for models the intel registry does
+  // not carry (e.g. HappyHorse), so their model-specific maxDimension and
+  // dimensionMultiple are applied instead of the generic 1536 / 16 defaults.
+  const localFallback = videoModelDimensionDefaultsLikeWrapper(modelId);
+  const configuredMax = modelDefaults?.maxDimension || localFallback?.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
   return {
     minDimension: modelDefaults?.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension,
     maxDimension: Math.min(configuredMax, wrapperMax),
-    dimensionMultiple: modelDefaults?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
+    dimensionMultiple: modelDefaults?.dimensionMultiple || localFallback?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
   };
 }
 
@@ -1406,6 +1555,14 @@ const MULTI_ANGLE_DISTANCE_ALIASES = new Map([
   ['wide shot', 'wide']
 ]);
 
+const VIDEO_CONTROLNET_NAMES = ['canny', 'pose', 'depth', 'detailer', 'outpaint', 'inpaint'];
+const VIDEO_CONTROLNET_NAME_SET = new Set(VIDEO_CONTROLNET_NAMES);
+const OUTPAINT_POSITIONS = ['center', 'top', 'bottom', 'left', 'right'];
+const OUTPAINT_POSITION_SET = new Set(OUTPAINT_POSITIONS);
+const LTX_TRANSITION_LORA_ID = 'transition';
+const LTX_TRANSITION_TRIGGER = 'zhuanchang';
+const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
+
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/_/g, '-').replace(/\s+/g, ' ').trim();
@@ -1426,6 +1583,123 @@ function buildMultiAnglePrompt({ azimuth, elevation, distance, description }) {
   const parts = ['<sks>', azimuthPrompt, elevationPrompt, distancePrompt].filter(Boolean);
   if (description) parts.push(description);
   return parts.join(' ');
+}
+
+function normalizeVideoControlNetName(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/_/g, '-');
+  return normalized || null;
+}
+
+function normalizeOutpaintPositionValue(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/_/g, '-');
+  return OUTPAINT_POSITION_SET.has(normalized) ? normalized : null;
+}
+
+function parseOutpaintAspectRatio(value) {
+  if (!value) return null;
+  const match = String(value).trim().match(/^(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)$/i);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return width / height;
+}
+
+function isLtx23V2VModelId(modelId) {
+  return !!modelId && modelId.includes('ltx23') && /_v2v(_|$)/.test(modelId);
+}
+
+function isLtxI2vTransitionModelId(modelId) {
+  return !!modelId && modelId.includes('ltx') && /_i2v(_|$)/.test(modelId);
+}
+
+function applyLtxTransitionLora(projectConfig, modelId, hasStartFrame, hasEndFrame) {
+  if (!hasStartFrame || !hasEndFrame || !isLtxI2vTransitionModelId(modelId)) {
+    return;
+  }
+  const loras = Array.isArray(projectConfig.loras) ? [...projectConfig.loras] : [];
+  const loraStrengths = Array.isArray(projectConfig.loraStrengths) ? [...projectConfig.loraStrengths] : [];
+  if (!loras.includes(LTX_TRANSITION_LORA_ID)) {
+    loras.push(LTX_TRANSITION_LORA_ID);
+    loraStrengths.push(LTX_TRANSITION_DEFAULT_STRENGTH);
+  }
+  projectConfig.loras = loras;
+  projectConfig.loraStrengths = loraStrengths;
+  const prompt = String(projectConfig.positivePrompt || '');
+  if (!new RegExp(`\\b${LTX_TRANSITION_TRIGGER}\\b`, 'i').test(prompt)) {
+    projectConfig.positivePrompt = prompt ? `${prompt}, ${LTX_TRANSITION_TRIGGER}` : LTX_TRANSITION_TRIGGER;
+  }
+}
+
+function computeOutpaintCanvas(sourceWidth, sourceHeight, aspectRatioArg, position, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
+  const step = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const minD = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxD = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  let srcW = Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 1920;
+  let srcH = Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : 1088;
+  if (srcW > maxD || srcH > maxD) {
+    const scale = Math.min(maxD / srcW, maxD / srcH);
+    srcW *= scale;
+    srcH *= scale;
+  }
+
+  let targetW = srcW;
+  let targetH = srcH;
+  const parsedAspect = parseOutpaintAspectRatio(aspectRatioArg);
+  if (parsedAspect) {
+    const srcAspect = srcW / srcH;
+    if (parsedAspect > srcAspect) targetW = srcH * parsedAspect;
+    else if (parsedAspect < srcAspect) targetH = srcW / parsedAspect;
+  } else {
+    const factor = 1.5;
+    if (position === 'left' || position === 'right') targetW = srcW * factor;
+    else if (position === 'top' || position === 'bottom') targetH = srcH * factor;
+    else {
+      targetW = srcW * factor;
+      targetH = srcH * factor;
+    }
+  }
+
+  const snapUp = (value) => Math.ceil(value / step) * step;
+  let width = Math.min(maxD, Math.max(minD, snapUp(targetW)));
+  let height = Math.min(maxD, Math.max(minD, snapUp(targetH)));
+  width = Math.max(width, Math.min(maxD, snapUp(srcW)));
+  height = Math.max(height, Math.min(maxD, snapUp(srcH)));
+  return { width, height };
+}
+
+function computeSourceAspectCanvas(sourceWidth, sourceHeight, rules = DEFAULT_VIDEO_DIMENSION_RULES, targetResolution = null) {
+  const step = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const minD = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxD = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  let width = Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 1920;
+  let height = Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : 1088;
+  if (Number.isFinite(targetResolution) && targetResolution > 0) {
+    const roundedTarget = Math.max(minD, Math.round(targetResolution / step) * step);
+    if (width <= height) {
+      height = Math.round((height * roundedTarget) / width / step) * step;
+      width = roundedTarget;
+    } else {
+      width = Math.round((width * roundedTarget) / height / step) * step;
+      height = roundedTarget;
+    }
+  }
+  if (width > maxD || height > maxD) {
+    const scale = Math.min(maxD / width, maxD / height);
+    width *= scale;
+    height *= scale;
+  }
+  if (width < minD || height < minD) {
+    const scale = Math.max(minD / width, minD / height);
+    width *= scale;
+    height *= scale;
+  }
+  return {
+    width: Math.max(minD, Math.min(maxD, Math.round(width / step) * step)),
+    height: Math.max(minD, Math.min(maxD, Math.round(height / step) * step))
+  };
 }
 
 function loadOpenClawPluginConfig() {
@@ -1533,6 +1807,9 @@ const options = {
   refVideo: null, // Reference video for animate workflows (primary)
   refVideos: [], // Additional Seedance loose video refs; first --ref-video fills refVideo, subsequent calls append here
   videoStart: null, // Optional start offset into reference video
+  refMask: null, // Inpaint mask image for LTX-2.3 v2v inpaint
+  outpaintPosition: null, // LTX-2.3 v2v outpaint canvas anchor
+  outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
   photobooth: false, // Photobooth mode (InstantID face transfer)
@@ -1677,6 +1954,9 @@ const cliSet = {
   refVideo: false,
   refVideos: false,
   videoStart: false,
+  refMask: false,
+  outpaintPosition: false,
+  outpaintAspectRatio: false,
   context: false,
   looping: false,
   photobooth: false,
@@ -2033,16 +2313,31 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.cnGuidanceEnd = parseNumberValue(raw, arg);
     cliSet.cnGuidanceEnd = true;
-  } else if (arg === '--controlnet-name') {
+  } else if (arg === '--controlnet-name' || arg === '--control-type') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.videoControlNetName = raw;
+    options.videoControlNetName = normalizeVideoControlNetName(raw);
     cliSet.videoControlNetName = true;
   } else if (arg === '--controlnet-strength') {
     const raw = requireFlagValue(args, i, arg);
     i++;
     options.videoControlNetStrength = parseNumberValue(raw, arg);
     cliSet.videoControlNetStrength = true;
+  } else if (arg === '--mask' || arg === '--ref-mask' || arg === '--reference-mask') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.refMask = raw;
+    cliSet.refMask = true;
+  } else if (arg === '--outpaint-position') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.outpaintPosition = raw;
+    cliSet.outpaintPosition = true;
+  } else if (arg === '--outpaint-aspect-ratio' || arg === '--outpaint-ratio') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.outpaintAspectRatio = raw;
+    cliSet.outpaintAspectRatio = true;
   } else if (arg === '--sam2-coordinates') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -2507,7 +2802,7 @@ Photobooth (Face Transfer):
 
 Music Options:
   --music               Generate music/audio instead of image
-  --music-model <id>    Music model: turbo|sft|ace_step_1.5_turbo|ace_step_1.5_sft
+  --music-model <id>    Music model: turbo|sft|ace_step_1.5_xl_turbo|ace_step_1.5_xl_sft
   --lyrics <text>       Optional song lyrics (omit for instrumental)
   --language <code>     Lyrics language code (default: en)
   --duration <sec>      Music duration in seconds (10-600, default: 30)
@@ -2546,7 +2841,7 @@ Video Options:
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen. On LTX/WAN: single primary for animate/v2v workflows.
 
-Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-fast):
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; max 2 images.
   - LOOSE REFERENCE MODE: -c/--context image refs plus optional --ref-audio /
@@ -2557,8 +2852,12 @@ Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-fast):
   All three modalities pull caps from the canonical
   @sogni-ai/sogni-protocol seedance-reference-limits catalog.
   --video-start <sec>   Start offset into --ref-video for segmented V2V/animate
-  --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer
+  --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer|outpaint|inpaint
+  --control-type <n>    Alias for --controlnet-name
   --controlnet-strength <n>  ControlNet strength for v2v (0.0-1.0, default: 0.8)
+  --mask <path|url>     Inpaint mask image for LTX-2.3 v2v inpaint (white = regenerate)
+  --outpaint-position <p> LTX-2.3 outpaint anchor: center|top|bottom|left|right
+  --outpaint-aspect-ratio <r> LTX-2.3 outpaint target ratio, e.g. 16:9 or 9:16
   --sam2-coordinates <coords>  SAM2 click coords for animate-replace (x,y or x1,y1;x2,y2)
   --trim-end-frame      Trim last frame for seamless video stitching
   --first-frame-strength <n>  Keyframe strength for start frame (0.0-1.0)
@@ -2664,6 +2963,7 @@ Personas (named people with reference photos):
 Image Models:
   z_image_turbo_bf16              Fast, general purpose (default)
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
+  krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   flux1-schnell-fp8               Very fast
   flux2_dev_fp8                   High quality (slow)
   qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
@@ -2677,14 +2977,22 @@ Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
 
 Music Models:
-  ace_step_1.5_turbo              Default direct music generation
-  ace_step_1.5_sft                Experimental model with stronger lyric handling
+  ace_step_1.5_xl_turbo           Default direct music generation
+  ace_step_1.5_xl_sft             Quality variant with stronger lyric handling
+  ace_step_1.5_turbo              Legacy direct music generation
+  ace_step_1.5_sft                Legacy lyric-focused music generation
 
 Seedance 2.0 Video Model Selectors:
   seedance2                         Text-to-video, 4-15s, native audio, HTTPS multimodal refs
-  seedance2-fast                    Fast 720p-capped text-to-video
+  seedance2-mini                    Lower-cost 720p-capped text-to-video
+  seedance2-fast                    Legacy fast 720p-capped text-to-video
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet
+
+HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/1080P):
+  happyhorse-1.1-t2v                Text-to-video (also accepts the bare "happyhorse" alias)
+  happyhorse-1.1-i2v                Image-to-video from a single first-frame image (--ref)
+  happyhorse-1.1-r2v                Reference-to-video from 1-9 reference images (-c/--context)
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
@@ -3114,13 +3422,18 @@ if (options.angles360Video && !options.angles360) {
 if (options.video) {
   if (options.videoWorkflow) {
     const normalized = normalizeVideoWorkflow(options.videoWorkflow);
-    if (!normalized) {
-      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace.`, {
+    if (normalized) {
+      options.videoWorkflow = normalized;
+    } else if (options.videoWorkflow === 'r2v' && isHappyHorseModelSelectionLocal(options.model)) {
+      // HappyHorse adds a reference-to-video (r2v) mode that the shared
+      // SkillVideoWorkflow enum does not carry; accept it for HappyHorse only.
+      options.videoWorkflow = 'r2v';
+    } else {
+      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace (r2v on HappyHorse).`, {
         code: 'INVALID_ARGUMENT',
         details: { workflow: options.videoWorkflow }
       });
     }
-    options.videoWorkflow = normalized;
   }
 
   if (
@@ -3142,6 +3455,32 @@ if (options.video) {
     } else {
       options.videoWorkflow = 't2v';
     }
+  }
+
+  // HappyHorse 1.1 has no v2v/ia2v. A concrete `happyhorse-1.1-<mode>` id pins
+  // the workflow; the bare `happyhorse` / `happyhorse-1.1` alias infers t2v by
+  // default, i2v from a single first-frame image (--ref), and r2v from loose
+  // -c/--context reference images (1-9). Pin the concrete per-mode model id.
+  if (isHappyHorseModelSelectionLocal(options.model)) {
+    const pinnedMode = happyHorseModeFromModelId(options.model);
+    if (pinnedMode) {
+      if (options.videoWorkflow && options.videoWorkflow !== pinnedMode) {
+        fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
+          code: 'INVALID_ARGUMENT',
+          details: { workflow: options.videoWorkflow, model: options.model }
+        });
+      }
+      options.videoWorkflow = pinnedMode;
+    } else if (!options.videoWorkflow) {
+      if (Array.isArray(options.contextImages) && options.contextImages.length > 0) {
+        options.videoWorkflow = 'r2v';
+      } else if (options.refImage) {
+        options.videoWorkflow = 'i2v';
+      } else {
+        options.videoWorkflow = 't2v';
+      }
+    }
+    options.model = resolveHappyHorseModelId(options.model, options.videoWorkflow);
   }
 
   const workflowFromModel = inferVideoWorkflowFromModel(resolveVideoModelAlias(options.model, options.videoWorkflow));
@@ -3180,7 +3519,7 @@ if (options.music) {
   const configuredMusicModel = options.model || openclawConfig?.defaultMusicModel || 'turbo';
   options.model = normalizeMusicModelId(configuredMusicModel);
   if (!options.model) {
-    fatalCliError(`Unknown music model "${configuredMusicModel}". Use turbo, sft, ace_step_1.5_turbo, or ace_step_1.5_sft.`, {
+    fatalCliError(`Unknown music model "${configuredMusicModel}". Use turbo, sft, ace_step_1.5_xl_turbo, or ace_step_1.5_xl_sft.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: cliSet.model ? '--model' : 'defaultMusicModel', value: configuredMusicModel }
     });
@@ -3214,12 +3553,22 @@ if (options.music) {
   options.model = options.model || selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig) || 'wan_v2.2-14b-fp8_i2v_lightx2v';
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
+  // Fall back to skill-local defaults for models the intel registry does not
+  // carry (e.g. HappyHorse), so they get a sensible 16:9 default instead of the
+  // 512x512 square. Registry defaults still take precedence when present.
+  const videoModelDimensionFallback = videoModelDimensionDefaultsLikeWrapper(options.model);
+  const defaultVideoWidth = Number.isFinite(videoModelDefaults?.defaultWidth)
+    ? videoModelDefaults.defaultWidth
+    : videoModelDimensionFallback?.defaultWidth;
+  const defaultVideoHeight = Number.isFinite(videoModelDefaults?.defaultHeight)
+    ? videoModelDefaults.defaultHeight
+    : videoModelDimensionFallback?.defaultHeight;
   const isSeedanceVideo = isSeedanceModel(options.model);
-  if (!cliSet.width && !widthFromConfig && !widthFromPrompt && Number.isFinite(videoModelDefaults?.defaultWidth)) {
-    options.width = videoModelDefaults.defaultWidth;
+  if (!cliSet.width && !widthFromConfig && !widthFromPrompt && Number.isFinite(defaultVideoWidth)) {
+    options.width = defaultVideoWidth;
   }
-  if (!cliSet.height && !heightFromConfig && !heightFromPrompt && Number.isFinite(videoModelDefaults?.defaultHeight)) {
-    options.height = videoModelDefaults.defaultHeight;
+  if (!cliSet.height && !heightFromConfig && !heightFromPrompt && Number.isFinite(defaultVideoHeight)) {
+    options.height = defaultVideoHeight;
   }
   if (!cliSet.fps && !fpsFromConfig && Number.isFinite(videoModelDefaults?.fps)) {
     options.fps = videoModelDefaults.fps;
@@ -3384,8 +3733,8 @@ if (options.apiChat && !options.prompt && getApiModeMediaReferences().length ===
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null)) {
-  fatalCliError('Video-only options (--workflow/--frames/--target-resolution/--ref-audio/--ref-video/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -3404,10 +3753,23 @@ if (options.photobooth) {
 
 if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
+  const isHappyHorseVideo = isHappyHorseModel(options.model);
   if (isSeedanceVideo && !['t2v', 'ia2v', 'v2v'].includes(options.videoWorkflow)) {
     fatalCliError('Seedance models support only t2v, ia2v, or v2v workflows.', {
       code: 'INVALID_ARGUMENT',
       details: { workflow: options.videoWorkflow, model: options.model }
+    });
+  }
+  if (isHappyHorseVideo && !['t2v', 'i2v', 'r2v'].includes(options.videoWorkflow)) {
+    fatalCliError('HappyHorse models support only t2v, i2v, or r2v workflows.', {
+      code: 'INVALID_ARGUMENT',
+      details: { workflow: options.videoWorkflow, model: options.model }
+    });
+  }
+  if (isHappyHorseVideo && options.videoControlNetName) {
+    fatalCliError('HappyHorse video models do not support ControlNet.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, controlNetName: options.videoControlNetName }
     });
   }
 
@@ -3418,11 +3780,34 @@ if (options.video) {
       });
     }
   } else if (options.videoWorkflow === 'i2v') {
-    if (!options.refImage && !options.refImageEnd) {
-      fatalCliError('i2v requires --ref and/or --ref-end.', { code: 'INVALID_ARGUMENT' });
+    if (isHappyHorseVideo) {
+      if (!options.refImage) {
+        fatalCliError('HappyHorse i2v requires --ref (a single first-frame image).', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refImageEnd) {
+        fatalCliError('HappyHorse i2v accepts only a single first-frame image (--ref); it has no end-frame input.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refAudio || options.refVideo) {
+        fatalCliError('HappyHorse i2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
+      }
+    } else {
+      if (!options.refImage && !options.refImageEnd) {
+        fatalCliError('i2v requires --ref and/or --ref-end.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refAudio || options.refVideo) {
+        fatalCliError('i2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+  } else if (options.videoWorkflow === 'r2v') {
+    // HappyHorse reference-to-video: 1-9 loose image references via -c/--context.
+    if (!Array.isArray(options.contextImages) || options.contextImages.length === 0) {
+      fatalCliError('HappyHorse r2v requires 1-9 reference images via -c/--context.', { code: 'INVALID_ARGUMENT' });
+    }
+    if (options.refImage || options.refImageEnd) {
+      fatalCliError('HappyHorse r2v takes reference images via -c/--context, not --ref/--ref-end.', { code: 'INVALID_ARGUMENT' });
     }
     if (options.refAudio || options.refVideo) {
-      fatalCliError('i2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
+      fatalCliError('HappyHorse r2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
     }
   } else if (options.videoWorkflow === 's2v') {
     if (!options.refImage || !options.refAudio) {
@@ -3454,7 +3839,7 @@ if (options.video) {
       fatalCliError('v2v requires --ref-video.', { code: 'INVALID_ARGUMENT' });
     }
     if (!options.videoControlNetName && !isSeedanceModel(options.model)) {
-      fatalCliError('v2v requires --controlnet-name (canny|pose|depth|detailer).', { code: 'INVALID_ARGUMENT' });
+      fatalCliError(`v2v requires --controlnet-name/--control-type (${VIDEO_CONTROLNET_NAMES.join('|')}).`, { code: 'INVALID_ARGUMENT' });
     }
     if (!isSeedanceVideo && options.refAudio) {
       fatalCliError('v2v does not accept reference audio.', { code: 'INVALID_ARGUMENT' });
@@ -3504,13 +3889,13 @@ if (options.video) {
   // they only support a single primary --ref-audio / --ref-video each.
   if (!isSeedanceVideo) {
     if (Array.isArray(options.refAudios) && options.refAudios.length > 0) {
-      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refAudios },
       });
     }
     if (Array.isArray(options.refVideos) && options.refVideos.length > 0) {
-      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-fast).', {
+      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refVideos },
       });
@@ -3531,11 +3916,61 @@ if (options.video) {
 
   // Validate controlnet-name values
   if (options.videoControlNetName) {
-    const validControlNets = ['canny', 'pose', 'depth', 'detailer'];
-    if (!validControlNets.includes(options.videoControlNetName)) {
-      fatalCliError(`Unknown --controlnet-name "${options.videoControlNetName}". Use: ${validControlNets.join('|')}`, {
+    if (!VIDEO_CONTROLNET_NAME_SET.has(options.videoControlNetName)) {
+      fatalCliError(`Unknown --controlnet-name "${options.videoControlNetName}". Use: ${VIDEO_CONTROLNET_NAMES.join('|')}`, {
         code: 'INVALID_ARGUMENT',
-        details: { flag: '--controlnet-name', value: options.videoControlNetName, allowed: validControlNets }
+        details: { flag: '--controlnet-name', value: options.videoControlNetName, allowed: VIDEO_CONTROLNET_NAMES }
+      });
+    }
+    if ((options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint') && !isLtx23V2VModelId(options.model)) {
+      fatalCliError(`${options.videoControlNetName} control requires the LTX-2.3 v2v model.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { controlNetName: options.videoControlNetName, model: options.model },
+        hint: 'Use --workflow v2v -m ltx23 --control-type ' + options.videoControlNetName
+      });
+    }
+    if (options.videoControlNetName === 'inpaint' && !options.refMask) {
+      fatalCliError('LTX-2.3 v2v inpaint requires --mask <image> (white pixels = region to regenerate).', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    if (options.videoControlNetName === 'outpaint' && !options.outpaintPosition) {
+      options.outpaintPosition = 'center';
+    }
+  }
+
+  if (options.refMask && options.videoControlNetName !== 'inpaint') {
+    fatalCliError('--mask is only supported with --control-type inpaint.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+
+  if (options.outpaintPosition) {
+    const normalizedOutpaintPosition = normalizeOutpaintPositionValue(options.outpaintPosition);
+    if (!normalizedOutpaintPosition) {
+      fatalCliError(`Invalid --outpaint-position "${options.outpaintPosition}". Use: ${OUTPAINT_POSITIONS.join('|')}`, {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--outpaint-position', value: options.outpaintPosition, allowed: OUTPAINT_POSITIONS }
+      });
+    }
+    if (options.videoControlNetName !== 'outpaint') {
+      fatalCliError('--outpaint-position is only supported with --control-type outpaint.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    options.outpaintPosition = normalizedOutpaintPosition;
+  }
+
+  if (options.outpaintAspectRatio) {
+    if (!parseOutpaintAspectRatio(options.outpaintAspectRatio)) {
+      fatalCliError(`Invalid --outpaint-aspect-ratio "${options.outpaintAspectRatio}". Use a ratio like 16:9 or 9:16.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--outpaint-aspect-ratio', value: options.outpaintAspectRatio }
+      });
+    }
+    if (options.videoControlNetName !== 'outpaint') {
+      fatalCliError('--outpaint-aspect-ratio is only supported with --control-type outpaint.', {
+        code: 'INVALID_ARGUMENT'
       });
     }
   }
@@ -3564,11 +3999,12 @@ if (options.video) {
 
 applyVideoPromptGuardrails();
 
-if (options.video && isSeedanceModel(options.model) && options.fps !== 24) {
+if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(options.model)) && options.fps !== 24) {
   const originalFps = options.fps;
+  const vendorLabel = isHappyHorseModel(options.model) ? 'HappyHorse' : 'Seedance';
   options.fps = 24;
   if (!options.quiet) {
-    console.error(`Adjusted Seedance fps from ${originalFps} to 24 (Seedance uses fixed 24fps video generation).`);
+    console.error(`Adjusted ${vendorLabel} fps from ${originalFps} to 24 (${vendorLabel} uses fixed 24fps video generation).`);
   }
 }
 
@@ -4157,6 +4593,7 @@ function getApiModeMediaReferences() {
   for (const value of options.refVideos || []) {
     if (value) refs.push({ flag: '--ref-video', value, kind: 'video' });
   }
+  if (options.refMask) refs.push({ flag: '--mask', value: options.refMask, kind: 'image' });
   return refs;
 }
 
@@ -4224,6 +4661,7 @@ function apiMediaReferenceUploadType(ref, index) {
   if (ref.kind === 'audio') return 'referenceAudio';
   if (ref.kind === 'video') return 'referenceVideo';
   if (ref.flag === '--ref-end') return 'referenceImageEnd';
+  if (ref.flag === '--mask') return `contextImage${Math.min(index + 1, 16)}`;
   if (ref.flag === '-c/--context') return `contextImage${Math.min(index + 1, 16)}`;
   return 'referenceImage';
 }
@@ -5662,10 +6100,11 @@ async function runApiWorkflow() {
       await streamApiWorkflowEvents(apiKey, id);
       return;
     }
-    // Prefer SDK transport when opted-in. `resume` has no SDK
-    // equivalent yet (it lives on the API; the SDK exposes
-    // cancel/get/events/streamEvents). For resume we fall through to
-    // the legacy fetch path.
+    // Prefer SDK transport when opted-in. `resume` exists in the SDK
+    // (sogni-client CreativeWorkflows.resume) since 5.1.0-alpha.16 but
+    // is not wired here yet, so resume still falls through to the
+    // legacy fetch path. Wiring it (plus reseed, which the SDK also
+    // ships) is tracked in the workflows MASTER plan, Phase 4.4.
     let sdkPayload = null;
     if (
       options.apiWorkflowAction === 'get'
@@ -6549,6 +6988,32 @@ function enforceSeedanceReferenceCaps() {
           requestedCount: err.requestedCount,
           maxCount: err.maxCount,
           limits: SEEDANCE_REFERENCE_LIMITS,
+        },
+      });
+    }
+    throw err;
+  }
+}
+
+// Wraps the shared validateHappyHorseReferenceCounts() so a thrown
+// HappyHorseReferenceLimitError is re-raised as a CLI fatal error with the same
+// human message the hosted chat surfaces. HappyHorse caps are PER MODEL (mode):
+// t2v 0 images, i2v 1 first-frame image, r2v up to 9 reference images; it takes
+// no reference videos or audios (audio is rendered natively). Source of truth:
+// @sogni-ai/sogni-intelligence-client/tools HAPPYHORSE_REFERENCE_LIMITS.
+function enforceHappyHorseReferenceCaps() {
+  try {
+    validateHappyHorseReferenceCounts(options.model, effectiveSeedanceReferenceCounts());
+  } catch (err) {
+    if (err instanceof HappyHorseReferenceLimitError) {
+      fatalCliError(err.message, {
+        code: err.code,
+        details: {
+          modelId: err.modelId,
+          limitKind: err.limitKind,
+          requestedCount: err.requestedCount,
+          maxCount: err.maxCount,
+          limits: getHappyHorseReferenceLimits(options.model) || HAPPYHORSE_REFERENCE_LIMITS,
         },
       });
     }
@@ -8197,16 +8662,26 @@ async function main() {
       if (options.refVideo) log(`Reference video: ${options.refVideo}`);
 
       const isSeedanceVideo = isSeedanceModel(options.model);
+      const isHappyHorseVideo = isHappyHorseModel(options.model);
+      // Vendor video models forward image references as HTTPS URL arrays (or
+      // Sogni-hosted uploads) instead of inline buffers; HappyHorse takes
+      // image-only references (i2v first_frame, r2v reference_image).
+      const isVendorReferenceVideo = isSeedanceVideo || isHappyHorseVideo;
       if (isSeedanceVideo) {
         // Source of truth: @sogni-ai/sogni-protocol catalogs/seedance-reference-limits.json
         // surfaced through @sogni-ai/sogni-intelligence-client/tools.
         enforceSeedanceReferenceCaps();
       }
+      if (isHappyHorseVideo) {
+        // Source of truth: @sogni-ai/sogni-intelligence-client/tools
+        // HAPPYHORSE_REFERENCE_LIMITS (per-mode image-only caps).
+        enforceHappyHorseReferenceCaps();
+      }
       const seedanceReferenceImageUrls = [];
       const seedanceReferenceVideoUrls = [];
       const seedanceReferenceAudioUrls = [];
-      const useRefImageUrl = isSeedanceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
-      const useRefImageEndUrl = isSeedanceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
+      const useRefImageUrl = isVendorReferenceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
+      const useRefImageEndUrl = isVendorReferenceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
       const refAudioFormatByPath = options.refAudio
         ? detectReferenceAudioFormat(
             new Uint8Array(),
@@ -8250,19 +8725,19 @@ async function main() {
         }
       }
 
-      // Seedance loose-reference extras: -c/--context images beyond start/end,
-      // plus repeated --ref-audio / --ref-video entries past the first. The
-      // Sogni Client SDK accepts only URL arrays for these (createJobRequestMessage),
-      // so each entry must resolve to an HTTPS URL. HTTPS inputs are forwarded as-is
-      // (SSRF-validated); local files are uploaded to a Sogni-hosted URL first, the
-      // same way the primary --ref-audio / --ref-video locals are handled. This lets
-      // `-c <local image>` work in direct generation without a detour through
-      // --api-chat / --durable-chat.
-      if (isSeedanceVideo) {
+      // Vendor loose image references: -c/--context images beyond start/end.
+      // The Sogni Client SDK accepts only URL arrays for these
+      // (createJobRequestMessage), so each entry must resolve to an HTTPS URL.
+      // HTTPS inputs are forwarded as-is (SSRF-validated); local files are
+      // uploaded to a Sogni-hosted URL first. This lets `-c <local image>` work
+      // in direct generation without a detour through --api-chat / --durable-chat.
+      // Seedance treats these as @ImageN loose refs; HappyHorse r2v treats them
+      // as reference_image inputs (up to 9).
+      if (isVendorReferenceVideo) {
         for (const [ctxIndex, ctxImage] of (Array.isArray(options.contextImages) ? options.contextImages : []).entries()) {
           if (!ctxImage) continue;
           if (isHttpsUrl(ctxImage)) {
-            await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Seedance image reference');
+            await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, ctxImage, 'Image reference');
           } else {
             const uploadedImageUrl = await uploadSeedanceReferenceImageUrl(
               ctxImage,
@@ -8272,6 +8747,10 @@ async function main() {
             seedanceReferenceImageUrls.push(uploadedImageUrl);
           }
         }
+      }
+      // Seedance-only loose extras: repeated --ref-audio / --ref-video entries
+      // past the first. HappyHorse takes no reference audio or video.
+      if (isSeedanceVideo) {
         for (const [extraAudioIndex, extraAudio] of options.refAudios.entries()) {
           if (!isHttpsUrl(extraAudio)) {
             fatalCliError(
@@ -8312,6 +8791,7 @@ async function main() {
       let endImageBuffer = options.refImageEnd && !useRefImageEndUrl ? await fetchMediaBuffer(options.refImageEnd) : undefined;
       let audioBuffer = options.refAudio && !useRefAudioUrl ? await fetchMediaBuffer(options.refAudio) : undefined;
       let videoBuffer = options.refVideo && !useRefVideoUrl ? await fetchMediaBuffer(options.refVideo) : undefined;
+      let maskBuffer = options.refMask ? await fetchMediaBuffer(options.refMask) : undefined;
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
       }
@@ -8341,6 +8821,62 @@ async function main() {
         : undefined;
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const videoDimensionRules = videoDimensionRulesFromDefaults(modelDefaults, options.model);
+
+      if (
+        options.videoWorkflow === 'v2v' &&
+        (options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint')
+      ) {
+        let sourceVideoDimensions = null;
+        if (options.refVideo && !isHttpUrl(options.refVideo) && existsSync(options.refVideo)) {
+          const probed = await probeVideoStreamInfo(options.refVideo);
+          if (probed.width && probed.height) {
+            sourceVideoDimensions = { width: probed.width, height: probed.height };
+          }
+        }
+
+        if (options.videoControlNetName === 'outpaint') {
+          const outpaintDimensions = computeOutpaintCanvas(
+            sourceVideoDimensions?.width ?? options.width,
+            sourceVideoDimensions?.height ?? options.height,
+            options.outpaintAspectRatio,
+            options.outpaintPosition || 'center',
+            videoDimensionRules
+          );
+          if (outpaintDimensions.width !== options.width || outpaintDimensions.height !== options.height) {
+            if (!options.quiet) {
+              const ratioLabel = options.outpaintAspectRatio ? ` for ${options.outpaintAspectRatio}` : '';
+              console.error(
+                `Adjusted outpaint canvas from ${options.width}x${options.height} ` +
+                `to ${outpaintDimensions.width}x${outpaintDimensions.height}${ratioLabel}.`
+              );
+            }
+            options.width = outpaintDimensions.width;
+            options.height = outpaintDimensions.height;
+          }
+        } else if (options.videoControlNetName === 'inpaint' && sourceVideoDimensions) {
+          const hasExplicitVideoDimensions =
+            (cliSet.width || widthFromConfig || widthFromPrompt) &&
+            (cliSet.height || heightFromConfig || heightFromPrompt);
+          if (!hasExplicitVideoDimensions) {
+            const inpaintDimensions = computeSourceAspectCanvas(
+              sourceVideoDimensions.width,
+              sourceVideoDimensions.height,
+              videoDimensionRules,
+              options.targetResolution
+            );
+            if (inpaintDimensions.width !== options.width || inpaintDimensions.height !== options.height) {
+              if (!options.quiet) {
+                console.error(
+                  `Adjusted inpaint canvas from ${options.width}x${options.height} ` +
+                  `to ${inpaintDimensions.width}x${inpaintDimensions.height} to match the source video aspect.`
+                );
+              }
+              options.width = inpaintDimensions.width;
+              options.height = inpaintDimensions.height;
+            }
+          }
+        }
+      }
 
       // Pre-resize reference images to model-compatible dimensions if needed for i2v workflow.
       if (options.videoWorkflow === 'i2v' && imageBuffer && options._needsRefResize) {
@@ -8409,6 +8945,12 @@ async function main() {
       if (endImageBuffer) {
         projectConfig.referenceImageEnd = endImageBuffer;
       }
+      applyLtxTransitionLora(
+        projectConfig,
+        options.model,
+        Boolean(projectConfig.referenceImage),
+        Boolean(projectConfig.referenceImageEnd)
+      );
       if (audioBuffer) {
         projectConfig.referenceAudio = audioBuffer;
       }
@@ -8439,7 +8981,9 @@ async function main() {
       if (options.seed !== null && options.seed !== undefined) {
         projectConfig.seed = options.seed;
       }
-      if (Number.isFinite(steps)) {
+      if (Number.isFinite(steps) && !isHappyHorseVideo) {
+        // HappyHorse routes through the vendor-job path and ignores `steps`,
+        // mirroring Seedance (whose model defaults already omit them).
         projectConfig.steps = steps;
       }
       if (guidance !== null && guidance !== undefined) {
@@ -8455,13 +8999,19 @@ async function main() {
         projectConfig.shift = modelDefaults.shift;
       }
       if (options.videoControlNetName && !isSeedanceModel(options.model)) {
-        const controlNetStrength = resolveVideoControlNetStrength(options.videoControlNetName, options.videoControlNetStrength);
+        const isInOutpaintControl = options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint';
         projectConfig.controlNet = {
           name: options.videoControlNetName,
-          strength: controlNetStrength
+          strength: isInOutpaintControl ? 1.0 : resolveVideoControlNetStrength(options.videoControlNetName, options.videoControlNetStrength)
         };
-        if (options.videoControlNetName !== 'detailer') {
+        if (!isInOutpaintControl && options.videoControlNetName !== 'detailer') {
           projectConfig.detailerStrength = 0.6;
+        }
+        if (options.videoControlNetName === 'inpaint' && maskBuffer) {
+          projectConfig.referenceMask = maskBuffer;
+        }
+        if (options.videoControlNetName === 'outpaint') {
+          projectConfig.outpaintPosition = options.outpaintPosition || 'center';
         }
       } else if (options.videoControlNetName && isSeedanceModel(options.model) && !options.quiet) {
         console.error('Warning: --controlnet-name ignored for Seedance V2V models.');
@@ -9099,7 +9649,7 @@ async function main() {
         success: false,
         error: error.message,
         prompt: options.prompt ?? null
-      }, error);
+      }, error, { modelId: options.model });
       if (error.code) payload.errorCode = error.code;
       if (error.details) payload.errorDetails = error.details;
       // Don't let a stale per-error hint overwrite the canonical
@@ -9134,10 +9684,10 @@ async function main() {
       if (IS_OPENCLAW_INVOCATION) payload.openclaw = true;
       console.log(JSON.stringify(payload));
       if (!options.json) {
-        printHumanError(error);
+        printHumanError(error, { modelId: options.model });
       }
     } else {
-      printHumanError(error);
+      printHumanError(error, { modelId: options.model });
     }
   } finally {
     try {

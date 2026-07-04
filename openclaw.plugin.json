@@ -2,7 +2,7 @@
   "id": "sogni-creative-agent-skill",
   "name": "Sogni Creative Agent Skill — Image, Video & Music Generation",
   "description": "Agent skill and CLI for Sogni AI image, video, and music generation.",
-  "version": "3.6.4",
+  "version": "3.9.0",
   "skills": [
     "."
   ],
@@ -27,7 +27,7 @@
       },
       "defaultMusicModel": {
         "type": "string",
-        "default": "ace_step_1.5_turbo",
+        "default": "ace_step_1.5_xl_turbo",
         "description": "Default model for direct music/audio generation."
       },
       "videoModels": {

@@ -371,12 +371,15 @@ export function snoozeUpdate({
 // ---------- what's new (CHANGELOG summaries) ----------
 
 // Parses keep-a-changelog style sections: `## [x.y.z] - date` headings.
+// semantic-release writes minor/major entries as h1 (`# [x.y.z](compare-url)`)
+// and patches as h2, so both heading levels are version entries; the file's
+// `# Changelog` title never matches because a semver must follow the hash.
 export function extractChangelogEntries(changelogText) {
   const entries = [];
   const lines = String(changelogText || '').split('\n');
   let current = null;
   for (const line of lines) {
-    const heading = line.match(/^##\s+\[?(\d+\.\d+\.\d+)\]?(.*)$/);
+    const heading = line.match(/^##?\s+\[?(\d+\.\d+\.\d+)\]?(.*)$/);
     if (heading) {
       if (current) entries.push(current);
       current = { version: heading[1], heading: line.trim(), body: [] };

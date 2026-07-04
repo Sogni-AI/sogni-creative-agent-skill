@@ -258,6 +258,24 @@ test('tools/call spawns the CLI with built argv and returns its stdout', async (
   assert.deepEqual(echoed.argv, ['--json', '-q', '--no-update-check', '-Q', 'fast', 'a red fox']);
 });
 
+test('oversized success output keeps the head (front-loaded JSON), not the tail', async (t) => {
+  // Append 30k pad chars AFTER the JSON line so the CLI output far exceeds the
+  // 20k cap; the client must still receive the parseable JSON prefix.
+  const client = new McpClient({ FAKE_AGENT_PAD: '30000' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', {
+    name: 'generate_image',
+    arguments: { prompt: 'a red fox', quality: 'fast' },
+  });
+  assert.equal(res.result.isError ?? false, false);
+  const text = res.result.content[0].text;
+  assert.equal(text.length, 20000);
+  assert.ok(
+    text.startsWith('{"argv":["--json","-q","--no-update-check","-Q","fast","a red fox"]'),
+    'expected the head (result JSON) to survive truncation, not the trailing pad',
+  );
+});
+
 test('tools/call surfaces CLI failure as isError with stderr included', async (t) => {
   const client = new McpClient({ FAKE_AGENT_EXIT: '3', FAKE_AGENT_STDERR: 'boom: no credentials' });
   t.after(() => client.close());

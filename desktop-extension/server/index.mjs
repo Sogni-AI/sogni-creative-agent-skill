@@ -89,7 +89,10 @@ async function callTool(name, input, progressToken) {
     child.on('close', (code) => {
       const text = [stdout.trim(), code === 0 ? '' : stderr.trim()].filter(Boolean).join('\n')
         || `sogni-agent exited with code ${code}`;
-      finish(textResult(text.slice(-MAX_RESULT_CHARS), code !== 0));
+      // Success output is front-loaded (e.g. result JSON) so keep the head; on
+      // failure the actionable error is at the tail, so keep the tail instead.
+      const clipped = code === 0 ? text.slice(0, MAX_RESULT_CHARS) : text.slice(-MAX_RESULT_CHARS);
+      finish(textResult(clipped, code !== 0));
     });
   });
 }

@@ -41,7 +41,7 @@ stamp('SKILL.md', (text) => {
   return updated;
 });
 
-for (const manifest of ['.claude-plugin/plugin.json', 'openclaw.plugin.json']) {
+for (const manifest of ['.claude-plugin/plugin.json', 'openclaw.plugin.json', 'desktop-extension/manifest.json']) {
   stamp(manifest, (text) => {
     const parsed = JSON.parse(text);
     if (parsed.version === version) return text;

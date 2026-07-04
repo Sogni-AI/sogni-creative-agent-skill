@@ -19,6 +19,7 @@
     "test:all": "npm run test && npm run test:integration",
     "test:coverage": "npm run check:creative-agent-runtime && node --test --experimental-test-coverage --test-coverage-include=sogni-agent.mjs --test-coverage-lines=50 --test-coverage-branches=35 --test-coverage-functions=50 test/sogni-agent.test.mjs",
     "test:coverage:full": "npm run check:creative-agent-runtime && node --test --experimental-test-coverage --test-coverage-include=sogni-agent.mjs --test-coverage-lines=50 --test-coverage-branches=35 --test-coverage-functions=50 test/*.test.mjs test/*.integration.mjs",
+    "build:mcpb": "npx -y @anthropic-ai/mcpb pack desktop-extension dist/sogni-creative-agent.mcpb",
     "prepack": "npm run check:creative-agent-source:strict && SOGNI_REQUIRE_RUNTIME_SYNC=1 npm run check:creative-agent-runtime",
     "prepare": "husky",
     "release": "semantic-release"
@@ -56,6 +57,7 @@
     "CHANGELOG.md",
     "SKILL.md",
     "references/",
+    "desktop-extension/",
     "skills/",
     "llm.txt",
     "skill-package.json",

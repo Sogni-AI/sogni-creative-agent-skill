@@ -267,6 +267,24 @@ If the checkout is missing, use the npm install path above or explicitly approve
 
 ---
 
+## Claude Desktop
+
+Claude Desktop can't run skills against your local files, so Sogni ships as a local MCP server instead. Two ways to install:
+
+**Recommended — one command (also installs the CLI, saves your API key, and offers to install ffmpeg):**
+
+    npx setup-sogni-agent-skill
+
+This registers the Sogni tools in `claude_desktop_config.json`. Fully quit and reopen Claude Desktop afterwards.
+
+**Manual — drag-and-drop bundle:** download `sogni-creative-agent.mcpb` from the GitHub Releases page and drop it onto Claude Desktop's Settings → Extensions page. You'll be prompted for your Sogni API key (stored in the OS keychain) unless you've already run the installer.
+
+Don't use both — you'd get duplicate Sogni tools. The extension wraps the same globally installed `sogni-agent` CLI used by Claude Code, so personas, memories, and credentials are shared.
+
+Video/audio editing features need ffmpeg on your machine; the `npx` installer offers to install it for you.
+
+---
+
 ## Setup (Sogni API key)
 
 1. Get your API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu).

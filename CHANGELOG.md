@@ -1,3 +1,19 @@
+# [3.10.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.9.0...v3.10.0) (2026-07-04)
+
+
+### Bug Fixes
+
+* **cli:** recognize semantic-release h1 changelog entries in whats-new ([067bb65](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/067bb651e1ab924fb32d1b15585c80deeeb79d84))
+* **desktop:** keep head of large success output, tail of errors ([394e1e1](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/394e1e131f5f75c4f01205a37286609ed7a59c99))
+
+
+### Features
+
+* **desktop:** add MCP tool registry mapping tools to sogni-agent argv ([cb951a7](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/cb951a79fcc5ef859ef3135f46b8aab81945305d))
+* **desktop:** add MCPB manifest, npm packaging, and build script ([d464627](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d4646273bcb4c2c8cfd7d08e7b6928e218f15e6f))
+* **desktop:** add path resolution for the Claude Desktop MCP wrapper ([8cd5832](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/8cd58323982d63a756e75264441d0dd33feb1acc))
+* **desktop:** implement dependency-free MCP stdio server for Claude Desktop ([de26cda](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/de26cda9f433a8da62dcc24c7b2b49e6c13e892a))
+
 # [3.9.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.8.0...v3.9.0) (2026-06-30)
 
 

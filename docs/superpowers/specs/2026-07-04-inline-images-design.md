@@ -68,3 +68,20 @@ Extend `test/fixtures/fake-sogni-agent.mjs` with `FAKE_AGENT_JSON_FILE` (emit a 
 ## Ship
 
 `feat(desktop)` commits → PR → merge → `GITHUB_TOKEN=$(gh auth token) npx semantic-release --no-ci` → 3.11.0 → post-release lockfile-sync and `sync:version` stamp commits (per release-process runbook).
+
+## Amendment — 2026-07-05: fit the host's 1MB tool-result cap
+
+Production testing revealed Claude Desktop rejects tool results over **1MB
+total** ("Tool result is too large. Maximum size is 1MB."), far below the 5MB
+API image ceiling the 3.5MB valve targeted — even a 512×704 HQ PNG failed.
+User decision: the "full-resolution bytes" choice is superseded by
+**auto-fit previews**:
+
+- Cumulative inline budget: **700KB raw** (≈933KB base64 + text, safely <1MB).
+- Per image: attach as-is if it fits the remaining budget; otherwise downscale
+  through a deterministic sharp ladder — 1024px/JPEG q80 → 768px/q70 →
+  512px/q60 — first rung that fits. If nothing fits (or sharp is unavailable),
+  skip with the existing too-large note.
+- The text block always carries the full-resolution URL / saved path — that is
+  the artifact for real work; the inline block is the preview.
+- 4-image cap, 20s fetch timeout, opt-out env, and failure posture unchanged.

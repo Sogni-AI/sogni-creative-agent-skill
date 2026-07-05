@@ -424,12 +424,50 @@ test('collectInlineImages: unparseable stdout and unreadable files degrade silen
 test('collectInlineImages: oversize non-image bytes are skipped with a note', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
   const big = join(dir, 'big.png');
-  writeFileSync(big, Buffer.alloc(4 * 1024 * 1024, 7)); // >3.5MB, not a real PNG → sharp fails → skip
+  writeFileSync(big, Buffer.alloc(900 * 1024, 7)); // >700KB budget, not a real PNG → ladder fails → skip
   const { blocks, notes } = await collectInlineImages({
     toolName: 'generate_image', input: {}, stdout: JSON.stringify({ localPath: big }), env: {},
   });
   assert.equal(blocks.length, 0);
   assert.deepEqual(notes, ['One image was too large to display inline; use the link above.']);
+});
+
+test('collectInlineImages: oversize real image is downscaled through the ladder under budget', async () => {
+  const { default: sharp } = await import('sharp');
+  // Random noise barely compresses, so this PNG is several MB — well over budget.
+  const noise = Buffer.from(Array.from({ length: 1400 * 1400 * 3 }, () => Math.floor(Math.random() * 256)));
+  const bigPng = await sharp(noise, { raw: { width: 1400, height: 1400, channels: 3 } }).png().toBuffer();
+  assert.ok(bigPng.length > 700 * 1024); // guard the premise: fixture must exceed the budget
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const big = join(dir, 'big.png');
+  writeFileSync(big, bigPng);
+  const { blocks, notes } = await collectInlineImages({
+    toolName: 'generate_image', input: {}, stdout: JSON.stringify({ localPath: big }), env: {},
+  });
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].mimeType, 'image/jpeg');
+  assert.ok(Buffer.from(blocks[0].data, 'base64').length <= 700 * 1024);
+  assert.deepEqual(notes, []);
+});
+
+test('collectInlineImages: cumulative budget attaches the first image and skips the second', async () => {
+  const { createServer } = await import('node:http');
+  const payload = Buffer.alloc(500 * 1024, 7); // 500KB apiece, garbage bytes served as PNG
+  const server = createServer((req, res) => { res.writeHead(200, { 'content-type': 'image/png' }); res.end(payload); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const urls = [`${base}/a.png`, `${base}/b.png`];
+    const { blocks, notes } = await collectInlineImages({
+      toolName: 'generate_image', input: {}, stdout: JSON.stringify({ urls }), env: {}, budgetRaw: 700 * 1024,
+    });
+    // First fits (500KB ≤ 700KB) as-is; second (500KB > 200KB remaining, garbage → ladder fails) is skipped.
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0].mimeType, 'image/png');
+    assert.deepEqual(notes, ['One image was too large to display inline; use the link above.']);
+  } finally {
+    server.close();
+  }
 });
 
 test('collectInlineImages: stalled URL fetch aborts on fetchTimeoutMs and degrades silently', async () => {

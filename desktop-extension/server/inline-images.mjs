@@ -4,15 +4,31 @@
 // to call this and how to compose the result. Every expected failure (bad
 // JSON, missing file, failed fetch, oversized bytes) degrades silently —
 // callers must never end up worse off than the text-only result.
+//
+// Size budget: Claude Desktop rejects any tool result over 1MB total ("Tool
+// result is too large. Maximum size is 1MB."). Inline previews therefore share
+// a cumulative raw-byte budget (INLINE_BUDGET_RAW) that leaves headroom for
+// base64 expansion (~4/3) plus the text block, keeping the whole result under
+// the 1MB host cap. Each image attaches as-is if it fits the remaining budget;
+// otherwise it is downscaled through a deterministic sharp ladder to the first
+// rung that fits. The text block always carries the full-resolution URL/path —
+// the inline block is only a preview.
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 
 const INLINE_TOOLS = new Set(['generate_image', 'photobooth']);
 const FRAME_ACTIONS = new Set(['extract_first_frame', 'extract_last_frame']);
 const MAX_INLINE_IMAGES = 4;
-const MAX_RAW_BYTES = 3.5 * 1024 * 1024; // ≈5MB once base64-encoded — the practical content ceiling
-const DOWNSCALE_MAX_DIM = 2048;
-const DOWNSCALE_JPEG_QUALITY = 85;
+// Cumulative raw-byte budget across all inline images. ≈933KB once base64-
+// encoded, which plus the text block stays safely under the 1MB host cap.
+const INLINE_BUDGET_RAW = 700 * 1024;
+// Deterministic downscale rungs, largest first; attach the first rung whose
+// JPEG output fits the remaining budget.
+const DOWNSCALE_LADDER = [
+  { dim: 1024, q: 80 },
+  { dim: 768, q: 70 },
+  { dim: 512, q: 60 },
+];
 const FETCH_TIMEOUT_MS = 20_000; // inline fetch must never meaningfully delay the text result
 const TOO_LARGE_NOTE = 'One image was too large to display inline; use the link above.';
 
@@ -79,18 +95,22 @@ async function obtainBytes(candidate, fetchImpl, fetchTimeoutMs) {
   return { data: Buffer.from(await res.arrayBuffer()), mime };
 }
 
-// Full-resolution by default; only an image that would blow the content
-// ceiling gets downscaled (sharp ships with the package), and if that is
-// impossible the image is skipped with a note rather than breaking the call.
-async function fitBytes(entry) {
-  if (entry.data.length <= MAX_RAW_BYTES) return entry;
+// Fit one image into the REMAINING cumulative budget. If the original bytes
+// already fit, attach them unchanged. Otherwise downscale through the ladder
+// (sharp ships with the package) and attach the first rung whose JPEG output
+// fits. If no rung fits, or sharp is unavailable/throws, return null so the
+// caller skips the image with a note rather than breaking the whole call.
+async function fitToBudget(entry, remaining) {
+  if (entry.data.length <= remaining) return entry;
   try {
     const { default: sharp } = await import('sharp');
-    const data = await sharp(entry.data)
-      .resize({ width: DOWNSCALE_MAX_DIM, height: DOWNSCALE_MAX_DIM, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: DOWNSCALE_JPEG_QUALITY })
-      .toBuffer();
-    if (data.length <= MAX_RAW_BYTES) return { data, mime: 'image/jpeg' };
+    for (const { dim, q } of DOWNSCALE_LADDER) {
+      const data = await sharp(entry.data)
+        .resize({ width: dim, height: dim, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: q })
+        .toBuffer();
+      if (data.length <= remaining) return { data, mime: 'image/jpeg' };
+    }
     return null;
   } catch {
     return null;
@@ -98,7 +118,8 @@ async function fitBytes(entry) {
 }
 
 export async function collectInlineImages({
-  toolName, input, stdout, env = process.env, fetchImpl = fetch, fetchTimeoutMs = FETCH_TIMEOUT_MS,
+  toolName, input, stdout, env = process.env, fetchImpl = fetch,
+  fetchTimeoutMs = FETCH_TIMEOUT_MS, budgetRaw = INLINE_BUDGET_RAW,
 }) {
   const empty = { blocks: [], notes: [] };
   if (env.SOGNI_MCP_NO_INLINE_IMAGES === '1') return empty;
@@ -106,14 +127,17 @@ export async function collectInlineImages({
 
   const blocks = [];
   const notes = [];
+  let attachedRawTotal = 0;
   for (const candidate of sourceCandidates(toolName, input, stdout)) {
     if (blocks.length >= MAX_INLINE_IMAGES) break;
     try {
-      const fitted = await fitBytes(await obtainBytes(candidate, fetchImpl, fetchTimeoutMs));
+      const remaining = budgetRaw - attachedRawTotal;
+      const fitted = await fitToBudget(await obtainBytes(candidate, fetchImpl, fetchTimeoutMs), remaining);
       if (!fitted) {
         if (!notes.includes(TOO_LARGE_NOTE)) notes.push(TOO_LARGE_NOTE);
         continue;
       }
+      attachedRawTotal += fitted.data.length;
       blocks.push({ type: 'image', data: fitted.data.toString('base64'), mimeType: fitted.mime });
     } catch {
       // Silent per-image degradation: the text block still carries the link.

@@ -1,3 +1,10 @@
+# [3.14.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.13.0...v3.14.0) (2026-07-05)
+
+
+### Features
+
+* **desktop:** add import_media tool bridging chat attachments to local files ([a259bcf](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/a259bcf36d4a747bb2cbe9d71ff8ec9da9e6c1c9))
+
 # [3.13.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.12.0...v3.13.0) (2026-07-05)
 
 

@@ -1,3 +1,10 @@
+## [3.11.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.11.0...v3.11.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* **desktop:** fit inline image previews under the 1MB host result cap ([4666922](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/46669226a8c6fb9a70ff808ef58c387ae62a4778))
+
 # [3.11.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.10.0...v3.11.0) (2026-07-05)
 
 

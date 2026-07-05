@@ -10,6 +10,7 @@ import {
 } from '../desktop-extension/server/resolve.mjs';
 import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
+import { importMedia } from '../desktop-extension/server/import-media.mjs';
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
@@ -68,13 +69,14 @@ test('buildChildEnv keeps a non-empty SOGNI_API_KEY', () => {
 test('TOOLS exposes the expected v1 tool names', () => {
   assert.deepEqual(TOOLS.map((t) => t.name).sort(), [
     'account_balance', 'edit_video', 'generate_image', 'generate_music',
-    'generate_video', 'list_media', 'manage_memories', 'manage_personas',
-    'photobooth', 'sogni_doctor',
+    'generate_video', 'import_media', 'list_media', 'manage_memories',
+    'manage_personas', 'photobooth', 'sogni_doctor',
   ]);
   for (const t of TOOLS) {
     assert.equal(typeof t.description, 'string');
     assert.equal(t.inputSchema.type, 'object');
-    assert.equal(typeof t.buildArgs, 'function');
+    // Tools either translate to CLI argv (buildArgs) or run inside the server (local).
+    assert.ok(typeof t.buildArgs === 'function' || t.local === true, `${t.name} has no execution path`);
   }
 });
 
@@ -544,4 +546,137 @@ test('tools/call generate_video stays text-only', async (t) => {
   const res = await client.request('tools/call', { name: 'generate_video', arguments: { prompt: 'x' } });
   assert.equal(res.result.content.length, 1);
   assert.equal(res.result.content[0].type, 'text');
+});
+
+test('importMedia writes decoded base64 into the inbound dir and returns path + bytes', async () => {
+  const dir = join(tempHome(), 'inbound'); // does not exist yet — must be created
+  const result = await importMedia(
+    { data: TINY_PNG.toString('base64'), filename: 'pixel.png' },
+    { env: { SOGNI_MEDIA_INBOUND_DIR: dir } },
+  );
+  assert.equal(result.path, join(dir, 'pixel.png'));
+  assert.equal(result.bytes, TINY_PNG.length);
+  assert.ok(readFileSync(result.path).equals(TINY_PNG));
+});
+
+test('importMedia sanitizes traversal filenames to their basename', async () => {
+  const dir = join(tempHome(), 'inbound');
+  const result = await importMedia(
+    { data: TINY_PNG.toString('base64'), filename: '../../evil.png' },
+    { env: { SOGNI_MEDIA_INBOUND_DIR: dir } },
+  );
+  assert.equal(result.path, join(dir, 'evil.png'));
+});
+
+test('importMedia never overwrites an existing file — it suffixes the name', async () => {
+  const dir = join(tempHome(), 'inbound');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'pixel.png'), Buffer.from('original'));
+  const result = await importMedia(
+    { data: TINY_PNG.toString('base64'), filename: 'pixel.png' },
+    { env: { SOGNI_MEDIA_INBOUND_DIR: dir } },
+  );
+  assert.equal(result.path, join(dir, 'pixel-2.png'));
+  assert.equal(readFileSync(join(dir, 'pixel.png'), 'utf8'), 'original');
+  assert.ok(readFileSync(result.path).equals(TINY_PNG));
+});
+
+test('importMedia appends subsequent chunks via append_to_path', async () => {
+  const dir = join(tempHome(), 'inbound');
+  const env = { SOGNI_MEDIA_INBOUND_DIR: dir };
+  const first = await importMedia(
+    { data: TINY_PNG.subarray(0, 40).toString('base64'), filename: 'chunked.png' },
+    { env },
+  );
+  const second = await importMedia(
+    { data: TINY_PNG.subarray(40).toString('base64'), append_to_path: first.path },
+    { env },
+  );
+  assert.equal(second.path, first.path);
+  assert.equal(second.bytes, TINY_PNG.length);
+  assert.ok(readFileSync(second.path).equals(TINY_PNG));
+});
+
+test('importMedia rejects append targets outside the inbound dir', async () => {
+  const home = tempHome();
+  const dir = join(home, 'inbound');
+  const outside = join(home, 'elsewhere', 'x.png');
+  mkdirSync(dirname(outside), { recursive: true });
+  writeFileSync(outside, 'x');
+  await assert.rejects(
+    importMedia({ data: TINY_PNG.toString('base64'), append_to_path: outside }, { env: { SOGNI_MEDIA_INBOUND_DIR: dir } }),
+    /inbox/i,
+  );
+});
+
+test('importMedia rejects appends to a file that does not exist', async () => {
+  const dir = join(tempHome(), 'inbound');
+  mkdirSync(dir, { recursive: true });
+  await assert.rejects(
+    importMedia(
+      { data: TINY_PNG.toString('base64'), append_to_path: join(dir, 'never-started.png') },
+      { env: { SOGNI_MEDIA_INBOUND_DIR: dir } },
+    ),
+    /filename/i,
+  );
+});
+
+test('importMedia validates required fields, extension, and base64', async () => {
+  const env = { SOGNI_MEDIA_INBOUND_DIR: join(tempHome(), 'inbound') };
+  await assert.rejects(importMedia({ filename: 'a.png' }, { env }), /data/);
+  await assert.rejects(importMedia({ data: TINY_PNG.toString('base64') }, { env }), /filename/);
+  await assert.rejects(importMedia({ data: TINY_PNG.toString('base64'), filename: 'run.sh' }, { env }), /extension/i);
+  await assert.rejects(importMedia({ data: 'not base64!!', filename: 'a.png' }, { env }), /base64/i);
+});
+
+test('importMedia enforces per-chunk and total-size caps', async () => {
+  const dir = join(tempHome(), 'inbound');
+  const env = { SOGNI_MEDIA_INBOUND_DIR: dir };
+  await assert.rejects(
+    importMedia({ data: TINY_PNG.toString('base64'), filename: 'big.png' }, { env, maxChunkBytes: 16 }),
+    /chunk/i,
+  );
+  const first = await importMedia({ data: TINY_PNG.toString('base64'), filename: 'total.png' }, { env, maxTotalBytes: 100 });
+  await assert.rejects(
+    importMedia({ data: TINY_PNG.toString('base64'), append_to_path: first.path }, { env, maxTotalBytes: 100 }),
+    /total|exceed/i,
+  );
+});
+
+test('media-consuming tools warn about chat attachments and point at import_media', () => {
+  for (const name of ['generate_image', 'generate_video', 'photobooth', 'manage_personas']) {
+    const { description } = getTool(name);
+    assert.match(description, /chat/i, `${name} should mention chat attachments`);
+    assert.match(description, /import_media/, `${name} should point at import_media`);
+  }
+  const listMedia = getTool('list_media').description;
+  assert.match(listMedia, /messaging|inbox/i);
+  assert.match(listMedia, /import_media/);
+  assert.match(getTool('import_media').description, /base64/i);
+});
+
+test('tools/call import_media saves the file locally even when the CLI is missing', async (t) => {
+  const inbound = join(tempHome(), 'inbound');
+  const client = new McpClient({
+    SOGNI_AGENT_PATH: '/nonexistent/sogni-agent.mjs',
+    SOGNI_MEDIA_INBOUND_DIR: inbound,
+  });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', {
+    name: 'import_media',
+    arguments: { data: TINY_PNG.toString('base64'), filename: 'chat-upload.png' },
+  });
+  assert.equal(res.result.isError ?? false, false);
+  const parsed = JSON.parse(res.result.content[0].text);
+  assert.equal(parsed.path, join(inbound, 'chat-upload.png'));
+  assert.equal(parsed.bytes, TINY_PNG.length);
+  assert.ok(readFileSync(parsed.path).equals(TINY_PNG));
+});
+
+test('tools/call import_media surfaces validation failures as isError', async (t) => {
+  const client = new McpClient({ SOGNI_MEDIA_INBOUND_DIR: join(tempHome(), 'inbound') });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'import_media', arguments: { filename: 'a.png' } });
+  assert.equal(res.result.isError, true);
+  assert.match(res.result.content[0].text, /data/);
 });

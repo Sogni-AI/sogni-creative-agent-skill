@@ -9,6 +9,27 @@ A dependency-free MCP stdio server that wraps the globally installed
 - `server/tools.mjs` — tool schemas + pure argv builders
 - `server/resolve.mjs` — absolute-path resolution (agent, ffmpeg, child env);
   Claude Desktop's GUI environment has a minimal PATH, so nothing here relies on PATH lookup
+- `server/import-media.mjs` — local handler for `import_media` (see below); the
+  only tool that runs inside the server instead of spawning the CLI
+
+## Chat attachments and import_media
+
+Files attached to a chat never reach this server: Claude Desktop keeps
+attachments in its remote sandbox, and MCP has no client→server file
+transfer. Every media input (`ref`, `context_images`, …) therefore only
+accepts paths on this machine or URLs — the tool descriptions say so, and
+point the model at the bridge:
+
+`import_media` accepts base64-encoded bytes and writes them into the Sogni
+media inbox (`SOGNI_MEDIA_INBOUND_DIR`, default `~/.openclaw/media/inbound/`
+— the same directory `list_media` reads), returning the absolute path to feed
+into the generation tools. Large files arrive in chunks: first call passes
+`filename`, later calls pass `append_to_path` from the previous result.
+Guardrails: media-only extensions, filenames reduced to their basename,
+existing files never overwritten (suffixed instead), appends confined to the
+inbox, 2MB per chunk / 25MB per file. In practice the model reads the
+attachment in its code-execution sandbox, downscales images to ~1024px JPEG,
+and relays the base64 — token-expensive, so previews beat full-res originals.
 
 ## Inline images
 

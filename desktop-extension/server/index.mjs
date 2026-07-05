@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { TOOLS, getTool } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
 import { collectInlineImages } from './inline-images.mjs';
+import { runImportMedia } from './import-media.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROTOCOL_FALLBACK = '2025-06-18';
@@ -33,9 +34,21 @@ function textResult(text, isError = false) {
   return { content: [{ type: 'text', text }], isError };
 }
 
+// Tools marked local in the registry run inside this process and must work
+// even when the sogni-agent CLI is not installed yet.
+const LOCAL_HANDLERS = { import_media: runImportMedia };
+
 async function callTool(name, input, progressToken) {
   const tool = getTool(name);
   if (!tool) return textResult(`Unknown tool: ${name}`, true);
+
+  if (tool.local) {
+    try {
+      return textResult(await LOCAL_HANDLERS[name](input ?? {}));
+    } catch (err) {
+      return textResult(err.message, true);
+    }
+  }
 
   const agentPath = resolveAgentPath();
   if (!agentPath) {

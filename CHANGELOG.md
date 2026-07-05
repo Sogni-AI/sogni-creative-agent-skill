@@ -1,3 +1,16 @@
+# [3.11.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.10.0...v3.11.0) (2026-07-05)
+
+
+### Bug Fixes
+
+* **desktop:** bound inline image fetches with a 20s abort timeout ([f20f42b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/f20f42ba6138eeb1f1c07ed8f02a5feb79c9f1fd))
+
+
+### Features
+
+* **desktop:** add inline-image collection module for MCP results ([422043f](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/422043f0cdef1bcd36f168fb95ab3e3bf6450962))
+* **desktop:** attach inline image blocks to successful tool results ([617bd5b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/617bd5b63f3f0437cd81df3f6b59da8a587dcf16))
+
 # [3.10.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.9.0...v3.10.0) (2026-07-04)
 
 

@@ -1,3 +1,10 @@
+# [3.12.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.11.1...v3.12.0) (2026-07-05)
+
+
+### Features
+
+* **unlimited:** surface plan entitlement and billing mode across the CLI ([373490f](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/373490fc30da1edea84d7928691ab419b44f5bcf))
+
 ## [3.11.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.11.0...v3.11.1) (2026-07-05)
 
 

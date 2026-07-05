@@ -83,6 +83,29 @@ To **create a transition between two existing videos** (A → B), bridge them wi
 
 > **i2v clips are silent and use the model's own frame rate** (often not 24). `--concat-videos` normalizes fps/size and fills silent audio automatically, so mismatched clips stitch correctly — but passing `--fps` to the transition generation keeps things clean from the start. Use `--concat-fps <n>` to force a specific output frame rate.
 
+## SourceReel: Folder of Images → Loopable Video
+
+Turn a folder of images into one stitched video: each image becomes an animated
+clip, consecutive images are bridged by generated transition clips, and the
+whole set is concatenated into a single mp4 (a single image renders one clip with
+no transitions). **Always plan first — `--reel-plan-only` prints the planned
+clips/transitions for free without rendering.** The render populates a working
+folder (`<source>/sogni-source-reel-*`, or `--reel-workdir <dir>`) that keeps
+every intermediate ref, clip, and transition so reruns can reuse them; the final
+stitch **requires ffmpeg**. Looping is on by default (a last→first transition
+closes the loop) — pass `--no-reel-loop` for a one-way reel.
+
+```bash
+# 1. Plan the reel for free (no rendering)
+sogni-agent --source-reel ./images --reel-plan-only
+
+# 2. Render clips + transitions and stitch (loop on by default)
+sogni-agent --source-reel ./images \
+  --reel-image-seconds 3 --reel-transition-seconds 3 \
+  --reel-image-prompt "friendly camera-ready motion" \
+  --reel-output ./reel.mp4
+```
+
 ## Segment a Longer Reference Video
 
 For local stitched workflows that only need part of a source video:

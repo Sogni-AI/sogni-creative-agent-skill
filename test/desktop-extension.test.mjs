@@ -9,6 +9,7 @@ import {
   resolveAgentPath, resolveFfmpegPath, buildChildEnv,
 } from '../desktop-extension/server/resolve.mjs';
 import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
+import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
@@ -183,6 +184,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVER = join(HERE, '..', 'desktop-extension', 'server', 'index.mjs');
 const FAKE_AGENT = join(HERE, 'fixtures', 'fake-sogni-agent.mjs');
 
+// 1x1 red PNG, 67 bytes — a real decodable PNG for byte-identity assertions.
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 // Minimal line-delimited JSON-RPC client for driving the server under test.
 class McpClient {
   constructor(extraEnv = {}) {
@@ -321,4 +328,182 @@ test('manifest.json version matches package.json and entry point exists', () => 
   assert.ok(fsExistsSync(join(root, 'desktop-extension', manifest.server.entry_point)));
   assert.deepEqual(manifest.server.mcp_config.args, ['${__dirname}/server/index.mjs']);
   assert.ok(pkg.files.includes('desktop-extension/'));
+});
+
+test('collectInlineImages: localPath descriptor yields one PNG block', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const img = join(dir, 'out.png');
+  writeFileSync(img, TINY_PNG);
+  const stdout = JSON.stringify({ type: 'image', localPath: img, urls: [] });
+  const { blocks, notes } = await collectInlineImages({ toolName: 'generate_image', input: {}, stdout, env: {} });
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].type, 'image');
+  assert.equal(blocks[0].mimeType, 'image/png');
+  assert.ok(Buffer.from(blocks[0].data, 'base64').equals(TINY_PNG));
+  assert.deepEqual(notes, []);
+});
+
+test('collectInlineImages: urls descriptor fetches bytes (http allowed for trusted CLI output)', async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(TINY_PNG);
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/img.png`;
+  try {
+    const stdout = JSON.stringify({ type: 'image', localPath: null, urls: [url] });
+    const { blocks } = await collectInlineImages({ toolName: 'photobooth', input: {}, stdout, env: {} });
+    assert.equal(blocks.length, 1);
+    assert.ok(Buffer.from(blocks[0].data, 'base64').equals(TINY_PNG));
+    assert.equal(blocks[0].mimeType, 'image/png');
+  } finally {
+    server.close();
+  }
+});
+
+test('collectInlineImages: caps inline images at 4', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const img = join(dir, 'a.png');
+  writeFileSync(img, TINY_PNG);
+  // 6 urls, all file-backed via localPath being absent — use a local http server for realism-lite:
+  const { createServer } = await import('node:http');
+  const server = createServer((req, res) => { res.writeHead(200, { 'content-type': 'image/png' }); res.end(TINY_PNG); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const urls = Array.from({ length: 6 }, (_, i) => `${base}/${i}.png`);
+    const { blocks } = await collectInlineImages({ toolName: 'generate_image', input: {}, stdout: JSON.stringify({ urls }), env: {} });
+    assert.equal(blocks.length, 4);
+  } finally {
+    server.close();
+  }
+});
+
+test('collectInlineImages: out-of-scope tools and opt-out env return nothing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const img = join(dir, 'out.png');
+  writeFileSync(img, TINY_PNG);
+  const stdout = JSON.stringify({ localPath: img });
+  const video = await collectInlineImages({ toolName: 'generate_video', input: {}, stdout, env: {} });
+  assert.deepEqual(video, { blocks: [], notes: [] });
+  const optOut = await collectInlineImages({
+    toolName: 'generate_image', input: {}, stdout, env: { SOGNI_MCP_NO_INLINE_IMAGES: '1' },
+  });
+  assert.deepEqual(optOut, { blocks: [], notes: [] });
+});
+
+test('collectInlineImages: edit_video frame extraction reads the output path', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const frame = join(dir, 'frame.jpg');
+  writeFileSync(frame, TINY_PNG); // bytes don't need to be real JPEG for sourcing
+  const { blocks } = await collectInlineImages({
+    toolName: 'edit_video',
+    input: { action: 'extract_last_frame', input: '/x.mp4', output: frame },
+    stdout: 'non-json wrapper output',
+    env: {},
+  });
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].mimeType, 'image/jpeg');
+  const concat = await collectInlineImages({
+    toolName: 'edit_video', input: { action: 'concat_videos', clips: ['/a.mp4','/b.mp4'], output: '/o.mp4' },
+    stdout: '', env: {},
+  });
+  assert.deepEqual(concat, { blocks: [], notes: [] });
+});
+
+test('collectInlineImages: unparseable stdout and unreadable files degrade silently', async () => {
+  const garbage = await collectInlineImages({ toolName: 'generate_image', input: {}, stdout: 'not json at all', env: {} });
+  assert.deepEqual(garbage, { blocks: [], notes: [] });
+  const missing = await collectInlineImages({
+    toolName: 'generate_image', input: {}, stdout: JSON.stringify({ localPath: '/nonexistent/nope.png' }), env: {},
+  });
+  assert.deepEqual(missing, { blocks: [], notes: [] });
+});
+
+test('collectInlineImages: oversize non-image bytes are skipped with a note', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-'));
+  const big = join(dir, 'big.png');
+  writeFileSync(big, Buffer.alloc(4 * 1024 * 1024, 7)); // >3.5MB, not a real PNG → sharp fails → skip
+  const { blocks, notes } = await collectInlineImages({
+    toolName: 'generate_image', input: {}, stdout: JSON.stringify({ localPath: big }), env: {},
+  });
+  assert.equal(blocks.length, 0);
+  assert.deepEqual(notes, ['One image was too large to display inline; use the link above.']);
+});
+
+test('collectInlineImages: stalled URL fetch aborts on fetchTimeoutMs and degrades silently', async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer(() => {}); // never responds — simulates a stalling CDN
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/stall.png`;
+  try {
+    const result = await collectInlineImages({
+      toolName: 'generate_image',
+      input: {},
+      stdout: JSON.stringify({ type: 'image', localPath: null, urls: [url] }),
+      env: {},
+      fetchTimeoutMs: 100,
+    });
+    assert.deepEqual(result, { blocks: [], notes: [] });
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});
+
+test('tools/call generate_image returns inline image block ahead of text', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ type: 'image', localPath: img, urls: ['https://example.invalid/x.png'] }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'a red pixel' } });
+  assert.equal(res.result.isError ?? false, false);
+  assert.equal(res.result.content.length, 2);
+  assert.equal(res.result.content[0].type, 'image');
+  assert.equal(res.result.content[0].mimeType, 'image/png');
+  assert.ok(Buffer.from(res.result.content[0].data, 'base64').equals(TINY_PNG));
+  assert.equal(res.result.content[1].type, 'text');
+  assert.match(res.result.content[1].text, /localPath/);
+});
+
+test('tools/call inline opt-out env yields text-only', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ localPath: img }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile, SOGNI_MCP_NO_INLINE_IMAGES: '1' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'x' } });
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
+});
+
+test('tools/call failing CLI never attaches images', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ localPath: img }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile, FAKE_AGENT_EXIT: '2', FAKE_AGENT_STDERR: 'boom' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'x' } });
+  assert.equal(res.result.isError, true);
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
+});
+
+test('tools/call generate_video stays text-only', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ type: 'video', localPath: null, urls: ['https://example.invalid/v.mp4'] }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_video', arguments: { prompt: 'x' } });
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
 });

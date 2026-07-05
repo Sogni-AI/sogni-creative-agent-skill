@@ -275,7 +275,7 @@ Claude Desktop can't run skills against your local files, so Sogni ships as a lo
 
     npx setup-sogni-agent-skill
 
-This registers the Sogni tools in `claude_desktop_config.json`. Fully quit and reopen Claude Desktop afterwards.
+This registers the Sogni tools in `claude_desktop_config.json`. Fully quit and reopen Claude Desktop afterwards. Generated images display inline in the chat automatically.
 
 **Manual — drag-and-drop bundle:** download `sogni-creative-agent.mcpb` from the GitHub Releases page and drop it onto Claude Desktop's Settings → Extensions page. You'll be prompted for your Sogni API key (stored in the OS keychain) unless you've already run the installer.
 

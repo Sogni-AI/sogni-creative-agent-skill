@@ -26,7 +26,8 @@ export const TOOLS = [
     description:
       'Generate one or more images from a text prompt on the Sogni GPU network. ' +
       'Pass output_path (absolute, .png/.jpg) to save locally; otherwise a hosted URL is returned. ' +
-      'Use context_images for image editing ("make the background a beach") and persona to include a saved person.',
+      'Use context_images for image editing ("make the background a beach") and persona to include a saved person. ' +
+      'Image results are attached inline in the tool result.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -142,7 +143,8 @@ export const TOOLS = [
     name: 'photobooth',
     description:
       'Face-transfer portrait generation: renders the person in the ref photo into a new scene ' +
-      '(e.g. "LinkedIn professional headshot", "80s fashion portrait").',
+      '(e.g. "LinkedIn professional headshot", "80s fashion portrait"). ' +
+      'Image results are attached inline in the tool result.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -167,7 +169,8 @@ export const TOOLS = [
     name: 'edit_video',
     description:
       'Safe local video utilities (ffmpeg wrappers): extract the first/last frame, ' +
-      'concatenate clips (with optional soundtrack), or remix the audio of an existing video.',
+      'concatenate clips (with optional soundtrack), or remix the audio of an existing video. ' +
+      'Extracted frames are attached inline in the tool result.',
     inputSchema: {
       type: 'object',
       properties: {

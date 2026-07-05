@@ -10,6 +10,16 @@ A dependency-free MCP stdio server that wraps the globally installed
 - `server/resolve.mjs` — absolute-path resolution (agent, ffmpeg, child env);
   Claude Desktop's GUI environment has a minimal PATH, so nothing here relies on PATH lookup
 
+## Inline images
+
+Successful `generate_image`, `photobooth`, and frame-extraction calls attach
+the rendered image(s) to the tool result as MCP image content blocks, which
+Claude Desktop displays inline (up to 4 per call, full resolution; images
+that would exceed the ~3.5MB content ceiling are downscaled via `sharp`, or
+skipped with a note if that fails). The text block always keeps the hosted
+URL / saved path. Set `SOGNI_MCP_NO_INLINE_IMAGES=1` in the server env to
+disable.
+
 ## Build the .mcpb bundle
 
     npm run build:mcpb   # → dist/sogni-creative-agent.mcpb

@@ -13,6 +13,7 @@ const MAX_INLINE_IMAGES = 4;
 const MAX_RAW_BYTES = 3.5 * 1024 * 1024; // ≈5MB once base64-encoded — the practical content ceiling
 const DOWNSCALE_MAX_DIM = 2048;
 const DOWNSCALE_JPEG_QUALITY = 85;
+const FETCH_TIMEOUT_MS = 20_000; // inline fetch must never meaningfully delay the text result
 const TOO_LARGE_NOTE = 'One image was too large to display inline; use the link above.';
 
 const MIME_BY_EXT = {
@@ -65,11 +66,13 @@ function sourceCandidates(toolName, input, stdout) {
   return [];
 }
 
-async function obtainBytes(candidate, fetchImpl) {
+async function obtainBytes(candidate, fetchImpl, fetchTimeoutMs) {
   if (candidate.kind === 'file') {
     return { data: await readFile(candidate.ref), mime: mimeFromPath(candidate.ref) ?? 'image/png' };
   }
-  const res = await fetchImpl(candidate.ref);
+  // AbortSignal.timeout bounds headers AND body for undici fetch; an abort
+  // rejects the await, which the caller's per-image try/catch degrades silently.
+  const res = await fetchImpl(candidate.ref, { signal: AbortSignal.timeout(fetchTimeoutMs) });
   if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
   const headerMime = (res.headers.get('content-type') ?? '').split(';')[0].trim();
   const mime = headerMime.startsWith('image/') ? headerMime : (mimeFromPath(candidate.ref) ?? 'image/png');
@@ -94,7 +97,9 @@ async function fitBytes(entry) {
   }
 }
 
-export async function collectInlineImages({ toolName, input, stdout, env = process.env, fetchImpl = fetch }) {
+export async function collectInlineImages({
+  toolName, input, stdout, env = process.env, fetchImpl = fetch, fetchTimeoutMs = FETCH_TIMEOUT_MS,
+}) {
   const empty = { blocks: [], notes: [] };
   if (env.SOGNI_MCP_NO_INLINE_IMAGES === '1') return empty;
   if (!isInlineScoped(toolName, input)) return empty;
@@ -104,7 +109,7 @@ export async function collectInlineImages({ toolName, input, stdout, env = proce
   for (const candidate of sourceCandidates(toolName, input, stdout)) {
     if (blocks.length >= MAX_INLINE_IMAGES) break;
     try {
-      const fitted = await fitBytes(await obtainBytes(candidate, fetchImpl));
+      const fitted = await fitBytes(await obtainBytes(candidate, fetchImpl, fetchTimeoutMs));
       if (!fitted) {
         if (!notes.includes(TOO_LARGE_NOTE)) notes.push(TOO_LARGE_NOTE);
         continue;

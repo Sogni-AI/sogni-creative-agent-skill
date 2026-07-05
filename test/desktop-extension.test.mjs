@@ -432,6 +432,26 @@ test('collectInlineImages: oversize non-image bytes are skipped with a note', as
   assert.deepEqual(notes, ['One image was too large to display inline; use the link above.']);
 });
 
+test('collectInlineImages: stalled URL fetch aborts on fetchTimeoutMs and degrades silently', async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer(() => {}); // never responds — simulates a stalling CDN
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/stall.png`;
+  try {
+    const result = await collectInlineImages({
+      toolName: 'generate_image',
+      input: {},
+      stdout: JSON.stringify({ type: 'image', localPath: null, urls: [url] }),
+      env: {},
+      fetchTimeoutMs: 100,
+    });
+    assert.deepEqual(result, { blocks: [], notes: [] });
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+});
+
 test('tools/call generate_image returns inline image block ahead of text', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
   const img = join(dir, 'render.png');

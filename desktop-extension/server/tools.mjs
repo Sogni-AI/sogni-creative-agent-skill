@@ -20,6 +20,13 @@ function required(input, field, hint) {
 const str = (description) => ({ type: 'string', description });
 const num = (description) => ({ type: 'number', description });
 
+// Chat clients (Claude Desktop etc.) never expose chat-attached files to this
+// server's filesystem; without this warning the model wastes turns discovering
+// that boundary by trial and error.
+const CHAT_ATTACHMENT_NOTE =
+  'Files attached to the chat are NOT visible to Sogni tools — import them with import_media first ' +
+  '(returns a local path), or pass a local absolute path, URL, or saved persona.';
+
 export const TOOLS = [
   {
     name: 'generate_image',
@@ -27,7 +34,7 @@ export const TOOLS = [
       'Generate one or more images from a text prompt on the Sogni GPU network. ' +
       'Pass output_path (absolute, .png/.jpg) to save locally; otherwise a hosted URL is returned. ' +
       'Use context_images for image editing ("make the background a beach") and persona to include a saved person. ' +
-      'Image results are attached inline in the tool result.',
+      'Image results are attached inline in the tool result. ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -67,7 +74,7 @@ export const TOOLS = [
     description:
       'Generate a video from a text prompt, optionally driven by reference media. ' +
       'ref = start frame image, ref_end = end frame, ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
-      'Rendering takes minutes; prefer output_path (absolute .mp4).',
+      'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -144,7 +151,7 @@ export const TOOLS = [
     description:
       'Face-transfer portrait generation: renders the person in the ref photo into a new scene ' +
       '(e.g. "LinkedIn professional headshot", "80s fashion portrait"). ' +
-      'Image results are attached inline in the tool result.',
+      'Image results are attached inline in the tool result. ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -211,8 +218,29 @@ export const TOOLS = [
     },
   },
   {
+    name: 'import_media',
+    description:
+      'Save base64-encoded media bytes to the local Sogni media inbox and return the absolute file path, ' +
+      'ready to pass as ref / context_images / persona ref. Use this to hand chat-attached files to the ' +
+      'generation tools: read the attachment bytes (e.g. via code execution), downscale large images to ' +
+      '~1024px JPEG first, base64-encode, and send. For anything over ~40KB, send multiple calls: the first ' +
+      'with filename, each following chunk with append_to_path set to the returned path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: str('Base64-encoded file bytes for this chunk (keep each chunk under ~64KB of base64)'),
+        filename: str('Filename with a media extension for a NEW import, e.g. "photo.jpg"'),
+        append_to_path: str('Path returned by the previous call — appends this chunk to that file instead of creating a new one'),
+      },
+      required: ['data'],
+    },
+    local: true, // handled inside the server (import-media.mjs); never spawns the CLI
+  },
+  {
     name: 'list_media',
-    description: 'List recent inbound media files the user sent to Sogni (images, audio, or all).',
+    description:
+      'List recent files in the Sogni media inbox: media the user sent via connected messaging apps ' +
+      'plus files saved by import_media. Chat attachments do NOT appear here unless imported first.',
     inputSchema: {
       type: 'object',
       properties: { type: { type: 'string', enum: ['images', 'audio', 'all'] } },
@@ -225,7 +253,7 @@ export const TOOLS = [
     name: 'manage_personas',
     description:
       'Manage saved personas (named people with reference photos and optional voice clips). ' +
-      'Actions: list, add (needs name + ref photo), remove, resolve (show details).',
+      'Actions: list, add (needs name + ref photo), remove, resolve (show details). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {

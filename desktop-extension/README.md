@@ -14,11 +14,12 @@ A dependency-free MCP stdio server that wraps the globally installed
 
 Successful `generate_image`, `photobooth`, and frame-extraction calls attach
 the rendered image(s) to the tool result as MCP image content blocks, which
-Claude Desktop displays inline (up to 4 per call, full resolution; images
-that would exceed the ~3.5MB content ceiling are downscaled via `sharp`, or
-skipped with a note if that fails). The text block always keeps the hosted
-URL / saved path. Set `SOGNI_MCP_NO_INLINE_IMAGES=1` in the server env to
-disable.
+Claude Desktop displays inline (up to 4 per call). Previews auto-fit the
+host's 1MB tool-result limit: they share a ~700KB cumulative raw-byte budget,
+and any image over the remaining budget is downscaled via a `sharp` ladder
+(1024px/q80 → 768px/q70 → 512px/q60), or skipped with a note if none fits.
+The text block always keeps the full-resolution URL / saved path. Set
+`SOGNI_MCP_NO_INLINE_IMAGES=1` in the server env to disable.
 
 ## Build the .mcpb bundle
 

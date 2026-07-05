@@ -2896,6 +2896,117 @@ test('--balance does not require a prompt', () => {
   assert.equal(payload.type, 'balance');
 });
 
+// --- Sogni Unlimited plan awareness -------------------------------------------
+
+test('--balance --json includes account username and subscription state', () => {
+  const { exitCode, stdout } = runCli(['--json', '--balance'], {
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited' }),
+    SOGNI_AGENT_TEST_ACCOUNT_INFO_JSON: JSON.stringify({ username: 'krunkosaurus', network: 'fast', isUnlimited: true })
+  });
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.username, 'krunkosaurus');
+  assert.deepEqual(payload.subscription, { active: true, status: 'active', tier: 'unlimited' });
+});
+
+test('--balance human output shows account and plan lines', () => {
+  const { exitCode, stdout } = runCli(['--balance'], {
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited' })
+  });
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('Account: stub-user'), `expected account line, got: ${stdout}`);
+  assert.ok(stdout.includes('Plan: Sogni Unlimited (active)'), `expected plan line, got: ${stdout}`);
+  assert.ok(stdout.includes('SPARK:'));
+});
+
+test('--balance human output shows Plan: none without a subscription', () => {
+  const { exitCode, stdout } = runCli(['--balance']);
+  assert.equal(exitCode, 0);
+  assert.ok(stdout.includes('Plan: none'), `expected plan none line, got: ${stdout}`);
+});
+
+test('active Unlimited plan skips the zero-balance video pre-flight block', () => {
+  const { exitCode, state } = runCli(['--video', 'a cinematic skyline at dusk'], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 0, sogni: 0, lastUpdated: new Date().toISOString() }),
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited' })
+  });
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+});
+
+test('inactive subscription still blocks zero-balance video renders', () => {
+  const { exitCode, stdout } = runCli(['--json', '--video', 'a cinematic skyline at dusk'], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 0, sogni: 0, lastUpdated: new Date().toISOString() }),
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: false, status: 'grace_period', tier: 'unlimited' })
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+});
+
+test('--billing-mode tokens opts out of the Unlimited pre-flight skip', () => {
+  const { exitCode, stdout } = runCli(['--json', '--billing-mode', 'tokens', '--video', 'a cinematic skyline at dusk'], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 0, sogni: 0, lastUpdated: new Date().toISOString() }),
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited' })
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+});
+
+test('subscription lookup failure falls back to the balance check', () => {
+  const { exitCode, stdout } = runCli(['--json', '--video', 'a cinematic skyline at dusk'], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 0, sogni: 0, lastUpdated: new Date().toISOString() }),
+    SOGNI_AGENT_TEST_SUBSCRIPTION_ERROR: 'subscription endpoint unavailable'
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
+});
+
+test('--billing-mode passes through to the image project config', () => {
+  const { exitCode, state } = runCli(['--billing-mode', 'auto', 'a duck on a skateboard']);
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastImageProject?.billingMode, 'auto');
+});
+
+test('billingMode is omitted from the project config by default', () => {
+  const { exitCode, state } = runCli(['a duck on a skateboard']);
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastImageProject);
+  assert.equal('billingMode' in state.lastImageProject, false);
+});
+
+test('--billing-mode rejects unknown values', () => {
+  expectCliError(
+    ['--billing-mode', 'gold', 'a duck on a skateboard'],
+    '--billing-mode must be "auto", "subscription", or "tokens".'
+  );
+});
+
+test('--doctor --json reports identity and the subscription plan check', () => {
+  const { exitCode, stdout } = runCli(['--doctor', '--json'], {
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited_pro' })
+  });
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  const byId = Object.fromEntries(payload.checks.map((check) => [check.id, check]));
+  assert.equal(byId.plan.status, 'pass');
+  assert.ok(byId.plan.detail.includes('Sogni Unlimited Pro'), `expected tier label, got: ${byId.plan.detail}`);
+  assert.ok(byId.auth.detail.includes('user stub-user'), `expected identity in auth check, got: ${byId.auth.detail}`);
+});
+
+test('--doctor warns when there is no subscription and no token balance', () => {
+  const { exitCode, stdout } = runCli(['--doctor', '--json'], {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 0, sogni: 0, lastUpdated: new Date().toISOString() })
+  });
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim().split('\n').filter(Boolean).pop());
+  const byId = Object.fromEntries(payload.checks.map((check) => [check.id, check]));
+  assert.equal(byId.plan.status, 'warn');
+  assert.ok(byId.plan.detail.includes('renders will fail'), `expected warn detail, got: ${byId.plan.detail}`);
+});
+
 test('json error: i2v explicit size that rounds to non-16 suggests a compatible bbox', async () => {
   const { default: sharp } = await import('sharp');
   const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-ref-'));

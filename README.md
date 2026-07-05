@@ -584,7 +584,7 @@ Uses SDXL Turbo (`coreml-sogniXLturbo_alpha1_ad`) at 1024×1024 by default. The 
 
 Multi-angle mode (`--multi-angle` / `--angles-360`) auto-builds the `<sks>` prompt and applies the `multiple_angles` LoRA. `--angles-360-video` generates i2v clips between consecutive angles (including last → first) and concatenates them with `ffmpeg` into a seamless loop.
 
-`--balance` / `--balances` does not require a prompt and prints current `SPARK` and `SOGNI` balances before exiting.
+`--balance` / `--balances` does not require a prompt and prints the account username, subscription plan (`Plan: Sogni Unlimited (active)` / `Plan: none`), and current `SPARK` and `SOGNI` balances before exiting. In `--json` mode the payload carries `username` and `subscription` fields (`null` when unavailable). `--doctor` likewise reports the authenticated user and an explicit `plan` check, so a wrong-account API key or a missing subscription is visible at a glance.
 
 ---
 
@@ -724,7 +724,9 @@ App Store and Google Play prices may differ from web pricing due to platform fee
 - **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`), and **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
-The CLI never sends `billingMode`/coverage hints itself; the server decides coverage from the account's verified entitlement and the resolved model. A subscription claim is never honored without a server-verified entitlement.
+By default the CLI sends no `billingMode`/coverage hint; the server decides coverage from the account's verified entitlement and the resolved model, and a subscription claim is never honored without a server-verified entitlement. `--billing-mode` makes the choice explicit when you need it: `subscription` requires Unlimited coverage (the job fails instead of spending tokens), `tokens` opts out of coverage and bills Spark/SOGNI, and `auto` states the default server behavior explicitly.
+
+With an active subscription, the CLI also skips its client-side "insufficient SPARK" pre-flight for covered video renders — a low token balance no longer blocks jobs the plan pays for. Vendor models and `--billing-mode tokens` keep the pre-flight, and the server remains authoritative either way.
 
 ### Free-trial usage limits
 

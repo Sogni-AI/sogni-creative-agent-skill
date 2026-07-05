@@ -191,6 +191,7 @@ sogni-agent doctor --json
 | `--photobooth` | Face transfer mode (with `--ref`) | - |
 | `--persona <name>` | Use a saved persona (photo + voice auto-attach) | - |
 | `--token-type spark\|sogni\|auto` | `auto` retries native models with SOGNI when SPARK is low | spark |
+| `--billing-mode auto\|subscription\|tokens` | `subscription` requires Sogni Unlimited coverage; `tokens` opts out of it | server decides |
 | `--last`, `--last-image` | Inspect last render / reuse it as context or ref | - |
 | `--json` | Machine-parseable stdout (progress goes to stderr) | false |
 | `-q, --quiet` | Suppress progress output | false |
@@ -296,7 +297,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 }
 ```
 
-`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "sogni": 0.56 }`. `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
+`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "sogni": 0.56, "username": "name", "subscription": { "active": true, "status": "active", "tier": "unlimited" } }` (`username`/`subscription` are `null` when unavailable; an active subscription means eligible renders are covered by Sogni Unlimited even when `spark` is low). `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
 
 ## Cost
 

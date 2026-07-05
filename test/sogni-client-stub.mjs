@@ -172,6 +172,23 @@ class SogniClientWrapper extends EventEmitter {
     };
   }
 
+  async getSubscriptionStatus() {
+    if (process.env.SOGNI_AGENT_TEST_SUBSCRIPTION_ERROR) {
+      throw new Error(process.env.SOGNI_AGENT_TEST_SUBSCRIPTION_ERROR);
+    }
+    if (process.env.SOGNI_AGENT_TEST_SUBSCRIPTION_JSON) {
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_SUBSCRIPTION_JSON);
+    }
+    return { active: false, status: 'none' };
+  }
+
+  async getAccountInfo() {
+    if (process.env.SOGNI_AGENT_TEST_ACCOUNT_INFO_JSON) {
+      return JSON.parse(process.env.SOGNI_AGENT_TEST_ACCOUNT_INFO_JSON);
+    }
+    return { username: 'stub-user', network: 'fast', isUnlimited: false };
+  }
+
   async estimateVideoCost() {
     const state = getState();
     state.lastEstimateVideoCost = arguments[0] ?? null;

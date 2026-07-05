@@ -1271,6 +1271,41 @@ function requiresSparkOnlyToken(modelId) {
   return isGptImage2ModelSelection(modelId) || isSeedanceModel(modelId) || isHappyHorseModel(modelId);
 }
 
+// Attach the user's explicit --billing-mode to a project config. Omitted by
+// default so the server keeps deciding coverage (Unlimited members get 'auto'
+// coverage server-side; token payers are unaffected).
+function withBillingMode(config) {
+  if (!options.billingMode) return config;
+  return { ...config, billingMode: options.billingMode };
+}
+
+// Best-effort Sogni Unlimited entitlement lookup. Returns null (never throws)
+// when the wrapper predates getSubscriptionStatus() or the request fails, so
+// callers degrade to balance-only behavior.
+async function fetchSubscriptionSnapshot(client, log) {
+  if (typeof client?.getSubscriptionStatus !== 'function') return null;
+  try {
+    return await client.getSubscriptionStatus();
+  } catch (err) {
+    if (!options.quiet && typeof log === 'function') {
+      log(`Warning: could not fetch subscription status (${err?.message || 'error'})`);
+    }
+    return null;
+  }
+}
+
+const SUBSCRIPTION_TIER_LABELS = {
+  unlimited: 'Sogni Unlimited',
+  unlimited_pro: 'Sogni Unlimited Pro',
+};
+
+function describeSubscription(subscription) {
+  if (!subscription || subscription.active !== true) return 'none';
+  const tierKey = String(subscription.tier || '').toLowerCase();
+  const label = SUBSCRIPTION_TIER_LABELS[tierKey] || subscription.tier || 'subscription';
+  return `${label} (${subscription.status || 'active'})`;
+}
+
 // HappyHorse 1.1 ships three discrete vendor models (no mini/fast). The shared
 // intel client only resolves the fully-qualified ids; accept the bare
 // `happyhorse` / `happyhorse-1.1` selector here so `-m happyhorse` works the way
@@ -1757,6 +1792,7 @@ const options = {
   strictSize: false,
   quality: null, // Quality tier: fast|hq|pro — auto-selects model, steps, dimensions
   tokenType: null,
+  billingMode: null, // auto|subscription|tokens — omitted by default so the server decides coverage
   steps: null,
   guidance: null,
   outputFormat: null,
@@ -2039,6 +2075,11 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.tokenType = raw;
     cliSet.tokenType = true;
+  } else if (arg === '--billing-mode') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.billingMode = raw;
+    cliSet.billingMode = true;
   } else if (arg === '--steps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -2906,8 +2947,10 @@ General:
   --steps <num>         Override steps (model-dependent)
   --guidance <num>      Override guidance (model-dependent)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
-  --balance, --balances Show SPARK/SOGNI balances and exit
-  --doctor              Health check: Node, credentials, ffmpeg, auth, config, version
+  --billing-mode <mode> Billing: auto|subscription|tokens (default: server decides; "subscription"
+                        requires Sogni Unlimited coverage, "tokens" opts out of it)
+  --balance, --balances Show account, plan, and SPARK/SOGNI balances and exit
+  --doctor              Health check: Node, credentials, ffmpeg, auth, plan, config, version
   --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
   --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
   --version, -V         Show sogni-agent version and exit
@@ -3159,6 +3202,17 @@ if (options.tokenType) {
     });
   }
   options.tokenType = token;
+}
+
+if (options.billingMode) {
+  const mode = String(options.billingMode).toLowerCase();
+  if (mode !== 'auto' && mode !== 'subscription' && mode !== 'tokens') {
+    fatalCliError('--billing-mode must be "auto", "subscription", or "tokens".', {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--billing-mode', value: options.billingMode }
+    });
+  }
+  options.billingMode = mode;
 }
 
 if (options.apiTaskProfile) {
@@ -7541,7 +7595,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
   client.on(ClientEvent.JOB_FAILED, onFailed);
 
   try {
-    const projectResult = await client.createImageEditProject(editConfig);
+    const projectResult = await client.createImageEditProject(withBillingMode(editConfig));
     projectId = projectResult?.project?.id || projectId;
 
     // Check for errors in the response (e.g., insufficient tokens)
@@ -7842,7 +7896,7 @@ async function runMultiAngleFlow(client, log) {
       if (options.autoResizeVideoAssets !== null) {
         clipConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;
       }
-      const clipResult = await client.createVideoProject(clipConfig);
+      const clipResult = await client.createVideoProject(withBillingMode(clipConfig));
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (clipResult?.error || clipResult?.message) {
@@ -7929,6 +7983,15 @@ function buildVideoEstimateParams({ tokenType, steps }) {
 
 async function ensureSufficientVideoBalance(client, log) {
   if (!options.video || options.estimateVideoCost) return;
+  // Sogni Unlimited bills covered video jobs to the subscription, so a low
+  // token balance must not block them client-side. Vendor models
+  // (Seedance/HappyHorse) always bill Premium Spark and keep the check, as
+  // does an explicit --billing-mode tokens opt-out. The server stays
+  // authoritative: an uncovered job still fails there with enriched guidance.
+  if (options.billingMode !== 'tokens' && !requiresSparkOnlyToken(options.model)) {
+    const subscription = await fetchSubscriptionSnapshot(client, log);
+    if (subscription?.active === true) return;
+  }
   const tokenType = options.tokenType || 'spark';
   const tokenLabel = tokenType.toUpperCase();
   let balance;
@@ -8062,9 +8125,19 @@ async function runDoctor() {
       });
       const authFlow = (async () => {
         await connectSogniClient(doctorClient);
-        return doctorClient.getBalance();
+        const balance = await doctorClient.getBalance();
+        // Identity + entitlement are best-effort: an old wrapper or a flaky
+        // subscription endpoint must not fail the auth check itself.
+        let accountInfo = null;
+        if (typeof doctorClient.getAccountInfo === 'function') {
+          try {
+            accountInfo = await doctorClient.getAccountInfo();
+          } catch { /* ignore */ }
+        }
+        const subscription = await fetchSubscriptionSnapshot(doctorClient, null);
+        return { balance, accountInfo, subscription };
       })();
-      const balance = await Promise.race([
+      const { balance, accountInfo, subscription } = await Promise.race([
         authFlow,
         new Promise((_, reject) => setTimeout(
           () => reject(Object.assign(new Error('timed out'), { code: 'DOCTOR_TIMEOUT' })),
@@ -8073,8 +8146,18 @@ async function runDoctor() {
       ]);
       const spark = Number.parseFloat(balance?.spark);
       const sogni = Number.parseFloat(balance?.sogni);
+      const identity = accountInfo?.username ? `user ${accountInfo.username}, ` : '';
       add('auth', 'pass',
-        `API key accepted (SPARK ${Number.isFinite(spark) ? spark : '?'}, SOGNI ${Number.isFinite(sogni) ? sogni : '?'})`);
+        `API key accepted (${identity}SPARK ${Number.isFinite(spark) ? spark : '?'}, SOGNI ${Number.isFinite(sogni) ? sogni : '?'})`);
+      if (subscription) {
+        if (subscription.active === true) {
+          add('plan', 'pass', describeSubscription(subscription));
+        } else if (Number.isFinite(spark) && spark <= 0 && Number.isFinite(sogni) && sogni <= 0) {
+          add('plan', 'warn', 'no subscription and no token balance — renders will fail until you buy Spark Packs or subscribe');
+        } else {
+          add('plan', 'pass', 'none — renders bill Spark/SOGNI from this account\'s balance');
+        }
+      }
     } catch (err) {
       if (isInvalidApiKeyError(err)) {
         add('auth', 'fail', 'API key rejected — get a fresh key at https://dashboard.sogni.ai (account menu)');
@@ -8528,6 +8611,15 @@ async function main() {
       const balance = await client.getBalance();
       const spark = Number.parseFloat(balance?.spark);
       const sogni = Number.parseFloat(balance?.sogni);
+      // Identity + plan make wrong-account and no-subscription states visible
+      // (a low Spark balance is fine when Unlimited covers the renders).
+      const subscription = await fetchSubscriptionSnapshot(client, log);
+      let accountInfo = null;
+      if (typeof client.getAccountInfo === 'function') {
+        try {
+          accountInfo = await client.getAccountInfo();
+        } catch { /* identity display is best-effort */ }
+      }
       if (options.json) {
         console.log(JSON.stringify({
           success: true,
@@ -8535,9 +8627,23 @@ async function main() {
           spark: Number.isFinite(spark) ? spark : null,
           sogni: Number.isFinite(sogni) ? sogni : null,
           tokenType: options.tokenType || 'spark',
+          username: accountInfo?.username ?? null,
+          subscription: subscription
+            ? {
+                active: subscription.active === true,
+                status: subscription.status ?? null,
+                tier: subscription.tier ?? null
+              }
+            : null,
           timestamp: new Date().toISOString()
         }));
       } else {
+        if (accountInfo?.username) {
+          console.log(`Account: ${accountInfo.username}`);
+        }
+        if (subscription) {
+          console.log(`Plan: ${describeSubscription(subscription)}`);
+        }
         console.log(`SPARK: ${formatTokenValue(spark)}`);
         console.log(`SOGNI: ${formatTokenValue(sogni)}`);
       }
@@ -9029,7 +9135,7 @@ async function main() {
         projectConfig.lastFrameStrength = options.lastFrameStrength;
       }
 
-      const videoResult = await client.createVideoProject(projectConfig);
+      const videoResult = await client.createVideoProject(withBillingMode(projectConfig));
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (videoResult?.error || videoResult?.message) {
@@ -9091,7 +9197,7 @@ async function main() {
         projectConfig.seed = options.seed;
       }
 
-      const audioResult = await client.createAudioProject(projectConfig);
+      const audioResult = await client.createAudioProject(withBillingMode(projectConfig));
 
       if (audioResult?.error || audioResult?.message) {
         throw buildProjectResultError(audioResult);
@@ -9154,8 +9260,8 @@ async function main() {
       }
       
       const editResult = isGptImage2ModelSelection(options.model)
-        ? await client.createImageProject(editConfig)
-        : await client.createImageEditProject(editConfig);
+        ? await client.createImageProject(withBillingMode(editConfig))
+        : await client.createImageEditProject(withBillingMode(editConfig));
       if (editResult?.error || editResult?.message) {
         throw buildProjectResultError(editResult);
       }
@@ -9200,7 +9306,7 @@ async function main() {
       if (options.loras.length > 0) projectConfig.loras = options.loras;
       if (options.loraStrengths.length > 0) projectConfig.loraStrengths = options.loraStrengths;
 
-      const projectResult = await client.createImageProject(projectConfig);
+      const projectResult = await client.createImageProject(withBillingMode(projectConfig));
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (projectResult?.error || projectResult?.message) {
@@ -9269,7 +9375,7 @@ async function main() {
           projectConfig.seed = options.seed;
         }
 
-        const imageResult = await client.createImageProject(projectConfig);
+        const imageResult = await client.createImageProject(withBillingMode(projectConfig));
         if (imageResult?.error || imageResult?.message) {
           throw buildProjectResultError(imageResult);
         }
@@ -9488,7 +9594,7 @@ async function main() {
             });
           });
 
-          const clip2Result = await client2.createVideoProject(projectConfig2);
+          const clip2Result = await client2.createVideoProject(withBillingMode(projectConfig2));
 
           // Check for errors in the response (e.g., insufficient tokens)
           if (clip2Result?.error || clip2Result?.message) {

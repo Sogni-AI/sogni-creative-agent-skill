@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOLS, getTool } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
+import { collectInlineImages } from './inline-images.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROTOCOL_FALLBACK = '2025-06-18';
@@ -86,13 +87,26 @@ async function callTool(name, input, progressToken) {
     };
 
     child.on('error', (err) => finish(textResult(`Failed to launch sogni-agent: ${err.message}`, true)));
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       const text = [stdout.trim(), code === 0 ? '' : stderr.trim()].filter(Boolean).join('\n')
         || `sogni-agent exited with code ${code}`;
       // Success output is front-loaded (e.g. result JSON) so keep the head; on
       // failure the actionable error is at the tail, so keep the tail instead.
       const clipped = code === 0 ? text.slice(0, MAX_RESULT_CHARS) : text.slice(-MAX_RESULT_CHARS);
-      finish(textResult(clipped, code !== 0));
+      if (code !== 0) {
+        finish(textResult(clipped, true));
+        return;
+      }
+      // Inline images: best-effort. Any failure here must not degrade the
+      // text result, so the whole step is fenced.
+      let inline = { blocks: [], notes: [] };
+      try {
+        inline = await collectInlineImages({ toolName: name, input: input ?? {}, stdout });
+      } catch {
+        inline = { blocks: [], notes: [] };
+      }
+      const finalText = [clipped, ...inline.notes].join('\n');
+      finish({ content: [...inline.blocks, { type: 'text', text: finalText }], isError: false });
     });
   });
 }

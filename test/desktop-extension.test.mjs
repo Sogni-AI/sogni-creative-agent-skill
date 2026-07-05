@@ -431,3 +431,59 @@ test('collectInlineImages: oversize non-image bytes are skipped with a note', as
   assert.equal(blocks.length, 0);
   assert.deepEqual(notes, ['One image was too large to display inline; use the link above.']);
 });
+
+test('tools/call generate_image returns inline image block ahead of text', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ type: 'image', localPath: img, urls: ['https://example.invalid/x.png'] }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'a red pixel' } });
+  assert.equal(res.result.isError ?? false, false);
+  assert.equal(res.result.content.length, 2);
+  assert.equal(res.result.content[0].type, 'image');
+  assert.equal(res.result.content[0].mimeType, 'image/png');
+  assert.ok(Buffer.from(res.result.content[0].data, 'base64').equals(TINY_PNG));
+  assert.equal(res.result.content[1].type, 'text');
+  assert.match(res.result.content[1].text, /localPath/);
+});
+
+test('tools/call inline opt-out env yields text-only', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ localPath: img }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile, SOGNI_MCP_NO_INLINE_IMAGES: '1' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'x' } });
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
+});
+
+test('tools/call failing CLI never attaches images', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'render.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ localPath: img }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile, FAKE_AGENT_EXIT: '2', FAKE_AGENT_STDERR: 'boom' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt: 'x' } });
+  assert.equal(res.result.isError, true);
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
+});
+
+test('tools/call generate_video stays text-only', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const stdoutFile = join(dir, 'stdout.json');
+  writeFileSync(stdoutFile, JSON.stringify({ type: 'video', localPath: null, urls: ['https://example.invalid/v.mp4'] }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'generate_video', arguments: { prompt: 'x' } });
+  assert.equal(res.result.content.length, 1);
+  assert.equal(res.result.content[0].type, 'text');
+});

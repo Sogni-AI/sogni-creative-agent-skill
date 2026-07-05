@@ -1866,6 +1866,19 @@ const options = {
   concatFps: null, // --concat-fps <n>: override target fps for concat normalization
   extractFirstFrame: null, // --extract-first-frame <video> <image>
   extractFirstFrameOutput: null,
+  sourceReelDir: null, // --source-reel <image-folder>: animate folder images into a stitched video
+  sourceReelImageSeconds: 3,
+  sourceReelTransitionSeconds: 3,
+  sourceReelLoop: true,
+  sourceReelWorkdir: null,
+  sourceReelOutput: null,
+  sourceReelImagePrompt: null,
+  sourceReelTransitionPrompt: null,
+  sourceReelTransitionPrompts: null,
+  sourceReelPlanOnly: false,
+  sourceReelConcurrency: 2,
+  sourceReelModel: null,
+  sourceReelTargetResolution: 768,
   // Audio remix (--remix-audio <in_video> <out_video>): loop/fade/mix without re-encoding video
   remixAudio: null,
   remixAudioOutput: null,
@@ -2450,6 +2463,56 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.extractFirstFrame = videoArg;
     options.extractFirstFrameOutput = imageArg;
+  } else if (arg === '--source-reel' || arg === '--image-reel') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.sourceReelDir = raw;
+  } else if (arg === '--reel-image-seconds' || arg === '--reel-clip-seconds') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelImageSeconds = parsePositiveIntegerValue(raw, arg);
+  } else if (arg === '--reel-transition-seconds') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelTransitionSeconds = parsePositiveIntegerValue(raw, arg);
+  } else if (arg === '--reel-loop') {
+    options.sourceReelLoop = true;
+  } else if (arg === '--no-reel-loop') {
+    options.sourceReelLoop = false;
+  } else if (arg === '--reel-workdir') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.sourceReelWorkdir = raw;
+  } else if (arg === '--reel-output') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.sourceReelOutput = raw;
+  } else if (arg === '--reel-image-prompt') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelImagePrompt = raw;
+  } else if (arg === '--reel-transition-prompt') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelTransitionPrompt = raw;
+  } else if (arg === '--reel-transition-prompts') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelTransitionPrompts = raw;
+  } else if (arg === '--reel-plan-only' || arg === '--reel-dry-run') {
+    options.sourceReelPlanOnly = true;
+  } else if (arg === '--reel-concurrency') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelConcurrency = parsePositiveIntegerValue(raw, arg, 1, 8);
+  } else if (arg === '--reel-model') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelModel = raw;
+  } else if (arg === '--reel-target-resolution') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.sourceReelTargetResolution = parsePositiveIntegerValue(raw, arg, 480, 1536);
   } else if (arg === '--remix-audio') {
     const inArg = requireFlagValue(args, i, arg + ' (input video)');
     i++;
@@ -2906,6 +2969,21 @@ Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / see
   --looping, --loop     Create seamless loop (i2v only): A→B→A
   --last-image          Use last generated image as reference
 
+SourceReel (folder of images → loopable video):
+  --source-reel <dir>   Build a video reel from images in a folder (alias: --image-reel)
+  --reel-plan-only      Print the planned clips/transitions without rendering
+  --reel-image-seconds <sec>      Seconds per animated image clip (default: 3)
+  --reel-transition-seconds <sec> Seconds per bridge transition (default: 3)
+  --reel-loop / --no-reel-loop    Include final last→first transition (default: loop)
+  --reel-image-prompt <text>      Motion prompt for each source image
+  --reel-transition-prompt <text> Default transition style between images
+  --reel-transition-prompts <json|@file>  Per-transition prompt array/object
+  --reel-workdir <dir>  Use/create one working folder (default: <source>/sogni-source-reel-*)
+  --reel-output <path>  Final merged mp4 path (default: inside working folder)
+  --reel-model <id>     Video model for clips/transitions (default: WAN i2v lightx2v)
+  --reel-concurrency <n> Parallel render jobs, 1-8 (default: 2)
+  --reel-target-resolution <px> Inferred short side when -w/-h omitted (default: 768)
+
 Hosted API Modes:
   --api-chat            Use /v1/chat/completions with Sogni creative-agent tools
   --durable-chat        Like --api-chat but routes through durable /v1/chat/runs + SSE
@@ -3066,6 +3144,8 @@ Examples:
   sogni-agent --video --ref cat.jpg --ref-audio speech.m4a -m wan_v2.2-14b-fp8_s2v_lightx2v "lip sync"
   sogni-agent --video --ref cover.jpg --ref-audio song.mp3 "music video"
   sogni-agent --video --ref-audio song.mp3 "abstract music visualizer"
+  sogni-agent --source-reel ./images --reel-plan-only
+  sogni-agent --source-reel ./images --reel-image-seconds 3 --reel-transition-seconds 3 --reel-image-prompt "friendly camera-ready motion"
   sogni-agent --music --duration 30 "uplifting cinematic synthwave theme for a product launch"
   sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale "C major" --output-format mp3 "bright indie pop chorus"
   sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
@@ -3756,6 +3836,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.extractLastFrame &&
   !options.extractFirstFrame &&
   !options.concatVideos &&
+  !options.sourceReelDir &&
   !options.remixAudio &&
   !options.listMedia &&
   !options.memoryAction &&
@@ -3772,7 +3853,7 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !opt
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7543,6 +7624,484 @@ async function remixVideoAudio(inputVideo, outputVideo, opts = {}) {
   }
 }
 
+const SOURCE_REEL_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const SOURCE_REEL_DEFAULT_MODEL = 'wan_v2.2-14b-fp8_i2v_lightx2v';
+const SOURCE_REEL_DEFAULT_IMAGE_PROMPT =
+  'A polished camera-ready photo moment: the subject or scene comes gently to life with restrained natural motion, soft breathing or environmental movement, subtle parallax, stable lighting, and a smooth steady camera. Preserve the source image identity, composition, style, and important details.';
+const SOURCE_REEL_DEFAULT_TRANSITION_PROMPT =
+  'Create a seamless, well-designed transition between the two shots with continuous camera motion, natural subject movement where appropriate, consistent lighting, and a clean landing into the next frame. Avoid a simple fade; make the bridge feel intentional and cinematic.';
+
+function sourceReelTimestamp() {
+  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+}
+
+function sourceReelSlug(value, fallback = 'item') {
+  const slug = String(value || '')
+    .toLowerCase()
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  return slug || fallback;
+}
+
+function roundToMultiple(value, multiple) {
+  return Math.max(multiple, Math.round(value / multiple) * multiple);
+}
+
+function inferSourceReelDimensions(metadata, targetShortSide) {
+  const rawWidth = Number(metadata?.width) || targetShortSide;
+  const rawHeight = Number(metadata?.height) || targetShortSide;
+  const aspect = rawWidth > 0 && rawHeight > 0 ? rawWidth / rawHeight : 1;
+  let width;
+  let height;
+  if (aspect >= 1) {
+    height = targetShortSide;
+    width = targetShortSide * aspect;
+  } else {
+    width = targetShortSide;
+    height = targetShortSide / aspect;
+  }
+
+  const maxSide = Math.max(width, height);
+  if (maxSide > 1536) {
+    const scale = 1536 / maxSide;
+    width *= scale;
+    height *= scale;
+  }
+  const minSide = Math.min(width, height);
+  if (minSide < 480) {
+    const scale = 480 / minSide;
+    width *= scale;
+    height *= scale;
+  }
+
+  return {
+    width: roundToMultiple(width, 16),
+    height: roundToMultiple(height, 16)
+  };
+}
+
+function uniqueSourceReelWorkdir(sourceDir) {
+  const base = join(sourceDir, `sogni-source-reel-${sourceReelTimestamp()}`);
+  if (!existsSync(base)) return base;
+  for (let i = 2; i < 100; i++) {
+    const candidate = `${base}-${i}`;
+    if (!existsSync(candidate)) return candidate;
+  }
+  return mkdtempSync(`${base}-`);
+}
+
+function loadSourceReelImages(sourceDir) {
+  const dir = sanitizePath(sourceDir, '--source-reel');
+  if (!existsSync(dir)) {
+    const err = new Error(`SourceReel image folder not found: ${dir}`);
+    err.code = 'FILE_NOT_FOUND';
+    throw err;
+  }
+  const lstats = lstatSync(dir);
+  if (!lstats.isDirectory() || lstats.isSymbolicLink()) {
+    const err = new Error(`SourceReel path must be a real directory: ${dir}`);
+    err.code = 'INVALID_PATH';
+    throw err;
+  }
+
+  const entries = readdirSync(dir);
+  const images = [];
+  for (const entry of entries) {
+    const ext = extname(entry).toLowerCase();
+    if (!SOURCE_REEL_IMAGE_EXTS.has(ext)) continue;
+    const fullPath = join(dir, entry);
+    const fileStats = lstatSync(fullPath);
+    if (fileStats.isSymbolicLink() || !fileStats.isFile()) continue;
+    images.push({
+      path: fullPath,
+      name: entry,
+      base: basename(entry, ext),
+      slug: sourceReelSlug(entry, `image-${images.length + 1}`)
+    });
+  }
+  images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  images.forEach((image, idx) => {
+    image.index = idx + 1;
+    image.id = String(idx + 1).padStart(2, '0');
+  });
+  return images;
+}
+
+function loadSourceReelTransitionPromptOverrides(raw) {
+  if (!raw) return null;
+  const parsed = parseJsonArgument(raw, '--reel-transition-prompts', 'INVALID_REEL_PROMPTS');
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object') return parsed;
+  fatalCliError('--reel-transition-prompts must be a JSON array or object, or @path to one.', {
+    code: 'INVALID_REEL_PROMPTS'
+  });
+}
+
+function sourceReelTransitionOverride(overrides, index, from, to) {
+  if (!overrides) return null;
+  if (Array.isArray(overrides)) {
+    return typeof overrides[index] === 'string' ? overrides[index] : null;
+  }
+  const keys = [
+    `${from.id}-to-${to.id}`,
+    `${from.index}-to-${to.index}`,
+    `${from.slug}-to-${to.slug}`,
+    `${from.base}-to-${to.base}`,
+  ];
+  for (const key of keys) {
+    if (typeof overrides[key] === 'string') return overrides[key];
+  }
+  return typeof overrides.default === 'string' ? overrides.default : null;
+}
+
+function buildSourceReelPlan() {
+  const sourceDir = resolve(sanitizePath(options.sourceReelDir, '--source-reel'));
+  const images = loadSourceReelImages(sourceDir);
+  if (images.length === 0) {
+    fatalCliError(`No source images found in ${sourceDir}. Supported: jpg, jpeg, png, webp.`, {
+      code: 'NO_SOURCE_IMAGES',
+      details: { sourceDir }
+    });
+  }
+
+  let dimensions = null;
+  if (cliSet.width || cliSet.height) {
+    if (!cliSet.width || !cliSet.height) {
+      fatalCliError('SourceReel requires both -w and -h when overriding dimensions.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    dimensions = {
+      width: roundToMultiple(options.width, 16),
+      height: roundToMultiple(options.height, 16)
+    };
+  }
+
+  const workdir = resolve(options.sourceReelWorkdir
+    ? sanitizePath(options.sourceReelWorkdir, '--reel-workdir')
+    : uniqueSourceReelWorkdir(sourceDir));
+  const outputPath = resolve(options.sourceReelOutput
+    ? sanitizePath(options.sourceReelOutput, '--reel-output')
+    : join(workdir, options.sourceReelLoop ? 'source-reel-loop.mp4' : 'source-reel.mp4'));
+
+  const imagePrompt = options.sourceReelImagePrompt || options.prompt || SOURCE_REEL_DEFAULT_IMAGE_PROMPT;
+  const transitionBasePrompt = options.sourceReelTransitionPrompt || SOURCE_REEL_DEFAULT_TRANSITION_PROMPT;
+  const promptOverrides = loadSourceReelTransitionPromptOverrides(options.sourceReelTransitionPrompts);
+  const model = options.sourceReelModel || (cliSet.model ? options.model : null) || SOURCE_REEL_DEFAULT_MODEL;
+  const fps = cliSet.fps ? options.fps : 32;
+  const concurrency = options.sourceReelConcurrency || 2;
+
+  const clips = images.map((image) => ({
+    ...image,
+    refPath: join(workdir, 'refs', `${image.id}-${image.slug}.jpg`),
+    clipPath: join(workdir, 'clips', `${image.id}-${image.slug}.mp4`),
+    logPath: join(workdir, 'logs', 'clips', `${image.id}-${image.slug}.log`),
+    prompt: imagePrompt
+  }));
+
+  const transitionCount = images.length > 1
+    ? (options.sourceReelLoop ? images.length : images.length - 1)
+    : 0;
+  const transitions = [];
+  for (let i = 0; i < transitionCount; i++) {
+    const from = clips[i];
+    const to = clips[(i + 1) % clips.length];
+    const key = `${from.id}-to-${to.id}`;
+    const override = sourceReelTransitionOverride(promptOverrides, i, from, to);
+    const body = override || transitionBasePrompt;
+    const prompt =
+      `Start exactly on the first reference frame and end exactly on the second reference frame. ` +
+      `${body}`;
+    transitions.push({
+      key,
+      from: from.id,
+      to: to.id,
+      lastFramePath: join(workdir, 'frames', `${from.id}-${from.slug}-last.png`),
+      firstFramePath: join(workdir, 'frames', `${to.id}-${to.slug}-first.png`),
+      clipPath: join(workdir, 'transitions', `${key}.mp4`),
+      logPath: join(workdir, 'logs', 'transitions', `${key}.log`),
+      prompt
+    });
+  }
+
+  return {
+    type: 'source-reel',
+    sourceDir,
+    workdir,
+    outputPath,
+    model,
+    fps,
+    dimensions,
+    targetResolution: options.sourceReelTargetResolution,
+    imageSeconds: options.sourceReelImageSeconds,
+    transitionSeconds: options.sourceReelTransitionSeconds,
+    loop: Boolean(options.sourceReelLoop),
+    concurrency,
+    imagePrompt,
+    transitionBasePrompt,
+    clips,
+    transitions
+  };
+}
+
+function printSourceReelPlan(plan) {
+  console.log('SourceReel plan');
+  console.log(`  Source folder: ${plan.sourceDir}`);
+  console.log(`  Working folder: ${plan.workdir}`);
+  console.log(`  Final output: ${plan.outputPath}`);
+  console.log(`  Images: ${plan.clips.length}`);
+  console.log(`  Clip seconds: ${plan.imageSeconds}`);
+  console.log(`  Transition seconds: ${plan.transitionSeconds}`);
+  console.log(`  Loop last→first: ${plan.loop ? 'yes' : 'no'}`);
+  console.log(`  Model: ${plan.model}`);
+  console.log(`  FPS: ${plan.fps}`);
+  if (plan.dimensions) {
+    console.log(`  Size: ${plan.dimensions.width}x${plan.dimensions.height}`);
+  } else {
+    console.log(`  Size: infer from first image, short side ${plan.targetResolution}px`);
+  }
+  console.log('');
+  console.log('Clip prompt:');
+  console.log(`  ${plan.imagePrompt}`);
+  console.log('');
+  console.log('Default transition prompt:');
+  console.log(`  ${plan.transitionBasePrompt}`);
+  console.log('');
+  console.log('Images:');
+  for (const clip of plan.clips) {
+    console.log(`  ${clip.id}. ${clip.name}`);
+  }
+  if (plan.transitions.length > 0) {
+    console.log('');
+    console.log('Transitions:');
+    for (const transition of plan.transitions) {
+      console.log(`  ${transition.key}: ${transition.prompt}`);
+    }
+  }
+  console.log('');
+  console.log('Run the same command without --reel-plan-only to render.');
+}
+
+async function prepareSourceReelReferenceImages(plan, log) {
+  const refsDir = join(plan.workdir, 'refs');
+  mkdirSync(refsDir, { recursive: true });
+
+  let dimensions = plan.dimensions;
+  if (!dimensions) {
+    const metadata = await sharp(plan.clips[0].path).rotate().metadata();
+    dimensions = inferSourceReelDimensions(metadata, plan.targetResolution);
+    plan.dimensions = dimensions;
+  }
+
+  for (const clip of plan.clips) {
+    if (isNonEmptyFile(clip.refPath)) {
+      log(`SKIP ref ${clip.refPath}`);
+      continue;
+    }
+    const background = await sharp(clip.path)
+      .rotate()
+      .resize(dimensions.width, dimensions.height, { fit: 'cover' })
+      .blur(28)
+      .modulate({ brightness: 0.72, saturation: 0.9 })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    const foreground = await sharp(clip.path)
+      .rotate()
+      .resize(dimensions.width, dimensions.height, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .png()
+      .toBuffer();
+    await sharp(background)
+      .composite([{ input: foreground, gravity: 'center' }])
+      .jpeg({ quality: 95 })
+      .toFile(clip.refPath);
+    log(`REF   ${clip.name} -> ${clip.refPath}`);
+  }
+}
+
+async function runSourceReelPool(items, concurrency, worker) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+}
+
+function sourceReelChildArgs(baseArgs, outputPath, prompt, plan, duration) {
+  const args = [
+    fileURLToPath(import.meta.url),
+    '--no-update-check',
+    '-q',
+    '--json',
+    '--video',
+    '-m', plan.model,
+    '--duration', String(duration),
+    '--fps', String(plan.fps),
+    '-w', String(plan.dimensions.width),
+    '-h', String(plan.dimensions.height),
+    '-o', outputPath,
+    ...baseArgs
+  ];
+  if (options.tokenType) args.push('--token-type', options.tokenType);
+  if (options.steps !== null && options.steps !== undefined) args.push('--steps', String(options.steps));
+  if (options.guidance !== null && options.guidance !== undefined) args.push('--guidance', String(options.guidance));
+  if (options.noFilter) args.push('--no-filter');
+  if (options.strictSize) args.push('--strict-size');
+  if (cliSet.timeout) args.push('-t', String(Math.ceil(options.timeout / 1000)));
+  args.push(prompt);
+  return args;
+}
+
+function parseSourceReelChildJson(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const lastLine = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop();
+    if (!lastLine) return null;
+    try { return JSON.parse(lastLine); } catch { return null; }
+  }
+}
+
+async function runSourceReelChild(label, args, logPath, outputPath) {
+  const result = await runCommand(process.execPath, args, { captureOutput: true });
+  const parsed = parseSourceReelChildJson(result.stdout);
+  const logBody = [
+    `label=${label}`,
+    `command=${process.execPath} ${args.map((x) => JSON.stringify(x)).join(' ')}`,
+    '',
+    'stdout:',
+    result.stdout || '',
+    '',
+    'stderr:',
+    result.stderr || ''
+  ].join('\n');
+  writeOutputFileSafe(logPath, Buffer.from(logBody), 'SourceReel render log');
+  if (result.error || result.status !== 0 || !parsed?.success || !isNonEmptyFile(outputPath)) {
+    const err = new Error(`SourceReel render failed: ${label}`);
+    err.code = parsed?.errorCode || parsed?.code || 'SOURCE_REEL_RENDER_FAILED';
+    err.hint = parsed?.hint || `See log: ${logPath}`;
+    err.details = { label, outputPath, logPath, status: result.status, child: parsed || null };
+    throw err;
+  }
+  return parsed;
+}
+
+async function runSourceReel(log) {
+  const plan = buildSourceReelPlan();
+  if (options.sourceReelPlanOnly) {
+    if (options.json || JSON_ERROR_MODE) {
+      console.log(JSON.stringify({ success: true, ...plan, timestamp: new Date().toISOString() }));
+    } else {
+      printSourceReelPlan(plan);
+    }
+    return;
+  }
+
+  mkdirSync(plan.workdir, { recursive: true });
+  mkdirSync(join(plan.workdir, 'clips'), { recursive: true });
+  mkdirSync(join(plan.workdir, 'transitions'), { recursive: true });
+  mkdirSync(join(plan.workdir, 'frames'), { recursive: true });
+  mkdirSync(join(plan.workdir, 'logs', 'clips'), { recursive: true });
+  mkdirSync(join(plan.workdir, 'logs', 'transitions'), { recursive: true });
+
+  await prepareSourceReelReferenceImages(plan, log);
+  writeOutputFileSafe(join(plan.workdir, 'plan.json'), Buffer.from(JSON.stringify(plan, null, 2)), 'SourceReel plan');
+
+  log(`SourceReel rendering ${plan.clips.length} clips (${plan.imageSeconds}s each)...`);
+  await runSourceReelPool(plan.clips, plan.concurrency, async (clip) => {
+    if (isNonEmptyFile(clip.clipPath)) {
+      log(`SKIP clip ${clip.clipPath}`);
+      return;
+    }
+    log(`START clip ${clip.id} ${clip.name}`);
+    const args = sourceReelChildArgs(['--ref', clip.refPath], clip.clipPath, clip.prompt, plan, plan.imageSeconds);
+    await runSourceReelChild(`clip ${clip.id}`, args, clip.logPath, clip.clipPath);
+    log(`DONE  clip ${clip.id} -> ${clip.clipPath}`);
+  });
+
+  for (const transition of plan.transitions) {
+    const fromClip = plan.clips.find((clip) => clip.id === transition.from);
+    const toClip = plan.clips.find((clip) => clip.id === transition.to);
+    if (!isNonEmptyFile(transition.lastFramePath)) {
+      log(`FRAME last ${fromClip.clipPath} -> ${transition.lastFramePath}`);
+      await extractLastFrameFromVideo(fromClip.clipPath, transition.lastFramePath);
+    }
+    if (!isNonEmptyFile(transition.firstFramePath)) {
+      log(`FRAME first ${toClip.clipPath} -> ${transition.firstFramePath}`);
+      await extractFirstFrameFromVideo(toClip.clipPath, transition.firstFramePath);
+    }
+  }
+
+  if (plan.transitions.length > 0) {
+    log(`SourceReel rendering ${plan.transitions.length} transitions (${plan.transitionSeconds}s each)...`);
+    await runSourceReelPool(plan.transitions, plan.concurrency, async (transition) => {
+      if (isNonEmptyFile(transition.clipPath)) {
+        log(`SKIP transition ${transition.clipPath}`);
+        return;
+      }
+      log(`START transition ${transition.key}`);
+      const args = sourceReelChildArgs(
+        ['--ref', transition.lastFramePath, '--ref-end', transition.firstFramePath],
+        transition.clipPath,
+        transition.prompt,
+        plan,
+        plan.transitionSeconds
+      );
+      await runSourceReelChild(`transition ${transition.key}`, args, transition.logPath, transition.clipPath);
+      log(`DONE  transition ${transition.key} -> ${transition.clipPath}`);
+    });
+  }
+
+  const concatParts = [];
+  for (const clip of plan.clips) {
+    concatParts.push(clip.clipPath);
+    const transition = plan.transitions.find((item) => item.from === clip.id);
+    if (transition) concatParts.push(transition.clipPath);
+  }
+
+  if (concatParts.length === 1) {
+    // Single-image reels have no bridge clips. Normalize through concat anyway
+    // would require two inputs, so preserve the generated clip as the final.
+    const buffer = readFileSync(concatParts[0]);
+    writeOutputFileSafe(plan.outputPath, buffer, 'SourceReel final video');
+  } else {
+    log(`SourceReel stitching ${concatParts.length} clips -> ${plan.outputPath}`);
+    await buildConcatVideoFromClips(plan.outputPath, concatParts, { targetFps: plan.fps });
+  }
+
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify({
+      success: true,
+      type: 'source-reel',
+      sourceDir: plan.sourceDir,
+      workdir: plan.workdir,
+      outputPath: plan.outputPath,
+      imageCount: plan.clips.length,
+      transitionCount: plan.transitions.length,
+      imageSeconds: plan.imageSeconds,
+      transitionSeconds: plan.transitionSeconds,
+      loop: plan.loop,
+      model: plan.model,
+      fps: plan.fps,
+      width: plan.dimensions.width,
+      height: plan.dimensions.height,
+      timestamp: new Date().toISOString()
+    }));
+  } else {
+    console.log(`SourceReel complete: ${plan.outputPath}`);
+    console.log(`Working folder: ${plan.workdir}`);
+  }
+}
+
 async function runImageEditProjectWithEvents(client, editConfig, expectedCount, log, timeoutMs, label) {
   const results = [];
   let completed = 0;
@@ -8476,6 +9035,11 @@ async function main() {
       } else {
         console.log(`Concatenated ${clips.length} clips to: ${outputPath}${concatAudio ? ` with audio ${concatAudio}` : ''}`);
       }
+      return;
+    }
+
+    if (options.sourceReelDir) {
+      await runSourceReel(log);
       return;
     }
 

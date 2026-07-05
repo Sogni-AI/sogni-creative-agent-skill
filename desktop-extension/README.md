@@ -31,6 +31,9 @@ The text block always keeps the full-resolution URL / saved path. Set
    pointing at this server inside the global npm package (preferred).
 2. The packed `.mcpb` is the manual drag-and-drop alternative
    (Claude Desktop → Settings → Extensions).
+3. OpenAI Codex uses the same server:
+   `codex mcp add sogni-creative-agent -- node <abs path to server/index.mjs>`
+   (the Codex CLI and IDE extension read `~/.codex/config.toml`).
 
 The server needs the CLI installed globally (`npm i -g @sogni-ai/sogni-creative-agent-skill`);
 when missing, every tool returns a hint to run `npx setup-sogni-agent-skill`.

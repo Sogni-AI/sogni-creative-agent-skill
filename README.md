@@ -51,6 +51,8 @@ With this skill, an agent can:
   - [Manual install from source](#manual-install-from-source)
   - [Verify your install](#verify-your-install)
   - [Upgrading safely from inside an agent](#upgrading-safely-from-inside-an-agent)
+- [Claude Desktop](#claude-desktop)
+  - [Also works in OpenAI Codex](#also-works-in-openai-codex)
 - [Setup (Sogni API key)](#setup-sogni-api-key)
 - [Usage](#usage)
 - [CLI Reference](#cli-reference)
@@ -282,6 +284,24 @@ This registers the Sogni tools in `claude_desktop_config.json`. Fully quit and r
 Don't use both — you'd get duplicate Sogni tools. The extension wraps the same globally installed `sogni-agent` CLI used by Claude Code, so personas, memories, and credentials are shared.
 
 Video/audio editing features need ffmpeg on your machine; the `npx` installer offers to install it for you.
+
+### Also works in OpenAI Codex
+
+The same local MCP server runs in OpenAI Codex — the Codex CLI and IDE extension read MCP servers from `~/.codex/config.toml`. With the CLI installed globally (`npm i -g @sogni-ai/sogni-creative-agent-skill`), register it and start a new Codex session:
+
+```bash
+codex mcp add sogni-creative-agent -- node "$(npm root -g)/@sogni-ai/sogni-creative-agent-skill/desktop-extension/server/index.mjs"
+```
+
+Or write the `~/.codex/config.toml` entry yourself (use the absolute path from `npm root -g`):
+
+```toml
+[mcp_servers.sogni-creative-agent]
+command = "node"
+args = ["/opt/homebrew/lib/node_modules/@sogni-ai/sogni-creative-agent-skill/desktop-extension/server/index.mjs"]
+```
+
+Codex also runs the Skill natively (see [OpenAI Codex CLI](#openai-codex-cli)) — pick one integration per machine; running both gives Codex duplicate Sogni tools. The server finds your globally installed `sogni-agent`, ffmpeg, and saved credentials on its own, so no `env` block is needed.
 
 ---
 

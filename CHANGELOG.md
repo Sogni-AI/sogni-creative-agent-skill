@@ -1,3 +1,10 @@
+# [3.13.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.12.0...v3.13.0) (2026-07-05)
+
+
+### Features
+
+* **cli:** port SourceReel folder-to-video reels from recovered branch ([0e61830](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/0e6183090a0e1af698bce5de112246bcd44d5eac))
+
 # [3.12.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.11.1...v3.12.0) (2026-07-05)
 
 

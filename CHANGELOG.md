@@ -85,6 +85,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--control-type inpaint --mask <image>`, and automatic `transition` LoRA attachment for LTX-2.3 i2v jobs
   that provide both `--ref` and `--ref-end`.
 
+### Changed
+
+- **Creative upscale routing is clearer in the bundled intelligence client.** Updated
+  `@sogni-ai/sogni-intelligence-client` to `3.7.0` so uploaded-video Seedance upscale, enhance, remaster,
+  restyle, and transform requests route through `video_to_video` with `seedance-v2v`, while quality-only upscale
+  and sharpening requests continue to use the LTX-2.3 detailer path without restyling.
+
 ## [3.8.0] - 2026-06-30
 
 ### Changed

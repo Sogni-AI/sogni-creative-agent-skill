@@ -81,6 +81,9 @@
     "json5": "^2.2.3",
     "sharp": "^0.34.5"
   },
+  "overrides": {
+    "@sogni-ai/sogni-client": "5.1.0-alpha.18"
+  },
   "openclaw": {
     "extensions": [
       "./openclaw-plugin.mjs"

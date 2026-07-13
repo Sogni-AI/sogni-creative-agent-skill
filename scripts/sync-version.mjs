@@ -1,7 +1,7 @@
 /**
  * Stamp the package.json version into every other manifest that carries it:
  *   version.mjs, SKILL.md frontmatter, .claude-plugin/plugin.json,
- *   openclaw.plugin.json.
+ *   openclaw.plugin.json, desktop-extension/manifest.json.
  *
  * package.json is the single source of truth. The docs-consistency test (and
  * CI) fail when any of these drift, so run `npm run sync:version` after every

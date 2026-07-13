@@ -69,13 +69,13 @@ there is no local ffmpeg and no local filesystem. Therefore:
 ## Commits and versioning
 
 - Conventional commits are enforced by commitlint (husky `commit-msg` hook).
-- The version is stamped in five files: `package.json` (source of truth), `version.mjs`, `SKILL.md` frontmatter, `.claude-plugin/plugin.json`, `openclaw.plugin.json`. **Never hand-edit the other four** — run:
+- The package version fans out from `package.json` into five stamp files: `version.mjs`, `SKILL.md` frontmatter, `.claude-plugin/plugin.json`, `openclaw.plugin.json`, and `desktop-extension/manifest.json`. **Never hand-edit the stamp files** — run:
 
 ```bash
 npm run sync:version
 ```
 
-The docs-consistency test (and CI) fails when they drift.
+The docs-consistency test, `npm run check:version-sync`, and the npm `prepack` gate fail when they drift. `npm version` also runs the stamp step automatically, which keeps semantic-release's npm prepare step from publishing mixed-version tarballs.
 
 ## Release process (manual, maintainers only)
 

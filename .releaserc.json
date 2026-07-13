@@ -38,7 +38,13 @@
       {
         "assets": [
           "package.json",
-          "CHANGELOG.md"
+          "package-lock.json",
+          "CHANGELOG.md",
+          "version.mjs",
+          "SKILL.md",
+          ".claude-plugin/plugin.json",
+          "openclaw.plugin.json",
+          "desktop-extension/manifest.json"
         ],
         "message": "chore(release): ${nextRelease.version} [skip ci]"
       }

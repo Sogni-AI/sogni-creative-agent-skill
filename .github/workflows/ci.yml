@@ -37,6 +37,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm run check:version-sync
       # --ignore-scripts: prepack's private-source gate is publish-only and
       # cannot run in CI. This validates the tarball file list instead.
       - name: Verify npm tarball contents

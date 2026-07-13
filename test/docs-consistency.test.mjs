@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { QUALITY_TIERS } from '../generated/creative-agent-runtime.mjs';
+import { checkVersionSync } from '../scripts/check-version-sync.mjs';
 
 const repoRoot = process.cwd();
 const read = (relativePath) => readFileSync(join(repoRoot, relativePath), 'utf8');
@@ -65,15 +66,8 @@ test('every CLI flag mentioned in the docs exists in the parser', () => {
 });
 
 test('version metadata is in sync across every manifest', () => {
-  const version = JSON.parse(read('package.json')).version;
-  assert.match(read('version.mjs'), new RegExp(`PACKAGE_VERSION = '${version.replaceAll('.', '\\.')}'`),
-    'version.mjs drifted — run npm run sync:version');
-  assert.match(read('SKILL.md'), new RegExp(`^\\s*version: "${version.replaceAll('.', '\\.')}"`, 'm'),
-    'SKILL.md frontmatter drifted — run npm run sync:version');
-  assert.equal(JSON.parse(read('.claude-plugin/plugin.json')).version, version,
-    '.claude-plugin/plugin.json drifted — run npm run sync:version');
-  assert.equal(JSON.parse(read('openclaw.plugin.json')).version, version,
-    'openclaw.plugin.json drifted — run npm run sync:version');
+  const { problems } = checkVersionSync({ repoRoot });
+  assert.deepEqual(problems, [], `Version metadata drifted — run npm run sync:version:\n${problems.join('\n')}`);
 });
 
 test('quality preset tables match the generated runtime QUALITY_TIERS', () => {

@@ -1,3 +1,10 @@
+# [3.14.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.14.0...v3.14.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **release:** prevent mixed-version npm tarballs after semantic-release bumps package.json
+
 # [3.14.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.13.0...v3.14.0) (2026-07-05)
 
 

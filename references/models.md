@@ -26,6 +26,9 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `flux2_dev_fp8` | Slow (~2min) | High quality |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
+| `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
+| `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
+| `dark_beast_krea2_identity_edit_v1_2` | Fast | Dark Beast Krea 2 Identity Edit community LoRA with 1-2 references |
 | `chroma-v.46-flash_fp8` | Medium | Balanced |
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
@@ -35,11 +38,17 @@ For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
 `krea2_turbo_fp8_scaled`.
 
+For identity-preserving Krea edits, pass a context image with
+`-m krea2_identity_edit_v1_2` or
+`-m dark_beast_krea2_identity_edit_v1_2`. These edit models support 1-2
+context images, 512-2048 px output, 8-12 steps, and guidance 1; the default
+is 10 steps.
+
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through
 `8,294,400`; the API snaps dimensions to valid multiples of 16. For image
 editing with `gpt-image-2`, you can pass up to 16 context images (Qwen models
-support up to 3).
+support up to 3; Krea identity edit models support up to 2).
 
 ## Music models
 
@@ -161,6 +170,9 @@ and short in-scene text.
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
 | Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
+| Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
+| Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
+| Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |

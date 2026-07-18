@@ -204,13 +204,14 @@ sogni-agent doctor --json
 ### Photobooth vs. context editing
 
 - `--photobooth` is **face-reference generation**, not full-image editing: it generates a *new* portrait from a face photo and may change pose, clothing, background, framing, and composition. Use it when the user explicitly asks for photobooth/face-transfer, a new portrait/headshot from their face, or to place their face into a different concept. Cannot be combined with `--video` or `-c/--context`. Tune with `--cn-strength` (default 0.8) and `--cn-guidance-end` (default 0.3).
-- If the request is "**same image, different style**" — e.g. an anime version that must keep the same face, pose, clothing, background, framing, and composition; "use this image as the base"; "keep everything the same"; "only change the style" — use Qwen context editing with `-c/--context` instead. For stronger preservation than the lightning default:
+- If the request is "**same image, different style**" — e.g. an anime version that must keep the same face, pose, clothing, background, framing, and composition; "use this image as the base"; "keep everything the same"; "only change the style" — use context editing with `-c/--context` instead. For stronger preservation than the lightning default:
 
 ```bash
 sogni-agent -c photo.jpg -m qwen_image_edit_2511_fp8 "turn this into anime style; keep the same face, pose, clothing, background, framing, and composition"
 ```
 
-- Do not route to `--photobooth` merely because the user asks to preserve a face in a style edit — face-preserving full-image edits use `-c` with Qwen image edit. When context images are provided without `-m`, the CLI defaults to `qwen_image_edit_2511_fp8_lightning`; select `-m gpt-image-2` for up to 16 reference images and OpenAI-backed editing (Qwen supports up to 3).
+- For identity-preserving Krea edits, use `-m krea2_identity_edit_v1_2` with 1-2 context images; use `-m dark_beast_krea2_identity_edit_v1_2` for the Dark Beast Krea 2 identity edit LoRA. Both use 512-2048 px output, 8-12 steps, guidance 1, and default to 10 steps.
+- Do not route to `--photobooth` merely because the user asks to preserve a face in a style edit — face-preserving full-image edits use `-c` with an image edit model. When context images are provided without `-m`, the CLI defaults to `qwen_image_edit_2511_fp8_lightning`; select `-m gpt-image-2` for up to 16 reference images and OpenAI-backed editing (Qwen supports up to 3; Krea identity edit supports up to 2).
 
 ### LTX video prompts
 
@@ -318,7 +319,7 @@ Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-ef
 | [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/hosted-api.md`](./references/hosted-api.md) | `--api-chat`, `--durable-chat`, `--api-workflow`, workflow templates, replays, Seedance reference modes, cost controls |
-| [`references/models.md`](./references/models.md) | Choosing models, sizing/divisibility rules, gpt-image-2 limits, music model options |
+| [`references/models.md`](./references/models.md) | Choosing models, sizing/divisibility rules, image edit reference limits, music model options |
 | [`references/personas-memory.md`](./references/personas-memory.md) | Persona CRUD/voice cloning, multi-persona scenes, memories, personality, style transfer, photo restoration |
 | [`references/openclaw-config.md`](./references/openclaw-config.md) | OpenClaw plugin config defaults and overrides |
 | [`skills/README.md`](./skills/README.md) | Hosted per-skill tool surface (for hosts that load focused capability subsets) |

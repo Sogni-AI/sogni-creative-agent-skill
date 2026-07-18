@@ -1249,6 +1249,25 @@ function isGptImage2ModelSelection(modelId) {
   return ['gpt-image-2', 'gptimage2', 'gpt-image', 'gpt_image_2'].includes(normalized);
 }
 
+const KREA2_IDENTITY_EDIT_MODELS = new Set([
+  'krea2_identity_edit_v1_2',
+  'dark_beast_krea2_identity_edit_v1_2'
+]);
+
+function isKrea2IdentityEditModelSelection(modelId) {
+  return KREA2_IDENTITY_EDIT_MODELS.has(String(modelId || '').trim().toLowerCase());
+}
+
+function getKrea2IdentityEditDefaults(modelId) {
+  if (!isKrea2IdentityEditModelSelection(modelId)) return null;
+  return {
+    steps: 10,
+    guidance: 1,
+    sampler: 'euler',
+    scheduler: 'simple'
+  };
+}
+
 function normalizeMusicModelId(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
@@ -1337,6 +1356,7 @@ function happyHorseModeFromModelId(modelId) {
 
 function getMaxContextImages(modelId) {
   if (isGptImage2ModelSelection(modelId)) return 16;
+  if (isKrea2IdentityEditModelSelection(modelId)) return 2;
   return getWrapperMaxContextImages(modelId);
 }
 
@@ -3085,6 +3105,9 @@ Image Models:
   z_image_turbo_bf16              Fast, general purpose (default)
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
+  dark_beast_krea2_fp8            Dark Beast Krea 2 text-to-image
+  krea2_identity_edit_v1_2        Krea 2 Identity Edit LoRA (up to 2 context images)
+  dark_beast_krea2_identity_edit_v1_2  Dark Beast Krea 2 Identity Edit (up to 2 context images)
   flux1-schnell-fp8               Very fast
   flux2_dev_fp8                   High quality (slow)
   qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
@@ -3157,6 +3180,7 @@ Examples:
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
   sogni-agent --video --last-image "gentle camera pan"
   sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
+  sogni-agent -c person.jpg -m krea2_identity_edit_v1_2 "editorial portrait, same identity, new wardrobe"
   sogni-agent -c subject.jpg -c style.jpg "apply the style to the subject"
   sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
   sogni-agent --photobooth --ref face.jpg -n 4 "LinkedIn professional headshot"
@@ -3742,7 +3766,7 @@ if (options.music) {
     options.timeout = 60000;
   }
 } else if (options.contextImages.length > 0) {
-  // Use qwen edit model when context images provided (unless model explicitly set)
+  // Use the default edit model when context images are provided unless -m overrides it.
   options.model = options.model || openclawConfig?.defaultEditModel || 'qwen_image_edit_2511_fp8_lightning';
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 60000; // 1 min for editing
@@ -4312,7 +4336,7 @@ if (options.contextImages.length > 0 && !options.video) {
     fatalCliError(`Model ${options.model} does not support context images.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },
-      hint: 'Try: qwen_image_edit_2511_fp8 or qwen_image_edit_2511_fp8_lightning'
+      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
     });
   }
   if (options.contextImages.length > maxImages) {
@@ -9776,7 +9800,8 @@ async function main() {
       const contextBuffers = await Promise.all(
         options.contextImages.map(img => fetchMediaBuffer(img))
       );
-      const modelDefaults = getModelDefaults(options.model, openclawConfig);
+      const modelDefaults = getModelDefaults(options.model, openclawConfig)
+        ?? getKrea2IdentityEditDefaults(options.model);
       const steps = options.steps ?? modelDefaults?.steps ?? (options.model.includes('lightning') ? 4 : 20);
       const guidance = options.guidance ?? modelDefaults?.guidance ?? (options.model.includes('lightning') ? 3.5 : 7.5);
       const gptImageQuality = isGptImage2ModelSelection(options.model)
@@ -9806,11 +9831,11 @@ async function main() {
       if (gptImageQuality) {
         editConfig.gptImageQuality = gptImageQuality;
       }
-      if (options.sampler) {
-        editConfig.sampler = options.sampler;
+      if (options.sampler || modelDefaults?.sampler) {
+        editConfig.sampler = options.sampler || modelDefaults.sampler;
       }
-      if (options.scheduler) {
-        editConfig.scheduler = options.scheduler;
+      if (options.scheduler || modelDefaults?.scheduler) {
+        editConfig.scheduler = options.scheduler || modelDefaults.scheduler;
       }
       if (options.loras.length > 0) {
         editConfig.loras = options.loras;

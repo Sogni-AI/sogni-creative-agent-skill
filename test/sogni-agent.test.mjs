@@ -672,6 +672,34 @@ test('SDK-returned insufficient funds from context image edit surfaces Spark Pac
   assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
 });
 
+test('Krea identity edit accepts two context images with local defaults', () => {
+  const { exitCode, state } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'krea2_identity_edit_v1_2',
+    'editorial portrait, same identity, new wardrobe'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastEditProject, 'createImageEditProject was called');
+  assert.equal(state.lastEditProject.modelId, 'krea2_identity_edit_v1_2');
+  assert.equal(state.lastEditProject.contextImages.length, 2);
+  assert.equal(state.lastEditProject.steps, 10);
+  assert.equal(state.lastEditProject.guidance, 1);
+  assert.equal(state.lastEditProject.sampler, 'euler');
+  assert.equal(state.lastEditProject.scheduler, 'simple');
+});
+
+test('Krea identity edit rejects a third context image', () => {
+  expectCliError([
+    '-c', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'dark_beast_krea2_identity_edit_v1_2',
+    'same identity, cinematic styling'
+  ], 'supports max 2 context images');
+});
+
 test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {
   const { exitCode, stdout } = runCli([
     '--json',

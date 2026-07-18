@@ -90,6 +90,12 @@ You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
   `--reference-audio-identity`, `--ref-video`, and `--mask` are uploaded and forwarded as
   `media_references`; API chat also attaches image refs as vision inputs.
   Workflow JSON can bind refs with `sourceStepId: "$input_media"`.
+- Direct Krea IDs: use `-m krea2_turbo_fp8_scaled` for Krea 2 Turbo images,
+  `-m dark_beast_krea2_fp8` for Dark Beast Krea 2 images, and
+  `-c <image> -m krea2_identity_edit_v1_2` or
+  `-c <image> -m dark_beast_krea2_identity_edit_v1_2` for identity-preserving
+  Krea edits with 1-2 references, 512-2048 px output, 8-12 steps, and
+  guidance 1.
 - Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.
 - JSON errors include canonical `errorType`, `errorCategory`, and `retryable`.
 

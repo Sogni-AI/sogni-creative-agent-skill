@@ -510,6 +510,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
 | Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
+| Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
+| Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
+| Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
@@ -521,7 +524,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
-`gpt-image-2` supports flexible OpenAI image sizes up to 3840 px on either edge, max 3:1 aspect ratio, and total pixels from 655,360 to 8,294,400; the API snaps dimensions to valid multiples of 16. For image editing with `gpt-image-2`, you can pass up to 16 context images.
+`gpt-image-2` supports flexible OpenAI image sizes up to 3840 px on either edge, max 3:1 aspect ratio, and total pixels from 655,360 to 8,294,400; the API snaps dimensions to valid multiples of 16. For image editing with `gpt-image-2`, you can pass up to 16 context images. Krea 2 Identity Edit (`krea2_identity_edit_v1_2`) and Dark Beast Krea 2 Identity Edit (`dark_beast_krea2_identity_edit_v1_2`) use `-c/--context`, support 1-2 references, 512-2048 px output, 8-12 steps, and guidance 1.
 
 Music generation uses `--music` and outputs `mp3` by default. `--audio` remains the video-reference alias for `--ref-audio`; use `--music` or `--generate-music` for direct audio-only generation.
 

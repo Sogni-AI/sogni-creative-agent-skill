@@ -222,6 +222,10 @@ class SogniClientWrapper extends EventEmitter {
 
 function getMaxContextImages(modelId) {
   if (modelId && modelId.includes('qwen_image_edit_2511')) return 3;
+  if (
+    modelId === 'krea2_identity_edit_v1_2'
+    || modelId === 'dark_beast_krea2_identity_edit_v1_2'
+  ) return 2;
   return 0;
 }
 

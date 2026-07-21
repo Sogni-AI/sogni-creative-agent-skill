@@ -1,3 +1,14 @@
+# [3.15.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.14.1...v3.15.0) (2026-07-21)
+
+### Bug Fixes
+
+* **packaging:** include the hosted SDK client module required by durable chat
+
+### Features
+
+* support Krea identity-edit models
+* add the verified loop-maker workflow
+
 # [3.14.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.14.0...v3.14.1) (2026-07-13)
 
 

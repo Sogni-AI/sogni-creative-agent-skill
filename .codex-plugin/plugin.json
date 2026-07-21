@@ -1,0 +1,38 @@
+{
+  "name": "sogni-creative-agent",
+  "version": "3.14.0",
+  "description": "Create images, generative video, music, and polished image-folder loops with Sogni AI.",
+  "author": {
+    "name": "Sogni AI",
+    "url": "https://sogni.ai"
+  },
+  "homepage": "https://github.com/Sogni-AI/sogni-creative-agent-skill",
+  "repository": "https://github.com/Sogni-AI/sogni-creative-agent-skill",
+  "license": "MIT",
+  "keywords": [
+    "sogni",
+    "image-generation",
+    "video-generation",
+    "music-generation",
+    "creative"
+  ],
+  "skills": "./skills",
+  "interface": {
+    "displayName": "Sogni Creative Agent",
+    "shortDescription": "Create images, video, music, and seamless loops",
+    "longDescription": "Generate and edit images, animate first-frame-to-last-frame video, create music, and turn image folders into verified seamless reels using Sogni AI.",
+    "developerName": "Sogni AI",
+    "category": "Creativity",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Network"
+    ],
+    "websiteURL": "https://sogni.ai",
+    "defaultPrompt": [
+      "Turn my image folder into a seamless music-backed loop.",
+      "Animate these two images as a first-frame-to-last-frame transition.",
+      "Create an instrumental soundtrack for my video."
+    ]
+  }
+}

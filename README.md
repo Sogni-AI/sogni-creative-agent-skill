@@ -27,6 +27,7 @@ With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
 - create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0, HappyHorse 1.1)
+- turn an image folder into a visually deduplicated, music-backed seamless loop with one plugin skill invocation
 - generate instrumental music or full songs with lyrics
 - run hosted creative workflows including storyboard-driven video
 - save personas, preferences, and last-render state across sessions
@@ -108,6 +109,7 @@ Then ask your agent to do something:
 
 - "Generate an image of a sunset over mountains"
 - "Edit this image to add a rainbow"
+- "Use Sogni Loop Maker on my image folder"
 - "Make a video of a cat playing piano"
 - "Generate a 30 second synthwave product-launch theme"
 - "Turn my selfie into James Bond using photobooth"
@@ -119,7 +121,7 @@ Then ask your agent to do something:
 
 - **Node.js ≥ 22.11.0**
 - **Sogni API key** ([dashboard.sogni.ai](https://dashboard.sogni.ai))
-- **`ffmpeg`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, and `--extract-last-frame`. Set `FFMPEG_PATH` to override discovery.
+- **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery.
 - macOS, Linux, or Windows
 
 ---
@@ -152,7 +154,24 @@ The first command registers a `sogni` marketplace with one plugin entry (`sogni-
 
 ### OpenAI Codex CLI
 
-The `npx` installer writes the skill to `~/.codex/skills/sogni-creative-agent-skill/`, which the Codex CLI discovers automatically:
+For the namespaced Sogni skills, register the marketplace and install the plugin:
+
+```bash
+codex plugin marketplace add Sogni-AI/sogni-creative-agent-skill
+codex plugin add sogni-creative-agent@sogni
+```
+
+Start a new Codex session, then invoke Loop Maker directly:
+
+```text
+$sogni-creative-agent:loop-maker ./images
+```
+
+In the Codex app, type `@`, choose **Sogni Loop Maker**, and select its starter prompt.
+
+For local development, replace the GitHub shorthand in `codex plugin marketplace add` with the absolute path to this repository.
+
+Alternatively, the `npx` installer writes the full monolithic skill to `~/.codex/skills/sogni-creative-agent-skill/`, which Codex discovers automatically:
 
 ```bash
 npx setup-sogni-agent-skill --only=codex
@@ -160,7 +179,7 @@ npx setup-sogni-agent-skill --only=codex
 
 Start Codex once before running the installer so `~/.codex/` exists. If the selected local runtime is not detected, setup exits before installing anything.
 
-Restart Codex (or start a new session) and ask it to "generate an image of a sunset" — the skill shells out to the globally installed `sogni-agent`. To remove it later: `npx setup-sogni-agent-skill --uninstall --only=codex`.
+Restart Codex (or start a new session) and ask it to "generate an image of a sunset" — the skill shells out to the globally installed `sogni-agent`. To remove this personal-skill install later: `npx setup-sogni-agent-skill --uninstall --only=codex`.
 
 ### Hermes Agent
 
@@ -336,6 +355,22 @@ Defaults live under `~/.config/sogni/` for credentials, last-render metadata, pe
 
 ## Usage
 
+Claude Code plugin users can launch the complete folder-to-loop workflow with one skill invocation:
+
+```text
+/sogni-creative-agent:loop-maker ./images
+/sogni-creative-agent:loop-maker ./images start=cover.jpg music="subtle tropical cyberpunk electronica" output=launch-loop.mp4
+```
+
+Codex CLI and IDE users can invoke the same bundled skill with `$`:
+
+```text
+$sogni-creative-agent:loop-maker ./images
+$sogni-creative-agent:loop-maker ./images start=cover.jpg music="subtle tropical cyberpunk electronica" output=launch-loop.mp4
+```
+
+The skill visually removes repeated concepts from the active sequence, renders one direct LTX first-frame/last-frame clip per image pair, closes the loop, generates a soundtrack longer than the picture, and verifies anchors, interior motion, streams, and full-file decoding before delivery. Original source images are preserved. The default stack is Sogni plus the bundled FFmpeg wrappers; HyperFrames and Remotion are optional only for explicitly requested text, overlays, or compositor effects. True 360 novel-view synthesis is deliberately excluded from this workflow because a direct single-image LTX prompt does not reliably create camera orbit geometry.
+
 ```bash
 # Image generation
 sogni-agent -Q hq -o dragon.png "a dragon eating tacos"
@@ -476,6 +511,8 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay records (use `@path` to load JSON from a file) |
 | `--persona <name>` | Use a saved persona |
 | `--concat-videos <out> <clips...>` | Stitch clips locally with FFmpeg |
+| `--extract-first-frame`, `--extract-frame-at`, `--extract-last-frame` | Extract visual-QA frames through safe FFmpeg wrappers |
+| `--verify-video <path>` | Probe streams and fully decode a final video before delivery |
 | `--last`, `--last-image` | Inspect last render / reuse last image as context or video reference |
 | `--strict-size` | Fail instead of auto-adjusting video size |
 | `--json` | Emit structured output for agents |

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Sogni Loop Maker"
+  short_description: "Turn an image folder into a seamless video loop"
+  default_prompt: "Use $loop-maker to turn my image folder into a polished, music-backed seamless loop."
+
+policy:
+  allow_implicit_invocation: true

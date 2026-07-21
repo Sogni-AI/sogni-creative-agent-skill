@@ -8,7 +8,8 @@
 | `SKILL.md` | The agent behavior contract every skill host loads. Keep it lean — deep guides belong in `references/`. |
 | `references/*.md` | On-demand deep-dive guides SKILL.md points at. Shipped to npm, the Claude plugin, and the OpenClaw link surface. |
 | `skills/*.md` | Per-skill view of the **hosted** tool surface (mirrors `@sogni/creative-agent` manifests). |
-| `plugin-skills/` | Lean Claude Code plugin skill (`.claude-plugin/` holds the marketplace + plugin manifests). |
+| `plugin-skills/` | Shared lean plugin workflows used by Claude Code and the Codex adapters. |
+| `.claude-plugin/`, `.codex-plugin/` | Host-specific plugin manifests; Codex adapters live under `skills/*/SKILL.md`. |
 | `generated/creative-agent-runtime.mjs` | Generated from the private `sogni-creative-agent` repo and **committed** so public installs and tests never need private access. |
 | `.openclaw-link/` | Generated OpenClaw link target (`npm run openclaw:sync`). Never edit by hand; never commit. |
 | `env.mjs`, `ssrf-guard.mjs`, `update-check.mjs`, `node-version-check.mjs`, `version.mjs` | Small focused modules the CLI composes. |
@@ -49,7 +50,8 @@ out as a sibling directory:
 `sogni-agent.mjs` is a **local command-line tool** — the only place that may
 assume a local filesystem and a local `ffmpeg`/`ffprobe` binary. Flags like
 `--concat-videos`, `--remix-audio`, `--extract-first-frame`,
-`--extract-last-frame`, and `--angles-360-video` shell out to ffmpeg behind
+`--extract-frame-at`, `--extract-last-frame`, `--verify-video`, and
+`--angles-360-video` shell out to ffmpeg/ffprobe behind
 `ensureFfmpegAvailable()` and run only when those flags are passed.
 
 Hosted surfaces — including the chat.sogni.ai web app — do **not** run

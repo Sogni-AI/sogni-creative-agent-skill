@@ -36,7 +36,9 @@
     "hermes-agent",
     "manus",
     "claude",
-    "claude-code"
+    "claude-code",
+    "codex",
+    "codex-plugin"
   ],
   "author": "Mauvis Ledford",
   "license": "MIT",
@@ -55,6 +57,9 @@
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
+    ".claude-plugin/",
+    ".codex-plugin/",
+    "plugin-skills/",
     "SKILL.md",
     "references/",
     "desktop-extension/",

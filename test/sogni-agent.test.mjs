@@ -3266,6 +3266,31 @@ test('--extract-first-frame with non-existent video file returns an error', () =
   assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
 });
 
+test('--extract-frame-at requires video, timestamp, and output arguments', () => {
+  expectCliError(['--extract-frame-at', '/tmp/video.mp4'], '--extract-frame-at (seconds) requires a value.');
+});
+
+test('--extract-frame-at rejects a negative timestamp', () => {
+  expectCliError(
+    ['--extract-frame-at', '/tmp/video.mp4', '-1', '/tmp/frame.png'],
+    '--extract-frame-at (seconds) must be >= 0.'
+  );
+});
+
+test('--extract-frame-at with non-existent video file returns an error', () => {
+  const { exitCode, stderr } = runCli([
+    '--extract-frame-at', '/tmp/nonexistent_video_at_98765.mp4', '1.5', '/tmp/frame.png'
+  ]);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
+});
+
+test('--verify-video with non-existent video file returns an error', () => {
+  const { exitCode, stderr } = runCli(['--verify-video', '/tmp/nonexistent_verify_video_98765.mp4']);
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
+});
+
 test('--remix-audio requires both input and output args', () => {
   expectCliError(['--remix-audio'], '--remix-audio (input video) requires a value.');
 });
@@ -3337,6 +3362,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--extract-last-frame'), 'Help should include --extract-last-frame');
   assert.ok(stdout.includes('--concat-videos'), 'Help should include --concat-videos');
   assert.ok(stdout.includes('--extract-first-frame'), 'Help should include --extract-first-frame');
+  assert.ok(stdout.includes('--extract-frame-at'), 'Help should include --extract-frame-at');
+  assert.ok(stdout.includes('--verify-video'), 'Help should include --verify-video');
   assert.ok(stdout.includes('--remix-audio'), 'Help should include --remix-audio');
   assert.ok(stdout.includes('--list-media'), 'Help should include --list-media');
   assert.ok(stdout.includes('--api-chat'), 'Help should include --api-chat');

@@ -5,7 +5,7 @@
     "url": "https://sogni.ai"
   },
   "metadata": {
-    "description": "Sogni AI plugins for Claude Code.",
+    "description": "Sogni AI plugins for Claude Code and Codex.",
     "version": "1.0.0"
   },
   "plugins": [

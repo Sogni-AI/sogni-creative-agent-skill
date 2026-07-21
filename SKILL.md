@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.14.0"
   homepage: https://sogni.ai
@@ -98,7 +98,7 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 - Memories / personality / personas (read/write): `~/.config/sogni/`
 - OpenClaw config (read): `~/.openclaw/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
 - Media listing for `--list-media` (read): `~/.openclaw/media/inbound`, falling back to the legacy `~/.clawdbot/media/inbound` when only it exists (`SOGNI_MEDIA_INBOUND_DIR`)
-- Custom ffmpeg binary: `FFMPEG_PATH`
+- Custom ffmpeg / ffprobe binaries: `FFMPEG_PATH`, `FFPROBE_PATH`
 
 ## Recommended path: you plan, Sogni executes
 
@@ -224,7 +224,9 @@ For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path o
 
 Trigger patterns — "animate/morph image A to image B" (`--ref A --ref-end B`; on LTX-2.3 i2v this is a single render — the transition/morph LoRA auto-applies, no bridge clip), "continue this video" (extract last frame → i2v → concat), "transition between two videos" (bridge clip between two *finished videos*), "make a reel/slideshow from these images" or "animate this folder of images" (`--source-reel <dir>`; plan first with the free `--reel-plan-only`; options: `--reel-image-seconds`, `--reel-transition-seconds`, `--reel-loop`/`--no-reel-loop`, `--reel-image-prompt`, `--reel-transition-prompt`), "360 video" (`--angles-360 --angles-360-video`), "add/replace the soundtrack" (`--concat-audio` / `--remix-audio`). **Read [`references/video-editing.md`](./references/video-editing.md) for the step-by-step recipes.**
 
-**Security: never run raw shell commands (`ffmpeg`, `ls`, `cp`, etc.) for file operations or video/audio manipulation.** Always use the CLI's built-in safe wrappers: `--extract-first-frame`, `--extract-last-frame`, `--concat-videos`, `--remix-audio`, `--list-media`, `--video-start`, `--audio-start`, `--audio-duration`, `--looping`.
+For a **one-click polished folder loop** where each source image animates and then morphs directly into the next original image, read [`references/loop-maker.md`](./references/loop-maker.md). Use its visually deduplicated, one-LTX-clip-per-pair workflow instead of the default SourceReel split animation-plus-bridge structure. Do not route true 360 novel-view synthesis to this direct pairwise workflow: a turning subject or occluder wipe is not a camera orbit. Trigger on requests such as "Sogni Loop Maker", "make this image folder a seamless loop", "one-click animated photo reel", the Claude Code command `/sogni-creative-agent:loop-maker`, or the Codex skill `$sogni-creative-agent:loop-maker`.
+
+**Security: never run raw shell commands (`ffmpeg`, `ffprobe`, `ls`, `cp`, etc.) for file operations or video/audio manipulation.** Always use the CLI's built-in safe wrappers: `--extract-first-frame`, `--extract-frame-at`, `--extract-last-frame`, `--verify-video`, `--concat-videos`, `--remix-audio`, `--list-media`, `--video-start`, `--audio-start`, `--audio-duration`, `--looping`.
 
 ### Finding user-sent media
 
@@ -317,6 +319,7 @@ Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-ef
 |-----------|------------------------|
 | [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
+| [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |
 | [`references/hosted-api.md`](./references/hosted-api.md) | `--api-chat`, `--durable-chat`, `--api-workflow`, workflow templates, replays, Seedance reference modes, cost controls |
 | [`references/models.md`](./references/models.md) | Choosing models, sizing/divisibility rules, gpt-image-2 limits, music model options |
 | [`references/personas-memory.md`](./references/personas-memory.md) | Persona CRUD/voice cloning, multi-persona scenes, memories, personality, style transfer, photo restoration |

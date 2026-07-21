@@ -1866,6 +1866,10 @@ const options = {
   concatFps: null, // --concat-fps <n>: override target fps for concat normalization
   extractFirstFrame: null, // --extract-first-frame <video> <image>
   extractFirstFrameOutput: null,
+  extractFrameAt: null, // --extract-frame-at <video> <seconds> <image>
+  extractFrameAtSeconds: null,
+  extractFrameAtOutput: null,
+  verifyVideo: null, // --verify-video <video>: probe streams and decode the full file
   sourceReelDir: null, // --source-reel <image-folder>: animate folder images into a stitched video
   sourceReelImageSeconds: 3,
   sourceReelTransitionSeconds: 3,
@@ -2463,6 +2467,20 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.extractFirstFrame = videoArg;
     options.extractFirstFrameOutput = imageArg;
+  } else if (arg === '--extract-frame-at') {
+    const videoArg = requireFlagValue(args, i, arg);
+    i++;
+    const secondsRaw = requireFlagValue(args, i, arg + ' (seconds)');
+    i++;
+    const imageArg = requireFlagValue(args, i, arg + ' (output image)');
+    i++;
+    options.extractFrameAt = videoArg;
+    options.extractFrameAtSeconds = parseNonNegativeNumberValue(secondsRaw, arg + ' (seconds)');
+    options.extractFrameAtOutput = imageArg;
+  } else if (arg === '--verify-video') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.verifyVideo = raw;
   } else if (arg === '--source-reel' || arg === '--image-reel') {
     const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
@@ -3036,6 +3054,8 @@ General:
   self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
   --extract-last-frame <video> <image>  Extract last frame from a video (safe ffmpeg wrapper)
   --extract-first-frame <video> <image> Extract first frame from a video (safe ffmpeg wrapper)
+  --extract-frame-at <video> <sec> <image> Extract a timestamped frame (safe ffmpeg wrapper)
+  --verify-video <video> Verify streams and fully decode a video (safe ffmpeg/ffprobe wrapper)
   --concat-videos <out> <clips...>      Concatenate video clips (safe ffmpeg wrapper, min 2 clips).
                         Normalizes fps/size and fills silent audio so mismatched clips stitch cleanly.
   --concat-fps <n>      Override target fps for --concat-videos (default: highest clip fps)
@@ -3835,6 +3855,8 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.doctor &&
   !options.extractLastFrame &&
   !options.extractFirstFrame &&
+  !options.extractFrameAt &&
+  !options.verifyVideo &&
   !options.concatVideos &&
   !options.sourceReelDir &&
   !options.remixAudio &&
@@ -3853,7 +3875,7 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !opt
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7396,6 +7418,34 @@ async function extractFirstFrameFromVideo(videoPath, outputImagePath) {
   await runFrameExtraction(args, { videoPath, outputImagePath, which: 'first' });
 }
 
+async function extractFrameAtTimeFromVideo(videoPath, seconds, outputImagePath) {
+  sanitizePath(videoPath, 'video path');
+  sanitizePath(outputImagePath, 'output image path');
+  const timestamp = Number(seconds);
+  if (!Number.isFinite(timestamp) || timestamp < 0) {
+    const err = new Error('Frame extraction timestamp must be a non-negative number.');
+    err.code = 'INVALID_ARGUMENT';
+    throw err;
+  }
+
+  // Seek after opening the input for frame-accurate visual QA. Loop Maker
+  // clips are short, so accuracy is more useful here than keyframe-only speed.
+  const args = [
+    '-i', videoPath,
+    '-ss', String(timestamp),
+    '-frames:v', '1',
+    '-q:v', '1',
+    '-y',
+    outputImagePath
+  ];
+
+  await runFrameExtraction(args, {
+    videoPath,
+    outputImagePath,
+    which: `frame at ${timestamp}s`
+  });
+}
+
 function parseFrameRate(raw) {
   if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null;
   if (typeof raw !== 'string') return null;
@@ -7410,15 +7460,23 @@ function parseFrameRate(raw) {
 }
 
 // Probe a media file's primary video stream + whether it has any audio.
-// Returns { width, height, fps, duration, hasAudio }. Fields are null when the
-// probe fails (e.g. ffprobe missing); callers fall back to safe defaults.
+// Fields are null when the probe fails (e.g. ffprobe missing); callers fall
+// back to safe defaults unless they explicitly require verification.
 async function probeVideoStreamInfo(filePath) {
-  const info = { width: null, height: null, fps: null, duration: null, hasAudio: false };
+  const info = {
+    width: null,
+    height: null,
+    fps: null,
+    duration: null,
+    hasAudio: false,
+    videoCodec: null,
+    audioCodec: null
+  };
   const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
   sanitizePath(ffprobePath, 'FFPROBE_PATH');
   const result = await runCommand(ffprobePath, [
     '-v', 'error',
-    '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,r_frame_rate',
+    '-show_entries', 'stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
     '-show_entries', 'format=duration',
     '-of', 'json',
     filePath,
@@ -7428,15 +7486,55 @@ async function probeVideoStreamInfo(filePath) {
   try { parsed = JSON.parse(result.stdout || '{}'); } catch { return info; }
   const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
   const video = streams.find((s) => s.codec_type === 'video');
-  info.hasAudio = streams.some((s) => s.codec_type === 'audio');
+  const audio = streams.find((s) => s.codec_type === 'audio');
+  info.hasAudio = Boolean(audio);
   if (video) {
     info.width = Number(video.width) || null;
     info.height = Number(video.height) || null;
     info.fps = parseFrameRate(video.avg_frame_rate) || parseFrameRate(video.r_frame_rate) || null;
+    info.videoCodec = video.codec_name || null;
   }
+  info.audioCodec = audio?.codec_name || null;
   const dur = Number(parsed?.format?.duration);
   info.duration = Number.isFinite(dur) && dur > 0 ? dur : null;
   return info;
+}
+
+async function verifyVideoFile(videoPath) {
+  sanitizePath(videoPath, 'video path');
+  const info = await probeVideoStreamInfo(videoPath);
+  if (!info.videoCodec || !info.width || !info.height || !info.fps || !info.duration) {
+    const err = new Error('Failed to read a valid video stream with ffprobe.');
+    err.code = 'FFPROBE_VERIFY_FAILED';
+    err.hint = 'Install ffprobe, confirm the file is a playable video, and retry.';
+    err.details = { videoPath, ...info };
+    throw err;
+  }
+
+  const ffmpegPath = await ensureFfmpegAvailable();
+  const result = await runCommand(ffmpegPath, [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-i', videoPath,
+    '-map', '0:v:0',
+    '-map', '0:a?',
+    '-f', 'null',
+    '-'
+  ], { captureOutput: true });
+  if (result.error || result.status !== 0) {
+    const err = new Error('Video stream verification failed during full decode.');
+    err.code = 'FFMPEG_VERIFY_FAILED';
+    err.hint = 'Keep the prior verified output and rebuild this file before delivery.';
+    err.details = {
+      videoPath,
+      status: result.status,
+      stderr: result.stderr || '',
+      stdout: result.stdout || ''
+    };
+    throw err;
+  }
+
+  return { ...info, decodable: true };
 }
 
 // Concatenate clips using the concat *filter* (not the concat demuxer). The
@@ -8996,6 +9094,58 @@ async function main() {
         }));
       } else {
         console.log(`Extracted first frame to: ${outputPath}`);
+      }
+      return;
+    }
+
+    if (options.extractFrameAt) {
+      const videoPath = sanitizePath(options.extractFrameAt, '--extract-frame-at video');
+      const outputPath = sanitizePath(options.extractFrameAtOutput, '--extract-frame-at output');
+      if (!existsSync(videoPath)) {
+        const err = new Error(`Video file not found: ${videoPath}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      await extractFrameAtTimeFromVideo(videoPath, options.extractFrameAtSeconds, outputPath);
+      if (options.json || JSON_ERROR_MODE) {
+        console.log(JSON.stringify({
+          success: true,
+          type: 'extract-frame-at',
+          seconds: options.extractFrameAtSeconds,
+          outputPath,
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        console.log(`Extracted frame at ${options.extractFrameAtSeconds}s to: ${outputPath}`);
+      }
+      return;
+    }
+
+    if (options.verifyVideo) {
+      const videoPath = sanitizePath(options.verifyVideo, '--verify-video input');
+      if (!existsSync(videoPath)) {
+        const err = new Error(`Video file not found: ${videoPath}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      const verification = await verifyVideoFile(videoPath);
+      if (options.json || JSON_ERROR_MODE) {
+        console.log(JSON.stringify({
+          success: true,
+          type: 'verify-video',
+          videoPath,
+          ...verification,
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        const audio = verification.hasAudio
+          ? `audio=${verification.audioCodec || 'present'}`
+          : 'audio=none';
+        console.log(
+          `Verified video: ${videoPath} ` +
+          `(${verification.width}x${verification.height}, ${verification.fps} fps, ` +
+          `${verification.duration.toFixed(3)}s, video=${verification.videoCodec}, ${audio})`
+        );
       }
       return;
     }

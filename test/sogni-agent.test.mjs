@@ -672,7 +672,7 @@ test('SDK-returned insufficient funds from context image edit surfaces Spark Pac
   assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
 });
 
-test('Krea identity edit accepts two context images with local defaults', () => {
+test('Krea identity edit accepts two context images with shared defaults', () => {
   const { exitCode, state } = runCli([
     '-c', SCREENSHOT_FIXTURE,
     '-c', SCREENSHOT_FIXTURE,
@@ -1373,10 +1373,9 @@ test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', (
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-t2v');
-  // HappyHorse spec default is 1080P (1920x1080, 16:9). The intel registry does
-  // not carry HappyHorse, so getModelDefaults returns null; the skill-local
-  // fallback supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1
-  // (matching HappyHorse's dimensionDivisor:1 / maxDimension:1920 in the client).
+  // HappyHorse spec default is 1080P (1920x1080, 16:9). The shared runtime
+  // still does not carry the bare HappyHorse alias, so the skill-local fallback
+  // supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1.
   assert.equal(state.lastVideoProject.width, 1920);
   assert.equal(state.lastVideoProject.height, 1080);
 });

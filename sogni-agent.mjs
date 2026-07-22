@@ -1249,25 +1249,6 @@ function isGptImage2ModelSelection(modelId) {
   return ['gpt-image-2', 'gptimage2', 'gpt-image', 'gpt_image_2'].includes(normalized);
 }
 
-const KREA2_IDENTITY_EDIT_MODELS = new Set([
-  'krea2_identity_edit_v1_2',
-  'dark_beast_krea2_identity_edit_v1_2'
-]);
-
-function isKrea2IdentityEditModelSelection(modelId) {
-  return KREA2_IDENTITY_EDIT_MODELS.has(String(modelId || '').trim().toLowerCase());
-}
-
-function getKrea2IdentityEditDefaults(modelId) {
-  if (!isKrea2IdentityEditModelSelection(modelId)) return null;
-  return {
-    steps: 10,
-    guidance: 1,
-    sampler: 'euler',
-    scheduler: 'simple'
-  };
-}
-
 function normalizeMusicModelId(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
@@ -1356,7 +1337,6 @@ function happyHorseModeFromModelId(modelId) {
 
 function getMaxContextImages(modelId) {
   if (isGptImage2ModelSelection(modelId)) return 16;
-  if (isKrea2IdentityEditModelSelection(modelId)) return 2;
   return getWrapperMaxContextImages(modelId);
 }
 
@@ -9950,8 +9930,7 @@ async function main() {
       const contextBuffers = await Promise.all(
         options.contextImages.map(img => fetchMediaBuffer(img))
       );
-      const modelDefaults = getModelDefaults(options.model, openclawConfig)
-        ?? getKrea2IdentityEditDefaults(options.model);
+      const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const steps = options.steps ?? modelDefaults?.steps ?? (options.model.includes('lightning') ? 4 : 20);
       const guidance = options.guidance ?? modelDefaults?.guidance ?? (options.model.includes('lightning') ? 3.5 : 7.5);
       const gptImageQuality = isGptImage2ModelSelection(options.model)

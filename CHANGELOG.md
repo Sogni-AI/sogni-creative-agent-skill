@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### Changed
+
+* **image edits:** consume `@sogni-ai/sogni-intelligence-client` `3.8.0` with Sogni Client `5.1.0-alpha.22`,
+  removing the duplicate Krea identity-edit CLI fallback while preserving the two-reference limit and 10-step
+  guidance defaults.
+
 # [3.15.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.14.1...v3.15.0) (2026-07-21)
 
 ### Bug Fixes

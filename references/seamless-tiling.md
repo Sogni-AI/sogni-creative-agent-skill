@@ -28,11 +28,11 @@ sogni-agent -m krea2_turbo_fp8_scaled -w 1024 -h 1024 -n 4 -o tile.png \
 
 `the motif repeats exactly N times across and N times down`
 
-Choose **N** for the scale you want: **1** for large bold figures, **2** for
-medium, **4** for a fine dense pattern. Equal counts across and down is the
-only part that matters. Measured over 30 renders each: 1× and 2× hit **63%**,
-4× hit 50%. **Avoid 3×** (40%, the worst value). This clause is a scale dial,
-not a tiling requirement — do not force 4× on someone who wants big motifs.
+Use **N = 1** for large bold figures or **N = 2** for a medium pattern, and
+keep the two counts equal. Measured over 30 renders each: 1× and 2× both hit
+**63%**, against 50% for 4× and 40% for 3× — so stick to 1 or 2 and pick
+between them purely on how large you want the motif to read. This clause is a
+scale dial, not a tiling requirement.
 
 ### Lighting — global evenness required, local depth optional
 
@@ -71,8 +71,8 @@ fall back to packing.
 
 ## It is probabilistic — always offer several
 
-Roughly **1 render in 3** wraps cleanly with the right configuration; the
-rest have a visible seam. So generate a batch and let the user pick:
+Roughly **half** the renders wrap cleanly on a good subject, fewer on a
+hard one. So generate a batch and let the user pick:
 
 ```bash
 sogni-agent -m krea2_turbo_fp8_scaled -w 1024 -h 1024 -n 4 -o tile.png "<prompt>"

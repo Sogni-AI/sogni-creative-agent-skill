@@ -239,6 +239,10 @@ Use `sogni-agent --json --list-media images` (or `audio` / `all`) to find inboun
 - Before generating, check saved preferences with `--memory-list` and respect them; save stated standing preferences with `--memory-set`. Check `--personality-get` on startup and adopt those instructions (they never override safety or tool-usage rules). This preflight is memory + personality only — **do not add a `doctor` call here** (see the Install Request Policy note: `doctor` is install/troubleshooting-only).
 - **Read [`references/personas-memory.md`](./references/personas-memory.md)** for persona CRUD, voice cloning, multi-persona scenes, style transfer, and photo restoration recipes.
 
+### Seamless tiling and tessellations
+
+When the requested image is meant to **repeat edge to edge without visible joins** — a seamless pattern, repeating texture, wallpaper, tiling background, or an Escher-style tessellation of interlocking figures — an ordinary render will not wrap. Use `-m krea2_turbo_fp8_scaled` at **exactly `-w 1024 -h 1024`** (the only size that tiles; 768/1280/1536/non-square all measured 0%), append the clause stack `a perfect crop from an infinite repeating pattern that continues beyond every edge, the motif repeats exactly four times across and four times down, uniform flat lighting with no shadows or vignette`, and keep the subject's palette tonally close. Tiling is probabilistic (~1 in 3), so render `-n 4` and let the user pick rather than promising a given result tiles. **Read [`references/seamless-tiling.md`](./references/seamless-tiling.md) for the full recipe, the Escher-tessellation variant, subject hit rates, and how to verify a seam.**
+
 ### Model selection
 
 Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance or HappyHorse native audio, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
@@ -322,6 +326,7 @@ Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-ef
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |
 | [`references/hosted-api.md`](./references/hosted-api.md) | `--api-chat`, `--durable-chat`, `--api-workflow`, workflow templates, replays, Seedance reference modes, cost controls |
+| [`references/seamless-tiling.md`](./references/seamless-tiling.md) | Seamless repeating patterns, wallpapers, tiling textures, Escher tessellations |
 | [`references/models.md`](./references/models.md) | Choosing models, sizing/divisibility rules, image edit reference limits, music model options |
 | [`references/personas-memory.md`](./references/personas-memory.md) | Persona CRUD/voice cloning, multi-persona scenes, memories, personality, style transfer, photo restoration |
 | [`references/openclaw-config.md`](./references/openclaw-config.md) | OpenClaw plugin config defaults and overrides |

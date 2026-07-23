@@ -12,19 +12,42 @@ with the canvas. Everything below is about stacking the odds, then checking.
 ## The configuration
 
 ```bash
-sogni-agent -m krea2_turbo_fp8_scaled -w 1024 -h 1024 -o tile.png \
-  "<subject>, a perfect crop from an infinite repeating pattern that continues beyond every edge, the motif repeats exactly four times across and four times down, uniform flat lighting with no shadows or vignette"
+sogni-agent -m krea2_turbo_fp8_scaled -w 1024 -h 1024 -n 4 -o tile.png \
+  "<subject>, a perfect crop from an infinite repeating pattern that continues beyond every edge, <motif-scale clause>, <lighting clause>"
 ```
-
-Every part of this is load-bearing:
 
 | Element | Why |
 |---|---|
 | `krea2_turbo_fp8_scaled` | The only model that composes edge-to-edge. `z_image_turbo_bf16` renders an object on a background instead and cannot tile. |
 | **1024×1024, always** | The only size that tiles. 768, 1280, 1536, landscape, and 896×1152 all measured **0%**. It is the model's native resolution; off-native sizes never phase-align. |
 | `a perfect crop from an infinite repeating pattern…` | Removes edge-framing behaviour — the model stops composing *for* a frame. |
-| `the motif repeats exactly four times across and four times down` | Anchors the pattern period to the canvas, which is what allows phase alignment. |
-| `uniform flat lighting with no shadows or vignette` | The single most important clause. A normal top-down lighting gradient is what makes the top and bottom edges disagree; it is the dominant failure mode. |
+| motif-scale clause | Sets how big the motif reads. Does **not** affect whether it tiles. |
+| lighting clause | Kills the global light gradient, which is what makes opposite edges disagree. The dominant failure mode. |
+
+### Motif scale — pick for looks, not for tiling
+
+`the motif repeats exactly N times across and N times down`
+
+Choose **N** for the scale you want: **1** for large bold figures, **2** for
+medium, **4** for a fine dense pattern. Equal counts across and down is the
+only part that matters. Measured over 30 renders each: 1× and 2× hit **63%**,
+4× hit 50%. **Avoid 3×** (40%, the worst value). This clause is a scale dial,
+not a tiling requirement — do not force 4× on someone who wants big motifs.
+
+### Lighting — global evenness required, local depth optional
+
+The constraint is *global*: no directional gradient or vignette across the
+frame. Individual figures may still be shaded, which usually looks better.
+
+- **Keep depth (recommended):** `consistent even illumination from edge to
+  edge, with natural shading and depth modeled within each object` — 47%,
+  and figures keep glossy highlights and three-dimensional modelling.
+- **Flat graphic look:** `uniform flat lighting with no shadows or vignette`
+  — 59%, slightly better odds, flatter result.
+
+**Do not omit this clause, and do not soften it to something vague** like
+"evenly lit across the frame": both measured **8%**. The wording has to
+explicitly forbid the gradient and vignette.
 
 **Palette rule:** keep the subject tonally close — one dominant colour
 family. High-contrast pairings expose the seam, because a border offset in

@@ -1,7 +1,8 @@
 /**
  * Stamp the package.json version into every other manifest that carries it:
  *   version.mjs, SKILL.md frontmatter, .claude-plugin/plugin.json,
- *   openclaw.plugin.json, desktop-extension/manifest.json.
+ *   .codex-plugin/plugin.json, openclaw.plugin.json,
+ *   desktop-extension/manifest.json.
  *
  * package.json is the single source of truth. The docs-consistency test (and
  * CI) fail when any of these drift, so run `npm run sync:version` after every
@@ -41,7 +42,12 @@ stamp('SKILL.md', (text) => {
   return updated;
 });
 
-for (const manifest of ['.claude-plugin/plugin.json', 'openclaw.plugin.json', 'desktop-extension/manifest.json']) {
+for (const manifest of [
+  '.claude-plugin/plugin.json',
+  '.codex-plugin/plugin.json',
+  'openclaw.plugin.json',
+  'desktop-extension/manifest.json',
+]) {
   stamp(manifest, (text) => {
     const parsed = JSON.parse(text);
     if (parsed.version === version) return text;

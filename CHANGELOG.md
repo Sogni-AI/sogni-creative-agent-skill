@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+## [3.16.1] - 2026-07-25
+
+### Fixed
+
+* **release:** stamp and verify the Codex plugin manifest alongside every other package and plugin manifest.
+
 ## [3.16.0] - 2026-07-25
 
 ### Added

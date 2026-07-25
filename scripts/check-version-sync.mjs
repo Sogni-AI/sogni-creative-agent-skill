@@ -46,6 +46,7 @@ export function checkVersionSync({ repoRoot = defaultRepoRoot } = {}) {
 
   for (const manifest of [
     '.claude-plugin/plugin.json',
+    '.codex-plugin/plugin.json',
     'openclaw.plugin.json',
     'desktop-extension/manifest.json',
   ]) {

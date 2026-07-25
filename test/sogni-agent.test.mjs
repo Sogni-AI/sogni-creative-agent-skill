@@ -1865,6 +1865,184 @@ test('--get-api-model fetches one hosted LLM model descriptor', async () => {
   });
 });
 
+const TEST_MODEL_CATALOG_HTML = `
+  <a class="mcard featured" href="/models/dark-beast-krea-2"
+    data-tier="standard"
+    data-uncensored="1"
+    data-community="0"
+    data-caps="text-to-image uncensored"
+    data-name="Dark Beast KREA 2"
+    data-text="dark beast krea 2 dark_beast_krea2_fp8 dark_beast_krea2_identity_edit_v1_2 new spicy uncensored">
+  </a>
+  <a class="mcard" href="/models/dark-beast-z-image-turbo-v9"
+    data-tier="premium"
+    data-uncensored="1"
+    data-community="1"
+    data-caps="text-to-image uncensored"
+    data-name="Dark Beast Z-Image Turbo v9"
+    data-text="dark beast z image turbo v9 dark_beast_z_image_turbo_v9_bf16 uncensored community">
+  </a>
+  <a class="mcard" href="/models/ltx-2-3"
+    data-tier="standard"
+    data-uncensored="0"
+    data-community="0"
+    data-caps="text-to-video"
+    data-name="LTX-2.3 22B"
+    data-text="ltx 2.3 22b ltx23-22b-fp8_t2v_distilled fast">
+  </a>
+`;
+
+test('--search-models queries live media models through the Sogni client', () => {
+  const models = [
+    {
+      id: 'dark_beast_z_image_turbo_v9_bf16',
+      name: 'Dark Beast Z-Image Turbo v9',
+      workerCount: 51,
+      media: 'image'
+    },
+    {
+      id: 'dark_beast_krea2_identity_edit_v1_2',
+      name: 'Dark Beast KREA 2 Identity Edit',
+      workerCount: 38,
+      media: 'image'
+    },
+    {
+      id: 'ltx23-22b-fp8_t2v_distilled',
+      name: 'LTX-2.3 22B',
+      workerCount: 20,
+      media: 'video'
+    }
+  ];
+  const { exitCode, stdout, state } = runCli(
+    ['--json', '--search-models', 'darkbeast'],
+    { SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models) }
+  );
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, true);
+  assert.equal(payload.type, 'live-models');
+  assert.equal(payload.network, 'fast');
+  assert.equal(payload.query, 'darkbeast');
+  assert.equal(payload.count, 2);
+  assert.deepEqual(
+    payload.models.map((model) => model.id),
+    ['dark_beast_z_image_turbo_v9_bf16', 'dark_beast_krea2_identity_edit_v1_2']
+  );
+  assert.equal(state.clientConfigs[0].network, 'fast');
+});
+
+test('--search-models matches the spicy catalog tag', () => {
+  const models = [
+    {
+      id: 'dark_beast_krea2_fp8',
+      name: 'Dark Beast KREA 2',
+      workerCount: 42,
+      media: 'image'
+    },
+    {
+      id: 'dark_beast_z_image_turbo_v9_bf16',
+      name: 'Dark Beast Z-Image Turbo v9',
+      workerCount: 31,
+      media: 'image'
+    }
+  ];
+  const { exitCode, stdout } = runCli(
+    ['--json', '--search-models', 'spicy'],
+    {
+      SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models),
+      SOGNI_AGENT_TEST_MODEL_CATALOG_HTML: TEST_MODEL_CATALOG_HTML
+    }
+  );
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.catalogTagsAvailable, true);
+  assert.equal(payload.count, 1);
+  assert.deepEqual(payload.models[0].tags, ['new', 'spicy', 'standard', 'uncensored']);
+  assert.equal(payload.models[0].id, 'dark_beast_krea2_fp8');
+});
+
+test('--model-tag filters available models with repeatable AND semantics', () => {
+  const models = [
+    {
+      id: 'dark_beast_krea2_fp8',
+      name: 'Dark Beast KREA 2',
+      workerCount: 42,
+      media: 'image'
+    },
+    {
+      id: 'dark_beast_z_image_turbo_v9_bf16',
+      name: 'Dark Beast Z-Image Turbo v9',
+      workerCount: 31,
+      media: 'image'
+    },
+    {
+      id: 'ltx23-22b-fp8_t2v_distilled',
+      name: 'LTX-2.3 22B',
+      workerCount: 20,
+      media: 'video'
+    }
+  ];
+  const { exitCode, stdout } = runCli(
+    ['--json', '--list-models', '--model-tag', 'uncensored', '--model-tag', 'spicy'],
+    {
+      SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models),
+      SOGNI_AGENT_TEST_MODEL_CATALOG_HTML: TEST_MODEL_CATALOG_HTML
+    }
+  );
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.deepEqual(payload.tagFilters, ['uncensored', 'spicy']);
+  assert.equal(payload.count, 1);
+  assert.equal(payload.models[0].id, 'dark_beast_krea2_fp8');
+});
+
+test('tag search fails clearly when catalog metadata is unavailable', () => {
+  const { exitCode, stdout } = runCli(['--json', '--search-models', 'uncensored']);
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'MODEL_CATALOG_INVALID');
+  assert.match(payload.error, /no model cards/i);
+  assert.match(payload.hint, /sogni\.ai\/models/);
+});
+
+test('--list-models supports media and network filters', () => {
+  const { exitCode, stdout, state } = runCli([
+    '--json',
+    '--list-models',
+    '--model-media', 'video',
+    '--model-network', 'relaxed'
+  ]);
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, true);
+  assert.equal(payload.network, 'relaxed');
+  assert.equal(payload.media, 'video');
+  assert.equal(payload.count, 1);
+  assert.ok(payload.models.every((model) => model.media === 'video'));
+  assert.equal(state.clientConfigs[0].network, 'relaxed');
+});
+
+test('--search-models matches Unicode model names', () => {
+  const { exitCode, stdout } = runCli(['--json', '--search-models', '黑兽']);
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.count, 1);
+  assert.equal(payload.models[0].id, 'dark_beast_krea2_fp8');
+});
+
+test('live model filter flags require a model discovery action', () => {
+  const { exitCode, stderr } = runCli(['--model-media', 'image']);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /require --list-models or --search-models/);
+});
+
 test('--api-chat rejects loopback api base without explicit unsafe opt-in before sending credentials', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -3393,6 +3571,11 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--verify-video'), 'Help should include --verify-video');
   assert.ok(stdout.includes('--remix-audio'), 'Help should include --remix-audio');
   assert.ok(stdout.includes('--list-media'), 'Help should include --list-media');
+  assert.ok(stdout.includes('--list-models'), 'Help should include --list-models');
+  assert.ok(stdout.includes('--search-models'), 'Help should include --search-models');
+  assert.ok(stdout.includes('--model-media'), 'Help should include --model-media');
+  assert.ok(stdout.includes('--model-network'), 'Help should include --model-network');
+  assert.ok(stdout.includes('--model-tag'), 'Help should include --model-tag');
   assert.ok(stdout.includes('--api-chat'), 'Help should include --api-chat');
   assert.ok(stdout.includes('--api-workflow'), 'Help should include --api-workflow');
   assert.ok(stdout.includes('--generate-audio'), 'Help should include --generate-audio');

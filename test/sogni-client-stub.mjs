@@ -189,6 +189,42 @@ class SogniClientWrapper extends EventEmitter {
     return { username: 'stub-user', network: 'fast', isUnlimited: false };
   }
 
+  async getAvailableModels(options = {}) {
+    let models = process.env.SOGNI_AGENT_TEST_MODELS_JSON
+      ? JSON.parse(process.env.SOGNI_AGENT_TEST_MODELS_JSON)
+      : [
+          {
+            id: 'dark_beast_krea2_fp8',
+            name: 'Dark Beast KREA 2 黑兽',
+            workerCount: 42,
+            media: 'image'
+          },
+          {
+            id: 'ltx23-22b-fp8_t2v_distilled',
+            name: 'LTX-2.3 22B',
+            workerCount: 24,
+            media: 'video'
+          },
+          {
+            id: 'ace_step_1.5_xl_turbo',
+            name: 'ACE-Step 1.5 XL Turbo',
+            workerCount: 12,
+            media: 'audio'
+          }
+        ];
+    if (options.minWorkers !== undefined) {
+      models = models.filter((model) => model.workerCount >= options.minWorkers);
+    }
+    if (options.sortByWorkers) {
+      models = [...models].sort((a, b) => b.workerCount - a.workerCount);
+    }
+    return models.map((model) => ({
+      ...model,
+      isAvailable: model.workerCount > 0,
+      recommendedSettings: model.recommendedSettings || {}
+    }));
+  }
+
   async estimateVideoCost() {
     const state = getState();
     state.lastEstimateVideoCost = arguments[0] ?? null;

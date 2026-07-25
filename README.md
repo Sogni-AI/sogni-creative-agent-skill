@@ -431,6 +431,11 @@ sogni-agent --api-chat --task-profile reasoning --no-thinking \
   "Plan a concise multi-step product launch workflow"
 sogni-agent --list-api-models
 
+# Live Supernet media model discovery
+sogni-agent --list-models
+sogni-agent --search-models spicy
+sogni-agent --list-models --model-media image --model-tag uncensored
+
 # Durable hosted chat run with SSE progress events
 SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat \
   "Create a product launch storyboard and render the first hero image"
@@ -508,6 +513,9 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--watch-workflow`, `--list-workflows`, `--get-workflow <id>`, `--workflow-events <id>`, `--stream-workflow <id>`, `--cancel-workflow <id>`, `--resume-workflow <id>` | Manage durable workflows |
 | `--api-tools <mode>`, `--no-api-tool-execution`, `--llm-model <id>`, `--task-profile <profile>`, `--max-tokens <n>`, `--thinking` / `--no-thinking`, `--api-base-url <url>` | Tune hosted API requests |
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM models |
+| `--list-models [query]`, `--search-models <query>` | List or search currently available Supernet image, video, and audio models |
+| `--model-media <type>`, `--model-network <network>` | Filter live model discovery by media or Fast/Relaxed network |
+| `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching |
 | `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay records (use `@path` to load JSON from a file) |
 | `--persona <name>` | Use a saved persona |
 | `--concat-videos <out> <clips...>` | Stitch clips locally with FFmpeg |

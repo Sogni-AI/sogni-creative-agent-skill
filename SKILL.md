@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.15.1"
+  version: "3.16.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -167,6 +167,11 @@ sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the ref
 sogni-agent --json --balance
 sogni-agent --last --json
 sogni-agent --json --list-media images
+sogni-agent --list-models
+sogni-agent --search-models darkbeast
+sogni-agent --search-models spicy
+sogni-agent --list-models --model-tag uncensored
+sogni-agent --json --search-models darkbeast
 sogni-agent doctor --json
 ```
 
@@ -193,6 +198,10 @@ sogni-agent doctor --json
 | `--token-type spark\|sogni\|auto` | `auto` retries native models with SOGNI when SPARK is low | spark |
 | `--billing-mode auto\|subscription\|tokens` | `subscription` requires Sogni Unlimited coverage; `tokens` opts out of it | server decides |
 | `--last`, `--last-image` | Inspect last render / reuse it as context or ref | - |
+| `--list-models [query]`, `--search-models <query>` | List or search the live Supernet image/video/audio model catalog | - |
+| `--model-media image\|video\|audio\|all` | Filter live model discovery by output media | all |
+| `--model-network fast\|relaxed` | Select the Supernet used for live model discovery | configured network or fast |
+| `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching | - |
 | `--json` | Machine-parseable stdout (progress goes to stderr) | false |
 | `-q, --quiet` | Suppress progress output | false |
 | `-t <sec>` | Timeout | 30 image / 300 video |

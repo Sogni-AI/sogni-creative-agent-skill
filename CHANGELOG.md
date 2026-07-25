@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [3.16.0] - 2026-07-25
+
+### Added
+
+* **cli:** add live Supernet media model discovery through `sogni-client`, including separator-insensitive
+  ID/name search, image/video/audio and Fast/Relaxed filters, JSON output, and official catalog tag search
+  with repeatable `--model-tag` filters for labels such as `spicy` and `uncensored`.
+
 ### Changed
 
 * **image edits:** consume `@sogni-ai/sogni-intelligence-client` `3.8.0` with Sogni Client `5.1.0-alpha.22`,

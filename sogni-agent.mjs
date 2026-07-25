@@ -99,6 +99,20 @@ const SPARK_PACKS_PURCHASE_URL = 'https://docs.sogni.ai/pricing/#spark-packs';
 const SPARK_PACKS_PURCHASE_HINT = `Buy Spark Packs to continue: ${SPARK_PACKS_PURCHASE_URL}`;
 
 const UNLIMITED_PLAN_URL = 'https://docs.sogni.ai/pricing/unlimited-plan-details';
+const SOGNI_MODEL_CATALOG_URL = 'https://www.sogni.ai/models';
+const SOGNI_MODEL_CATALOG_MAX_BYTES = 5 * 1024 * 1024;
+const SOGNI_MODEL_CATALOG_TIMEOUT_MS = 10000;
+const KNOWN_MODEL_CATALOG_TAGS = new Set([
+  'spicy',
+  'uncensored',
+  'community',
+  'new',
+  'popular',
+  'fast',
+  'free-tier',
+  'standard',
+  'premium'
+]);
 
 // Skill-local fallback guidance for Sogni Unlimited subscription billing errors,
 // keyed on the canonical socket error code (a structured fact, not an English
@@ -1921,6 +1935,11 @@ const options = {
   apiSystemPrompt: null,
   apiModelAction: null, // list|get
   apiModelId: null,
+  liveModelAction: null, // list|search
+  liveModelQuery: null,
+  liveModelMedia: 'all', // image|video|audio|all
+  liveModelNetwork: null, // fast|relaxed; defaults to configured network
+  liveModelTags: [], // repeatable --model-tag filters (AND semantics)
   apiReplayAction: null, // list|get|ingest
   apiReplayId: null,
   apiReplayInput: null,
@@ -2573,6 +2592,42 @@ for (let i = 0; i < args.length; i++) {
     } else {
       options.listMedia = 'images';
     }
+  } else if (arg === '--list-models' || arg === '--live-models') {
+    options.liveModelAction = 'list';
+    const next = args[i + 1];
+    if (next && !next.startsWith('-')) {
+      i++;
+      options.liveModelQuery = next;
+    }
+  } else if (arg === '--search-models' || arg === '--find-models') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.liveModelAction = 'search';
+    options.liveModelQuery = raw;
+  } else if (arg === '--model-media') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    if (!['image', 'video', 'audio', 'all'].includes(raw)) {
+      fatalCliError('--model-media must be one of image, video, audio, or all.', {
+        code: 'INVALID_ARGUMENT',
+        details: { value: raw }
+      });
+    }
+    options.liveModelMedia = raw;
+  } else if (arg === '--model-network') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    if (!['fast', 'relaxed'].includes(raw)) {
+      fatalCliError('--model-network must be fast or relaxed.', {
+        code: 'INVALID_ARGUMENT',
+        details: { value: raw }
+      });
+    }
+    options.liveModelNetwork = raw;
+  } else if (arg === '--model-tag') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.liveModelTags.push(raw);
   // --- Hosted Sogni API paths ---
   } else if (arg === '--api-chat') {
     options.apiChat = true;
@@ -3046,6 +3101,11 @@ General:
   --billing-mode <mode> Billing: auto|subscription|tokens (default: server decides; "subscription"
                         requires Sogni Unlimited coverage, "tokens" opts out of it)
   --balance, --balances Show account, plan, and SPARK/SOGNI balances and exit
+  --list-models [query] List live Supernet media models; optionally filter by query
+  --search-models <q>   Search live models by ID or name (separator-insensitive)
+  --model-media <type>  Filter model discovery: image|video|audio|all (default: all)
+  --model-network <n>   Model discovery network: fast|relaxed (default: configured network)
+  --model-tag <tag>     Filter by catalog tag, e.g. spicy or uncensored (repeatable, AND)
   --doctor              Health check: Node, credentials, ffmpeg, auth, plan, config, version
   --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
   --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
@@ -3843,6 +3903,7 @@ const apiWorkflowStartAction = options.apiWorkflowAction === 'start';
 const apiWorkflowStartHasExternalInput = options.apiWorkflowAction === 'start' && options.apiWorkflowInput;
 const apiWorkflowTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
 const apiModelUtilityAction = Boolean(options.apiModelAction);
+const liveModelUtilityAction = Boolean(options.liveModelAction);
 const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
 const contractUtilityAction = Boolean(options.contractAction);
@@ -3850,6 +3911,7 @@ const storyboardPlanUtilityAction = Boolean(options.storyboardPlanAction);
 const commandUsesGenerationSeed = !options.apiChat &&
   !apiWorkflowUtilityAction &&
   !apiModelUtilityAction &&
+  !liveModelUtilityAction &&
   !apiReplayUtilityAction &&
   !contractUtilityAction &&
   !storyboardPlanUtilityAction &&
@@ -3874,12 +3936,17 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
+if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.liveModelNetwork || options.liveModelTags.length > 0)) {
+  fatalCliError('--model-media, --model-network, and --model-tag require --list-models or --search-models.', {
+    code: 'INVALID_ARGUMENT'
+  });
+}
 // Normalize a whitespace-only prompt to empty so the guard below treats it as
 // "no prompt" rather than silently sending blank text to the server.
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -5875,6 +5942,236 @@ async function runApiModels() {
   const models = modelsFromPayload(payload);
   for (const model of models) {
     console.log(`${model.id || model.modelId || model.name || '(unknown)'}\t${model.owned_by || model.displayName || ''}`);
+  }
+}
+
+function normalizeLiveModelSearch(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function normalizeLiveModelTag(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-');
+}
+
+function decodeModelCatalogAttribute(value) {
+  return String(value || '')
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function modelCatalogEntriesFromHtml(html) {
+  const entries = [];
+  const anchorPattern = /<a\b[^>]*>/gi;
+  let anchorMatch;
+  while ((anchorMatch = anchorPattern.exec(String(html || ''))) !== null) {
+    const attributes = {};
+    const attributePattern = /([:\w-]+)\s*=\s*"([^"]*)"/g;
+    let attributeMatch;
+    while ((attributeMatch = attributePattern.exec(anchorMatch[0])) !== null) {
+      attributes[attributeMatch[1].toLowerCase()] = decodeModelCatalogAttribute(attributeMatch[2]);
+    }
+    const classes = (attributes.class || '').split(/\s+/);
+    if (!classes.includes('mcard')) continue;
+
+    const textTokens = (attributes['data-text'] || '')
+      .toLocaleLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    const capabilities = (attributes['data-caps'] || '')
+      .toLocaleLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    const tags = new Set();
+    if (attributes['data-uncensored'] === '1' || capabilities.includes('uncensored')) {
+      tags.add('uncensored');
+    }
+    if (attributes['data-community'] === '1') tags.add('community');
+    const tier = normalizeLiveModelTag(attributes['data-tier']);
+    if (tier) tags.add(tier);
+    for (const tag of KNOWN_MODEL_CATALOG_TAGS) {
+      if (textTokens.includes(tag)) tags.add(tag);
+    }
+    entries.push({
+      modelIds: new Set(textTokens),
+      tags: [...tags].sort()
+    });
+  }
+  return entries;
+}
+
+async function fetchModelCatalogEntries() {
+  if (getEnv('SOGNI_AGENT_TEST_STATE_PATH')) {
+    return modelCatalogEntriesFromHtml(getEnv('SOGNI_AGENT_TEST_MODEL_CATALOG_HTML') || '');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SOGNI_MODEL_CATALOG_TIMEOUT_MS);
+  try {
+    const response = await fetchSafeUrl(
+      SOGNI_MODEL_CATALOG_URL,
+      {
+        headers: { Accept: 'text/html' },
+        signal: controller.signal
+      },
+      { allowedHosts: ['www.sogni.ai'] }
+    );
+    if (!response.ok) {
+      const err = new Error(`Sogni model catalog returned HTTP ${response.status}.`);
+      err.code = 'MODEL_CATALOG_UNAVAILABLE';
+      throw err;
+    }
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > SOGNI_MODEL_CATALOG_MAX_BYTES) {
+      const err = new Error('Sogni model catalog response is unexpectedly large.');
+      err.code = 'MODEL_CATALOG_INVALID';
+      throw err;
+    }
+    const html = await response.text();
+    if (Buffer.byteLength(html, 'utf8') > SOGNI_MODEL_CATALOG_MAX_BYTES) {
+      const err = new Error('Sogni model catalog response is unexpectedly large.');
+      err.code = 'MODEL_CATALOG_INVALID';
+      throw err;
+    }
+    const entries = modelCatalogEntriesFromHtml(html);
+    if (entries.length === 0) {
+      const err = new Error('Sogni model catalog contained no model cards.');
+      err.code = 'MODEL_CATALOG_INVALID';
+      throw err;
+    }
+    return entries;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function enrichLiveModelsWithCatalogTags(models, catalogEntries) {
+  return models.map((model) => {
+    const modelId = String(model.id || '').toLocaleLowerCase();
+    const entry = catalogEntries.find((candidate) => candidate.modelIds.has(modelId));
+    return {
+      ...model,
+      tags: entry?.tags || []
+    };
+  });
+}
+
+async function runLiveModels() {
+  const creds = loadCredentials();
+  const apiKey = requireApiKeyCredentials(
+    creds,
+    options.liveModelAction === 'search' ? '--search-models' : '--list-models'
+  );
+  const network = options.liveModelNetwork || openclawConfig?.defaultNetwork || 'fast';
+  const media = options.liveModelMedia || 'all';
+  const query = options.liveModelQuery?.trim() || null;
+  const normalizedQuery = normalizeLiveModelSearch(query);
+  const tagFilters = [...new Set(options.liveModelTags.map(normalizeLiveModelTag).filter(Boolean))];
+  if (query && !normalizedQuery) {
+    const err = new Error('Model search query must contain at least one letter or number.');
+    err.code = 'INVALID_ARGUMENT';
+    throw err;
+  }
+  const modelClient = new SogniClientWrapper({
+    appSource: SOGNI_APP_SOURCE,
+    network,
+    autoConnect: false,
+    apiKey,
+    authType: 'apiKey'
+  });
+
+  try {
+    await connectSogniClient(modelClient);
+    let models = await modelClient.getAvailableModels({ sortByWorkers: true });
+    const queryAsTag = normalizeLiveModelTag(query);
+    const catalogRequired = tagFilters.length > 0 || KNOWN_MODEL_CATALOG_TAGS.has(queryAsTag);
+    let catalogTagsAvailable = false;
+    try {
+      const catalogEntries = await fetchModelCatalogEntries();
+      if (catalogRequired && catalogEntries.length === 0) {
+        const err = new Error('Sogni model catalog contained no model cards.');
+        err.code = 'MODEL_CATALOG_INVALID';
+        throw err;
+      }
+      models = enrichLiveModelsWithCatalogTags(models, catalogEntries);
+      catalogTagsAvailable = catalogEntries.length > 0;
+    } catch (error) {
+      if (catalogRequired) {
+        if (!error.code) error.code = 'MODEL_CATALOG_UNAVAILABLE';
+        error.hint = 'Tag filtering requires the live Sogni model catalog at https://www.sogni.ai/models.';
+        throw error;
+      }
+      models = enrichLiveModelsWithCatalogTags(models, []);
+      if (!options.quiet && !options.json && !JSON_ERROR_MODE) {
+        console.error(`Warning: model catalog tags unavailable: ${cliErrorMessage(error)}`);
+      }
+    }
+    if (media !== 'all') {
+      models = models.filter((model) => model.media === media);
+    }
+    if (tagFilters.length > 0) {
+      models = models.filter((model) =>
+        tagFilters.every((tag) => model.tags.includes(tag))
+      );
+    }
+    if (normalizedQuery) {
+      models = models.filter((model) =>
+        normalizeLiveModelSearch(`${model.id} ${model.name} ${model.tags.join(' ')}`).includes(normalizedQuery)
+      );
+    }
+
+    const result = {
+      success: true,
+      type: 'live-models',
+      network,
+      media,
+      query,
+      tagFilters,
+      catalogTagsAvailable,
+      count: models.length,
+      models,
+      timestamp: new Date().toISOString()
+    };
+    if (options.json || JSON_ERROR_MODE) {
+      console.log(JSON.stringify(result));
+      return;
+    }
+
+    const scope = [
+      media === 'all' ? 'all media' : media,
+      `network=${network}`,
+      query ? `query=${JSON.stringify(query)}` : null,
+      tagFilters.length ? `tags=${tagFilters.join('+')}` : null
+    ].filter(Boolean).join(', ');
+    console.log(`Live Sogni models (${models.length}; ${scope})`);
+    if (models.length === 0) {
+      console.log('No matching models found.');
+      return;
+    }
+    console.log('MEDIA\tWORKERS\tMODEL ID\tTAGS\tNAME');
+    for (const model of models) {
+      console.log(`${model.media}\t${model.workerCount}\t${model.id}\t${model.tags.join(',') || '-'}\t${model.name}`);
+    }
+  } finally {
+    try {
+      if (modelClient.isConnected()) {
+        await Promise.race([
+          modelClient.disconnect(),
+          new Promise(resolve => setTimeout(resolve, 1000))
+        ]);
+      }
+    } catch {}
   }
 }
 
@@ -9030,6 +9327,11 @@ async function main() {
 
     if (options.apiModelAction) {
       await runApiModels();
+      return;
+    }
+
+    if (options.liveModelAction) {
+      await runLiveModels();
       return;
     }
 

@@ -5,6 +5,37 @@ answering "which model should I use for X". For everyday generation prefer
 `-Q fast|hq|pro` and automatic workflow routing instead of memorizing IDs.
 `sogni-agent --help` is the canonical flag reference.
 
+## Live model discovery
+
+The static tables below are recommendations, not the complete changing
+Supernet catalog. Query the live catalog through the CLI, which uses
+`sogni-client` model availability:
+
+```bash
+sogni-agent --list-models
+sogni-agent --search-models darkbeast
+sogni-agent --search-models spicy
+sogni-agent --list-models --model-tag uncensored
+sogni-agent --list-models --model-tag spicy --model-tag uncensored
+sogni-agent --list-models --model-media video
+sogni-agent --json --search-models darkbeast
+sogni-agent --list-models --model-network relaxed
+```
+
+Search matches model IDs and names case-insensitively and ignores separators,
+so `darkbeast`, `dark beast`, and `dark_beast` produce the same matches. It
+also searches catalog tags such as `spicy`, `uncensored`, `community`, `new`,
+and tier labels. `--model-tag <tag>` is repeatable and combines filters with
+AND semantics.
+
+Availability and worker counts come from `sogni-client`. Tags are joined from
+the official Sogni model catalog, since the client availability objects do not
+currently include catalog tags. Only models that are live on the selected
+network are returned.
+
+`--list-api-models` is different: it lists Sogni Intelligence language models
+from `/v1/models`, not Supernet media models.
+
 ## Quality presets (images)
 
 | Preset | Model | Steps | Size | Speed |

@@ -1406,7 +1406,22 @@ const DEFAULT_VIDEO_DIMENSION_RULES = {
 };
 const WRAPPER_MAX_VIDEO_DIMENSION = 2048;
 const WRAPPER_MAX_WAN_VIDEO_DIMENSION = 1536;
+
+// SogniClientWrapper.normalizeVideoDimensions in @sogni-ai/sogni-intelligence-client clamps to
+// MAX_VIDEO_DIMENSION = 1536 for every model before it resizes a reference image and overwrites
+// the project dimensions with the resized reference's. So on any reference-bearing workflow a
+// larger ceiling is not reachable: the CLI waves 1600x896 through as "valid", the wrapper then
+// clamps to 1536x848 and hands the model a 1514x848 reference that is off-divisor — the exact
+// failure the i2v sizing logic exists to prevent. Applied only to reference-bearing workflows;
+// t2v never goes through the reference resize. Keep in sync with the pinned client version.
+const WRAPPER_MAX_REF_VIDEO_DIMENSION = 1536;
 const VIDEO_DIMENSION_MULTIPLE = DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+
+// i2v reference sizing: when an exact-aspect bounding box would cost more than this share of
+// the pixel budget, pre-resize the reference to the model cap instead. The aspect ceiling keeps
+// the swap invisible — a 25:14 source becoming 16:9 drifts 0.44%, far under the limit.
+const VIDEO_REF_PRERESIZE_MIN_AREA_GAIN = 1.1;
+const VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT = 0.02;
 
 function isWanVideoModelId(modelId) {
   return typeof modelId === 'string' && modelId.startsWith('wan_');
@@ -1563,33 +1578,48 @@ function videoDimensionRulesFromDefaults(modelDefaults, modelId) {
 }
 
 /**
+ * Predicts the dimensions `resizeImageBufferForVideo` will produce for a reference image.
+ *
+ * Scales the reference up to the model's max dimension (preserving aspect via fit:inside),
+ * then rounds each side to the nearest model divisor. Unlike an exact-aspect bounding box,
+ * this always reaches the model cap — at the cost of a sub-pixel-percent aspect adjustment.
+ *
+ * `resizeImageBufferForVideo` delegates to this so the prediction can never drift from the
+ * actual resize.
+ */
+function predictVideoRefPreResizeDims(refWidth, refHeight, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
+  const rw = Number(refWidth);
+  const rh = Number(refHeight);
+  if (!Number.isFinite(rw) || !Number.isFinite(rh) || rw <= 0 || rh <= 0) return null;
+
+  const multiple = rules.dimensionMultiple || VIDEO_DIMENSION_MULTIPLE;
+  const minDimension = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxDimension = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  const roundToMultiple = (n) => Math.max(multiple, Math.round(n / multiple) * multiple);
+  // Never round past the model's hard limits.
+  const floorMultiple = Math.floor(maxDimension / multiple) * multiple;
+  const ceilMultiple = Math.ceil(minDimension / multiple) * multiple;
+  const clamp = (n) => Math.min(floorMultiple, Math.max(ceilMultiple, roundToMultiple(n)));
+
+  const boxWidth = Math.max(minDimension, Math.min(maxDimension, roundToMultiple(rw)));
+  const boxHeight = Math.max(minDimension, Math.min(maxDimension, roundToMultiple(rh)));
+  const fitted = predictSharpInsideResizeDims(rw, rh, boxWidth, boxHeight);
+  if (!fitted) return null;
+
+  return { width: clamp(fitted.width), height: clamp(fitted.height) };
+}
+
+/**
  * Resizes an image buffer to model-compatible dimensions while maintaining aspect ratio.
  * Uses sharp's fit:inside to preserve aspect, then rounds to the model divisor.
  */
 async function resizeImageBufferForVideo(buffer, originalWidth, originalHeight, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
-  const multiple = rules.dimensionMultiple || VIDEO_DIMENSION_MULTIPLE;
-  const roundToMultiple = (n) => Math.max(multiple, Math.round(n / multiple) * multiple);
-  const targetWidth = Math.max(rules.minDimension, Math.min(rules.maxDimension, roundToMultiple(originalWidth)));
-  const targetHeight = Math.max(rules.minDimension, Math.min(rules.maxDimension, roundToMultiple(originalHeight)));
+  const target = predictVideoRefPreResizeDims(originalWidth, originalHeight, rules);
+  if (!target) return buffer;
 
-  // Resize using sharp with fit:inside (maintains aspect ratio)
-  const resizedBuffer = await sharp(buffer)
-    .resize(targetWidth, targetHeight, { fit: 'inside', withoutEnlargement: false })
+  return await sharp(buffer)
+    .resize(target.width, target.height, { fit: 'cover', withoutEnlargement: false })
     .toBuffer();
-
-  // Get actual dimensions after resize
-  const metadata = await sharp(resizedBuffer).metadata();
-  const actualWidth = roundToMultiple(metadata.width);
-  const actualHeight = roundToMultiple(metadata.height);
-
-  // If dimensions aren't exactly model-compatible, do a final resize/crop.
-  if (metadata.width !== actualWidth || metadata.height !== actualHeight) {
-    return await sharp(resizedBuffer)
-      .resize(actualWidth, actualHeight, { fit: 'cover' })
-      .toBuffer();
-  }
-
-  return resizedBuffer;
 }
 
 function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
@@ -4483,7 +4513,17 @@ if (options.video && !options.frames) {
 //   with sharp `fit: inside` and then override the project width/height with the resized reference dims.
 //   That means a "valid" requested size can still fail if the resized ref lands off the model divisor.
 if (options.video) {
-  const videoDimensionRules = videoDimensionRulesFromDefaults(getModelDefaults(options.model, openclawConfig), options.model);
+  const baseVideoDimensionRules = videoDimensionRulesFromDefaults(getModelDefaults(options.model, openclawConfig), options.model);
+  // A reference image routes through the wrapper's resize, which caps at 1536 for every model
+  // and then adopts the resized reference's dimensions as the project's. Honour that ceiling up
+  // front so the CLI picks a divisor-valid size instead of letting the wrapper clamp blindly.
+  const hasVideoReference = Boolean(options.refImage || options.refImageEnd);
+  const videoDimensionRules = hasVideoReference
+    ? {
+      ...baseVideoDimensionRules,
+      maxDimension: Math.min(baseVideoDimensionRules.maxDimension, WRAPPER_MAX_REF_VIDEO_DIMENSION)
+    }
+    : baseVideoDimensionRules;
   if (!Number.isFinite(options.width) || options.width <= 0 || !Number.isFinite(options.height) || options.height <= 0) {
     fatalCliError('Video width/height must be positive numbers.', {
       code: 'INVALID_ARGUMENT',
@@ -4569,6 +4609,46 @@ if (options.video) {
 
       const beforeW = options.width;
       const beforeH = options.height;
+
+      // An exact-aspect bounding box can only land on sizes where BOTH sides are divisor-valid.
+      // For aspect ratios with sparse valid sizes (e.g. 25:14 on a /16 model, which tops out at
+      // 1200x672 under a 1536 cap) that forfeits a large share of the model's pixel budget.
+      // Pre-resizing the reference reaches the cap instead, trading a tiny aspect adjustment for
+      // the resolution — so prefer it when it wins materially on pixels and barely moves the aspect.
+      const preResize = predictVideoRefPreResizeDims(dims.width, dims.height, videoDimensionRules);
+      const candidateArea = candidate.output ? candidate.output.width * candidate.output.height : 0;
+      const preResizeArea = preResize ? preResize.width * preResize.height : 0;
+      const refAspect = dims.width / dims.height;
+      const aspectDrift = preResize
+        ? Math.abs((preResize.width / preResize.height) - refAspect) / refAspect
+        : Infinity;
+
+      if (preResizeArea > candidateArea * VIDEO_REF_PRERESIZE_MIN_AREA_GAIN
+        && aspectDrift <= VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT) {
+        options.width = preResize.width;
+        options.height = preResize.height;
+        options[ref.resizeFlag] = true;
+        options._adjustedVideoDims = {
+          reason: 'i2v-ref-pre-resize',
+          referenceType: ref.key,
+          requested: { width: beforeW, height: beforeH },
+          adjusted: { width: options.width, height: options.height },
+          resizedFrom: predicted,
+          resizedTo: { width: preResize.width, height: preResize.height },
+          insteadOf: candidate.output
+            ? { width: candidate.output.width, height: candidate.output.height }
+            : null
+        };
+        if (!options.quiet) {
+          console.error(
+            `Pre-resizing ${ref.label.toLowerCase()} to ${preResize.width}x${preResize.height} ` +
+            `instead of shrinking the video to ${candidate.output.width}x${candidate.output.height} ` +
+            `(keeps ${Math.round((preResizeArea / candidateArea - 1) * 100)}% more pixels).`
+          );
+        }
+        continue;
+      }
+
       options.width = candidate.width;
       options.height = candidate.height;
 
@@ -4601,12 +4681,17 @@ if (options.video) {
 
     const effectiveDimsSource = localRefDims.get('refImage') || localRefDims.get('refImageEnd') || null;
     if (effectiveDimsSource) {
-      const predicted = predictSharpInsideResizeDims(
-        effectiveDimsSource.width,
-        effectiveDimsSource.height,
-        options.width,
-        options.height
-      );
+      const effectiveResizeFlag = localRefDims.has('refImage') ? '_needsRefResize' : '_needsRefEndResize';
+      // A pre-resized reference reaches the wrapper already divisor-valid, so the video lands on
+      // the pre-resize dims rather than the fit:inside prediction of the original.
+      const predicted = options[effectiveResizeFlag]
+        ? predictVideoRefPreResizeDims(effectiveDimsSource.width, effectiveDimsSource.height, videoDimensionRules)
+        : predictSharpInsideResizeDims(
+          effectiveDimsSource.width,
+          effectiveDimsSource.height,
+          options.width,
+          options.height
+        );
       if (predicted) {
         options._effectiveVideoDims = {
           width: predicted.width,

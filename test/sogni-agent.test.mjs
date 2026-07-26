@@ -3141,9 +3141,10 @@ test('i2v infers a 16-multiple video size from non-square reference when width/h
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   // screenshot.jpg is 2314x1200. Default requested size is 512x512, but i2v would resize it to 512x266.
-  // The CLI auto-picks a compatible bounding box so the resized reference remains divisible by 16.
-  assert.equal(state.lastVideoProject.width, 1296);
-  assert.equal(state.lastVideoProject.height, 672);
+  // An exact-aspect bounding box tops out at 1296x672 here, so the CLI instead pre-resizes the
+  // reference to the model cap: 1536x800 keeps 41% more pixels for 0.43% of aspect drift.
+  assert.equal(state.lastVideoProject.width, 1536);
+  assert.equal(state.lastVideoProject.height, 800);
 });
 
 test('video dims are normalized to 16-multiples instead of hard failing', () => {
@@ -3482,9 +3483,91 @@ test('i2v auto-adjust handles near-matching aspects that still round to a non-16
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject);
-  // CLI chooses a compatible bounding box near the WAN i2v model default.
-  assert.equal(state.lastVideoProject.width, 832);
-  assert.equal(state.lastVideoProject.height, 720);
+  // The exact-aspect bounding box (832x720) would resize this reference down to 480x720.
+  // Pre-resizing to 592x880 keeps 51% more pixels for 0.85% of aspect drift, so it wins.
+  assert.equal(state.lastVideoProject.width, 592);
+  assert.equal(state.lastVideoProject.height, 880);
+});
+
+test('i2v keeps the model pixel budget when the reference aspect has no large divisor-valid box', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-ref-'));
+  const refPath = join(tmp, 'ref-1600x896.png');
+  // 1600x896 is 25:14. On a /16 model the largest box where BOTH the box and the resized
+  // reference stay divisor-valid is 1200x672 — only 78% of the 1536x864 the model can reach.
+  await sharp({
+    create: { width: 1600, height: 896, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  }).png().toFile(refPath);
+
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
+    '--ref', refPath,
+    '--width', '1536',
+    '--height', '864',
+    '--duration', '1',
+    'gentle motion'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.width, 1536);
+  assert.equal(state.lastVideoProject.height, 864);
+});
+
+test('i2v reports pre-resized effective dims in --json rather than the fit-inside prediction', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-ref-'));
+  const refPath = join(tmp, 'ref-1600x896.png');
+  await sharp({
+    create: { width: 1600, height: 896, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  }).png().toFile(refPath);
+
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
+    '--ref', refPath,
+    '--width', '1536',
+    '--height', '864',
+    '--duration', '1',
+    'gentle motion'
+  ]);
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, true);
+  assert.equal(payload.adjustedVideoDims.reason, 'i2v-ref-pre-resize');
+  assert.deepEqual(payload.adjustedVideoDims.resizedTo, { width: 1536, height: 864 });
+  // The old behaviour would have silently shrunk the video to this instead.
+  assert.deepEqual(payload.adjustedVideoDims.insteadOf, { width: 1200, height: 672 });
+  assert.equal(payload.effectiveWidth, 1536);
+  assert.equal(payload.effectiveHeight, 864);
+});
+
+test('i2v keeps the exact-aspect box when pre-resizing would distort the aspect too far', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-ref-'));
+  const refPath = join(tmp, 'ref-1000x500.png');
+  // A clean 2:1 source already has large divisor-valid boxes, so no pre-resize trade is needed.
+  await sharp({
+    create: { width: 1000, height: 500, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  }).png().toFile(refPath);
+
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
+    '--ref', refPath,
+    '--duration', '1',
+    'gentle motion'
+  ]);
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, true);
+  // Aspect must be preserved within the configured drift ceiling either way.
+  const aspect = payload.effectiveWidth / payload.effectiveHeight;
+  assert.ok(Math.abs(aspect - 2) / 2 <= 0.02, `expected ~2:1 output, got ${payload.effectiveWidth}x${payload.effectiveHeight}`);
 });
 
 test('--balance with --json returns balance information', () => {

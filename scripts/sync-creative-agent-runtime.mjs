@@ -73,6 +73,45 @@ if (!existsSync(upstreamSyncScript)) {
   process.exit(1);
 }
 
+const INTELLIGENCE_CLIENT = '@sogni-ai/sogni-intelligence-client';
+
+function installedClientVersion(fromDir) {
+  const manifest = join(fromDir, 'node_modules', INTELLIGENCE_CLIENT, 'package.json');
+  if (!existsSync(manifest)) return null;
+  try {
+    return JSON.parse(readFileSync(manifest, 'utf8')).version || null;
+  } catch {
+    return null;
+  }
+}
+
+// The upstream sync script generates the prompt contracts from ITS OWN copy of the
+// intelligence client, not ours. If that copy is older than the version this repo pins, the
+// sync silently regenerates the runtime from stale contracts and DELETES everything added
+// since — an easy change to land unnoticed, because it looks like a routine "runtime is
+// stale" diff. Fail loudly on a version mismatch instead of emitting a downgrade.
+const upstreamRoot = dirname(dirname(upstreamSyncScript));
+const ourClientVersion = installedClientVersion(repoRoot);
+const upstreamClientVersion = installedClientVersion(upstreamRoot);
+
+if (ourClientVersion && upstreamClientVersion && ourClientVersion !== upstreamClientVersion) {
+  console.error(`Refusing to sync: ${INTELLIGENCE_CLIENT} version mismatch.`);
+  console.error(`  this repo:     ${ourClientVersion}`);
+  console.error(`  ${upstreamRoot}: ${upstreamClientVersion}`);
+  console.error('');
+  console.error('The upstream sync script builds the prompt contracts from its own node_modules,');
+  console.error('so syncing now would regenerate generated/creative-agent-runtime.mjs from the');
+  console.error('older contract set and drop anything added since that version.');
+  console.error('');
+  console.error(`Fix: npm install --prefix ${upstreamRoot}`);
+  process.exit(1);
+}
+
+if (!upstreamClientVersion) {
+  console.warn(`Warning: could not resolve ${INTELLIGENCE_CLIENT} in ${upstreamRoot};`);
+  console.warn('skipping version-parity check. Verify the generated diff before committing.');
+}
+
 const syncResult = run(process.execPath, [upstreamSyncScript], {
   env: {
     ...process.env,

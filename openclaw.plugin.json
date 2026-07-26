@@ -2,7 +2,7 @@
   "id": "sogni-creative-agent-skill",
   "name": "Sogni Creative Agent Skill — Image, Video & Music Generation",
   "description": "Agent skill and CLI for Sogni AI image, video, and music generation.",
-  "version": "3.17.1",
+  "version": "3.17.2",
   "skills": [
     "."
   ],

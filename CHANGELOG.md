@@ -1,3 +1,10 @@
+## [3.17.2](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.1...v3.17.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* **billing:** clarify unlimited settlement and LTX sizing ([d836b49](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d836b490bccda5c9e8166b2bb3d928708d2fbae4))
+
 ## Unreleased
 
 ### Fixed

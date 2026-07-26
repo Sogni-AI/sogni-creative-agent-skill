@@ -6,6 +6,14 @@
 * **scripts:** refuse runtime sync on intelligence-client version mismatch ([247da8c](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/247da8c9cb7b6f0575a25543847ca00f44929c0a))
 * **video:** stop discarding i2v resolution on sparse aspect ratios ([23125f7](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/23125f780d394ec988012aabd4db7a9e49c63341))
 
+## [3.17.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.0...v3.17.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **scripts:** refuse runtime sync on intelligence-client version mismatch ([247da8c](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/247da8c9cb7b6f0575a25543847ca00f44929c0a))
+* **video:** stop discarding i2v resolution on sparse aspect ratios ([23125f7](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/23125f780d394ec988012aabd4db7a9e49c63341))
+
 ## [3.17.0] - 2026-07-26
 
 ### Added

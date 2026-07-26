@@ -2207,34 +2207,51 @@ test('--get-api-model fetches one hosted LLM model descriptor', async () => {
   });
 });
 
-const TEST_MODEL_CATALOG_HTML = `
-  <a class="mcard featured" href="/models/dark-beast-krea-2"
-    data-tier="standard"
-    data-uncensored="1"
-    data-community="0"
-    data-caps="text-to-image uncensored"
-    data-name="Dark Beast KREA 2"
-    data-text="dark beast krea 2 dark_beast_krea2_fp8 dark_beast_krea2_identity_edit_v1_2 new spicy uncensored">
-  </a>
-  <a class="mcard" href="/models/dark-beast-z-image-turbo-v9"
-    data-tier="premium"
-    data-uncensored="1"
-    data-community="1"
-    data-caps="text-to-image uncensored"
-    data-name="Dark Beast Z-Image Turbo v9"
-    data-text="dark beast z image turbo v9 dark_beast_z_image_turbo_v9_bf16 uncensored community">
-  </a>
-  <a class="mcard" href="/models/ltx-2-3"
-    data-tier="standard"
-    data-uncensored="0"
-    data-community="0"
-    data-caps="text-to-video"
-    data-name="LTX-2.3 22B"
-    data-text="ltx 2.3 22b ltx23-22b-fp8_t2v_distilled fast">
-  </a>
-`;
+function testModelCatalog(models) {
+  return JSON.stringify({
+    status: 'success',
+    data: {
+      catalogVersion: 'test-catalog-v1',
+      models: models.map(model => ({
+        id: model.id,
+        name: model.name,
+        mediaType: model.media,
+        availableNetworks: model.networks || ['fast'],
+        workerCounts: model.workerCounts || { fast: model.workerCount },
+        tierId: model.tierId || null,
+        tags: model.tags || []
+      }))
+    }
+  });
+}
 
-test('--search-models queries live media models through the Sogni client', () => {
+const TEST_LIVE_MODELS = [
+  {
+    id: 'dark_beast_krea2_fp8',
+    name: 'Dark Beast KREA 2 黑兽',
+    workerCount: 42,
+    media: 'image',
+    tags: ['new', 'spicy', 'standard', 'uncensored']
+  },
+  {
+    id: 'ltx23-22b-fp8_t2v_distilled',
+    name: 'LTX-2.3 22B',
+    workerCount: 24,
+    media: 'video',
+    networks: ['fast', 'relaxed'],
+    workerCounts: { fast: 24, relaxed: 1 },
+    tags: ['fast', 'standard']
+  },
+  {
+    id: 'ace_step_1.5_xl_turbo',
+    name: 'ACE-Step 1.5 XL Turbo',
+    workerCount: 12,
+    media: 'audio',
+    tags: ['standard']
+  }
+];
+
+test('--search-models queries the public REST model catalog without a socket client', () => {
   const models = [
     {
       id: 'dark_beast_z_image_turbo_v9_bf16',
@@ -2257,7 +2274,10 @@ test('--search-models queries live media models through the Sogni client', () =>
   ];
   const { exitCode, stdout, state } = runCli(
     ['--json', '--search-models', 'darkbeast'],
-    { SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models) }
+    {
+      SOGNI_API_KEY: '',
+      SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(models)
+    }
   );
 
   assert.equal(exitCode, 0);
@@ -2271,7 +2291,7 @@ test('--search-models queries live media models through the Sogni client', () =>
     payload.models.map((model) => model.id),
     ['dark_beast_z_image_turbo_v9_bf16', 'dark_beast_krea2_identity_edit_v1_2']
   );
-  assert.equal(state.clientConfigs[0].network, 'fast');
+  assert.equal(state?.clientConfigs, undefined);
 });
 
 test('--search-models matches the spicy catalog tag', () => {
@@ -2292,8 +2312,12 @@ test('--search-models matches the spicy catalog tag', () => {
   const { exitCode, stdout } = runCli(
     ['--json', '--search-models', 'spicy'],
     {
-      SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models),
-      SOGNI_AGENT_TEST_MODEL_CATALOG_HTML: TEST_MODEL_CATALOG_HTML
+      SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(models.map(model => ({
+        ...model,
+        tags: model.id === 'dark_beast_krea2_fp8'
+          ? ['new', 'spicy', 'standard', 'uncensored']
+          : ['community', 'premium', 'uncensored']
+      })))
     }
   );
 
@@ -2329,8 +2353,14 @@ test('--model-tag filters available models with repeatable AND semantics', () =>
   const { exitCode, stdout } = runCli(
     ['--json', '--list-models', '--model-tag', 'uncensored', '--model-tag', 'spicy'],
     {
-      SOGNI_AGENT_TEST_MODELS_JSON: JSON.stringify(models),
-      SOGNI_AGENT_TEST_MODEL_CATALOG_HTML: TEST_MODEL_CATALOG_HTML
+      SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(models.map(model => ({
+        ...model,
+        tags: model.id === 'dark_beast_krea2_fp8'
+          ? ['new', 'spicy', 'standard', 'uncensored']
+          : model.id === 'dark_beast_z_image_turbo_v9_bf16'
+            ? ['community', 'premium', 'uncensored']
+            : ['fast', 'standard']
+      })))
     }
   );
 
@@ -2342,13 +2372,17 @@ test('--model-tag filters available models with repeatable AND semantics', () =>
 });
 
 test('tag search fails clearly when catalog metadata is unavailable', () => {
-  const { exitCode, stdout } = runCli(['--json', '--search-models', 'uncensored']);
+  const { exitCode, stdout } = runCli(['--json', '--search-models', 'uncensored'], {
+    SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: JSON.stringify({
+      data: { models: TEST_LIVE_MODELS.map(({ tags: _tags, ...model }) => model) }
+    })
+  });
 
   assert.equal(exitCode, 1);
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.errorCode, 'MODEL_CATALOG_INVALID');
-  assert.match(payload.error, /no model cards/i);
-  assert.match(payload.hint, /sogni\.ai\/models/);
+  assert.match(payload.error, /does not include catalog tags/i);
+  assert.match(payload.hint, /api\.sogni\.ai/);
 });
 
 test('--list-models supports media and network filters', () => {
@@ -2357,7 +2391,9 @@ test('--list-models supports media and network filters', () => {
     '--list-models',
     '--model-media', 'video',
     '--model-network', 'relaxed'
-  ]);
+  ], {
+    SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(TEST_LIVE_MODELS)
+  });
 
   assert.equal(exitCode, 0);
   const payload = JSON.parse(stdout.trim());
@@ -2366,16 +2402,62 @@ test('--list-models supports media and network filters', () => {
   assert.equal(payload.media, 'video');
   assert.equal(payload.count, 1);
   assert.ok(payload.models.every((model) => model.media === 'video'));
-  assert.equal(state.clientConfigs[0].network, 'relaxed');
+  assert.equal(state?.clientConfigs, undefined);
 });
 
 test('--search-models matches Unicode model names', () => {
-  const { exitCode, stdout } = runCli(['--json', '--search-models', '黑兽']);
+  const { exitCode, stdout } = runCli(['--json', '--search-models', '黑兽'], {
+    SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(TEST_LIVE_MODELS)
+  });
 
   assert.equal(exitCode, 0);
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.count, 1);
   assert.equal(payload.models[0].id, 'dark_beast_krea2_fp8');
+});
+
+test('model discovery cache revalidates the REST catalog with ETag', async () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-model-list-cache-etag-'));
+  const cachePath = join(cacheDir, 'catalog.json');
+  const requestHeaders = [];
+  const server = createServer((req, res) => {
+    requestHeaders.push(req.headers);
+    if (req.headers['if-none-match'] === '"catalog-list-v1"') {
+      res.statusCode = 304;
+      res.end();
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('etag', '"catalog-list-v1"');
+    res.end(testModelCatalog(TEST_LIVE_MODELS));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const env = {
+    SOGNI_MODEL_CATALOG_URL: `http://127.0.0.1:${address.port}/v1/model-catalog`,
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cachePath
+  };
+
+  try {
+    const first = await runCliAsync(['--json', '--list-models'], env);
+    assert.equal(first.exitCode, 0);
+
+    const listCachePath = `${cachePath}.models`;
+    const cached = JSON.parse(readFileSync(listCachePath, 'utf8'));
+    cached.fetchedAt = Date.now() - (6 * 60 * 1000);
+    writeFileSync(listCachePath, JSON.stringify(cached));
+
+    const second = await runCliAsync(['--json', '--list-models'], env);
+    assert.equal(second.exitCode, 0);
+    assert.equal(JSON.parse(second.stdout).count, TEST_LIVE_MODELS.length);
+    assert.equal(requestHeaders.length, 2);
+    assert.equal(requestHeaders[1]['if-none-match'], '"catalog-list-v1"');
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+    });
+  }
 });
 
 test('live model filter flags require a model discovery action', () => {

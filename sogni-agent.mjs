@@ -99,7 +99,6 @@ const SPARK_PACKS_PURCHASE_URL = 'https://docs.sogni.ai/pricing/#spark-packs';
 const SPARK_PACKS_PURCHASE_HINT = `Buy Spark Packs to continue: ${SPARK_PACKS_PURCHASE_URL}`;
 
 const UNLIMITED_PLAN_URL = 'https://docs.sogni.ai/pricing/unlimited-plan-details';
-const SOGNI_MODEL_CATALOG_URL = 'https://www.sogni.ai/models';
 const SOGNI_MODEL_CATALOG_MAX_BYTES = 5 * 1024 * 1024;
 const SOGNI_MODEL_CATALOG_TIMEOUT_MS = 10000;
 const KNOWN_MODEL_CATALOG_TAGS = new Set([
@@ -428,12 +427,12 @@ function validateModelTierSelections(modelId, card) {
   validateRange('Configured guidance', configuredDefaults?.guidance, card.guidance);
 }
 
-function persistModelCatalogCache(catalog) {
-  const tempPath = `${MODEL_CATALOG_CACHE_PATH}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+function persistModelCatalogCache(catalog, cachePath = MODEL_CATALOG_CACHE_PATH) {
+  const tempPath = `${cachePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   try {
-    mkdirSync(dirname(MODEL_CATALOG_CACHE_PATH), { recursive: true });
+    mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(tempPath, JSON.stringify(catalog), { mode: 0o600 });
-    renameSync(tempPath, MODEL_CATALOG_CACHE_PATH);
+    renameSync(tempPath, cachePath);
   } catch (error) {
     if (!options.quiet) {
       console.error(`Warning: could not persist model catalog cache (${error?.message || error}).`);
@@ -1972,6 +1971,7 @@ const MODEL_CATALOG_CACHE_PATH = resolveConfiguredPath(
   DEFAULT_MODEL_CATALOG_CACHE_PATH,
   'Sogni model catalog cache path'
 );
+const MODEL_CATALOG_LIST_CACHE_PATH = `${MODEL_CATALOG_CACHE_PATH}.models`;
 const MODEL_CATALOG_URL = (getEnv('SOGNI_MODEL_CATALOG_URL') || DEFAULT_MODEL_CATALOG_URL).replace(/\/+$/, '');
 const MEDIA_INBOUND_DIR = resolveConfiguredPath(
   getEnv('SOGNI_MEDIA_INBOUND_DIR') || openclawConfig?.mediaInboundDir,
@@ -6187,119 +6187,94 @@ function normalizeLiveModelTag(value) {
     .replace(/[\s_]+/g, '-');
 }
 
-function decodeModelCatalogAttribute(value) {
-  return String(value || '')
-    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-}
-
-function modelCatalogEntriesFromHtml(html) {
-  const entries = [];
-  const anchorPattern = /<a\b[^>]*>/gi;
-  let anchorMatch;
-  while ((anchorMatch = anchorPattern.exec(String(html || ''))) !== null) {
-    const attributes = {};
-    const attributePattern = /([:\w-]+)\s*=\s*"([^"]*)"/g;
-    let attributeMatch;
-    while ((attributeMatch = attributePattern.exec(anchorMatch[0])) !== null) {
-      attributes[attributeMatch[1].toLowerCase()] = decodeModelCatalogAttribute(attributeMatch[2]);
-    }
-    const classes = (attributes.class || '').split(/\s+/);
-    if (!classes.includes('mcard')) continue;
-
-    const textTokens = (attributes['data-text'] || '')
-      .toLocaleLowerCase()
-      .split(/\s+/)
-      .filter(Boolean);
-    const capabilities = (attributes['data-caps'] || '')
-      .toLocaleLowerCase()
-      .split(/\s+/)
-      .filter(Boolean);
-    const tags = new Set();
-    if (attributes['data-uncensored'] === '1' || capabilities.includes('uncensored')) {
-      tags.add('uncensored');
-    }
-    if (attributes['data-community'] === '1') tags.add('community');
-    const tier = normalizeLiveModelTag(attributes['data-tier']);
-    if (tier) tags.add(tier);
-    for (const tag of KNOWN_MODEL_CATALOG_TAGS) {
-      if (textTokens.includes(tag)) tags.add(tag);
-    }
-    entries.push({
-      modelIds: new Set(textTokens),
-      tags: [...tags].sort()
-    });
-  }
-  return entries;
-}
-
-async function fetchModelCatalogEntries() {
-  if (getEnv('SOGNI_AGENT_TEST_STATE_PATH')) {
-    return modelCatalogEntriesFromHtml(getEnv('SOGNI_AGENT_TEST_MODEL_CATALOG_HTML') || '');
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SOGNI_MODEL_CATALOG_TIMEOUT_MS);
+async function fetchLiveModelCatalog(network, media) {
+  const fixtureJson = getEnv('SOGNI_AGENT_TEST_MODEL_CATALOG_JSON');
+  let cachedCatalog = null;
   try {
-    const response = await fetchSafeUrl(
-      SOGNI_MODEL_CATALOG_URL,
-      {
-        headers: { Accept: 'text/html' },
-        signal: controller.signal
-      },
-      { allowedHosts: ['www.sogni.ai'] }
-    );
-    if (!response.ok) {
-      const err = new Error(`Sogni model catalog returned HTTP ${response.status}.`);
-      err.code = 'MODEL_CATALOG_UNAVAILABLE';
-      throw err;
+    if (existsSync(MODEL_CATALOG_LIST_CACHE_PATH)) {
+      const cached = JSON.parse(readFileSync(MODEL_CATALOG_LIST_CACHE_PATH, 'utf8'));
+      const cacheAge = Date.now() - cached?.fetchedAt;
+      if (
+        Number.isFinite(cached?.fetchedAt) &&
+        cacheAge >= 0 &&
+        cached?.network === network &&
+        cached?.media === media &&
+        Array.isArray(cached?.models)
+      ) {
+        cachedCatalog = cached;
+        if (cacheAge < MODEL_CATALOG_CACHE_TTL_MS) return cached;
+      }
     }
-    const contentLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(contentLength) && contentLength > SOGNI_MODEL_CATALOG_MAX_BYTES) {
-      const err = new Error('Sogni model catalog response is unexpectedly large.');
-      err.code = 'MODEL_CATALOG_INVALID';
-      throw err;
-    }
-    const html = await response.text();
-    if (Buffer.byteLength(html, 'utf8') > SOGNI_MODEL_CATALOG_MAX_BYTES) {
-      const err = new Error('Sogni model catalog response is unexpectedly large.');
-      err.code = 'MODEL_CATALOG_INVALID';
-      throw err;
-    }
-    const entries = modelCatalogEntriesFromHtml(html);
-    if (entries.length === 0) {
-      const err = new Error('Sogni model catalog contained no model cards.');
-      err.code = 'MODEL_CATALOG_INVALID';
-      throw err;
-    }
-    return entries;
-  } finally {
-    clearTimeout(timeoutId);
+  } catch {
+    // A corrupt cache is treated as a miss and replaced by the live response.
   }
-}
 
-function enrichLiveModelsWithCatalogTags(models, catalogEntries) {
-  return models.map((model) => {
-    const modelId = String(model.id || '').toLocaleLowerCase();
-    const entry = catalogEntries.find((candidate) => candidate.modelIds.has(modelId));
-    return {
-      ...model,
-      tags: entry?.tags || []
-    };
-  });
+  try {
+    let catalog;
+    if (fixtureJson) {
+      const payload = JSON.parse(fixtureJson);
+      const data = payload?.data || payload;
+      catalog = {
+        fetchedAt: Date.now(),
+        network,
+        media,
+        etag: null,
+        catalogVersion: data?.catalogVersion || null,
+        models: data?.models
+      };
+    } else {
+      const url = new URL(MODEL_CATALOG_URL);
+      url.searchParams.set('network', network);
+      if (media !== 'all') url.searchParams.set('mediaType', media);
+      const headers = { accept: 'application/json' };
+      if (cachedCatalog?.etag) headers['if-none-match'] = cachedCatalog.etag;
+      const response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(SOGNI_MODEL_CATALOG_TIMEOUT_MS)
+      });
+      if (response.status === 304 && cachedCatalog) {
+        catalog = { ...cachedCatalog, fetchedAt: Date.now() };
+      } else {
+        if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
+        const contentLength = Number(response.headers.get('content-length'));
+        if (Number.isFinite(contentLength) && contentLength > SOGNI_MODEL_CATALOG_MAX_BYTES) {
+          const error = new Error('Sogni model catalog response is unexpectedly large.');
+          error.code = 'MODEL_CATALOG_INVALID';
+          throw error;
+        }
+        const text = await response.text();
+        if (Buffer.byteLength(text, 'utf8') > SOGNI_MODEL_CATALOG_MAX_BYTES) {
+          const error = new Error('Sogni model catalog response is unexpectedly large.');
+          error.code = 'MODEL_CATALOG_INVALID';
+          throw error;
+        }
+        const payload = JSON.parse(text);
+        catalog = {
+          fetchedAt: Date.now(),
+          network,
+          media,
+          etag: response.headers.get('etag'),
+          catalogVersion: payload?.data?.catalogVersion || null,
+          models: payload?.data?.models
+        };
+      }
+    }
+    if (!Array.isArray(catalog?.models)) {
+      const error = new Error('Sogni model catalog response contained no model list.');
+      error.code = 'MODEL_CATALOG_INVALID';
+      throw error;
+    }
+    persistModelCatalogCache(catalog, MODEL_CATALOG_LIST_CACHE_PATH);
+    return catalog;
+  } catch (cause) {
+    const error = new Error(`Could not load the live Sogni model catalog (${cause?.message || cause}).`);
+    error.code = cause?.code || 'MODEL_CATALOG_UNAVAILABLE';
+    error.hint = `Check Sogni platform status and retry. Catalog: ${MODEL_CATALOG_URL}`;
+    throw error;
+  }
 }
 
 async function runLiveModels() {
-  const creds = loadCredentials();
-  const apiKey = requireApiKeyCredentials(
-    creds,
-    options.liveModelAction === 'search' ? '--search-models' : '--list-models'
-  );
   const network = options.liveModelNetwork || openclawConfig?.defaultNetwork || 'fast';
   const media = options.liveModelMedia || 'all';
   const query = options.liveModelQuery?.trim() || null;
@@ -6310,95 +6285,77 @@ async function runLiveModels() {
     err.code = 'INVALID_ARGUMENT';
     throw err;
   }
-  const modelClient = new SogniClientWrapper({
-    appSource: SOGNI_APP_SOURCE,
+  const catalog = await fetchLiveModelCatalog(network, media);
+  let models = catalog.models.map((model) => ({
+    id: model.id,
+    name: model.name || model.id,
+    workerCount: Number(model.workerCounts?.[network] || 0),
+    media: model.mediaType,
+    networks: Array.isArray(model.availableNetworks) ? model.availableNetworks : [],
+    workerCounts: model.workerCounts || {},
+    tierId: model.tierId || null,
+    tags: Array.isArray(model.tags)
+      ? [...new Set(model.tags.map(normalizeLiveModelTag).filter(Boolean))].sort()
+      : []
+  })).filter(model =>
+    ['image', 'video', 'audio'].includes(model.media) &&
+    model.networks.includes(network) &&
+    (media === 'all' || model.media === media)
+  );
+  const catalogTagsAvailable = catalog.models.every(model => Array.isArray(model.tags));
+  const queryAsTag = normalizeLiveModelTag(query);
+  if ((tagFilters.length > 0 || KNOWN_MODEL_CATALOG_TAGS.has(queryAsTag)) && !catalogTagsAvailable) {
+    const error = new Error('Sogni model catalog response does not include catalog tags.');
+    error.code = 'MODEL_CATALOG_INVALID';
+    error.hint = `Tag filtering requires catalog tags from ${MODEL_CATALOG_URL}`;
+    throw error;
+  }
+  models.sort((left, right) =>
+    right.workerCount - left.workerCount ||
+    left.name.localeCompare(right.name) ||
+    left.id.localeCompare(right.id)
+  );
+  if (tagFilters.length > 0) {
+    models = models.filter((model) => tagFilters.every((tag) => model.tags.includes(tag)));
+  }
+  if (normalizedQuery) {
+    models = models.filter((model) =>
+      normalizeLiveModelSearch(`${model.id} ${model.name} ${model.tags.join(' ')}`).includes(normalizedQuery)
+    );
+  }
+
+  const result = {
+    success: true,
+    type: 'live-models',
     network,
-    autoConnect: false,
-    apiKey,
-    authType: 'apiKey'
-  });
+    media,
+    query,
+    tagFilters,
+    catalogTagsAvailable,
+    catalogVersion: catalog.catalogVersion,
+    count: models.length,
+    models,
+    timestamp: new Date().toISOString()
+  };
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify(result));
+    return;
+  }
 
-  try {
-    await connectSogniClient(modelClient);
-    let models = await modelClient.getAvailableModels({ sortByWorkers: true });
-    const queryAsTag = normalizeLiveModelTag(query);
-    const catalogRequired = tagFilters.length > 0 || KNOWN_MODEL_CATALOG_TAGS.has(queryAsTag);
-    let catalogTagsAvailable = false;
-    try {
-      const catalogEntries = await fetchModelCatalogEntries();
-      if (catalogRequired && catalogEntries.length === 0) {
-        const err = new Error('Sogni model catalog contained no model cards.');
-        err.code = 'MODEL_CATALOG_INVALID';
-        throw err;
-      }
-      models = enrichLiveModelsWithCatalogTags(models, catalogEntries);
-      catalogTagsAvailable = catalogEntries.length > 0;
-    } catch (error) {
-      if (catalogRequired) {
-        if (!error.code) error.code = 'MODEL_CATALOG_UNAVAILABLE';
-        error.hint = 'Tag filtering requires the live Sogni model catalog at https://www.sogni.ai/models.';
-        throw error;
-      }
-      models = enrichLiveModelsWithCatalogTags(models, []);
-      if (!options.quiet && !options.json && !JSON_ERROR_MODE) {
-        console.error(`Warning: model catalog tags unavailable: ${cliErrorMessage(error)}`);
-      }
-    }
-    if (media !== 'all') {
-      models = models.filter((model) => model.media === media);
-    }
-    if (tagFilters.length > 0) {
-      models = models.filter((model) =>
-        tagFilters.every((tag) => model.tags.includes(tag))
-      );
-    }
-    if (normalizedQuery) {
-      models = models.filter((model) =>
-        normalizeLiveModelSearch(`${model.id} ${model.name} ${model.tags.join(' ')}`).includes(normalizedQuery)
-      );
-    }
-
-    const result = {
-      success: true,
-      type: 'live-models',
-      network,
-      media,
-      query,
-      tagFilters,
-      catalogTagsAvailable,
-      count: models.length,
-      models,
-      timestamp: new Date().toISOString()
-    };
-    if (options.json || JSON_ERROR_MODE) {
-      console.log(JSON.stringify(result));
-      return;
-    }
-
-    const scope = [
-      media === 'all' ? 'all media' : media,
-      `network=${network}`,
-      query ? `query=${JSON.stringify(query)}` : null,
-      tagFilters.length ? `tags=${tagFilters.join('+')}` : null
-    ].filter(Boolean).join(', ');
-    console.log(`Live Sogni models (${models.length}; ${scope})`);
-    if (models.length === 0) {
-      console.log('No matching models found.');
-      return;
-    }
-    console.log('MEDIA\tWORKERS\tMODEL ID\tTAGS\tNAME');
-    for (const model of models) {
-      console.log(`${model.media}\t${model.workerCount}\t${model.id}\t${model.tags.join(',') || '-'}\t${model.name}`);
-    }
-  } finally {
-    try {
-      if (modelClient.isConnected()) {
-        await Promise.race([
-          modelClient.disconnect(),
-          new Promise(resolve => setTimeout(resolve, 1000))
-        ]);
-      }
-    } catch {}
+  const scope = [
+    media === 'all' ? 'all media' : media,
+    `network=${network}`,
+    query ? `query=${JSON.stringify(query)}` : null,
+    tagFilters.length ? `tags=${tagFilters.join('+')}` : null
+  ].filter(Boolean).join(', ');
+  console.log(`Live Sogni models (${models.length}; ${scope})`);
+  if (models.length === 0) {
+    console.log('No matching models found.');
+    return;
+  }
+  console.log('MEDIA\tWORKERS\tMODEL ID\tTAGS\tNAME');
+  for (const model of models) {
+    console.log(`${model.media}\t${model.workerCount}\t${model.id}\t${model.tags.join(',') || '-'}\t${model.name}`);
   }
 }
 

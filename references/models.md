@@ -8,8 +8,7 @@ answering "which model should I use for X". For everyday generation prefer
 ## Live model discovery
 
 The static tables below are recommendations, not the complete changing
-Supernet catalog. Query the live catalog through the CLI, which uses
-`sogni-client` model availability:
+Supernet catalog. Query the public REST catalog through the CLI:
 
 ```bash
 sogni-agent --list-models
@@ -28,10 +27,9 @@ also searches catalog tags such as `spicy`, `uncensored`, `community`, `new`,
 and tier labels. `--model-tag <tag>` is repeatable and combines filters with
 AND semantics.
 
-Availability and worker counts come from `sogni-client`. Tags are joined from
-the official Sogni model catalog, since the client availability objects do not
-currently include catalog tags. Only models that are live on the selected
-network are returned.
+Availability, worker counts, media types, network coverage, and tags come from
+`https://api.sogni.ai/v1/model-catalog`. Only models that are live on the
+selected network are returned. Discovery does not require an API key.
 
 `--list-api-models` is different: it lists Sogni Intelligence language models
 from `/v1/models`, not Supernet media models.

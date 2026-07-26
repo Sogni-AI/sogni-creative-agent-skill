@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.16.1"
+  version: "3.17.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -96,7 +96,7 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 - API key credentials file (read): `~/.config/sogni/credentials` (`SOGNI_CREDENTIALS_PATH`)
 - Last render metadata (read/write): `~/.config/sogni/last-render.json` (`SOGNI_LAST_RENDER_PATH`)
 - Model catalog: `https://api.sogni.ai/v1/model-catalog` (`SOGNI_MODEL_CATALOG_URL`)
-- Model catalog cache (read/write, 5-minute per-model TTL with ETag revalidation): `~/.config/sogni/model-catalog-cache.json` (`SOGNI_MODEL_CATALOG_CACHE_PATH`)
+- Model catalog cache (read/write, 5-minute TTL with ETag revalidation for model parameters and discovery): `~/.config/sogni/model-catalog-cache.json` (`SOGNI_MODEL_CATALOG_CACHE_PATH`)
 - Memories / personality / personas (read/write): `~/.config/sogni/`
 - OpenClaw config (read): `~/.openclaw/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
 - Media listing for `--list-media` (read): `~/.openclaw/media/inbound`, falling back to the legacy `~/.clawdbot/media/inbound` when only it exists (`SOGNI_MEDIA_INBOUND_DIR`)

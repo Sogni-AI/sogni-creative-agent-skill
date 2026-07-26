@@ -690,6 +690,214 @@ test('Krea identity edit accepts two context images with shared defaults', () =>
   assert.equal(state.lastEditProject.scheduler, 'simple');
 });
 
+test('Dark Beast Krea 2 text generation uses live catalog defaults', () => {
+  const { exitCode, state } = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'editorial portrait in a chain-link courtyard'
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      status: 'success',
+      data: {
+        model: {
+          id: 'dark_beast_krea2_fp8',
+          tierId: 'current_dark_beast_tier',
+          parameters: {
+          steps: { min: 8, max: 20, default: 16 },
+          guidance: { min: 1, max: 1, default: 1 },
+          comfySampler: { default: 'euler' },
+          comfyScheduler: { default: 'simple' }
+          }
+        }
+      }
+    })
+  });
+
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastImageProject, 'createImageProject was called');
+  assert.equal(state.lastImageProject.steps, 16);
+  assert.equal(state.lastImageProject.guidance, 1);
+});
+
+test('Dark Beast Krea 2 rejects settings outside the live catalog contract', () => {
+  const { exitCode, stderr } = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    '--steps', '28',
+    '--guidance', '2.5',
+    'editorial portrait in a chain-link courtyard'
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      dark_beast_krea2_fp8: {
+        steps: { min: 8, max: 20, default: 16 },
+        guidance: { min: 1, max: 1, default: 1 }
+      }
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /--steps 28 is outside the live catalog range/);
+});
+
+test('Dark Beast Krea 2 rejects OpenClaw defaults outside the live catalog contract', () => {
+  const { exitCode, stderr } = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'configured defaults must remain valid'
+  ], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({
+      modelDefaults: {
+        dark_beast_krea2_fp8: { steps: 20, guidance: 7.5 }
+      }
+    }),
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      dark_beast_krea2_fp8: {
+        steps: { min: 8, max: 20, default: 16 },
+        guidance: { min: 1, max: 1, default: 1 }
+      }
+    })
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Configured guidance 7.5 is outside the live catalog range/);
+});
+
+test('model catalog cache avoids a second API request within its TTL', () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-model-cache-test-'));
+  const cachePath = join(cacheDir, 'catalog.json');
+  const fixture = JSON.stringify({
+    models: [{ id: 'dark_beast_krea2_fp8', tier: 'dark_beast_tier' }],
+    tiers: {
+      dark_beast_tier: {
+        steps: { min: 8, max: 20, default: 16 },
+        guidance: { min: 1, max: 1, default: 1 }
+      }
+    }
+  });
+  const first = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'first render'
+  ], {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cachePath,
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: fixture
+  });
+  assert.equal(first.exitCode, 0);
+
+  const second = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'second render'
+  ], {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cachePath,
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: '{not valid JSON'
+  });
+  assert.equal(second.exitCode, 0);
+  assert.equal(second.state.lastImageProject.steps, 16);
+  assert.equal(second.state.lastImageProject.guidance, 1);
+});
+
+test('expired model catalog cache revalidates with ETag and accepts a 304', async () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-model-cache-etag-'));
+  const cachePath = join(cacheDir, 'catalog.json');
+  const requestHeaders = [];
+  const server = createServer((req, res) => {
+    requestHeaders.push(req.headers);
+    if (req.headers['if-none-match'] === '"catalog-v1"') {
+      res.statusCode = 304;
+      res.end();
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('etag', '"catalog-v1"');
+    res.end(JSON.stringify({
+      status: 'success',
+      data: {
+        model: {
+          id: 'dark_beast_krea2_fp8',
+          parameters: {
+            steps: { min: 8, max: 20, default: 16 },
+            guidance: { min: 1, max: 1, default: 1 }
+          }
+        }
+      }
+    }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const env = {
+    SOGNI_MODEL_CATALOG_URL: `http://127.0.0.1:${address.port}/v1/model-catalog`,
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cachePath
+  };
+
+  try {
+    const first = await runCliAsync([
+      '-m', 'dark_beast_krea2_fp8',
+      'first conditional request'
+    ], env);
+    assert.equal(first.exitCode, 0);
+
+    const cached = JSON.parse(readFileSync(cachePath, 'utf8'));
+    cached.fetchedAt = Date.now() - (6 * 60 * 1000);
+    writeFileSync(cachePath, JSON.stringify(cached));
+
+    const second = await runCliAsync([
+      '-m', 'dark_beast_krea2_fp8',
+      'conditional revalidation'
+    ], env);
+    assert.equal(second.exitCode, 0);
+    assert.equal(second.state.lastImageProject.steps, 16);
+    assert.equal(requestHeaders.length, 2);
+    assert.equal(requestHeaders[1]['if-none-match'], '"catalog-v1"');
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+    });
+  }
+});
+
+test('expired model catalog cache is not used when refresh fails', () => {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-model-cache-expired-'));
+  const cachePath = join(cacheDir, 'catalog.json');
+  writeFileSync(cachePath, JSON.stringify({
+    fetchedAt: Date.now() - (6 * 60 * 1000),
+    models: [{ id: 'dark_beast_krea2_fp8', tier: 'dark_beast_tier' }],
+    tiers: {
+      dark_beast_tier: {
+        steps: { min: 8, max: 20, default: 16 },
+        guidance: { min: 1, max: 1, default: 1 }
+      }
+    }
+  }));
+
+  const { exitCode, stderr } = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'expired cache must refresh'
+  ], {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cachePath,
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: '{not valid JSON'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Could not load the live Sogni model catalog/);
+});
+
+test('an unwritable model catalog cache target does not block generation', () => {
+  const cacheTargetDirectory = mkdtempSync(join(tmpdir(), 'sogni-model-cache-directory-'));
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'dark_beast_krea2_fp8',
+    'cache writes are optional'
+  ], {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: cacheTargetDirectory,
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      dark_beast_krea2_fp8: {
+        steps: { min: 8, max: 20, default: 16 },
+        guidance: { min: 1, max: 1, default: 1 }
+      }
+    })
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastImageProject.steps, 16);
+  assert.match(stderr, /Warning: could not persist model catalog cache/);
+});
+
 test('Krea identity edit rejects a third context image', () => {
   expectCliError([
     '-c', SCREENSHOT_FIXTURE,

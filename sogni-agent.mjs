@@ -11,7 +11,7 @@ import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
@@ -49,7 +49,7 @@ import {
   dimensionsForAspectRatio,
   dimensionsWithShortSide,
   dispatchPublicSkillToolCall,
-  getModelDefaults,
+  getModelDefaults as getSharedModelDefaults,
   getVideoPromptGuardrailPlan,
   inferVideoWorkflowFromAssets,
   inferVideoWorkflowFromModel,
@@ -240,6 +240,7 @@ function sanitizePath(p, label) {
 
 const DEFAULT_CREDENTIALS_PATH = join(homedir(), '.config', 'sogni', 'credentials');
 const DEFAULT_LAST_RENDER_PATH = join(homedir(), '.config', 'sogni', 'last-render.json');
+const DEFAULT_MODEL_CATALOG_CACHE_PATH = join(homedir(), '.config', 'sogni', 'model-catalog-cache.json');
 const DEFAULT_OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
 // Current OpenClaw home, with a fallback to the legacy clawdbot-era directory
 // for installs that predate the rename. Only used when neither
@@ -376,6 +377,169 @@ const MUSIC_MODEL_DEFAULTS = {
     scheduler: { allowed: ['simple', 'linear_quadratic'], default: 'linear_quadratic' }
   }
 };
+const DEFAULT_MODEL_CATALOG_URL = 'https://api.sogni.ai/v1/model-catalog';
+const MODEL_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+let liveModelDefaults = null;
+
+function getModelDefaults(modelId, config) {
+  const sharedDefaults = getSharedModelDefaults(modelId, config);
+  const catalogDefaults = liveModelDefaults?.[modelId];
+  if (!catalogDefaults) return sharedDefaults;
+  const configuredDefaults = config?.modelDefaults?.[modelId];
+  // The live catalog supersedes bundled registry data. Explicit user config
+  // remains the final override.
+  return { ...(sharedDefaults || {}), ...catalogDefaults, ...(configuredDefaults || {}) };
+}
+
+function defaultsFromModelTier(card) {
+  const defaults = {};
+  if (Number.isFinite(card?.steps?.default)) defaults.steps = card.steps.default;
+  if (Number.isFinite(card?.guidance?.default)) defaults.guidance = card.guidance.default;
+  if (card?.comfySampler?.default) defaults.sampler = card.comfySampler.default;
+  if (card?.comfyScheduler?.default) defaults.scheduler = card.comfyScheduler.default;
+  if (Number.isFinite(card?.width?.default)) defaults.defaultWidth = card.width.default;
+  if (Number.isFinite(card?.height?.default)) defaults.defaultHeight = card.height.default;
+  if (Number.isFinite(card?.width?.min)) defaults.minDimension = card.width.min;
+  if (Number.isFinite(card?.width?.max)) defaults.maxDimension = card.width.max;
+  if (Number.isFinite(card?.width?.step)) defaults.dimensionMultiple = card.width.step;
+  return defaults;
+}
+
+function validateModelTierSelections(modelId, card) {
+  const validateRange = (source, value, range) => {
+    if (value === null || value === undefined || !range) return;
+    if (
+      (Number.isFinite(range.min) && value < range.min) ||
+      (Number.isFinite(range.max) && value > range.max)
+    ) {
+      const error = new Error(
+        `${source} ${value} is outside the live catalog range for "${modelId}" ` +
+        `(${range.min}–${range.max}).`
+      );
+      error.code = 'INVALID_MODEL_PARAMETER';
+      error.hint = `Use a value between ${range.min} and ${range.max}. Catalog: ${MODEL_CATALOG_URL}`;
+      throw error;
+    }
+  };
+  validateRange('--steps', options.steps, card.steps);
+  validateRange('--guidance', options.guidance, card.guidance);
+  const configuredDefaults = openclawConfig?.modelDefaults?.[modelId];
+  validateRange('Configured steps', configuredDefaults?.steps, card.steps);
+  validateRange('Configured guidance', configuredDefaults?.guidance, card.guidance);
+}
+
+function persistModelCatalogCache(catalog) {
+  const tempPath = `${MODEL_CATALOG_CACHE_PATH}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    mkdirSync(dirname(MODEL_CATALOG_CACHE_PATH), { recursive: true });
+    writeFileSync(tempPath, JSON.stringify(catalog), { mode: 0o600 });
+    renameSync(tempPath, MODEL_CATALOG_CACHE_PATH);
+  } catch (error) {
+    if (!options.quiet) {
+      console.error(`Warning: could not persist model catalog cache (${error?.message || error}).`);
+    }
+  } finally {
+    try {
+      if (existsSync(tempPath)) unlinkSync(tempPath);
+    } catch {
+      // Cache cleanup is best-effort and must never block generation.
+    }
+  }
+}
+
+async function loadLiveModelDefaults(modelId) {
+  // Existing CLI tests mock the SDK rather than the public catalog API.
+  // A supplied JSON fixture opts a test into exercising this lookup.
+  const testFixture = getEnv('SOGNI_AGENT_TEST_MODEL_TIERS_JSON');
+  let cachedCatalog = null;
+  try {
+    if (existsSync(MODEL_CATALOG_CACHE_PATH)) {
+      const cached = JSON.parse(readFileSync(MODEL_CATALOG_CACHE_PATH, 'utf8'));
+      const cacheAge = Date.now() - cached?.fetchedAt;
+      if (
+        Number.isFinite(cached?.fetchedAt) &&
+        cacheAge >= 0 &&
+        cached?.modelId === modelId &&
+        cached?.descriptor?.parameters &&
+        typeof cached.descriptor.parameters === 'object'
+      ) {
+        cachedCatalog = cached;
+        if (cacheAge < MODEL_CATALOG_CACHE_TTL_MS) {
+          const card = cached.descriptor.parameters;
+          validateModelTierSelections(modelId, card);
+          liveModelDefaults = { [modelId]: defaultsFromModelTier(card) };
+          return;
+        }
+      }
+    }
+  } catch {
+    // A corrupt cache is treated as a miss and replaced by the live response.
+  }
+
+  if (
+    !testFixture &&
+    getEnv('SOGNI_AGENT_TEST_STATE_PATH') &&
+    !getEnv('SOGNI_MODEL_CATALOG_URL')
+  ) return;
+
+  let catalog;
+  try {
+    if (testFixture) {
+      const fixture = JSON.parse(testFixture);
+      const descriptor = fixture?.data?.model || fixture?.model || (() => {
+        const model = fixture?.models?.find?.((entry) => entry?.id === modelId);
+        const tierId = model?.tier || modelId;
+        const parameters = fixture?.tiers?.[tierId] || (!fixture?.tiers ? fixture?.[tierId] : null);
+        return parameters ? { id: modelId, parameters } : null;
+      })();
+      catalog = { fetchedAt: Date.now(), modelId, etag: null, descriptor };
+    } else {
+      const url = `${MODEL_CATALOG_URL}/${encodeURIComponent(modelId)}`;
+      const headers = { accept: 'application/json' };
+      if (cachedCatalog?.etag) headers['if-none-match'] = cachedCatalog.etag;
+      const response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (response.status === 304 && cachedCatalog) {
+        catalog = { ...cachedCatalog, fetchedAt: Date.now() };
+      } else {
+        if (response.status === 404) {
+          const error = new Error(`Model "${modelId}" is not present in the live Sogni model catalog.`);
+          error.code = 'MODEL_NOT_FOUND';
+          error.hint = `Choose a model currently listed by ${MODEL_CATALOG_URL}`;
+          throw error;
+        }
+        if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
+        const payload = await response.json();
+        catalog = {
+          fetchedAt: Date.now(),
+          modelId,
+          etag: response.headers.get('etag'),
+          descriptor: payload?.data?.model
+        };
+      }
+    }
+    persistModelCatalogCache(catalog);
+  } catch (cause) {
+    if (cause?.code === 'MODEL_NOT_FOUND') throw cause;
+    const error = new Error(`Could not load the live Sogni model catalog (${cause?.message || cause}).`);
+    error.code = 'MODEL_CATALOG_UNAVAILABLE';
+    error.hint = `Check Sogni platform status and retry. Catalog: ${MODEL_CATALOG_URL}`;
+    throw error;
+  }
+
+  const card = catalog?.descriptor?.parameters;
+  if (!card || typeof card !== 'object') {
+    const error = new Error(`Model "${modelId}" is not present in the live Sogni model catalog.`);
+    error.code = 'MODEL_NOT_FOUND';
+    error.hint = `Choose a model currently listed by ${MODEL_CATALOG_URL}`;
+    throw error;
+  }
+  validateModelTierSelections(modelId, card);
+  liveModelDefaults = { [modelId]: defaultsFromModelTier(card) };
+}
+
 const MUSIC_DURATION_LIMITS = { min: 10, max: 600, default: 30 };
 const MUSIC_BPM_LIMITS = { min: 30, max: 300, default: 120 };
 const MUSIC_PROMPT_STRENGTH_LIMITS = { min: 0, max: 10 };
@@ -1785,6 +1949,12 @@ const LAST_RENDER_PATH = resolveConfiguredPath(
   DEFAULT_LAST_RENDER_PATH,
   'SOGNI last render path'
 );
+const MODEL_CATALOG_CACHE_PATH = resolveConfiguredPath(
+  getEnv('SOGNI_MODEL_CATALOG_CACHE_PATH'),
+  DEFAULT_MODEL_CATALOG_CACHE_PATH,
+  'Sogni model catalog cache path'
+);
+const MODEL_CATALOG_URL = (getEnv('SOGNI_MODEL_CATALOG_URL') || DEFAULT_MODEL_CATALOG_URL).replace(/\/+$/, '');
 const MEDIA_INBOUND_DIR = resolveConfiguredPath(
   getEnv('SOGNI_MEDIA_INBOUND_DIR') || openclawConfig?.mediaInboundDir,
   DEFAULT_MEDIA_INBOUND_DIR,
@@ -9670,6 +9840,7 @@ async function main() {
       return;
     }
 
+    await loadLiveModelDefaults(options.model);
     await ensureSufficientVideoBalance(client, log);
 
     if (options.estimateVideoCost) {

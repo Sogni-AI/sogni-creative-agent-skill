@@ -347,6 +347,8 @@ Defaults live under `~/.config/sogni/` for credentials, last-render metadata, pe
 |----------|---------|
 | `SOGNI_CREDENTIALS_PATH` | Custom credentials file |
 | `SOGNI_LAST_RENDER_PATH` | Where last-render state is persisted |
+| `SOGNI_MODEL_CATALOG_URL` | Model catalog API base URL (default: `https://api.sogni.ai/v1/model-catalog`) |
+| `SOGNI_MODEL_CATALOG_CACHE_PATH` | Where the five-minute, per-model catalog cache and ETag are persisted |
 | `SOGNI_MEDIA_INBOUND_DIR` | Directory used by `--list-media` |
 | `OPENCLAW_CONFIG_PATH` | OpenClaw config file location |
 | `FFMPEG_PATH` | Custom `ffmpeg` binary |

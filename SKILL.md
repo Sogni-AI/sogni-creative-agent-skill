@@ -95,6 +95,8 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 
 - API key credentials file (read): `~/.config/sogni/credentials` (`SOGNI_CREDENTIALS_PATH`)
 - Last render metadata (read/write): `~/.config/sogni/last-render.json` (`SOGNI_LAST_RENDER_PATH`)
+- Model catalog: `https://api.sogni.ai/v1/model-catalog` (`SOGNI_MODEL_CATALOG_URL`)
+- Model catalog cache (read/write, 5-minute per-model TTL with ETag revalidation): `~/.config/sogni/model-catalog-cache.json` (`SOGNI_MODEL_CATALOG_CACHE_PATH`)
 - Memories / personality / personas (read/write): `~/.config/sogni/`
 - OpenClaw config (read): `~/.openclaw/openclaw.json` (`OPENCLAW_CONFIG_PATH`)
 - Media listing for `--list-media` (read): `~/.openclaw/media/inbound`, falling back to the legacy `~/.clawdbot/media/inbound` when only it exists (`SOGNI_MEDIA_INBOUND_DIR`)

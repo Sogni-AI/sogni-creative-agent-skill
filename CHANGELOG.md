@@ -1,3 +1,12 @@
+## Unreleased
+
+### Fixed
+
+* **billing:** clarify that `tokenType: "spark"` is a denomination, not proof of a Spark debit; Unlimited
+  coverage is determined by `paymentModel: "subscription"` or explicit subscription-billing success.
+* **video:** use an already-compatible local LTX/10Eros reference as the implicit i2v canvas, avoiding
+  misleading intermediate dimension adjustments and no-op resize messages.
+
 ## [3.17.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.0...v3.17.1) (2026-07-26)
 
 

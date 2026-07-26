@@ -777,6 +777,8 @@ App Store and Google Play prices may differ from web pricing due to platform fee
 
 By default the CLI sends no `billingMode`/coverage hint; the server decides coverage from the account's verified entitlement and the resolved model, and a subscription claim is never honored without a server-verified entitlement. `--billing-mode` makes the choice explicit when you need it: `subscription` requires Unlimited coverage (the job fails instead of spending tokens), `tokens` opts out of coverage and bills Spark/SOGNI, and `auto` states the default server behavior explicitly.
 
+Do not use `tokenType: "spark"` by itself to determine that Spark paid for a render. `tokenType` is also the quote/accounting denomination for covered jobs. The server's separate `paymentModel` is authoritative: `subscription` means it skipped the artist Spark/SOGNI debit, while `paid_spark`, `free_spark`, and `sogni` identify token-funded paths. Some client result summaries do not expose `paymentModel`; in that case the payment source is unknown from that result alone. A request that completes successfully with `--billing-mode subscription` was covered—if coverage is unavailable, the server returns `4078` or `4080` instead of silently spending Spark.
+
 With an active subscription, the CLI also skips its client-side "insufficient SPARK" pre-flight for covered video renders — a low token balance no longer blocks jobs the plan pays for. Vendor models and `--billing-mode tokens` keep the pre-flight, and the server remains authoritative either way.
 
 ### Free-trial usage limits

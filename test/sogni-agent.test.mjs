@@ -3224,6 +3224,58 @@ test('LTX 2.3 video dimensions follow wrapper 2048px cap and 64-multiple rules',
   assert.equal(payload.height, 1152);
 });
 
+test('10Eros and regular LTX 2.3 i2v share compatible portrait sizing without redundant resizing', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-10eros-ref-'));
+  const refPath = join(tmp, 'ref-832x1216.png');
+  await sharp({
+    create: { width: 832, height: 1216, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  }).png().toFile(refPath);
+
+  const models = [
+    {
+      id: 'ltx23-22b-10eros-v1.4-fp8mixed_i2v',
+      args: ['-m', '10eros', '--lora', 'dr34ml4y-v3', '--no-filter']
+    },
+    {
+      id: 'ltx23-22b-fp8_i2v_distilled',
+      args: ['-m', 'ltx23-22b-fp8_i2v_distilled']
+    }
+  ];
+
+  for (const model of models) {
+    const catalogFixture = JSON.stringify({
+      data: {
+        model: {
+          id: model.id,
+          parameters: {
+            width: { min: 640, max: 3840, step: 64 },
+            height: { min: 640, max: 3840, step: 64 },
+            defaultSize: '1920x1088'
+          }
+        }
+      }
+    });
+    const { exitCode, state, stderr } = runCli([
+      '--video',
+      '--ref', refPath,
+      ...model.args,
+      '--billing-mode', 'subscription',
+      '--duration', '5',
+      'gentle camera motion'
+    ], { SOGNI_AGENT_TEST_MODEL_TIERS_JSON: catalogFixture });
+    assert.equal(exitCode, 0, model.id);
+    assert.equal(state?.lastVideoProject?.width, 832, model.id);
+    assert.equal(state?.lastVideoProject?.height, 1216, model.id);
+    assert.equal(state?.lastVideoProject?.autoResizeVideoAssets, false, model.id);
+    assert.doesNotMatch(
+      stderr,
+      /Auto-adjusted video dimensions|Auto-adjusted i2v video size/,
+      model.id
+    );
+  }
+});
+
 test('WAN non-animate duration is clamped to wrapper max', () => {
   const { exitCode, state } = runCli([
     '--video',

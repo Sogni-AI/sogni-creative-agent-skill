@@ -117,7 +117,13 @@ HappyHorse 1.1 (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`,
 `happyhorse-1.1-r2v`) — are never covered and always need Premium Spark;
 selecting SOGNI opts a job out of coverage. The server decides
 coverage from the verified entitlement + resolved model; the CLI never asserts
-coverage. Fair-use throttling lowers per-UTC-day concurrency as completed renders
+coverage. Never infer a Spark charge from `tokenType: "spark"`: that field is
+the quote/accounting denomination and can remain `spark` on a covered job.
+`paymentModel: "subscription"` is the authoritative indication that the artist
+debit was skipped. If `paymentModel` is absent, call the payment source unknown
+instead of claiming Spark was spent. A successful `--billing-mode subscription`
+request is covered; unavailable coverage fails with 4078 or 4080 rather than
+silently falling back to Spark. Fair-use throttling lowers per-UTC-day concurrency as completed renders
 climb (resets UTC midnight) and demotes over-allowance jobs to a lower-priority
 standard queue — describe this as fair use / standard queue, never "relaxed".
 Subscription-billing failures use `errorCategory: "subscription_billing"` with

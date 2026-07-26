@@ -275,6 +275,8 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast**, and **HappyHorse 1.1** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
 
+**Do not infer a Spark charge from `tokenType: "spark"`.** `tokenType` is the quote/accounting denomination and may remain `spark` on a covered Unlimited job. Billing is decided separately by the server's `paymentModel`: `subscription` means the artist Spark/SOGNI debit was skipped; `paid_spark`, `free_spark`, or `sogni` means token billing. If a result does not expose `paymentModel`, treat the payment source as unknown rather than warning that Spark was spent. Check the structured subscription state or transaction history when available. A successful request made with `--billing-mode subscription` is covered: if the server cannot use Unlimited, it rejects the request with `4078` or `4080` instead of silently falling back to Spark.
+
 Unlimited is fair-use, not unmetered: per-UTC-day concurrency ceilings step down as completed renders climb (and reset at UTC midnight), and once a plan's fast-lane allowance is exceeded, further jobs run best-effort in a lower-priority standard queue until capacity resets. Describe this as **fair use** / a **standard (throttled) queue** — never as "relaxed."
 
 When a generation cannot bill to the subscription, the CLI returns a structured error (`errorCategory: "subscription_billing"`). Respond by the `errorCode`, and **do not** collect payment details or simulate a purchase:
@@ -324,7 +326,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 
 ## Cost
 
-Uses Spark tokens from the user's Sogni account. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance, HappyHorse, and GPT Image 2 are vendor models requiring Premium Spark eligibility.
+Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise renders use the selected Spark or SOGNI token path. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance, HappyHorse, and GPT Image 2 are vendor models requiring Premium Spark eligibility.
 
 ## Troubleshooting
 

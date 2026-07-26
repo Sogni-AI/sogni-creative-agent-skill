@@ -401,6 +401,11 @@ function defaultsFromModelTier(card) {
   if (Number.isFinite(card?.width?.min)) defaults.minDimension = card.width.min;
   if (Number.isFinite(card?.width?.max)) defaults.maxDimension = card.width.max;
   if (Number.isFinite(card?.width?.step)) defaults.dimensionMultiple = card.width.step;
+  const defaultSize = String(card?.defaultSize || '').match(/^(\d+)x(\d+)$/i);
+  if (defaultSize) {
+    defaults.defaultWidth = Number(defaultSize[1]);
+    defaults.defaultHeight = Number(defaultSize[2]);
+  }
   return defaults;
 }
 
@@ -4027,6 +4032,14 @@ if (options.music) {
 } else if (options.video) {
   options.model = options.model || selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig) || 'wan_v2.2-14b-fp8_i2v_lightx2v';
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
+  try {
+    await loadLiveModelDefaults(options.model);
+  } catch (error) {
+    fatalCliError(error?.message || 'Could not load the live Sogni model catalog.', {
+      code: error?.code || 'MODEL_CATALOG_UNAVAILABLE',
+      hint: error?.hint
+    });
+  }
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
   // Fall back to skill-local defaults for models the intel registry does not
   // carry (e.g. HappyHorse), so they get a sensible 16:9 default instead of the
@@ -4524,6 +4537,44 @@ if (options.video) {
       maxDimension: Math.min(baseVideoDimensionRules.maxDimension, WRAPPER_MAX_REF_VIDEO_DIMENSION)
     }
     : baseVideoDimensionRules;
+
+  // An implicit LTX i2v canvas follows an already-compatible local reference
+  // directly. Resolve this before normalizing the model's landscape default so
+  // the CLI does not print an intermediate adjustment that will immediately be
+  // discarded in favor of the reference aspect.
+  const hasRequestedVideoCanvas =
+    cliSet.width ||
+    cliSet.height ||
+    cliSet.targetResolution ||
+    widthFromConfig ||
+    heightFromConfig ||
+    widthFromPrompt ||
+    heightFromPrompt ||
+    targetResolutionFromPrompt;
+  if (
+    isLtx2Model(options.model) &&
+    options.videoWorkflow === 'i2v' &&
+    !hasRequestedVideoCanvas
+  ) {
+    const implicitRefPath = options.refImage || options.refImageEnd;
+    if (implicitRefPath && !isHttpUrl(implicitRefPath) && existsSync(implicitRefPath)) {
+      const implicitRefBuffer = readFileSync(implicitRefPath);
+      const implicitRefDims = getImageDimensionsFromBuffer(implicitRefBuffer);
+      if (implicitRefDims?.width && implicitRefDims?.height) {
+        const sourceCanvas = computeSourceAspectCanvas(
+          implicitRefDims.width,
+          implicitRefDims.height,
+          videoDimensionRules
+        );
+        options.width = sourceCanvas.width;
+        options.height = sourceCanvas.height;
+        options._ltxReferencePassthrough =
+          sourceCanvas.width === implicitRefDims.width &&
+          sourceCanvas.height === implicitRefDims.height;
+      }
+    }
+  }
+
   if (!Number.isFinite(options.width) || options.width <= 0 || !Number.isFinite(options.height) || options.height <= 0) {
     fatalCliError('Video width/height must be positive numbers.', {
       code: 'INVALID_ARGUMENT',
@@ -4572,6 +4623,7 @@ if (options.video) {
       const buffer = readFileSync(ref.path);
       const dims = getImageDimensionsFromBuffer(buffer);
       if (!dims?.width || !dims?.height) continue;
+
       localRefDims.set(ref.key, dims);
 
       const predicted = predictSharpInsideResizeDims(dims.width, dims.height, options.width, options.height);
@@ -9939,7 +9991,11 @@ async function main() {
       return;
     }
 
-    await loadLiveModelDefaults(options.model);
+    // Video catalog data is loaded before model-aware dimension planning.
+    // Other media types retain the connected-stage lookup used previously.
+    if (!options.video) {
+      await loadLiveModelDefaults(options.model);
+    }
     await ensureSufficientVideoBalance(client, log);
 
     if (options.estimateVideoCost) {
@@ -10327,8 +10383,13 @@ async function main() {
       if (options.outputFormat) {
         projectConfig.outputFormat = options.outputFormat;
       }
+      // Skip the wrapper's generic resize only for the proven no-op case: an
+      // implicit LTX canvas already equals the compatible local reference.
+      // Explicit canvases and incompatible references retain wrapper handling.
       if (options.autoResizeVideoAssets !== null) {
         projectConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;
+      } else if (options._ltxReferencePassthrough) {
+        projectConfig.autoResizeVideoAssets = false;
       }
 
       if (options.frames) {

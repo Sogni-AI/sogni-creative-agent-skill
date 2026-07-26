@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Added
+
+* **video:** add LTX-2.3 10Eros image-to-video support for private mature-theme creativity, including
+  DR34ML4Y v3 video LoRA support through `--lora dr34ml4y-v3`.
+* **models:** list 10Eros in CLI help and model-selection guidance as a Fast-network video model, with
+  `10eros` available as a concise selector for its canonical model ID.
+
 ## [3.16.1] - 2026-07-25
 
 ### Fixed

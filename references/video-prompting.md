@@ -15,7 +15,19 @@ it into an LTX-2.3-safe prompt before calling `sogni-agent`.
 - Start with shot scale plus the scene's visual identity, then describe environment, time of day, atmosphere, textures, and specific light sources.
 - Keep people, clothing, props, and locations concrete and stable across the whole paragraph.
 - Give the scene one main action thread from start to finish. Use connectors like `as`, `while`, and `then` so motion reads as a continuous filmed moment.
-- If the user asks for dialogue, embed the spoken words inline as prose and identify who is speaking and how they deliver the line.
+- Be specific and literal about motion. Describe what moves, where it moves,
+  what it contacts, and what happens next in chronological order. Do not replace
+  visible actions with euphemisms or broad summaries. For example, replace "a
+  ball bouncing around" with "A red ball moves right, bounces off the wall,
+  and returns to the center"; replace "fluid pouring" with "Water flows from
+  the left container through the connecting tube into the right container
+  until both levels are equal."
+- Treat native audio as part of the scene design. Integrate relevant dialogue,
+  voice delivery, foley, environmental sound, and music with the actions that
+  produce or accompany them.
+- Write dialogue out verbatim in double quotes and identify the speaker and
+  delivery. Never merely suggest dialogue with phrases such as "they talk,"
+  "she says something," or "the couple discusses the scene."
 - Budget spoken dialogue at about 3 words per second, plus about 1 second for each meaningful acting beat or pause.
 - Express emotion through visible physical cues such as posture, grip, jaw tension, breathing, or pacing. Ambient sound can be woven into the prose naturally.
 - Use positive phrasing only. Do not add negative prompts, "no ..." clauses, on-screen text/logo requests, vague filler words like `beautiful` or `nice`, or structural markup such as `[DIALOGUE]`.

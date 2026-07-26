@@ -1775,6 +1775,19 @@ const OUTPAINT_POSITION_SET = new Set(OUTPAINT_POSITIONS);
 const LTX_TRANSITION_LORA_ID = 'transition';
 const LTX_TRANSITION_TRIGGER = 'zhuanchang';
 const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
+const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
+const DR34ML4Y_LORA_ID = 'dr34ml4y-v3';
+const DR34ML4Y_DEFAULT_STRENGTH = 1.0;
+const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
+  'ltx23-22b-fp8_i2v',
+  'ltx23-22b-fp8_i2v_dev',
+  LTX23_10EROS_MODEL_ID
+]);
+
+function resolveSkillVideoModelAlias(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === '10eros' ? LTX23_10EROS_MODEL_ID : modelId;
+}
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
   if (!value) return null;
@@ -1825,7 +1838,12 @@ function isLtx23V2VModelId(modelId) {
 }
 
 function isLtxI2vTransitionModelId(modelId) {
-  return !!modelId && modelId.includes('ltx') && /_i2v(_|$)/.test(modelId);
+  return (
+    !!modelId &&
+    modelId !== LTX23_10EROS_MODEL_ID &&
+    modelId.includes('ltx') &&
+    /_i2v(_|$)/.test(modelId)
+  );
 }
 
 function applyLtxTransitionLora(projectConfig, modelId, hasStartFrame, hasEndFrame) {
@@ -3349,6 +3367,7 @@ Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
+  ltx23-22b-10eros-v1.4-fp8mixed_i2v  Private mature-theme I2V; first and/or last frame; requires --no-filter
 
 Music Models:
   ace_step_1.5_xl_turbo           Default direct music generation
@@ -3772,6 +3791,16 @@ if (options.outputFormat) {
   }
 }
 
+if (options.video) {
+  options.model = resolveSkillVideoModelAlias(options.model);
+  if (options.model === LTX23_10EROS_MODEL_ID && !options.noFilter) {
+    fatalCliError(
+      `LTX-2.3 10Eros is an opt-in mature-theme model and requires --no-filter.`,
+      { code: 'INVALID_ARGUMENT' }
+    );
+  }
+}
+
 if (options.loraStrengths.length > 0 && options.loras.length === 0) {
   fatalCliError('--lora-strength requires at least one --lora.', { code: 'INVALID_ARGUMENT' });
 }
@@ -3784,8 +3813,36 @@ if (options.loraStrengths.length > 0 && options.loras.length > 0 &&
   });
 }
 
-if ((options.video || options.music) && options.loras.length > 0) {
-  fatalCliError('--lora options are image-only.', { code: 'INVALID_ARGUMENT' });
+if (options.music && options.loras.length > 0) {
+  fatalCliError('--lora options are not supported for music.', { code: 'INVALID_ARGUMENT' });
+}
+
+if (options.video && options.loras.length > 0) {
+  const unsupportedVideoLoras = options.loras.filter(loraId => loraId !== DR34ML4Y_LORA_ID);
+  if (unsupportedVideoLoras.length > 0) {
+    fatalCliError(
+      `Video LoRA "${unsupportedVideoLoras[0]}" is not supported. ` +
+      `The supported video LoRA is "${DR34ML4Y_LORA_ID}".`,
+      { code: 'INVALID_ARGUMENT' }
+    );
+  }
+  if (!DR34ML4Y_SUPPORTED_MODEL_IDS.has(options.model)) {
+    fatalCliError(
+      `"${DR34ML4Y_LORA_ID}" requires a supported LTX-2.3 I2V model: ` +
+      'ltx23-22b-fp8_i2v, ltx23-22b-fp8_i2v_dev, or 10eros. ' +
+      'The separately trained WAN DR34ML4Y artifact is not installed on Sogni.',
+      { code: 'INVALID_ARGUMENT' }
+    );
+  }
+  if (!options.noFilter) {
+    fatalCliError(
+      `"${DR34ML4Y_LORA_ID}" is an opt-in mature-theme LoRA and requires --no-filter.`,
+      { code: 'INVALID_ARGUMENT' }
+    );
+  }
+  if (options.loraStrengths.length === 0) {
+    options.loraStrengths = options.loras.map(() => DR34ML4Y_DEFAULT_STRENGTH);
+  }
 }
 
 if (options.video && (options.sampler || options.scheduler)) {
@@ -10324,6 +10381,10 @@ async function main() {
       }
       if (options.lastFrameStrength != null) {
         projectConfig.lastFrameStrength = options.lastFrameStrength;
+      }
+      if (options.loras.length > 0) {
+        projectConfig.loras = options.loras;
+        projectConfig.loraStrengths = options.loraStrengths;
       }
 
       const videoResult = await client.createVideoProject(withBillingMode(projectConfig));

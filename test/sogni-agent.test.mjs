@@ -1744,8 +1744,142 @@ test('photobooth cannot be combined with video', () => {
   expectCliError(['--photobooth', '--video', '--ref', 'screenshot.jpg', 'portrait'], '--photobooth cannot be combined with --video.');
 });
 
-test('video rejects lora options', () => {
-  expectCliError(['--video', '--lora', 'foo', 'a cat'], '--lora options are image-only.');
+test('video rejects unsupported lora options', () => {
+  expectCliError(['--video', '--lora', 'foo', 'a cat'], 'Video LoRA "foo" is not supported.');
+});
+
+test('DR34ML4Y video LoRA requires compatible LTX I2V and the sensitive-content filter off', () => {
+  expectCliError(
+    ['--video', '--lora', 'dr34ml4y-v3', 'a mature scene'],
+    'requires a supported LTX-2.3 I2V model'
+  );
+  expectCliError(
+    [
+      '--video',
+      '--ref', SCREENSHOT_FIXTURE,
+      '-m', '10eros',
+      '--lora', 'dr34ml4y-v3',
+      'a mature scene'
+    ],
+    'LTX-2.3 10Eros is an opt-in mature-theme model and requires --no-filter'
+  );
+});
+
+test('DR34ML4Y supports regular LTX-2.3 I2V with the filter off', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'ltx23-22b-fp8_i2v',
+    '--lora', 'dr34ml4y-v3',
+    '--no-filter',
+    'Test motion prompt, c0wg1rl'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v');
+  assert.deepEqual(state.lastVideoProject.loras, ['dr34ml4y-v3']);
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+});
+
+test('the installed LTX DR34ML4Y artifact is rejected on WAN models', () => {
+  expectCliError(
+    [
+      '--video',
+      '--ref', SCREENSHOT_FIXTURE,
+      '-m', 'wan_v2.2-14b-fp8_i2v',
+      '--lora', 'dr34ml4y-v3',
+      '--no-filter',
+      'Test motion prompt'
+    ],
+    'The separately trained WAN DR34ML4Y artifact is not installed on Sogni'
+  );
+});
+
+test('10Eros requires the sensitive-content filter off without a LoRA too', () => {
+  expectCliError(
+    ['--video', '--ref', SCREENSHOT_FIXTURE, '-m', '10eros', 'a mature scene'],
+    'LTX-2.3 10Eros is an opt-in mature-theme model and requires --no-filter'
+  );
+});
+
+test('10Eros alias forwards DR34ML4Y and its default strength for adult I2V', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', '10eros',
+    '--lora', 'dr34ml4y-v3',
+    '--no-filter',
+    'Test motion prompt, d0gg1e'
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      status: 'success',
+      data: {
+        model: {
+          id: 'ltx23-22b-10eros-v1.4-fp8mixed_i2v',
+          parameters: {
+            steps: { min: 9, max: 9, default: 9 },
+            guidance: { min: 1, max: 1, default: 1 }
+          }
+        }
+      }
+    })
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-10eros-v1.4-fp8mixed_i2v');
+  assert.equal(state.lastVideoProject.disableNSFWFilter, true);
+  assert.deepEqual(state.lastVideoProject.loras, ['dr34ml4y-v3']);
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+  assert.equal(state.lastVideoProject.steps, 9);
+  assert.equal(state.lastVideoProject.guidance, 1);
+});
+
+test('10Eros forwards DR34ML4Y without requiring an action token', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', '10eros',
+    '--lora', 'dr34ml4y-v3',
+    '--no-filter',
+    'A continuous mature-theme motion prompt'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(state.lastVideoProject.loras, ['dr34ml4y-v3']);
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+});
+
+test('10Eros keyframes do not attach the incompatible transition LoRA', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    '-m', '10eros',
+    '--no-filter',
+    'One uninterrupted test motion'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-10eros-v1.4-fp8mixed_i2v');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.equal(state.lastVideoProject.loras, undefined);
+  assert.doesNotMatch(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+});
+
+test('10Eros supports last-frame-only generation', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref-end', SCREENSHOT_FIXTURE,
+    '-m', '10eros',
+    '--no-filter',
+    'The continuous shot resolves precisely into the supplied final frame'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-10eros-v1.4-fp8mixed_i2v');
+  assert.equal(state.lastVideoProject.referenceImage, undefined);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
 });
 
 test('video rejects sampler/scheduler options', () => {

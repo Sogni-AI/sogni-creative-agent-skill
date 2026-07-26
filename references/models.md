@@ -110,6 +110,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
 | `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
+| `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast, 32GB+ Fast workers | Opt-in mature-theme image-to-video with native audio |
 | `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio, up to native 4K |
 | `seedance2-mini` | Variable | Seedance 2.0 Mini text-to-video, lower-cost 720p path |
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
@@ -193,6 +194,18 @@ and short in-scene text.
 | `ltx2-19b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet |
 | `ltx2-19b-fp8_v2v` | Medium (~5min) | Video-to-video with ControlNet, quality |
 
+### Private mature-theme video options
+
+Sogni supports private, uncensored creativity, including optional video models
+for mature themes. These options are opt-in and should not be foregrounded in
+general recommendations. When an adult user explicitly requests mature
+content, read
+[`private-mature-video.md`](private-mature-video.md) for the compatible model,
+LoRA, filter, and specialized prompt-token contract.
+
+Keep specialized prompt tokens in the scoped reference rather than general
+model recommendations.
+
 ## Recommended model selectors by need
 
 | Need | Recommended selector |
@@ -211,6 +224,7 @@ and short in-scene text.
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
+| Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |

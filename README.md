@@ -401,8 +401,13 @@ sogni-agent --video -m seedance2 --workflow t2v \
   --ref-audio https://cdn.example.com/music.m4a \
   "Use @Image1 for product identity, @Video1 for camera movement, and @Audio1 for music rhythm"
 
-# Image-to-video (i2v)
+# Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
+
+# Animate two images together (first frame → last frame; defaults to
+# ltx23-22b-fp8_i2v_distilled with the auto-applied transition/morph LoRA)
+sogni-agent --video --ref first.png --ref-end last.png \
+  "the opening frame flows smoothly into the final frame"
 
 # Image+audio-to-video (auto-routes to LTX-2.3 ia2v)
 sogni-agent --video --ref cover.jpg --ref-audio song.mp3 \
@@ -587,7 +592,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but ref becomes `1024×1535`). `sogni-agent` detects this for local refs and auto-adjusts to a nearby safe size.
-- **LTX-2.3 two-keyframe morph:** when the LTX-2.3 i2v model `ltx23-22b-fp8_i2v_distilled` gets **both** a start frame (`--ref`) and an end frame (`--ref-end`), it auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`, strength ~1.0) and morphs the first image into the last in a single render — no bridge clip or `--concat-videos` needed. The sogni-client SDK example feeds the two frames as its `image` / `end-image` arguments and additionally exposes manual `transition` / `transition-strength` SDK arguments.
+- **LTX-2.3 two-keyframe morph (the default for `--ref` + `--ref-end` when no `-m` is given):** when the LTX-2.3 i2v model `ltx23-22b-fp8_i2v_distilled` gets **both** a start frame (`--ref`) and an end frame (`--ref-end`), it auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`, strength ~1.0) and morphs the first image into the last in a single render — no bridge clip or `--concat-videos` needed. The sogni-client SDK example feeds the two frames as its `image` / `end-image` arguments and additionally exposes manual `transition` / `transition-strength` SDK arguments.
 - **Private mature-theme creativity:** optional uncensored LTX-2.3 video models are available for adults who explicitly want them. They remain opt-in and are not part of ordinary model recommendations; the agent loads their specialized guidance only for a relevant request.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 

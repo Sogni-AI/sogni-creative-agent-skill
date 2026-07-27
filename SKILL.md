@@ -144,8 +144,11 @@ sogni-agent -q -c /path/to/input.jpg -o ./edited.png "make it pop art style"
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
 # Text-to-video / image-to-video (write the prompt per references/video-prompting.md)
+# Single-image i2v defaults to wan_v2.2-14b-fp8_i2v_lightx2v; adding --ref-end
+# defaults to ltx23-22b-fp8_i2v_distilled (transition/morph LoRA auto-applies).
 sogni-agent -q --video -o ./video.mp4 "<cinematic prose paragraph>"
 sogni-agent -q --video --ref /path/to/image.png -o ./video.mp4 "<cinematic prose paragraph>"
+sogni-agent -q --video --ref ./first.png --ref-end ./last.png -o ./morph.mp4 "<LTX transition paragraph>"
 
 # Sound-to-video (lip-sync), image+audio, audio-only (workflow auto-inferred)
 sogni-agent --video --ref face.jpg --ref-audio speech.m4a -m wan_v2.2-14b-fp8_s2v_lightx2v "lip sync talking head"
@@ -239,7 +242,7 @@ For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path o
 
 ### Video editing, stitching, 360 turnarounds
 
-Trigger patterns — "animate/morph image A to image B" (`--ref A --ref-end B`; on LTX-2.3 i2v this is a single render — the transition/morph LoRA auto-applies, no bridge clip), "continue this video" (extract last frame → i2v → concat), "transition between two videos" (bridge clip between two *finished videos*), "make a reel/slideshow from these images" or "animate this folder of images" (`--source-reel <dir>`; plan first with the free `--reel-plan-only`; options: `--reel-image-seconds`, `--reel-transition-seconds`, `--reel-loop`/`--no-reel-loop`, `--reel-image-prompt`, `--reel-transition-prompt`), "360 video" (`--angles-360 --angles-360-video`), "add/replace the soundtrack" (`--concat-audio` / `--remix-audio`). **Read [`references/video-editing.md`](./references/video-editing.md) for the step-by-step recipes.**
+Trigger patterns — "animate/morph image A to image B" or any first-frame/last-frame request (`--ref A --ref-end B` — defaults to `ltx23-22b-fp8_i2v_distilled`, a single render whose transition/morph LoRA auto-applies, no bridge clip; single-image i2v defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`), "continue this video" (extract last frame → i2v → concat), "transition between two videos" (bridge clip between two *finished videos*), "make a reel/slideshow from these images" or "animate this folder of images" (`--source-reel <dir>`; plan first with the free `--reel-plan-only`; options: `--reel-image-seconds`, `--reel-transition-seconds`, `--reel-loop`/`--no-reel-loop`, `--reel-image-prompt`, `--reel-transition-prompt`), "360 video" (`--angles-360 --angles-360-video`), "add/replace the soundtrack" (`--concat-audio` / `--remix-audio`). **Read [`references/video-editing.md`](./references/video-editing.md) for the step-by-step recipes.**
 
 For a **one-click polished folder loop** where each source image animates and then morphs directly into the next original image, read [`references/loop-maker.md`](./references/loop-maker.md). Use its visually deduplicated, one-LTX-clip-per-pair workflow instead of the default SourceReel split animation-plus-bridge structure. Do not route true 360 novel-view synthesis to this direct pairwise workflow: a turning subject or occluder wipe is not a camera orbit. Trigger on requests such as "Sogni Loop Maker", "make this image folder a seamless loop", "one-click animated photo reel", the Claude Code command `/sogni-creative-agent:loop-maker`, or the Codex skill `$sogni-creative-agent:loop-maker`.
 

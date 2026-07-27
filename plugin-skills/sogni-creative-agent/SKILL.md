@@ -22,7 +22,8 @@ Do not run the default `npx setup-sogni-agent-skill` from an installed plugin un
 
 - Image: `sogni-agent "a cat on the moon, cinematic"`
 - Image edit: `sogni-agent -c <path> "make it night, add fireflies"`
-- Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"`
+- Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"` (defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`)
+- Animate two images (first frame → last frame): `sogni-agent --video --ref <first> --ref-end <last> "smooth morph into the final frame"` (defaults to `ltx23-22b-fp8_i2v_distilled`; the transition/morph LoRA auto-applies)
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
 - One-click image-folder loop in Codex: `$sogni-creative-agent:loop-maker ./images`
 - Music: `sogni-agent --music "ambient drone, 30 seconds"`

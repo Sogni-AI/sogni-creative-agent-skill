@@ -104,7 +104,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | Model | Speed | Use Case |
 |-------|-------|----------|
 | `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Default text-to-video with native dialogue/audio |
-| `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio |
+| `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio; **default for two-image first-frame → last-frame animation** (transition/morph LoRA auto-applies) |
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
 | `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
@@ -117,12 +117,33 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
 | `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
 | `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
-| `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | Simple image-to-video |
+| `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
 | `wan_v2.2-14b-fp8_s2v_lightx2v` | Fast | Face lip-sync with uploaded audio |
 | `wan_v2.2-14b-fp8_animate-move_lightx2v` | Fast | Animate-move |
 | `wan_v2.2-14b-fp8_animate-replace_lightx2v` | Fast | Animate-replace |
+
+### Default image-to-video routing
+
+- **Single-image i2v** (`--ref` only, no `-m`) defaults to
+  `wan_v2.2-14b-fp8_i2v_lightx2v`. Keep that default for plain "animate this
+  image" requests. The CLI auto-routes single-image i2v to
+  `ltx23-22b-fp8_i2v_distilled` only when the prompt calls for native audio
+  (quoted dialogue; words like audio, music, sound, speech, sings) or reads
+  as story direction (story, scene, script, narrative, commercial), or when
+  `-Q hq`/`-Q pro` is set — WAN clips render silent. If the prompt must
+  contain such words but the WAN path is still wanted, pin it explicitly
+  with `-m wan_v2.2-14b-fp8_i2v_lightx2v`.
+- **Two-image first-frame → last-frame animation** (`--ref` + `--ref-end`,
+  no `-m`) defaults to `ltx23-22b-fp8_i2v_distilled`: the transition/morph
+  LoRA auto-attaches (trigger `zhuanchang`) and morphs the first image into
+  the end image in a single render. Use this default whenever the user asks
+  to animate two images together or supplies a first and last frame. Pass
+  `-m wan_v2.2-14b-fp8_i2v_lightx2v` only when the user explicitly wants the
+  WAN path (silent clip, no transition LoRA).
+- A configured `videoModels.i2v` (OpenClaw plugin config) overrides both
+  defaults.
 
 ## HappyHorse 1.1 models
 
@@ -219,6 +240,8 @@ model recommendations.
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
+| Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
+| Animate two images together (first frame → last frame) | `ltx23-22b-fp8_i2v_distilled` with `--ref A --ref-end B` (transition/morph LoRA auto-applies) |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |

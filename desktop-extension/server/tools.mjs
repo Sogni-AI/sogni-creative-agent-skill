@@ -73,7 +73,9 @@ export const TOOLS = [
     name: 'generate_video',
     description:
       'Generate a video from a text prompt, optionally driven by reference media. ' +
-      'ref = start frame image, ref_end = end frame, ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
+      'ref = start frame image (alone defaults to wan_v2.2-14b-fp8_i2v_lightx2v), ' +
+      'ref_end = end frame (with ref, defaults to ltx23-22b-fp8_i2v_distilled and its auto-applied transition/morph LoRA), ' +
+      'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',

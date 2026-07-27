@@ -3228,7 +3228,9 @@ Video Options:
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
   --ref <path|url>      Reference image for video (start/first frame on Seedance)
-  --ref-end <path|url>  End frame for interpolation/morphing (last frame on Seedance)
+  --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
+                         defaults to the LTX-2.3 transition/morph model
+                         (last frame on Seedance)
   --ref-audio <path|url> Audio reference. Repeatable on Seedance models (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen (use --api-chat for multi local-file uploads).
@@ -3398,7 +3400,7 @@ Image Models:
 
 Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_t2v_distilled     Text-to-video with native dialogue/audio
-  ltx23-22b-fp8_i2v_distilled     Image-to-video with native dialogue/audio
+  ltx23-22b-fp8_i2v_distilled     Image-to-video with native dialogue/audio; default for --ref + --ref-end pairs
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
@@ -3424,7 +3426,7 @@ HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/108
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
-  wan_v2.2-14b-fp8_i2v_lightx2v   Fast simple image-to-video
+  wan_v2.2-14b-fp8_i2v_lightx2v   Default single-image image-to-video (fast)
   wan_v2.2-14b-fp8_i2v            Higher quality
   wan_v2.2-14b-fp8_s2v_lightx2v   Face lip-sync with uploaded audio (fast)
   wan_v2.2-14b-fp8_s2v            Sound-to-video (quality)
@@ -4030,7 +4032,21 @@ if (options.music) {
     options.timeout = 600000;
   }
 } else if (options.video) {
-  options.model = options.model || selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig) || 'wan_v2.2-14b-fp8_i2v_lightx2v';
+  if (!options.model) {
+    let defaultVideoModel = selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig);
+    // Two-image first/last-frame animation defaults to the LTX-2.3 i2v morph
+    // path (transition LoRA auto-applies); a configured videoModels.i2v or an
+    // LTX pick from audio/quality routing still wins.
+    if (
+      options.videoWorkflow === 'i2v'
+      && options.refImage && options.refImageEnd
+      && !openclawConfig?.videoModels?.i2v
+      && !isLtx2Model(defaultVideoModel)
+    ) {
+      defaultVideoModel = 'ltx23-22b-fp8_i2v_distilled';
+    }
+    options.model = defaultVideoModel || 'wan_v2.2-14b-fp8_i2v_lightx2v';
+  }
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
   try {
     await loadLiveModelDefaults(options.model);

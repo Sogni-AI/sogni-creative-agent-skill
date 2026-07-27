@@ -15,8 +15,16 @@ reproducible results and are the only sanctioned file operations.
 When a user asks to **animate between two images**, use `--ref` (first frame) and `--ref-end` (last frame):
 
 ```bash
-sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition.mp4 "descriptive prompt of the transition"
+sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition.mp4 "<4-8 sentence LTX transition paragraph>"
 ```
+
+**Default model:** with both `--ref` and `--ref-end` set and no `-m`, the CLI
+defaults to `ltx23-22b-fp8_i2v_distilled` — the LTX-2.3 transition/morph path
+described in the callout below — so write the prompt as an LTX paragraph per
+[`video-prompting.md`](video-prompting.md). Pass
+`-m wan_v2.2-14b-fp8_i2v_lightx2v` only when the user explicitly wants the
+WAN path (silent clip, no transition LoRA). Plain single-image i2v (one
+`--ref`, no end frame) defaults to `wan_v2.2-14b-fp8_i2v_lightx2v` instead.
 
 **Always apply this pattern when:**
 - User says "animate image A to image B" → use `--ref A --ref-end B`
@@ -45,8 +53,9 @@ sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition
    ```
 2. **Generate a new video** using the last frame as `--ref` and the target image as `--ref-end`:
    ```bash
-   sogni-agent -q --video --ref ./lastframe.png --ref-end ./target.png -o ./continuation.mp4 "scene transition prompt"
+   sogni-agent -q --video --ref ./lastframe.png --ref-end ./target.png -o ./continuation.mp4 "<4-8 sentence LTX transition paragraph into the target image>"
    ```
+   (No `-m` needed — the two-frame default is `ltx23-22b-fp8_i2v_distilled` with the auto-applied transition/morph LoRA.)
 3. **Concatenate the videos**:
    ```bash
    sogni-agent --concat-videos ./full_sequence.mp4 ./existing.mp4 ./continuation.mp4
@@ -74,7 +83,7 @@ To **create a transition between two existing videos** (A → B), bridge them wi
    ```bash
    sogni-agent -q --video -m wan_v2.2-14b-fp8_i2v_lightx2v \
      --ref ./A_last.png --ref-end ./B_first.png --fps 24 \
-     -o ./transition.mp4 "descriptive morph between the two scenes"
+     -o ./transition.mp4 "descriptive morph between the two shots"
    ```
 3. Concatenate A → transition → B:
    ```bash

@@ -1260,6 +1260,38 @@ test('--last-image participates in video workflow inference', () => {
   assert.equal(state.lastVideoProject.referenceImage != null, true);
 });
 
+test('two-image first/last-frame animation defaults to the LTX-2.3 morph model', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'the opening frame flows smoothly into the final frame'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v_distilled');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.deepEqual(state.lastVideoProject.loras, ['transition']);
+  assert.match(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+});
+
+test('explicit -m wan keeps WAN for first/last-frame pairs', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'the opening frame flows smoothly into the final frame'
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'wan_v2.2-14b-fp8_i2v_lightx2v');
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.equal(state.lastVideoProject.loras, undefined);
+});
+
 test('seedance rejects audio-only references before wrapper validation', () => {
   expectCliError(
     ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref-audio', 'https://cdn.example.com/music.mp3', 'music-led clip'],

@@ -70,6 +70,10 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
 Notes:
 
 - Seed strategies: `prompt-hash` (deterministic) or `random`.
+- `videoModels.i2v` also governs two-image `--ref` + `--ref-end` renders:
+  when set, it overrides the built-in LTX-2.3 transition/morph default
+  (`ltx23-22b-fp8_i2v_distilled`) that otherwise applies to first/last-frame
+  pairs. Unset, single-image i2v defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`.
 - `defaultCount` is clamped to the CLI's safety cap (16 unless raised with
   `SOGNI_MAX_COUNT`).
 - `mediaInboundDir` defaults to `~/.openclaw/media/inbound`; when unset and

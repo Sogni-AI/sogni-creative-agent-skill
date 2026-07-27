@@ -1,3 +1,10 @@
+# [3.18.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.2...v3.18.0) (2026-07-27)
+
+
+### Features
+
+* **video:** default first/last-frame pairs to LTX-2.3 morph ([#24](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/24)) ([430edf5](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/430edf58e1d1be1f757824e586a5ba7ef18764fe))
+
 ## [3.17.2](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.1...v3.17.2) (2026-07-26)
 
 ### Bug Fixes

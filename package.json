@@ -79,6 +79,7 @@
     "openclaw.plugin.json",
     "env.mjs",
     "ssrf-guard.mjs",
+    "sogni-app-id.mjs",
     "sogni-hosted-client.mjs",
     "update-check.mjs",
     "node-version-check.mjs",

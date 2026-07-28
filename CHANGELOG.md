@@ -1,3 +1,10 @@
+# [3.18.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.0...v3.18.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* **cli:** persist one recognizable `sogni-agent-<uuid>` application ID across SDK sessions to prevent repeated CLI runs from exhausting the per-address app-ID allowance ([#25](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/25))
+
 # [3.18.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.17.2...v3.18.0) (2026-07-27)
 
 

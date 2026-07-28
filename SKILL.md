@@ -145,6 +145,9 @@ sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashi
 sogni-agent -q --video -o ./video.mp4 "<cinematic prose paragraph>"
 sogni-agent -q --video --ref /path/to/image.png -o ./video.mp4 "<cinematic prose paragraph>"
 
+# LTX-2.3 10Eros v1.4 (explicit uncensored I2V; 30GB+ workers only)
+sogni-agent -q --video --workflow i2v --ref /path/to/image.png -m ltx23-eros --no-filter -o ./video.mp4 "<LTX-rewritten paragraph>"
+
 # Sound-to-video (lip-sync), image+audio, audio-only (workflow auto-inferred)
 sogni-agent --video --ref face.jpg --ref-audio speech.m4a -m wan_v2.2-14b-fp8_s2v_lightx2v "lip sync talking head"
 sogni-agent --video --ref cover.jpg --ref-audio song.mp3 "music video with synchronized motion"
@@ -255,6 +258,8 @@ When the requested image is meant to **repeat edge to edge without visible joins
 ### Model selection
 
 Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance or HappyHorse native audio, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+
+`ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 
 ### Insufficient funds
 

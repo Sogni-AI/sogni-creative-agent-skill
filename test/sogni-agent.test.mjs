@@ -2870,6 +2870,52 @@ test('LTX 2.3 i2v forwards first frame and audio identity together', () => {
   assert.ok(state.lastVideoProject.positivePrompt.includes('[SPEECH]'));
 });
 
+test('LTX 2.3 10Eros alias pins its required workflow settings', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'ltx23-eros',
+    '--no-filter',
+    'slow camera push toward the subject'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-10eros-v1.4-fp8mixed_i2v');
+  assert.equal(state.lastVideoProject.steps, 9);
+  assert.equal(state.lastVideoProject.guidance, 1);
+  assert.equal(state.lastVideoProject.sampler, 'euler_ancestral');
+  assert.equal(state.lastVideoProject.scheduler, 'manual_sigmas');
+  assert.equal(state.lastVideoProject.disableNSFWFilter, true);
+});
+
+test('LTX 2.3 10Eros requires explicit content-filter disablement', () => {
+  expectCliError(
+    [
+      '--video',
+      '--workflow', 'i2v',
+      '--ref', SCREENSHOT_FIXTURE,
+      '-m', 'ltx23-eros',
+      'slow camera push toward the subject'
+    ],
+    'LTX-2.3 10Eros requires explicit --no-filter acknowledgement.'
+  );
+});
+
+test('LTX 2.3 10Eros rejects incompatible fixed settings', () => {
+  expectCliError(
+    [
+      '--video',
+      '--workflow', 'i2v',
+      '--ref', SCREENSHOT_FIXTURE,
+      '-m', 'ltx23-eros',
+      '--no-filter',
+      '--steps', '8',
+      'slow camera push toward the subject'
+    ],
+    'LTX-2.3 10Eros requires --steps 9.'
+  );
+});
+
 test('api key auth is accepted', () => {
   const { exitCode, state } = runCli(
     ['a cat wearing a hat'],

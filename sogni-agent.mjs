@@ -3176,6 +3176,7 @@ Image Models:
 Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_t2v_distilled     Text-to-video with native dialogue/audio
   ltx23-22b-fp8_i2v_distilled     Image-to-video with native dialogue/audio
+  ltx23-eros                       Explicit uncensored I2V (30GB+ worker; requires --no-filter)
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
@@ -3771,6 +3772,31 @@ if (options.music) {
   options.model = options.model || selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig) || 'wan_v2.2-14b-fp8_i2v_lightx2v';
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
+  if (videoModelDefaults?.requiresDisabledSafetyFilter) {
+    if (!options.noFilter) {
+      fatalCliError('LTX-2.3 10Eros requires explicit --no-filter acknowledgement.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, requiredFlag: '--no-filter' },
+        hint: 'Retry with --video --workflow i2v --ref <image> -m ltx23-eros --no-filter'
+      });
+    }
+    const fixedSettings = {
+      steps: videoModelDefaults.steps,
+      guidance: videoModelDefaults.guidance,
+      sampler: videoModelDefaults.sampler,
+      scheduler: videoModelDefaults.scheduler
+    };
+    for (const [setting, expected] of Object.entries(fixedSettings)) {
+      if (expected === undefined) continue;
+      if (cliSet[setting] && options[setting] !== expected) {
+        fatalCliError(`LTX-2.3 10Eros requires --${setting} ${expected}.`, {
+          code: 'INVALID_ARGUMENT',
+          details: { model: options.model, setting, expected, received: options[setting] }
+        });
+      }
+      options[setting] = expected;
+    }
+  }
   // Fall back to skill-local defaults for models the intel registry does not
   // carry (e.g. HappyHorse), so they get a sensible 16:9 default instead of the
   // 512x512 square. Registry defaults still take precedence when present.

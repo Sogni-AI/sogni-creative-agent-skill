@@ -1,3 +1,10 @@
+# [3.19.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.1...v3.19.0) (2026-07-28)
+
+
+### Features
+
+* **cli:** lease per-process app IDs from a persistent slot pool ([#26](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/26)) ([ef0ae8b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/ef0ae8b973e65f88a78b775fb1b791daca719d42))
+
 # [3.18.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.0...v3.18.1) (2026-07-28)
 
 

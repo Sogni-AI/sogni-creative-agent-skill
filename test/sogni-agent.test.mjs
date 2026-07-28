@@ -373,7 +373,7 @@ test('default image generation uses 512x512 and prompt', () => {
   assert.equal(state.lastImageProject.sizePreset, 'custom');
 });
 
-test('reuses one persisted app ID across separate CLI sessions', () => {
+test('reuses one pooled app ID across separate CLI sessions', () => {
   const sharedHome = mkdtempSync(join(tmpdir(), 'sogni-agent-shared-home-'));
   const sharedEnv = { HOME: sharedHome, USERPROFILE: sharedHome };
 
@@ -386,10 +386,16 @@ test('reuses one persisted app ID across separate CLI sessions', () => {
   const secondAppId = second.state?.clientConfigs?.[0]?.appId;
   assert.ok(firstAppId, 'first session passed an app ID to the SDK');
   assert.match(firstAppId, /^sogni-agent-[0-9a-f-]{36}$/);
-  assert.equal(secondAppId, firstAppId);
+  assert.equal(secondAppId, firstAppId, 'sequential sessions reuse the released slot-0 identity');
   assert.equal(
-    readFileSync(join(sharedHome, '.config', 'sogni', 'app-id'), 'utf8').trim(),
+    readFileSync(join(sharedHome, '.config', 'sogni', 'app-ids', 'slot-0'), 'utf8').trim(),
     firstAppId,
+  );
+  // The exited session must not leave a lease behind, or the next process
+  // would burn a fresh slot (and eventually a fresh daily app ID).
+  assert.throws(
+    () => readFileSync(join(sharedHome, '.config', 'sogni', 'app-ids', 'slot-0.lease'), 'utf8'),
+    { code: 'ENOENT' },
   );
 });
 

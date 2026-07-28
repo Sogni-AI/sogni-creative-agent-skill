@@ -341,14 +341,18 @@ You can also skip the file and export `SOGNI_API_KEY` in your environment.
 
 ### Filesystem path overrides
 
-Defaults live under `~/.config/sogni/` for credentials, last-render metadata, personas, memories, and personality. Override individual paths with:
+Defaults live under `~/.config/sogni/` for credentials, last-render metadata, personas, memories, and personality.
+
+**Running several agents at once** (Claude Code, Codex, OpenCode, hermes, ...) works out of the box: each process leases its own stable app ID from a persistent slot pool in `~/.config/sogni/app-ids/`, so concurrent runs never fight over one socket identity (SWITCH_CONNECTION 4015) and routine runs never mint new IDs against the per-address daily allowance (error 4061). Leases are released on exit and reclaimed automatically if a process dies. Long-lived daemons should pin their own `SOGNI_APP_ID` to stay out of the shared pool, and each harness can set its own `SOGNI_LAST_RENDER_PATH` so `--last` stays per-tool. Override individual paths with:
 
 | Variable | Purpose |
 |----------|---------|
 | `SOGNI_CREDENTIALS_PATH` | Custom credentials file |
-| `SOGNI_APP_ID` | Stable app ID override for ephemeral/container homes (generated default: `sogni-agent-<uuid>`) |
-| `SOGNI_APP_ID_PATH` | Persistent app ID file (default: `~/.config/sogni/app-id`) |
-| `SOGNI_LAST_RENDER_PATH` | Where last-render state is persisted |
+| `SOGNI_APP_ID` | Pinned app ID (ephemeral/container homes and long-lived daemons; skips the pool) |
+| `SOGNI_APP_ID_PATH` | Legacy single app-ID file mode for callers that manage their own concurrency |
+| `SOGNI_APP_ID_POOL_DIR` | Persistent app-ID slot pool for concurrent agents (default: `~/.config/sogni/app-ids/`) |
+| `SOGNI_APP_ID_POOL_MAX` | Maximum concurrent app-ID slots (default: 32) |
+| `SOGNI_LAST_RENDER_PATH` | Where last-render state is persisted; give each agent harness its own file so `--last` never reads another tool's render |
 | `SOGNI_MODEL_CATALOG_URL` | Model catalog API base URL (default: `https://api.sogni.ai/v1/model-catalog`) |
 | `SOGNI_MODEL_CATALOG_CACHE_PATH` | Base path for the five-minute model catalog caches and ETags |
 | `SOGNI_MEDIA_INBOUND_DIR` | Directory used by `--list-media` |

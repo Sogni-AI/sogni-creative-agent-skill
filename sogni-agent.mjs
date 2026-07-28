@@ -16,6 +16,7 @@ import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
 import { getEnv, hasEnv } from './env.mjs';
+import { getOrCreateSogniAppId } from './sogni-app-id.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
 import {
@@ -120,6 +121,9 @@ const KNOWN_MODEL_CATALOG_TAGS = new Set([
 // covered job that cannot bill. Codes are the source of truth in
 // sogni-socket/constants/errorCodes.js (4078-4081).
 const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081']);
+const APP_ID_LIMIT_ERROR_CODE = '4061';
+const APP_ID_LIMIT_HINT =
+  'This CLI now persists and reuses one installation app ID. Keep ~/.config/sogni/app-id between sessions; for ephemeral/container homes, set one stable SOGNI_APP_ID or persist SOGNI_APP_ID_PATH. App IDs already registered from this address remain counted until 00:00 UTC, so wait for the next UTC reset once if the address is already blocked.';
 
 function subscriptionBillingFallback(code) {
   if (code === undefined || code === null) return null;
@@ -189,6 +193,24 @@ function subscriptionBillingCodeFromError(error) {
     ?? record.error_code
     ?? record.payload?.errorCode
     ?? record.payload?.error_code;
+}
+
+function isAppIdLimitError(error) {
+  if (!error) return false;
+  const code = error.code
+    ?? error.errorCode
+    ?? error.error_code
+    ?? error.payload?.errorCode
+    ?? error.payload?.error_code;
+  if (String(code) === APP_ID_LIMIT_ERROR_CODE) return true;
+  const message = `${error.message || ''} ${error.reason || ''} ${error.payload?.message || ''}`.toLowerCase();
+  return message.includes('too many app-ids') || message.includes('too many app ids');
+}
+
+function enrichAppIdLimitError(error) {
+  if (!isAppIdLimitError(error)) return;
+  error.code = APP_ID_LIMIT_ERROR_CODE;
+  if (!error.hint) error.hint = APP_ID_LIMIT_HINT;
 }
 
 const require = createRequire(import.meta.url);
@@ -855,6 +877,7 @@ function reportFatalError(error) {
   if (getEnv('SOGNI_DEBUG') || getEnv('DEBUG')) {
     console.error(error?.stack || String(error));
   }
+  enrichAppIdLimitError(error);
   if (isInvalidApiKeyError(error)) {
     fatalCliError('Invalid Sogni API key.', {
       code: 'INVALID_API_KEY',
@@ -878,6 +901,7 @@ async function connectSogniClient(client) {
   try {
     await client.connect();
   } catch (error) {
+    enrichAppIdLimitError(error);
     if (isInvalidApiKeyError(error) && !error.hint) {
       error.hint = INVALID_API_KEY_HINT;
       if (!error.code) error.code = 'INVALID_API_KEY';
@@ -4971,7 +4995,7 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
       restEndpoint: restBase,
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
-      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+      appId: getOrCreateSogniAppId(),
     },
     async (client) => {
       if (action === 'list') {
@@ -5049,7 +5073,7 @@ async function dispatchChatHostedViaSdk(apiKey, body) {
       restEndpoint: restBase,
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
-      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+      appId: getOrCreateSogniAppId(),
     },
     async (client) => helpers.sdkChatHostedCreate(client, body),
   );
@@ -5092,7 +5116,7 @@ async function dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action
       restEndpoint: restBase,
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
-      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+      appId: getOrCreateSogniAppId(),
     },
     async (client) => {
       const type = apiMediaReferenceUploadType(ref, index);
@@ -5880,7 +5904,7 @@ async function runApiChatDurable(log, { apiKey, body }) {
       restEndpoint: restBase,
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
-      appId: `sogni-skill-sdk-${process.pid}-${Date.now()}`,
+      appId: getOrCreateSogniAppId(),
     },
     async (client) => {
       const created = await helpers.sdkChatRunsCreate(client, runParams);
@@ -9413,6 +9437,7 @@ async function runDoctor() {
     try {
       doctorClient = new SogniClientWrapper({
         appSource: SOGNI_APP_SOURCE,
+        appId: getOrCreateSogniAppId(),
         network: openclawConfig?.defaultNetwork || 'fast',
         autoConnect: false,
         apiKey: creds.SOGNI_API_KEY,
@@ -9954,6 +9979,7 @@ async function main() {
     log('Connecting to Sogni...');
     client = new SogniClientWrapper({
       appSource: SOGNI_APP_SOURCE,
+      appId: getOrCreateSogniAppId(),
       network: openclawConfig?.defaultNetwork || 'fast',
       autoConnect: false,
       apiKey: creds.SOGNI_API_KEY,
@@ -10911,6 +10937,7 @@ async function main() {
           const creds = loadCredentials();
           const client2 = new SogniClientWrapper({
             appSource: SOGNI_APP_SOURCE,
+            appId: getOrCreateSogniAppId(),
             network: openclawConfig?.defaultNetwork || 'fast',
             autoConnect: false,
             apiKey: creds.SOGNI_API_KEY,
@@ -11118,6 +11145,7 @@ async function main() {
       if (!error.hint) error.hint = INVALID_API_KEY_HINT;
       if (!error.code) error.code = 'INVALID_API_KEY';
     }
+    enrichAppIdLimitError(error);
 
     exitCode = 1;
     const shouldJson = options.json || IS_OPENCLAW_INVOCATION;

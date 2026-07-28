@@ -25,6 +25,7 @@
  */
 import { createRequire } from 'node:module';
 import { assertSafeUrl } from './ssrf-guard.mjs';
+import { getOrCreateSogniAppId } from './sogni-app-id.mjs';
 
 const require = createRequire(import.meta.url);
 const { SogniClient } = require('@sogni-ai/sogni-intelligence-client');
@@ -75,7 +76,7 @@ export async function assertSafeSogniEndpoints({ restEndpoint, socketEndpoint })
 export async function withHostedClient({ apiKey, restEndpoint, socketEndpoint, appSource, appId }, work) {
   await assertSafeSogniEndpoints({ restEndpoint, socketEndpoint });
   const client = await SogniClient.createInstance({
-    appId: appId ?? `sogni-skill-${process.pid}-${Date.now()}`,
+    appId: appId ?? getOrCreateSogniAppId(),
     apiKey,
     appSource: appSource ?? 'sogni-creative-agent-skill',
     logLevel: 'error',

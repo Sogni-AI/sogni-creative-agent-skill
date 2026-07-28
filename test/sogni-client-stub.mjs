@@ -73,6 +73,12 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   async connect() {
+    if (process.env.SOGNI_AGENT_TEST_CONNECT_APP_ID_LIMIT) {
+      const err = new Error('Too many app-ids for this address, you need to connect with the same ones each time. This limit resets each UTC day.');
+      err.code = 4061;
+      err.reason = err.message;
+      throw err;
+    }
     // Simulate the SDK rejecting connect() with a REST 401 (invalid API key).
     if (process.env.SOGNI_AGENT_TEST_CONNECT_REST_401) {
       const err = new Error('Invalid API key');

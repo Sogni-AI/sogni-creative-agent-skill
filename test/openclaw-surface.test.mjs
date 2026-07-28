@@ -44,6 +44,7 @@ test('non-OpenClaw skill distribution keeps a single root skill source', () => {
   assert.ok(rootPackage.files.includes('SKILL.md'), 'root SKILL.md must be published');
   assert.ok(rootPackage.files.includes('skill-package.json'), 'skill-package.json must be published');
   assert.ok(rootPackage.files.includes('sogni-agent.mjs'), 'CLI must be published for skill runtimes');
+  assert.ok(rootPackage.files.includes('sogni-app-id.mjs'), 'persistent app ID helper must be published with the CLI');
   assert.ok(rootPackage.files.includes('generated/creative-agent-runtime.mjs'), 'generated runtime policy must be published');
   assert.ok(!rootPackage.files.includes('.openclaw-link'), 'generated OpenClaw link surface must not be published');
   assert.ok(!rootPackage.files.includes('openclaw'), 'OpenClaw mirror must not create a second packaged SKILL.md');

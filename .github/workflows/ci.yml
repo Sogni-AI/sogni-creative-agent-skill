@@ -43,7 +43,7 @@ jobs:
       - name: Verify npm tarball contents
         run: |
           npm pack --dry-run --ignore-scripts 2>&1 | tee pack.txt
-          for required in SKILL.md README.md CHANGELOG.md llm.txt sogni-agent.mjs ssrf-guard.mjs sogni-hosted-client.mjs update-check.mjs generated/creative-agent-runtime.mjs references/video-prompting.md skills/README.md; do
+          for required in SKILL.md README.md CHANGELOG.md llm.txt sogni-agent.mjs sogni-app-id.mjs ssrf-guard.mjs sogni-hosted-client.mjs update-check.mjs generated/creative-agent-runtime.mjs references/video-prompting.md skills/README.md; do
             grep -q "$required" pack.txt || { echo "MISSING from tarball: $required"; exit 1; }
           done
       - name: Validate JSON manifests

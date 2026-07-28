@@ -74,6 +74,11 @@ chmod 600 ~/.config/sogni/credentials
 You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
 `sogni-agent doctor`.
 
+The CLI creates `~/.config/sogni/app-id` once and reuses that installation ID
+for every SDK connection. Preserve that file between sessions. In ephemeral
+containers, set one stable `SOGNI_APP_ID` value or mount a persistent
+`SOGNI_APP_ID_PATH`; changing it on each run can trigger Sogni error 4061.
+
 ## Hosted API modes (require SOGNI_API_KEY)
 
 - `sogni-agent --api-chat "prompt"` — `/v1/chat/completions` with hosted

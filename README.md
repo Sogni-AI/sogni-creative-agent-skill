@@ -346,6 +346,8 @@ Defaults live under `~/.config/sogni/` for credentials, last-render metadata, pe
 | Variable | Purpose |
 |----------|---------|
 | `SOGNI_CREDENTIALS_PATH` | Custom credentials file |
+| `SOGNI_APP_ID` | Stable app ID override for ephemeral/container homes (generated default: `sogni-agent-<uuid>`) |
+| `SOGNI_APP_ID_PATH` | Persistent app ID file (default: `~/.config/sogni/app-id`) |
 | `SOGNI_LAST_RENDER_PATH` | Where last-render state is persisted |
 | `SOGNI_MODEL_CATALOG_URL` | Model catalog API base URL (default: `https://api.sogni.ai/v1/model-catalog`) |
 | `SOGNI_MODEL_CATALOG_CACHE_PATH` | Base path for the five-minute model catalog caches and ETags |

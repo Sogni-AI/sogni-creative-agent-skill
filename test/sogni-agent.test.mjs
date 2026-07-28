@@ -373,6 +373,47 @@ test('default image generation uses 512x512 and prompt', () => {
   assert.equal(state.lastImageProject.sizePreset, 'custom');
 });
 
+test('reuses one persisted app ID across separate CLI sessions', () => {
+  const sharedHome = mkdtempSync(join(tmpdir(), 'sogni-agent-shared-home-'));
+  const sharedEnv = { HOME: sharedHome, USERPROFILE: sharedHome };
+
+  const first = runCli(['first image'], sharedEnv);
+  const second = runCli(['second image'], sharedEnv);
+
+  assert.equal(first.exitCode, 0);
+  assert.equal(second.exitCode, 0);
+  const firstAppId = first.state?.clientConfigs?.[0]?.appId;
+  const secondAppId = second.state?.clientConfigs?.[0]?.appId;
+  assert.ok(firstAppId, 'first session passed an app ID to the SDK');
+  assert.match(firstAppId, /^sogni-agent-[0-9a-f-]{36}$/);
+  assert.equal(secondAppId, firstAppId);
+  assert.equal(
+    readFileSync(join(sharedHome, '.config', 'sogni', 'app-id'), 'utf8').trim(),
+    firstAppId,
+  );
+});
+
+test('SOGNI_APP_ID supplies a stable deployment identity without a home file', () => {
+  const { exitCode, state } = runCli(
+    ['a cat'],
+    { SOGNI_APP_ID: 'fixed-container-install-id' },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(state?.clientConfigs?.[0]?.appId, 'fixed-container-install-id');
+});
+
+test('app-id limit error explains persistence and the one-time UTC reset', () => {
+  const { exitCode, stdout } = runCli(
+    ['--json', 'a cat'],
+    { SOGNI_AGENT_TEST_CONNECT_APP_ID_LIMIT: '1' },
+  );
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, '4061');
+  assert.match(payload.hint, /persists and reuses one installation app ID/i);
+  assert.match(payload.hint, /00:00 UTC/);
+});
+
 test('unknown CLI flag returns a validation error', () => {
   const { exitCode, stderr } = runCli(['--not-a-real-flag', 'a cat wearing a hat']);
   assert.equal(exitCode, 1);
@@ -543,6 +584,7 @@ test('insufficient token balance offers Spark packs purchase link in json output
 
   assert.equal(exitCode, 1);
   assert.equal(state.clientConfigs.length, 2);
+  assert.equal(state.clientConfigs[1].appId, state.clientConfigs[0].appId);
   assert.match(stderr, /retrying with SOGNI tokens/);
 
   const payload = JSON.parse(stdout.trim());

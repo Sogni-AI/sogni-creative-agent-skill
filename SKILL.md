@@ -94,7 +94,7 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 ## Filesystem Paths and Overrides
 
 - API key credentials file (read): `~/.config/sogni/credentials` (`SOGNI_CREDENTIALS_PATH`)
-- Reusable installation app ID (read/write): `~/.config/sogni/app-id`; new IDs use `sogni-agent-<uuid>` (`SOGNI_APP_ID_PATH`; set a stable `SOGNI_APP_ID` value instead for ephemeral/container homes)
+- Reusable app-ID slot pool (read/write): `~/.config/sogni/app-ids/slot-<n>` plus `.lease` files; new IDs use `sogni-agent-<uuid>` (`SOGNI_APP_ID_POOL_DIR`/`SOGNI_APP_ID_POOL_MAX`). Concurrent agent processes lease distinct slots automatically; the legacy single `~/.config/sogni/app-id` file migrates into slot-0 on first use. Set a stable `SOGNI_APP_ID` for ephemeral/container homes or long-lived daemons, or `SOGNI_APP_ID_PATH` for legacy single-file mode.
 - Last render metadata (read/write): `~/.config/sogni/last-render.json` (`SOGNI_LAST_RENDER_PATH`)
 - Model catalog: `https://api.sogni.ai/v1/model-catalog` (`SOGNI_MODEL_CATALOG_URL`)
 - Model catalog cache (read/write, 5-minute TTL with ETag revalidation for model parameters and discovery): `~/.config/sogni/model-catalog-cache.json` (`SOGNI_MODEL_CATALOG_CACHE_PATH`)
@@ -336,7 +336,8 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 
 - **Anything broken?** Run `sogni-agent doctor` first — it checks Node, credentials (and file permissions), config-dir writability, ffmpeg, live auth, and version freshness, with a fix in every failure detail.
 - **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai, account menu).
-- **Error 4061 / too many app IDs:** the CLI persists and reuses `~/.config/sogni/app-id`. Do not delete it between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session or persist `SOGNI_APP_ID_PATH`. App IDs already registered today remain counted until 00:00 UTC, so an existing block may require waiting for that reset once after upgrading.
+- **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. App IDs already registered today remain counted until 00:00 UTC, so an existing block may require waiting for that reset once after upgrading.
+- **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.
 - **Video size errors:** sizes are model-specific (WAN ÷16 min 480 max 1536; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
 - **Timeouts:** try a faster model or raise `-t`.
 - **No workers:** check https://sogni.ai for network status.

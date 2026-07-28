@@ -74,10 +74,12 @@ chmod 600 ~/.config/sogni/credentials
 You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
 `sogni-agent doctor`.
 
-The CLI creates `~/.config/sogni/app-id` once and reuses that installation ID
-for every SDK connection. Preserve that file between sessions. In ephemeral
-containers, set one stable `SOGNI_APP_ID` value or mount a persistent
-`SOGNI_APP_ID_PATH`; changing it on each run can trigger Sogni error 4061.
+The CLI leases a stable app ID per process from a persistent slot pool in
+`~/.config/sogni/app-ids/`, so concurrent agents (Claude Code, Codex,
+OpenCode, hermes, ...) never share one socket identity and routine runs never
+mint new IDs. Preserve that directory between sessions. In ephemeral
+containers, set one stable `SOGNI_APP_ID` value; rotating IDs on each run can
+trigger Sogni error 4061 (allowance resets at 00:00 UTC).
 
 ## Hosted API modes (require SOGNI_API_KEY)
 

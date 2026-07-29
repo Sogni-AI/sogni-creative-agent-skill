@@ -226,6 +226,7 @@ sogni-agent -c photo.jpg -m qwen_image_edit_2511_fp8 "turn this into anime style
 ```
 
 - For identity-preserving Krea edits, use `-m krea2_identity_edit_v1_2` with 1-2 context images; use `-m dark_beast_krea2_identity_edit_v1_2` for the Dark Beast Krea 2 identity edit LoRA. Both use 512-2048 px output, 8-12 steps, guidance 1, and default to 10 steps.
+- For Krea 2 style/control LoRAs, use the base text-to-image model `-m krea2_turbo_fp8_scaled` with repeatable ordered `--lora <id> --lora-strength <n>` arguments (or comma-separated `--loras` / `--lora-strengths`). Up to 8 LoRAs may be stacked. Order matters, strengths are positional, omitted strengths default to 1, and many Krea 2 LoRAs are bipolar sliders whose negative values apply the inverse effect. Do not clamp them to 0-2. The first use of an uncached LoRA may pause while the worker downloads it.
 - Do not route to `--photobooth` merely because the user asks to preserve a face in a style edit — face-preserving full-image edits use `-c` with an image edit model. When context images are provided without `-m`, the CLI defaults to `qwen_image_edit_2511_fp8_lightning`; select `-m gpt-image-2` for up to 16 reference images and OpenAI-backed editing (Qwen supports up to 3; Krea identity edit supports up to 2).
 
 ### LTX video prompts

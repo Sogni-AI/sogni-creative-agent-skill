@@ -67,6 +67,21 @@ For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
 `krea2_turbo_fp8_scaled`.
 
+Krea 2 Turbo supports ordered LoRA stacks:
+
+```bash
+sogni-agent -m krea2_turbo_fp8_scaled \
+  --lora krea2-detail-enhancer --lora-strength 3 \
+  --lora krea2-amateur --lora-strength -2 \
+  "candid editorial street portrait at dusk"
+```
+
+Use no more than 8 LoRAs. `loraStrengths[i]` controls `loras[i]`, and changing
+the order can change the result. Omitted strengths default to 1. Many Krea 2
+LoRAs are bipolar sliders, so negative values are valid and apply the inverse
+effect. Follow the range documented for each LoRA rather than assuming 0-2.
+The first render with an uncached LoRA can take longer while its asset downloads.
+
 For identity-preserving Krea edits, pass a context image with
 `-m krea2_identity_edit_v1_2` or
 `-m dark_beast_krea2_identity_edit_v1_2`. These edit models support 1-2

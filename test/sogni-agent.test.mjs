@@ -766,6 +766,20 @@ test('Dark Beast Krea 2 text generation uses live catalog defaults', () => {
   assert.equal(state.lastImageProject.guidance, 1);
 });
 
+test('Krea 2 preserves ordered LoRA stacks with bipolar strengths', () => {
+  const { exitCode, state } = runCli([
+    '-m', 'krea2_turbo_fp8_scaled',
+    '--lora', 'krea2-detail-enhancer',
+    '--lora-strength', '3',
+    '--lora', 'krea2-amateur',
+    '--lora-strength', '-2',
+    'a candid editorial portrait',
+  ]);
+  assert.equal(exitCode, 0);
+  assert.deepEqual(state.lastImageProject.loras, ['krea2-detail-enhancer', 'krea2-amateur']);
+  assert.deepEqual(state.lastImageProject.loraStrengths, [3, -2]);
+});
+
 test('Dark Beast Krea 2 rejects settings outside the live catalog contract', () => {
   const { exitCode, stderr } = runCli([
     '-m', 'dark_beast_krea2_fp8',
@@ -1826,6 +1840,15 @@ test('photobooth cannot be combined with video', () => {
 
 test('video rejects unsupported lora options', () => {
   expectCliError(['--video', '--lora', 'foo', 'a cat'], 'Video LoRA "foo" is not supported.');
+});
+
+test('image rejects more than eight ordered LoRAs', () => {
+  const args = ['-m', 'krea2_turbo_fp8_scaled'];
+  for (let index = 0; index < 9; index += 1) {
+    args.push('--lora', `krea2-test-${index}`);
+  }
+  args.push('a portrait');
+  expectCliError(args, 'Image generation supports at most 8 LoRAs per render.');
 });
 
 test('DR34ML4Y video LoRA requires compatible LTX I2V and the sensitive-content filter off', () => {

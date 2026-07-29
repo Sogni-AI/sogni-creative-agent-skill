@@ -93,7 +93,7 @@
     "sharp": "^0.34.5"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.1.0-alpha.22"
+    "@sogni-ai/sogni-client": "5.1.0-alpha.24"
   },
   "openclaw": {
     "extensions": [

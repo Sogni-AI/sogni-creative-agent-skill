@@ -3211,7 +3211,7 @@ Image Options:
   --output-format <f>   Image output format: png|jpg (webp for gpt-image-2)
   --sampler <name>      Sampler (model-dependent)
   --scheduler <name>    Scheduler (model-dependent)
-  --lora <id>           LoRA id (repeatable, edit only)
+  --lora <id>           Image LoRA id (repeatable; order is significant)
   --loras <ids>         Comma-separated LoRA ids
   --lora-strength <n>   LoRA strength (repeatable)
   --lora-strengths <n>  Comma-separated LoRA strengths
@@ -3871,6 +3871,13 @@ if (options.loraStrengths.length > 0 && options.loras.length > 0 &&
   fatalCliError('--lora-strengths count must match --loras count.', {
     code: 'INVALID_ARGUMENT',
     details: { loras: options.loras.length, loraStrengths: options.loraStrengths.length }
+  });
+}
+
+if (!options.video && options.loras.length > 8) {
+  fatalCliError('Image generation supports at most 8 LoRAs per render.', {
+    code: 'INVALID_ARGUMENT',
+    details: { loras: options.loras.length, maximum: 8 }
   });
 }
 
@@ -10766,6 +10773,12 @@ async function main() {
         }
         if (steps) {
           projectConfig.steps = steps;
+        }
+        if (options.loras.length > 0) {
+          projectConfig.loras = options.loras;
+        }
+        if (options.loraStrengths.length > 0) {
+          projectConfig.loraStrengths = options.loraStrengths;
         }
 
         if (options.seed !== null && options.seed !== undefined) {

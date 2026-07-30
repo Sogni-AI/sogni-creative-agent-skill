@@ -11,6 +11,7 @@ import {
 import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 import { importMedia } from '../desktop-extension/server/import-media.mjs';
+import { PACKAGE_VERSION } from '../version.mjs';
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
@@ -304,7 +305,7 @@ test('MCP initialize allowlists clientInfo before injecting child attribution', 
   assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK, 'codex');
   assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK_VERSION, '0.77.0');
   assert.equal(echoed.env.SOGNI_AGENT_SURFACE, 'mcp');
-  assert.equal(echoed.env.SOGNI_AGENT_SURFACE_VERSION, '3.21.0');
+  assert.equal(echoed.env.SOGNI_AGENT_SURFACE_VERSION, PACKAGE_VERSION);
 });
 
 test('MCP never forwards raw unknown clientInfo into child attribution', async (t) => {

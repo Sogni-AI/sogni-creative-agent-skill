@@ -1,3 +1,13 @@
+# [3.22.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.21.0...v3.22.0) (2026-07-30)
+
+
+### Features
+
+* **models:** add the explicit `ltx23-eros` selector for LTX-2.3 10Eros
+  image-to-video, with required filter acknowledgement and fixed model settings
+* **video:** add start-frame-aware 10Eros cinematic prompting guidance for
+  coherent performance, camera motion, atmosphere, dialogue, and sound
+
 # [3.21.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.20.0...v3.21.0) (2026-07-31)
 
 
@@ -20,7 +30,8 @@
 
 ### Features
 
-* **images:** support Krea LoRA stacks
+* **images:** support up to eight ordered Krea 2 Turbo LoRAs with independently
+  validated bipolar strengths, including negative inverse-effect values
 
 # [3.19.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.1...v3.19.0) (2026-07-28)
 

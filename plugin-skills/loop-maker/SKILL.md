@@ -7,6 +7,9 @@ description: Turn a folder of images into a polished, music-backed seamless loop
 
 Create the image-folder loop described in the user's current request. Treat text after the explicit skill invocation as its arguments when the host provides them.
 
+When running this Claude Code plugin, invoke `sogni-agent-claude-code` wherever
+the root skill or loop workflow says `sogni-agent`.
+
 1. Resolve the plugin root as two directories above this `SKILL.md`. Read the root `SKILL.md` completely. A host-provided plugin-root variable may be used, but do not depend on one.
 2. Read `references/loop-maker.md` under that plugin root completely and follow it as the canonical workflow.
 3. Treat the first folder path in the arguments as the source. Treat remaining text as optional preferences such as the opening image, music direction, output name, pacing, aspect ratio, compositor effects, or cleanup request.

@@ -66,6 +66,30 @@ export async function assertSafeSogniEndpoints({ restEndpoint, socketEndpoint })
   }
 }
 
+export function buildHostedClientConfig({
+  apiKey,
+  restEndpoint,
+  socketEndpoint,
+  appSource,
+  appId,
+  attribution,
+}) {
+  return {
+    appId: appId ?? getOrCreateSogniAppId(),
+    apiKey,
+    appSource: appSource ?? 'sogni-creative-agent-skill',
+    ...(attribution ? { attribution } : {}),
+    logLevel: 'error',
+    ...(restEndpoint ? { restEndpoint } : {}),
+    ...(socketEndpoint ? { socketEndpoint } : {}),
+    // Every operation routed through this factory is REST or SSE. Avoid
+    // creating a short-lived WebSocket for each hosted call or upload-URL
+    // lookup; those connections would add noise to connection telemetry.
+    disableSocket: true,
+    socketEventSubscriptions: { modelAvailability: false }
+  };
+}
+
 /**
  * Construct a managed `SogniClient` for the duration of `work`. Disposes
  * the socket connection on completion (matching the per-request shape
@@ -73,17 +97,23 @@ export async function assertSafeSogniEndpoints({ restEndpoint, socketEndpoint })
  * that pooling isn't required; the API process owns long-running pools
  * via `SogniClientSessionService`.
  */
-export async function withHostedClient({ apiKey, restEndpoint, socketEndpoint, appSource, appId }, work) {
+export async function withHostedClient({
+  apiKey,
+  restEndpoint,
+  socketEndpoint,
+  appSource,
+  appId,
+  attribution,
+}, work) {
   await assertSafeSogniEndpoints({ restEndpoint, socketEndpoint });
-  const client = await SogniClient.createInstance({
-    appId: appId ?? getOrCreateSogniAppId(),
+  const client = await SogniClient.createInstance(buildHostedClientConfig({
     apiKey,
-    appSource: appSource ?? 'sogni-creative-agent-skill',
-    logLevel: 'error',
-    ...(restEndpoint ? { restEndpoint } : {}),
-    ...(socketEndpoint ? { socketEndpoint } : {}),
-    socketEventSubscriptions: { modelAvailability: false }
-  });
+    restEndpoint,
+    socketEndpoint,
+    appSource,
+    appId,
+    attribution,
+  }));
   try {
     return await work(client);
   } finally {

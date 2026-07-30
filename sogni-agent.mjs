@@ -18,6 +18,14 @@ import sharp from 'sharp';
 import { getEnv, hasEnv } from './env.mjs';
 import { getOrCreateSogniAppId } from './sogni-app-id.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
+import {
+  SOGNI_APP_SOURCE,
+  attributionHeaders,
+  clientAttribution,
+  createInvocationLineage,
+  resolveAgentAttribution,
+  semanticWorkloadAttribution,
+} from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
@@ -282,9 +290,10 @@ const DEFAULT_SAFE_API_HOSTS = Object.freeze(['api.sogni.ai']);
 const LOOPBACK_API_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1']);
 const DEFAULT_LLM_MODEL = 'qwen3.6-35b-a3b-gguf-iq4xs';
 const VALID_API_TASK_PROFILES = new Set(['general', 'coding', 'reasoning']);
-const SOGNI_APP_SOURCE = 'sogni-creative-agent-skill';
 const OPENCLAW_CONFIG_PATH = getEnv('OPENCLAW_CONFIG_PATH') || DEFAULT_OPENCLAW_CONFIG_PATH;
 const IS_OPENCLAW_INVOCATION = Boolean(getEnv('OPENCLAW_PLUGIN_CONFIG'));
+const AGENT_ATTRIBUTION = resolveAgentAttribution({ surfaceVersion: PACKAGE_VERSION });
+const INVOCATION_LINEAGE = createInvocationLineage();
 const RAW_ARGS = process.argv.slice(2);
 const CLI_WANTS_JSON = RAW_ARGS.includes('--json');
 const JSON_ERROR_MODE = CLI_WANTS_JSON || IS_OPENCLAW_INVOCATION;
@@ -1503,9 +1512,16 @@ function requiresSparkOnlyToken(modelId) {
 // Attach the user's explicit --billing-mode to a project config. Omitted by
 // default so the server keeps deciding coverage (Unlimited members get 'auto'
 // coverage server-side; token payers are unaffected).
-function withBillingMode(config) {
-  if (!options.billingMode) return config;
-  return { ...config, billingMode: options.billingMode };
+function nextSemanticWorkloadAttribution(options = {}) {
+  return semanticWorkloadAttribution(AGENT_ATTRIBUTION, INVOCATION_LINEAGE.next(options));
+}
+
+function withBillingMode(config, attributionOptions = {}) {
+  return {
+    ...config,
+    ...(options.billingMode ? { billingMode: options.billingMode } : {}),
+    attribution: nextSemanticWorkloadAttribution(attributionOptions),
+  };
 }
 
 // Best-effort Sogni Unlimited entitlement lookup. Returns null (never throws)
@@ -5005,12 +5021,13 @@ function requireApiKeyCredentials(creds, modeLabel) {
   throw err;
 }
 
-function apiRequestHeaders(apiKey, extra = {}) {
+function apiRequestHeaders(apiKey, extra = {}, workloadAttribution = undefined) {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
     'api-key': apiKey,
-    ...extra
+    ...extra,
+    ...attributionHeaders(AGENT_ATTRIBUTION, workloadAttribution),
   };
 }
 
@@ -5051,6 +5068,7 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
       appId: getOrCreateSogniAppId(),
+      attribution: clientAttribution(AGENT_ATTRIBUTION),
     },
     async (client) => {
       if (action === 'list') {
@@ -5084,6 +5102,7 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
               : {}),
             ...(params.confirmCost != null ? { confirmCost: params.confirmCost } : {}),
             ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+            ...(params.attribution ? { attribution: params.attribution } : {}),
           },
           {},
         );
@@ -5112,7 +5131,7 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
  * Returns `null` when SDK transport is off so the caller falls back
  * to `fetchApiJson`.
  */
-async function dispatchChatHostedViaSdk(apiKey, body) {
+async function dispatchChatHostedViaSdk(apiKey, body, workloadAttribution) {
   let helpers;
   try {
     helpers = await import('./sogni-hosted-client.mjs');
@@ -5129,8 +5148,12 @@ async function dispatchChatHostedViaSdk(apiKey, body) {
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
       appId: getOrCreateSogniAppId(),
+      attribution: clientAttribution(AGENT_ATTRIBUTION),
     },
-    async (client) => helpers.sdkChatHostedCreate(client, body),
+    async (client) => helpers.sdkChatHostedCreate(client, {
+      ...body,
+      ...(workloadAttribution ? { attribution: workloadAttribution } : {}),
+    }),
   );
 }
 
@@ -5172,6 +5195,7 @@ async function dispatchMediaReferenceUrlViaSdk({ ref, file, index, jobId, action
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
       appId: getOrCreateSogniAppId(),
+      attribution: clientAttribution(AGENT_ATTRIBUTION),
     },
     async (client) => {
       const type = apiMediaReferenceUploadType(ref, index);
@@ -5237,11 +5261,17 @@ async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_HTTP_TI
   }
 }
 
-async function fetchApiJson(path, { apiKey, method = 'GET', body = undefined, headers = {} } = {}) {
+async function fetchApiJson(path, {
+  apiKey,
+  method = 'GET',
+  body = undefined,
+  headers = {},
+  workloadAttribution = undefined,
+} = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
     method,
-    headers: apiRequestHeaders(apiKey, headers),
+    headers: apiRequestHeaders(apiKey, headers, workloadAttribution),
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   };
 
@@ -5847,15 +5877,17 @@ async function runApiChat(log) {
     ...(options.noFilter === true ? { safeContentFilter: false } : {}),
     ...(apiMediaReferences.length > 0 ? { media_references: apiMediaReferences } : {})
   };
+  const workloadAttribution = nextSemanticWorkloadAttribution();
   if (options.durableChat) {
-    return runApiChatDurable(log, { apiKey, body });
+    return runApiChatDurable(log, { apiKey, body, workloadAttribution });
   }
   const payload =
-    (await dispatchChatHostedViaSdk(apiKey, body))
+    (await dispatchChatHostedViaSdk(apiKey, body, workloadAttribution))
     ?? (await fetchApiJson('/v1/chat/completions', {
       apiKey,
       method: 'POST',
-      body
+      body,
+      workloadAttribution,
     }));
   const message = extractChatMessage(payload);
   const workflows = extractChatWorkflows(payload);
@@ -5905,7 +5937,7 @@ async function runApiChat(log) {
  * installed) we fail with a clear error rather than silently falling
  * back to the synchronous endpoint.
  */
-async function runApiChatDurable(log, { apiKey, body }) {
+async function runApiChatDurable(log, { apiKey, body, workloadAttribution }) {
   let helpers;
   try {
     helpers = await import('./sogni-hosted-client.mjs');
@@ -5942,6 +5974,7 @@ async function runApiChatDurable(log, { apiKey, body }) {
     ...(typeof body.safeContentFilter === 'boolean'
       ? { runtimeConfig: { safeContentFilter: body.safeContentFilter } }
       : {}),
+    ...(workloadAttribution ? { attribution: workloadAttribution } : {}),
   };
 
   const restEndpoint = await buildSafeApiUrl('/');
@@ -5960,6 +5993,7 @@ async function runApiChatDurable(log, { apiKey, body }) {
       socketEndpoint: process.env.SOGNI_SOCKET_ENDPOINT || undefined,
       appSource: SOGNI_APP_SOURCE,
       appId: getOrCreateSogniAppId(),
+      attribution: clientAttribution(AGENT_ATTRIBUTION),
     },
     async (client) => {
       const created = await helpers.sdkChatRunsCreate(client, runParams);
@@ -6306,12 +6340,19 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
     sogni_tools: false,
     sogni_tool_execution: false
   };
+  // Planning is internal compute for the workflow intent. Reserve the
+  // invocation root for the workflow start so headline counts stay at one.
+  const workloadAttribution = nextSemanticWorkloadAttribution({
+    scope: 'child',
+    parentOperationId: INVOCATION_LINEAGE.rootOperationId,
+  });
   const payload =
-    (await dispatchChatHostedViaSdk(apiKey, body))
+    (await dispatchChatHostedViaSdk(apiKey, body, workloadAttribution))
     ?? (await fetchApiJson('/v1/chat/completions', {
       apiKey,
       method: 'POST',
-      body
+      body,
+      workloadAttribution,
     }));
   const message = extractChatMessage(payload);
   const storyline = typeof message.content === 'string' ? message.content.trim() : '';
@@ -7030,6 +7071,7 @@ async function runApiWorkflow() {
     input = buildGeneratedKeyframeVideoWorkflowInput();
   }
 
+  const workloadAttribution = nextSemanticWorkloadAttribution({ scope: 'top_level' });
   payload =
     (await dispatchWorkflowActionViaSdk('start', apiKey, {
       input,
@@ -7038,6 +7080,7 @@ async function runApiWorkflow() {
       maxEstimatedCapacityUnits: options.apiWorkflowMaxCost ?? undefined,
       confirmCost: options.apiWorkflowConfirmCost ?? undefined,
       idempotencyKey: options.apiWorkflowIdempotencyKey ?? undefined,
+      attribution: workloadAttribution,
     }))
     ?? (await fetchApiJson('/v1/creative-agent/workflows', {
       apiKey,
@@ -7054,7 +7097,8 @@ async function runApiWorkflow() {
         ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
         token_type: tokenType,
         app_source: SOGNI_APP_SOURCE
-      }
+      },
+      workloadAttribution,
     }));
   const workflow = workflowFromPayload(payload);
   const workflowId = workflow?.workflowId || workflow?.id;
@@ -8013,8 +8057,11 @@ function isNonEmptyFile(filePath) {
   }
 }
 
-async function runCommand(command, args, { captureOutput = false } = {}) {
-  const options = { reject: false };
+async function runCommand(command, args, { captureOutput = false, env = undefined } = {}) {
+  const options = {
+    reject: false,
+    ...(env ? { env: { ...process.env, ...env } } : {}),
+  };
   if (captureOutput) {
     options.stdout = 'pipe';
     options.stderr = 'pipe';
@@ -8786,8 +8833,22 @@ function parseSourceReelChildJson(stdout) {
   }
 }
 
-async function runSourceReelChild(label, args, logPath, outputPath) {
-  const result = await runCommand(process.execPath, args, { captureOutput: true });
+function sourceReelLineageEnvironment(workloadAttribution) {
+  return {
+    SOGNI_AGENT_OPERATION_SCOPE: workloadAttribution.operationScope,
+    SOGNI_AGENT_OPERATION_ID: workloadAttribution.operationId,
+    SOGNI_AGENT_ROOT_OPERATION_ID: workloadAttribution.rootOperationId,
+    ...(workloadAttribution.parentOperationId
+      ? { SOGNI_AGENT_PARENT_OPERATION_ID: workloadAttribution.parentOperationId }
+      : {}),
+  };
+}
+
+async function runSourceReelChild(label, args, logPath, outputPath, workloadAttribution) {
+  const result = await runCommand(process.execPath, args, {
+    captureOutput: true,
+    env: sourceReelLineageEnvironment(workloadAttribution),
+  });
   const parsed = parseSourceReelChildJson(result.stdout);
   const logBody = [
     `label=${label}`,
@@ -8839,7 +8900,14 @@ async function runSourceReel(log) {
     }
     log(`START clip ${clip.id} ${clip.name}`);
     const args = sourceReelChildArgs(['--ref', clip.refPath], clip.clipPath, clip.prompt, plan, plan.imageSeconds);
-    await runSourceReelChild(`clip ${clip.id}`, args, clip.logPath, clip.clipPath);
+    const workloadAttribution = nextSemanticWorkloadAttribution();
+    await runSourceReelChild(
+      `clip ${clip.id}`,
+      args,
+      clip.logPath,
+      clip.clipPath,
+      workloadAttribution,
+    );
     log(`DONE  clip ${clip.id} -> ${clip.clipPath}`);
   });
 
@@ -8871,7 +8939,14 @@ async function runSourceReel(log) {
         plan,
         plan.transitionSeconds
       );
-      await runSourceReelChild(`transition ${transition.key}`, args, transition.logPath, transition.clipPath);
+      const workloadAttribution = nextSemanticWorkloadAttribution();
+      await runSourceReelChild(
+        `transition ${transition.key}`,
+        args,
+        transition.logPath,
+        transition.clipPath,
+        workloadAttribution,
+      );
       log(`DONE  transition ${transition.key} -> ${transition.clipPath}`);
     });
   }
@@ -9493,6 +9568,7 @@ async function runDoctor() {
       doctorClient = new SogniClientWrapper({
         appSource: SOGNI_APP_SOURCE,
         appId: getOrCreateSogniAppId(),
+        attribution: clientAttribution(AGENT_ATTRIBUTION),
         network: openclawConfig?.defaultNetwork || 'fast',
         autoConnect: false,
         apiKey: creds.SOGNI_API_KEY,
@@ -10035,6 +10111,7 @@ async function main() {
     client = new SogniClientWrapper({
       appSource: SOGNI_APP_SOURCE,
       appId: getOrCreateSogniAppId(),
+      attribution: clientAttribution(AGENT_ATTRIBUTION),
       network: openclawConfig?.defaultNetwork || 'fast',
       autoConnect: false,
       apiKey: creds.SOGNI_API_KEY,
@@ -10999,6 +11076,7 @@ async function main() {
           const client2 = new SogniClientWrapper({
             appSource: SOGNI_APP_SOURCE,
             appId: getOrCreateSogniAppId(),
+            attribution: clientAttribution(AGENT_ATTRIBUTION),
             network: openclawConfig?.defaultNetwork || 'fast',
             autoConnect: false,
             apiKey: creds.SOGNI_API_KEY,

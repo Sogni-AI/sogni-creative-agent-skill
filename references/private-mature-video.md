@@ -44,22 +44,40 @@ chronologically, and place each token beside its corresponding action.
 ## Prompt construction for 10Eros + DR34ML4Y
 
 Write the prompt solely to produce the result the creator requested. Use one
-unbroken, chronological LTX paragraph:
+unbroken, chronological LTX paragraph of 4-8 present-tense sentences. Do not
+emit section labels such as `Performance:` or `Dialogue:` into the model
+prompt; fold those details into cinematic prose instead.
 
-1. Describe the supplied frame's visible composition and pose.
-2. State the action concretely. Include a LoRA token when the requested action
+1. Use the supplied start image exactly as the first frame by passing it through
+   `--ref`; do not merely mention it in prose. Briefly anchor its composition,
+   subject placement, and starting pose without inventing conflicting details.
+2. Establish the overall cinematic style, shot scale, camera movement,
+   environment, lighting, atmosphere, and relevant subtle background motion.
+3. State the action concretely. Include a LoRA token when the requested action
    matches one of its trained concepts.
-3. Describe what happens step by step in chronological order: who moves, which
+4. Describe what happens step by step in chronological order: who moves, which
    body parts move, their direction, changes in position or contact, and the
    resulting pose.
-4. Specify shot scale, camera angle, framing, and any camera movement.
-5. Integrate the audio design with the action: voice delivery, dialogue, foley,
+5. Direct the performance through observable behavior: posture, breathing,
+   gaze, facial expression, micro-expressions, small pauses, and emotional
+   changes that flow naturally from the starting pose.
+6. Integrate the audio design with the action: voice delivery, dialogue, foley,
    environmental sound, and music where relevant.
 
 Be specific and literal. Do not substitute euphemisms or generalizations for
 the requested visible action. Keep the action density appropriate for the
 duration, and avoid contradictory positions, unrelated cuts, generic quality
-tags, and repeating the same action in several different ways.
+tags, and repeating the same action in several different ways. Prefer one
+simple, logical, interesting motion evolution. Keep acting and physical motion
+natural and cinematic, with realistic weight and restrained gestures rather
+than exaggerated motion or slapstick. Do not introduce extra characters unless
+they are clearly visible in the supplied image or explicitly requested.
+
+When an image is attached and the creator says "one for this image", "make one
+for this", or similar, treat the image as the start-frame authority and build
+the complete purpose-written prompt from what is visibly present plus the
+creator's stated intent. Do not answer with generic prompting advice, and do
+not invent a different scene merely to fill out the paragraph.
 
 Write every spoken line verbatim in double quotes and identify who says it and
 how. Never imply dialogue with a summary such as "they talk" or "she says

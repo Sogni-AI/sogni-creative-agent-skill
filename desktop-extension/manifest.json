@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "sogni-creative-agent",
   "display_name": "Sogni Creative Agent",
-  "version": "3.20.0",
+  "version": "3.21.0",
   "description": "Generate images, video, and music on Sogni AI's decentralized GPU network — with personas, memories, and safe video editing tools.",
   "author": { "name": "Sogni AI", "url": "https://sogni.ai" },
   "homepage": "https://sogni.ai",

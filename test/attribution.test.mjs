@@ -12,7 +12,7 @@ import {
 } from '../attribution.mjs';
 
 test('unmarked official CLI is an unattributed external agent, never human', () => {
-  const attribution = resolveAgentAttribution({ env: {}, surfaceVersion: '3.20.0' });
+  const attribution = resolveAgentAttribution({ env: {}, surfaceVersion: '3.21.0' });
   assert.deepEqual(attribution, {
     appSource: SOGNI_APP_SOURCE,
     interactionKind: 'external_agent',
@@ -20,7 +20,7 @@ test('unmarked official CLI is an unattributed external agent, never human', () 
     agentFramework: 'unknown',
     agentFrameworkVersion: undefined,
     agentSurface: 'cli',
-    agentSurfaceVersion: '3.20.0',
+    agentSurfaceVersion: '3.21.0',
     executionMode: undefined,
     attributionMethod: 'known_source',
   });
@@ -32,28 +32,28 @@ test('explicit installer markers are normalized and cannot replace appSource', (
       SOGNI_AGENT_FRAMEWORK: 'OpenAI_Codex',
       SOGNI_AGENT_FRAMEWORK_VERSION: '1.2.3',
       SOGNI_AGENT_SURFACE: 'personal-skill',
-      SOGNI_AGENT_SURFACE_VERSION: '3.20.0',
+      SOGNI_AGENT_SURFACE_VERSION: '3.21.0',
     },
   });
   assert.equal(attribution.appSource, SOGNI_APP_SOURCE);
   assert.equal(attribution.agentFramework, 'codex');
   assert.equal(attribution.agentFrameworkVersion, '1.2.3');
   assert.equal(attribution.agentSurface, 'personal_skill');
-  assert.equal(attribution.agentSurfaceVersion, '3.20.0');
+  assert.equal(attribution.agentSurfaceVersion, '3.21.0');
   assert.equal(attribution.attributionMethod, 'wrapper_declared');
 });
 
 test('OpenClaw is declared only by its runtime-local environment marker', () => {
   const openclaw = resolveAgentAttribution({
     env: { OPENCLAW_PLUGIN_CONFIG: '{}' },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   assert.equal(openclaw.agentFramework, 'openclaw');
   assert.equal(openclaw.agentSurface, 'plugin');
 
   const configPathOnly = resolveAgentAttribution({
     env: { OPENCLAW_CONFIG_PATH: '/tmp/openclaw.json' },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   assert.equal(configPathOnly.agentFramework, 'unknown');
   assert.equal(configPathOnly.agentSurface, 'cli');
@@ -66,7 +66,7 @@ test('unrecognized free-form marker values collapse to bounded unknown values', 
       SOGNI_AGENT_FRAMEWORK_VERSION: 'not a version with spaces',
       SOGNI_AGENT_SURFACE: 'somewhere',
     },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   assert.equal(attribution.agentFramework, 'unknown');
   assert.equal(attribution.agentFrameworkVersion, undefined);
@@ -79,7 +79,7 @@ test('version metadata matches the bounded transport contract', () => {
       SOGNI_AGENT_FRAMEWORK: 'codex',
       SOGNI_AGENT_FRAMEWORK_VERSION: 'v1.2.3',
     },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   assert.equal(prefixed.agentFrameworkVersion, undefined);
 
@@ -88,16 +88,16 @@ test('version metadata matches the bounded transport contract', () => {
       SOGNI_AGENT_FRAMEWORK: 'codex',
       SOGNI_AGENT_FRAMEWORK_VERSION: `1${'2'.repeat(32)}`,
     },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   assert.equal(oversized.agentFrameworkVersion, undefined);
 });
 
 test('MCP clientInfo is allowlisted and raw names are never propagated', () => {
-  const fallback = resolveAgentAttribution({ env: {}, surfaceVersion: '3.20.0' });
+  const fallback = resolveAgentAttribution({ env: {}, surfaceVersion: '3.21.0' });
   const codex = normalizeMcpClientInfo(
     { name: 'openai-codex', version: '0.77.0' },
-    { fallback, surfaceVersion: '3.20.0' },
+    { fallback, surfaceVersion: '3.21.0' },
   );
   assert.equal(codex.agentFramework, 'codex');
   assert.equal(codex.agentFrameworkVersion, '0.77.0');
@@ -105,7 +105,7 @@ test('MCP clientInfo is allowlisted and raw names are never propagated', () => {
 
   const unknown = normalizeMcpClientInfo(
     { name: 'my-company laptop /Users/alice', version: 'private build' },
-    { fallback, surfaceVersion: '3.20.0' },
+    { fallback, surfaceVersion: '3.21.0' },
   );
   assert.equal(unknown.agentFramework, 'unknown');
   assert.equal(unknown.agentFrameworkVersion, undefined);
@@ -118,11 +118,11 @@ test('MCP uses an installer-owned fallback when clientInfo is unknown', () => {
       SOGNI_AGENT_FRAMEWORK: 'claude-desktop',
       SOGNI_AGENT_SURFACE: 'mcp',
     },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   const attribution = normalizeMcpClientInfo(
     { name: 'unknown-client', version: '1.0.0' },
-    { fallback, surfaceVersion: '3.20.0' },
+    { fallback, surfaceVersion: '3.21.0' },
   );
   assert.equal(attribution.agentFramework, 'claude-desktop');
   assert.equal(attribution.agentFrameworkVersion, undefined);
@@ -198,7 +198,7 @@ test('client config and REST headers use the same semantic attribution', () => {
       SOGNI_AGENT_FRAMEWORK: 'claude-code',
       SOGNI_AGENT_SURFACE: 'plugin',
     },
-    surfaceVersion: '3.20.0',
+    surfaceVersion: '3.21.0',
   });
   const lineage = createInvocationLineage({
     env: {},

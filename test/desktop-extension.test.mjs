@@ -78,13 +78,13 @@ test('buildChildEnv applies canonical MCP markers and drops undeclared versions'
       SOGNI_AGENT_FRAMEWORK: 'codex',
       SOGNI_AGENT_FRAMEWORK_VERSION: undefined,
       SOGNI_AGENT_SURFACE: 'mcp',
-      SOGNI_AGENT_SURFACE_VERSION: '3.20.0',
+      SOGNI_AGENT_SURFACE_VERSION: '3.21.0',
     },
   });
   assert.equal(env.SOGNI_AGENT_FRAMEWORK, 'codex');
   assert.equal('SOGNI_AGENT_FRAMEWORK_VERSION' in env, false);
   assert.equal(env.SOGNI_AGENT_SURFACE, 'mcp');
-  assert.equal(env.SOGNI_AGENT_SURFACE_VERSION, '3.20.0');
+  assert.equal(env.SOGNI_AGENT_SURFACE_VERSION, '3.21.0');
 });
 
 test('TOOLS exposes the expected v1 tool names', () => {
@@ -304,7 +304,7 @@ test('MCP initialize allowlists clientInfo before injecting child attribution', 
   assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK, 'codex');
   assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK_VERSION, '0.77.0');
   assert.equal(echoed.env.SOGNI_AGENT_SURFACE, 'mcp');
-  assert.equal(echoed.env.SOGNI_AGENT_SURFACE_VERSION, '3.20.0');
+  assert.equal(echoed.env.SOGNI_AGENT_SURFACE_VERSION, '3.21.0');
 });
 
 test('MCP never forwards raw unknown clientInfo into child attribution', async (t) => {

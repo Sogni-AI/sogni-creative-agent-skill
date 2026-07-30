@@ -236,7 +236,8 @@ sogni-agent -c photo.jpg -m qwen_image_edit_2511_fp8 "turn this into anime style
 
 Whenever the chosen video model is in the LTX family (including the default t2v), **do not pass the user's short request through unchanged**. Rewrite it into one unbroken paragraph of 4-8 flowing present-tense sentences describing a single continuous shot — concrete subjects, named light sources, one action thread, dialogue embedded in double quotes with the speaker identified, positive phrasing only, no headers/bullets/negative-prompts. **Read [`references/video-prompting.md`](./references/video-prompting.md) for the full rule, duration pacing, orientation mapping, and camera-language normalization before writing the prompt.**
 
-For lawful adult mature-theme video requests, read
+Whenever the creator explicitly requests 10Eros, and for lawful adult
+mature-theme video requests generally, read
 [`references/private-mature-video.md`](./references/private-mature-video.md)
 before choosing a model, LoRA, or specialized prompt token. Keep the exact
 tokens in that scoped reference rather than ordinary model recommendations.

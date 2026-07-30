@@ -140,6 +140,22 @@ test('SKILL.md reference pointers resolve to real files', () => {
   }
 });
 
+test('10Eros prompting guidance preserves start-frame and cinematic performance intent', () => {
+  const skill = read('SKILL.md');
+  const text = read('references/private-mature-video.md');
+
+  assert.match(skill, /Whenever the creator explicitly requests 10Eros/);
+  assert.match(text, /4-8 present-tense sentences/);
+  assert.match(text, /Use the supplied start image exactly as the first frame/);
+  assert.match(text, /passing it through\s+`--ref`/);
+  assert.match(text, /micro-expressions, small pauses/);
+  assert.match(text, /natural and cinematic/);
+  assert.match(text, /Do not introduce extra characters/);
+  assert.match(text, /"one for this image"/);
+  assert.match(text, /Do not answer with generic prompting advice/);
+  assert.match(text, /Do not\s+emit section labels such as `Performance:` or `Dialogue:`/);
+});
+
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {
   const lineCount = read('SKILL.md').split('\n').length;
   assert.ok(lineCount <= 500,

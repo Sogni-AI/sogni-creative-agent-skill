@@ -1,3 +1,15 @@
+# [3.20.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.19.0...v3.20.0) (2026-07-29)
+
+
+### Features
+
+* **images:** support up to eight Krea 2 LoRAs with independently validated strengths.
+
+### Dependencies
+
+* consume `@sogni-ai/sogni-intelligence-client` 3.9.0 and the matching released
+  `sogni-creative-agent` runtime.
+
 # [3.19.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.1...v3.19.0) (2026-07-28)
 
 

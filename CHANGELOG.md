@@ -1,3 +1,15 @@
+# [3.20.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.19.0...v3.20.0) (2026-07-29)
+
+
+### Bug Fixes
+
+* **deps:** use `@sogni-ai/sogni-intelligence-client` 3.9.0
+
+
+### Features
+
+* **images:** support Krea LoRA stacks
+
 # [3.19.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.18.1...v3.19.0) (2026-07-28)
 
 

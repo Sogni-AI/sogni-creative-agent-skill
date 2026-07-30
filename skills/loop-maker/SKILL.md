@@ -5,4 +5,7 @@ description: Turn a folder of images into a polished, music-backed seamless loop
 
 # Sogni Loop Maker
 
+This is the Codex plugin surface. Wherever the referenced workflow says
+`sogni-agent` or `sogni-agent-claude-code`, invoke `sogni-agent-codex`.
+
 Read `../../plugin-skills/loop-maker/SKILL.md` relative to this installed file completely and follow it. Resolve every subsequent plugin path from the plugin root two directories above this file, never from the user's working directory.

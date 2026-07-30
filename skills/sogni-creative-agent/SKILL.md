@@ -5,4 +5,7 @@ description: Generate and edit images, video, and music using Sogni AI's decentr
 
 # Sogni Creative Agent
 
+This is the Codex plugin surface. Wherever the referenced skill says
+`sogni-agent` or `sogni-agent-claude-code`, invoke `sogni-agent-codex`.
+
 Read `../../plugin-skills/sogni-creative-agent/SKILL.md` relative to this installed file completely and follow it. Resolve every subsequent plugin path from the plugin root two directories above this file, never from the user's working directory.

@@ -13,7 +13,9 @@
       "command": "node",
       "args": ["${__dirname}/server/index.mjs"],
       "env": {
-        "SOGNI_API_KEY": "${user_config.api_key}"
+        "SOGNI_API_KEY": "${user_config.api_key}",
+        "SOGNI_AGENT_FRAMEWORK": "claude-desktop",
+        "SOGNI_AGENT_SURFACE": "mcp"
       }
     }
   },

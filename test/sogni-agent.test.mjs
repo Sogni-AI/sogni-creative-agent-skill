@@ -2232,6 +2232,17 @@ test('--api-chat posts to /v1/chat/completions with creative-agent tools', async
     assert.equal(request.url, '/v1/chat/completions');
     assert.equal(request.method, 'POST');
     assert.equal(request.headers.authorization, 'Bearer test-api-key');
+    assert.equal(request.headers['x-app-source'], 'sogni-creative-agent-skill');
+    assert.equal(request.headers['x-sogni-interaction-kind'], 'external_agent');
+    assert.equal(request.headers['x-sogni-workload-kind'], 'agent_mediated');
+    assert.equal(request.headers['x-sogni-agent-framework'], 'unknown');
+    assert.equal(request.headers['x-sogni-agent-surface'], 'cli');
+    assert.equal(request.headers['x-sogni-operation-scope'], 'top_level');
+    assert.match(request.headers['x-sogni-operation-id'], /^op_[0-9a-f-]{36}$/);
+    assert.equal(
+      request.headers['x-sogni-root-operation-id'],
+      request.headers['x-sogni-operation-id'],
+    );
     assert.equal(request.body.sogni_tools, 'creative-agent');
     assert.equal(request.body.sogni_tool_execution, true);
     assert.equal(request.body.token_type, 'spark');
@@ -2703,6 +2714,19 @@ test('--api-chat uploads local audio and video references before hosted executio
     assert.equal(requests.filter(item => item.url.startsWith('/v1/media/uploadUrl')).length, 2);
     assert.equal(requests.filter(item => item.url.startsWith('/test-upload/')).length, 2);
     assert.equal(requests.filter(item => item.url.startsWith('/v1/media/downloadUrl')).length, 2);
+    for (const uploadUrlRequest of requests.filter(item => item.url.startsWith('/v1/media/uploadUrl'))) {
+      assert.equal(uploadUrlRequest.headers['x-app-source'], 'sogni-creative-agent-skill');
+      assert.equal(uploadUrlRequest.headers['x-sogni-interaction-kind'], 'external_agent');
+    }
+    for (const presignedUpload of requests.filter(item => item.url.startsWith('/test-upload/'))) {
+      assert.equal(presignedUpload.headers.authorization, undefined);
+      assert.equal(presignedUpload.headers['api-key'], undefined);
+      assert.equal(presignedUpload.headers['x-app-source'], undefined);
+      assert.equal(
+        Object.keys(presignedUpload.headers).some(name => name.startsWith('x-sogni-')),
+        false,
+      );
+    }
     assert.equal(Object.hasOwn(request.body, 'public_skill_contract_runtime'), false);
     assert.match(request.body.messages[1].content, /music\.mp3/);
     assert.match(request.body.messages[1].content, /source\.mp4/);
@@ -3470,6 +3494,43 @@ test('socket model availability events are disabled after connect', () => {
       modelAvailability: false
     }
   ]);
+});
+
+test('host markers reach both the socket client and one top-level project operation', () => {
+  const { exitCode, state } = runCli(
+    ['a cat wearing a hat'],
+    {
+      SOGNI_AGENT_FRAMEWORK: 'codex',
+      SOGNI_AGENT_SURFACE: 'personal_skill',
+      SOGNI_AGENT_FRAMEWORK_VERSION: '0.77.0',
+    },
+  );
+  assert.equal(exitCode, 0);
+
+  const clientAttribution = state?.clientConfigs?.[0]?.attribution;
+  assert.deepEqual(clientAttribution?.connection, {
+    interactionKind: 'external_agent',
+    agentFramework: 'codex',
+    agentFrameworkVersion: '0.77.0',
+    agentSurface: 'personal_skill',
+    agentSurfaceVersion: PACKAGE_VERSION,
+  });
+  assert.deepEqual(clientAttribution?.workload, {
+    workloadKind: 'agent_mediated',
+    agentFramework: 'codex',
+    agentFrameworkVersion: '0.77.0',
+    agentSurface: 'personal_skill',
+    agentSurfaceVersion: PACKAGE_VERSION,
+  });
+
+  const operation = state?.lastImageProject?.attribution;
+  assert.equal(operation?.workloadKind, 'agent_mediated');
+  assert.equal(operation?.agentFramework, 'codex');
+  assert.equal(operation?.agentSurface, 'personal_skill');
+  assert.equal(operation?.operationScope, 'top_level');
+  assert.match(operation?.operationId ?? '', /^op_[0-9a-f-]{36}$/);
+  assert.equal(operation?.rootOperationId, operation?.operationId);
+  assert.equal(operation?.parentOperationId, undefined);
 });
 
 test('missing API key is rejected', () => {

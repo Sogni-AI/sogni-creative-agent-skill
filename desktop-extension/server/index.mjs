@@ -12,6 +12,11 @@ import { TOOLS, getTool } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
 import { collectInlineImages } from './inline-images.mjs';
 import { runImportMedia } from './import-media.mjs';
+import {
+  attributionEnvironment,
+  normalizeMcpClientInfo,
+  resolveAgentAttribution,
+} from '../../attribution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROTOCOL_FALLBACK = '2025-06-18';
@@ -25,6 +30,10 @@ try {
 } catch {
   // Running outside a packaged layout (e.g. unit tests before Task 4); harmless.
 }
+let mcpAttributionEnv = attributionEnvironment(normalizeMcpClientInfo(undefined, {
+  fallback: resolveAgentAttribution({ surfaceVersion: VERSION }),
+  surfaceVersion: VERSION,
+}));
 
 function send(msg) {
   process.stdout.write(JSON.stringify(msg) + '\n');
@@ -65,7 +74,11 @@ async function callTool(name, input, progressToken) {
     return textResult(err.message, true);
   }
 
-  const env = buildChildEnv({ agentPath, ffmpegPath: resolveFfmpegPath() });
+  const env = buildChildEnv({
+    agentPath,
+    ffmpegPath: resolveFfmpegPath(),
+    attributionEnv: mcpAttributionEnv,
+  });
 
   return await new Promise((resolve) => {
     const child = spawn(process.execPath, [agentPath, ...args], {
@@ -129,6 +142,10 @@ async function dispatch(msg) {
   const isRequest = id !== undefined && id !== null;
 
   if (method === 'initialize') {
+    mcpAttributionEnv = attributionEnvironment(normalizeMcpClientInfo(params?.clientInfo, {
+      fallback: resolveAgentAttribution({ surfaceVersion: VERSION }),
+      surfaceVersion: VERSION,
+    }));
     send({
       jsonrpc: '2.0',
       id,

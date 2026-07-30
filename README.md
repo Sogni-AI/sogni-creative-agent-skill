@@ -575,6 +575,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
+| Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |

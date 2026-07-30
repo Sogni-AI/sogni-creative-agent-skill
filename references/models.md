@@ -120,6 +120,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 |-------|-------|----------|
 | `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Default text-to-video with native dialogue/audio |
 | `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio; **default for two-image first-frame → last-frame animation** (transition/morph LoRA auto-applies) |
+| `ltx23-eros` → `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast | Explicit uncensored I2V; 30GB+ GPU and `--no-filter` required |
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
 | `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
@@ -217,6 +218,20 @@ and short in-scene text.
 
 ## LTX-2 / LTX-2.3 models
 
+### LTX-2.3 10Eros
+
+Use `-m ltx23-eros` only when the user explicitly requests 10Eros/the
+uncensored model and explicitly permits disabling the content filter. It is
+image-to-video only and requires `--ref`, `--no-filter`, and a worker with at
+least 30GB VRAM. The CLI resolves it to
+`ltx23-22b-10eros-v1.4-fp8mixed_i2v` and pins 9 steps, guidance 1,
+`euler_ancestral`, and `manual_sigmas`.
+
+```bash
+sogni-agent --video --workflow i2v --ref input.png \
+  -m ltx23-eros --no-filter -o output.mp4 "<LTX-rewritten paragraph>"
+```
+
 | Model | Speed | Use Case |
 |-------|-------|----------|
 | `ltx2-19b-fp8_t2v_distilled` | Fast (~2-3min) | Text-to-video, 8-step |
@@ -257,6 +272,7 @@ model recommendations.
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
 | Animate two images together (first frame → last frame) | `ltx23-22b-fp8_i2v_distilled` with `--ref A --ref-end B` (transition/morph LoRA auto-applies) |
+| Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
 | Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
 | Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |

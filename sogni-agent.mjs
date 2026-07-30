@@ -405,11 +405,19 @@ let liveModelDefaults = null;
 function getModelDefaults(modelId, config) {
   const sharedDefaults = getSharedModelDefaults(modelId, config);
   const catalogDefaults = liveModelDefaults?.[modelId];
-  if (!catalogDefaults) return sharedDefaults;
   const configuredDefaults = config?.modelDefaults?.[modelId];
+  const fixedDefaults = modelId === LTX23_10EROS_MODEL_ID
+    ? LTX23_10EROS_FIXED_SETTINGS
+    : null;
+  if (!catalogDefaults && !configuredDefaults && !fixedDefaults) return sharedDefaults;
   // The live catalog supersedes bundled registry data. Explicit user config
-  // remains the final override.
-  return { ...(sharedDefaults || {}), ...catalogDefaults, ...(configuredDefaults || {}) };
+  // remains the final override except where a workflow has immutable settings.
+  return {
+    ...(sharedDefaults || {}),
+    ...(catalogDefaults || {}),
+    ...(configuredDefaults || {}),
+    ...(fixedDefaults || {})
+  };
 }
 
 function defaultsFromModelTier(card) {
@@ -1834,6 +1842,13 @@ const LTX_TRANSITION_LORA_ID = 'transition';
 const LTX_TRANSITION_TRIGGER = 'zhuanchang';
 const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
 const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
+const LTX23_10EROS_FIXED_SETTINGS = Object.freeze({
+  steps: 9,
+  guidance: 1,
+  sampler: 'euler_ancestral',
+  scheduler: 'manual_sigmas',
+  requiresDisabledSafetyFilter: true
+});
 const DR34ML4Y_LORA_ID = 'dr34ml4y-v3';
 const DR34ML4Y_DEFAULT_STRENGTH = 1.0;
 const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
@@ -1844,7 +1859,9 @@ const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
 
 function resolveSkillVideoModelAlias(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
-  return normalized === '10eros' ? LTX23_10EROS_MODEL_ID : modelId;
+  return normalized === '10eros' || normalized === 'ltx23-eros'
+    ? LTX23_10EROS_MODEL_ID
+    : modelId;
 }
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
@@ -3425,6 +3442,7 @@ Image Models:
 Recommended LTX 2.3 Video Models:
   ltx23-22b-fp8_t2v_distilled     Text-to-video with native dialogue/audio
   ltx23-22b-fp8_i2v_distilled     Image-to-video with native dialogue/audio; default for --ref + --ref-end pairs
+  ltx23-eros                       Explicit uncensored I2V (30GB+ worker; requires --no-filter)
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
@@ -4088,6 +4106,31 @@ if (options.music) {
     });
   }
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
+  if (videoModelDefaults?.requiresDisabledSafetyFilter) {
+    if (!options.noFilter) {
+      fatalCliError('LTX-2.3 10Eros requires explicit --no-filter acknowledgement.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, requiredFlag: '--no-filter' },
+        hint: 'Retry with --video --workflow i2v --ref <image> -m ltx23-eros --no-filter'
+      });
+    }
+    const fixedSettings = {
+      steps: videoModelDefaults.steps,
+      guidance: videoModelDefaults.guidance,
+      sampler: videoModelDefaults.sampler,
+      scheduler: videoModelDefaults.scheduler
+    };
+    for (const [setting, expected] of Object.entries(fixedSettings)) {
+      if (expected === undefined) continue;
+      if (cliSet[setting] && options[setting] !== expected) {
+        fatalCliError(`LTX-2.3 10Eros requires --${setting} ${expected}.`, {
+          code: 'INVALID_ARGUMENT',
+          details: { model: options.model, setting, expected, received: options[setting] }
+        });
+      }
+      options[setting] = expected;
+    }
+  }
   // Fall back to skill-local defaults for models the intel registry does not
   // carry (e.g. HappyHorse), so they get a sensible 16:9 default instead of the
   // 512x512 square. Registry defaults still take precedence when present.
@@ -4110,7 +4153,12 @@ if (options.music) {
   }
   const videoQuality = options.quality ? QUALITY_TIERS[options.quality]?.video : null;
   if (videoQuality) {
-    if (!isSeedanceVideo && !cliSet.steps && Number.isFinite(videoQuality.steps)) {
+    if (
+      !isSeedanceVideo
+      && options.model !== LTX23_10EROS_MODEL_ID
+      && !cliSet.steps
+      && Number.isFinite(videoQuality.steps)
+    ) {
       options.steps = videoQuality.steps;
     }
   }

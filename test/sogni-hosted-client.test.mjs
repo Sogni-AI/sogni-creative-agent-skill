@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   assertSafeSogniEndpoints,
+  buildHostedClientConfig,
   shouldUseSdkTransport
 } from '../sogni-hosted-client.mjs';
 
@@ -24,6 +25,33 @@ test('shouldUseSdkTransport is opt-in (defaults to false)', () => {
       process.env.SOGNI_SKILL_USE_SDK_TRANSPORT = previous;
     }
   }
+});
+
+test('hosted REST/SSE clients preserve attribution without opening a socket', () => {
+  const attribution = {
+    connection: {
+      interactionKind: 'external_agent',
+      agentFramework: 'codex',
+      agentSurface: 'personal_skill',
+    },
+    workload: {
+      workloadKind: 'agent_mediated',
+      agentFramework: 'codex',
+      agentSurface: 'personal_skill',
+    },
+  };
+  const config = buildHostedClientConfig({
+    apiKey: 'test-api-key',
+    appId: 'test-app-id',
+    appSource: 'sogni-creative-agent-skill',
+    attribution,
+    restEndpoint: 'https://api.sogni.ai',
+    socketEndpoint: 'wss://socket.sogni.ai',
+  });
+
+  assert.equal(config.disableSocket, true);
+  assert.equal(config.appSource, 'sogni-creative-agent-skill');
+  assert.deepEqual(config.attribution, attribution);
 });
 
 test('assertSafeSogniEndpoints accepts a public https endpoint', async () => {

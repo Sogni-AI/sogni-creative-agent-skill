@@ -7,6 +7,11 @@ description: "Sogni Creative Agent: image, video, and music generation using Sog
 
 Generate **images, videos, and music** via Sogni AI's decentralized GPU network through the `sogni-agent` CLI shipped with this plugin.
 
+**Claude Code plugin command:** invoke `sogni-agent-claude-code` for every
+Sogni command in this skill. Wherever this file or a referenced root guide says
+`sogni-agent`, substitute `sogni-agent-claude-code`. This fixed launcher
+preserves normal CLI behavior while attributing the request to Claude Code.
+
 ## Setup
 
 1. Install the CLI (one-time): `npm install -g @sogni-ai/sogni-creative-agent-skill@latest`.

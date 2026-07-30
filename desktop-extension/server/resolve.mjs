@@ -49,7 +49,12 @@ export function resolveFfmpegPath({ env = process.env } = {}) {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-export function buildChildEnv({ env = process.env, agentPath, ffmpegPath = null } = {}) {
+export function buildChildEnv({
+  env = process.env,
+  agentPath,
+  ffmpegPath = null,
+  attributionEnv = {},
+} = {}) {
   const extraBins = ['/opt/homebrew/bin', '/usr/local/bin'];
   if (agentPath) extraBins.push(dirname(agentPath));
   const child = {
@@ -57,6 +62,13 @@ export function buildChildEnv({ env = process.env, agentPath, ffmpegPath = null 
     PATH: [...extraBins, env.PATH ?? ''].filter(Boolean).join(delimiter),
   };
   if (ffmpegPath) child.FFMPEG_PATH = ffmpegPath;
+  for (const [name, value] of Object.entries(attributionEnv)) {
+    if (typeof value === 'string' && value.length > 0) {
+      child[name] = value;
+    } else {
+      delete child[name];
+    }
+  }
   // The .mcpb user_config template injects "" when the API-key field is left
   // blank; an empty env var would shadow ~/.config/sogni/credentials.
   if (child.SOGNI_API_KEY === '') delete child.SOGNI_API_KEY;

@@ -19,6 +19,10 @@ if (process.env.FAKE_AGENT_STDOUT_FILE) {
     env: {
       SOGNI_API_KEY: process.env.SOGNI_API_KEY ?? null,
       FFMPEG_PATH: process.env.FFMPEG_PATH ?? null,
+      SOGNI_AGENT_FRAMEWORK: process.env.SOGNI_AGENT_FRAMEWORK ?? null,
+      SOGNI_AGENT_FRAMEWORK_VERSION: process.env.SOGNI_AGENT_FRAMEWORK_VERSION ?? null,
+      SOGNI_AGENT_SURFACE: process.env.SOGNI_AGENT_SURFACE ?? null,
+      SOGNI_AGENT_SURFACE_VERSION: process.env.SOGNI_AGENT_SURFACE_VERSION ?? null,
     },
   }) + '\n';
 }

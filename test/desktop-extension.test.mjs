@@ -66,6 +66,27 @@ test('buildChildEnv keeps a non-empty SOGNI_API_KEY', () => {
   assert.equal(env.SOGNI_API_KEY, 'sk-1');
 });
 
+test('buildChildEnv applies canonical MCP markers and drops undeclared versions', () => {
+  const env = buildChildEnv({
+    env: {
+      PATH: '/usr/bin',
+      SOGNI_AGENT_FRAMEWORK: 'untrusted-parent',
+      SOGNI_AGENT_FRAMEWORK_VERSION: 'private build',
+    },
+    agentPath: '/x/sogni-agent.mjs',
+    attributionEnv: {
+      SOGNI_AGENT_FRAMEWORK: 'codex',
+      SOGNI_AGENT_FRAMEWORK_VERSION: undefined,
+      SOGNI_AGENT_SURFACE: 'mcp',
+      SOGNI_AGENT_SURFACE_VERSION: '3.21.0',
+    },
+  });
+  assert.equal(env.SOGNI_AGENT_FRAMEWORK, 'codex');
+  assert.equal('SOGNI_AGENT_FRAMEWORK_VERSION' in env, false);
+  assert.equal(env.SOGNI_AGENT_SURFACE, 'mcp');
+  assert.equal(env.SOGNI_AGENT_SURFACE_VERSION, '3.21.0');
+});
+
 test('TOOLS exposes the expected v1 tool names', () => {
   assert.deepEqual(TOOLS.map((t) => t.name).sort(), [
     'account_balance', 'edit_video', 'generate_image', 'generate_music',
@@ -265,6 +286,44 @@ test('tools/call spawns the CLI with built argv and returns its stdout', async (
   assert.equal(res.result.isError ?? false, false);
   const echoed = JSON.parse(res.result.content[0].text);
   assert.deepEqual(echoed.argv, ['--json', '-q', '--no-update-check', '-Q', 'fast', 'a red fox']);
+});
+
+test('MCP initialize allowlists clientInfo before injecting child attribution', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  await client.request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'openai-codex', version: '0.77.0' },
+  });
+  const res = await client.request('tools/call', {
+    name: 'generate_image',
+    arguments: { prompt: 'a red fox' },
+  });
+  const echoed = JSON.parse(res.result.content[0].text);
+  assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK, 'codex');
+  assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK_VERSION, '0.77.0');
+  assert.equal(echoed.env.SOGNI_AGENT_SURFACE, 'mcp');
+  assert.equal(echoed.env.SOGNI_AGENT_SURFACE_VERSION, '3.21.0');
+});
+
+test('MCP never forwards raw unknown clientInfo into child attribution', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  await client.request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'private /Users/alice client', version: 'secret build' },
+  });
+  const res = await client.request('tools/call', {
+    name: 'generate_image',
+    arguments: { prompt: 'a red fox' },
+  });
+  const echoed = JSON.parse(res.result.content[0].text);
+  assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK, 'unknown');
+  assert.equal(echoed.env.SOGNI_AGENT_FRAMEWORK_VERSION, null);
+  assert.equal(JSON.stringify(echoed.env).includes('alice'), false);
+  assert.equal(JSON.stringify(echoed.env).includes('secret'), false);
 });
 
 test('oversized success output keeps the head (front-loaded JSON), not the tail', async (t) => {

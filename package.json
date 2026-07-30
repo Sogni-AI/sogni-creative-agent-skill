@@ -1,11 +1,14 @@
 {
   "name": "@sogni-ai/sogni-creative-agent-skill",
-  "version": "3.20.0",
+  "version": "3.21.0",
   "description": "Sogni Creative Agent Skill: agent skill and CLI for Sogni AI image, video, and music generation.",
   "type": "module",
   "main": "sogni-agent.mjs",
   "bin": {
-    "sogni-agent": "sogni-agent.mjs"
+    "sogni-agent": "sogni-agent.mjs",
+    "sogni-agent-codex": "host-launchers/codex.mjs",
+    "sogni-agent-claude-code": "host-launchers/claude-code.mjs",
+    "sogni-agent-hermes": "host-launchers/hermes.mjs"
   },
   "scripts": {
     "openclaw:sync": "node scripts/sync-openclaw-plugin.mjs",
@@ -68,6 +71,7 @@
     "skills/",
     "llm.txt",
     "skill-package.json",
+    "host-launchers/",
     "scripts/sync-version.mjs",
     "scripts/check-version-sync.mjs",
     "scripts/check-creative-agent-runtime.mjs",
@@ -78,6 +82,7 @@
     "openclaw-plugin.mjs",
     "openclaw.plugin.json",
     "env.mjs",
+    "attribution.mjs",
     "ssrf-guard.mjs",
     "sogni-app-id.mjs",
     "sogni-hosted-client.mjs",
@@ -87,13 +92,13 @@
     "sogni-agent.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "3.9.0",
+    "@sogni-ai/sogni-intelligence-client": "3.10.0",
     "execa": "^9.6.1",
     "json5": "^2.2.3",
     "sharp": "^0.34.5"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.1.0-alpha.24"
+    "@sogni-ai/sogni-client": "5.3.0"
   },
   "openclaw": {
     "extensions": [

@@ -3,6 +3,11 @@
 
 ### Features
 
+* **images:** route identity-sensitive edits of referenced people and characters
+  through Krea 2 Identity Edit by default while preserving explicit model choices
+* **images:** add concise Krea edit prompting, ordered base/detail references,
+  and worker-owned execution defaults for stronger likeness preservation while
+  preserving deliberate direct-CLI control overrides
 * **models:** add the explicit `ltx23-eros` selector for LTX-2.3 10Eros
   image-to-video, with required filter acknowledgement and fixed model settings
 * **video:** add start-frame-aware 10Eros cinematic prompting guidance for

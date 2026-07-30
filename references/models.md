@@ -82,11 +82,22 @@ LoRAs are bipolar sliders, so negative values are valid and apply the inverse
 effect. Follow the range documented for each LoRA rather than assuming 0-2.
 The first render with an uncached LoRA can take longer while its asset downloads.
 
-For identity-preserving Krea edits, pass a context image with
-`-m krea2_identity_edit_v1_2` or
-`-m dark_beast_krea2_identity_edit_v1_2`. These edit models support 1-2
-context images, 512-2048 px output, 8-12 steps, and guidance 1; the default
-is 10 steps.
+For an edit of a referenced person or character that must preserve likeness or
+character identity while changing clothing, hair or makeup, pose or position,
+face/head/body, background, lighting, or visual style, default to a context
+edit with `-m krea2_identity_edit_v1_2`. Infer that semantic intent in any
+language; never route from keyword or regex matching. Also use it for a
+single-character sheet unless Pro/detail-critical layout requirements favor
+GPT Image 2. An explicitly requested model always wins. Use
+`-m dark_beast_krea2_identity_edit_v1_2` only when the creator explicitly
+requests that community/uncensored variant.
+
+These models accept 1-2 context images at 512-2048 px. With two references,
+pass the base scene first and the person/detail/outfit/pose/style reference
+second. Use a concise 1-4 sentence delta instruction rather than restating the
+whole image, do not send a negative prompt, and leave steps, guidance, sampler,
+and scheduler unset so the current model tier and worker choose their optimized
+defaults.
 
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through

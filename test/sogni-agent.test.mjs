@@ -720,7 +720,7 @@ test('SDK-returned insufficient funds from context image edit surfaces Spark Pac
   assert.match(payload.hint, /https:\/\/docs\.sogni\.ai\/pricing\/#spark-packs/);
 });
 
-test('Krea identity edit accepts two context images with shared defaults', () => {
+test('Krea identity edit accepts two context images with worker-owned defaults', () => {
   const { exitCode, state } = runCli([
     '-c', SCREENSHOT_FIXTURE,
     '-c', SCREENSHOT_FIXTURE,
@@ -732,8 +732,50 @@ test('Krea identity edit accepts two context images with shared defaults', () =>
   assert.ok(state?.lastEditProject, 'createImageEditProject was called');
   assert.equal(state.lastEditProject.modelId, 'krea2_identity_edit_v1_2');
   assert.equal(state.lastEditProject.contextImages.length, 2);
-  assert.equal(state.lastEditProject.steps, 10);
+  assert.equal(state.lastEditProject.steps, undefined);
+  assert.equal(state.lastEditProject.guidance, undefined);
+  assert.equal(state.lastEditProject.sampler, undefined);
+  assert.equal(state.lastEditProject.scheduler, undefined);
+});
+
+test('Krea identity edit preserves explicitly supplied execution controls', () => {
+  const { exitCode, state } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'krea2_identity_edit_v1_2',
+    '--steps', '12',
+    '--guidance', '1',
+    '--sampler', 'dpmpp_2m',
+    '--scheduler', 'beta',
+    'put a retro red coat on the subject',
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      krea2_identity_edit_v1_2: {
+        steps: { min: 8, max: 12, default: 10 },
+        guidance: { min: 1, max: 1, default: 1 },
+        comfySampler: { default: 'euler' },
+        comfyScheduler: { default: 'simple' },
+      },
+    }),
+  });
+
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastEditProject, 'createImageEditProject was called');
+  assert.equal(state.lastEditProject.steps, 12);
   assert.equal(state.lastEditProject.guidance, 1);
+  assert.equal(state.lastEditProject.sampler, 'dpmpp_2m');
+  assert.equal(state.lastEditProject.scheduler, 'beta');
+});
+
+test('multi-angle edits preserve their configured sampler and scheduler defaults', () => {
+  const { exitCode, state } = runCli([
+    '--multi-angle',
+    '-c', SCREENSHOT_FIXTURE,
+    '--azimuth', 'front-right',
+    'studio portrait',
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.ok(state?.lastEditProject, 'createImageEditProject was called');
   assert.equal(state.lastEditProject.sampler, 'euler');
   assert.equal(state.lastEditProject.scheduler, 'simple');
 });

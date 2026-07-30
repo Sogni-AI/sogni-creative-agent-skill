@@ -156,6 +156,22 @@ test('10Eros prompting guidance preserves start-frame and cinematic performance 
   assert.match(text, /Do not\s+emit section labels such as `Performance:` or `Dialogue:`/);
 });
 
+test('Krea identity routing follows typed shared policy without prose parsing', () => {
+  const skill = read('SKILL.md');
+  const models = read('references/models.md');
+
+  for (const text of [skill, models]) {
+    assert.match(text, /preserve likeness or\s+character identity/);
+    assert.match(text, /explicitly requested model always wins/i);
+    assert.match(text, /base scene first/);
+    assert.match(text, /1-4 sentence delta instruction/);
+    assert.match(text, /do not send a negative prompt/);
+    assert.match(text, /leave steps, guidance, sampler,\s+and scheduler unset/);
+    assert.match(text, /any\s+language; never route from keyword or regex matching/);
+  }
+  assert.match(skill, /agents must pass the Krea model explicitly/);
+});
+
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {
   const lineCount = read('SKILL.md').split('\n').length;
   assert.ok(lineCount <= 500,

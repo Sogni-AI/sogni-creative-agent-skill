@@ -87,6 +87,8 @@ import {
   extractToolCallProgressUpdate
 } from '@sogni-ai/sogni-intelligence-client/chatRun';
 import {
+  buildImageEditExecutionControls,
+  isKreaIdentityEditModel,
   SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
   prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
 } from '@sogni-ai/sogni-intelligence-client/media';
@@ -9127,20 +9129,23 @@ async function runMultiAngleFlow(client, log) {
       numberOfMedia: options.count,
       width: options.width,
       height: options.height,
-      steps,
-      guidance,
       tokenType: options.tokenType || 'spark',
       waitForCompletion: false,
-      disableNSFWFilter: options.noFilter === true
+      disableNSFWFilter: options.noFilter === true,
+      ...buildImageEditExecutionControls(options.model, {
+        steps,
+        guidance,
+        sampler: options.sampler,
+        scheduler: options.scheduler
+      }, {
+        steps: cliSet.steps ? options.steps : undefined,
+        guidance: cliSet.guidance ? options.guidance : undefined,
+        sampler: cliSet.sampler ? options.sampler : undefined,
+        scheduler: cliSet.scheduler ? options.scheduler : undefined
+      })
     };
     if (options.outputFormat) {
       editConfig.outputFormat = options.outputFormat;
-    }
-    if (options.sampler) {
-      editConfig.sampler = options.sampler;
-    }
-    if (options.scheduler) {
-      editConfig.scheduler = options.scheduler;
     }
     if (options.loras.length > 0) {
       editConfig.loras = options.loras;
@@ -10759,10 +10764,19 @@ async function main() {
         numberOfMedia: options.count,
         width: options.width,
         height: options.height,
-        steps,
-        guidance,
         tokenType: options.tokenType || 'spark',
-        disableNSFWFilter: options.noFilter === true
+        disableNSFWFilter: options.noFilter === true,
+        ...buildImageEditExecutionControls(options.model, {
+          steps,
+          guidance,
+          sampler: options.sampler || modelDefaults?.sampler,
+          scheduler: options.scheduler || modelDefaults?.scheduler
+        }, {
+          steps: cliSet.steps ? options.steps : undefined,
+          guidance: cliSet.guidance ? options.guidance : undefined,
+          sampler: cliSet.sampler ? options.sampler : undefined,
+          scheduler: cliSet.scheduler ? options.scheduler : undefined
+        })
       };
 
       if (options.outputFormat) {
@@ -10770,12 +10784,6 @@ async function main() {
       }
       if (gptImageQuality) {
         editConfig.gptImageQuality = gptImageQuality;
-      }
-      if (options.sampler || modelDefaults?.sampler) {
-        editConfig.sampler = options.sampler || modelDefaults.sampler;
-      }
-      if (options.scheduler || modelDefaults?.scheduler) {
-        editConfig.scheduler = options.scheduler || modelDefaults.scheduler;
       }
       if (options.loras.length > 0) {
         editConfig.loras = options.loras;

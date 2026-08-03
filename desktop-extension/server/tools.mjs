@@ -91,7 +91,7 @@ export const TOOLS = [
         ref_video: str('Absolute path or URL of reference video'),
         persona: str('Saved persona name (reference frame)'),
         target_resolution: num('Short-side target in px, preserves aspect'),
-        timeout_seconds: num('Generation timeout override (default 300)'),
+        timeout_seconds: num('Generation timeout override (default 1800)'),
       },
       required: ['prompt'],
     },

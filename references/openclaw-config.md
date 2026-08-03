@@ -54,7 +54,7 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
           "defaultFps": 16,
           "defaultDurationSec": 5,
           "defaultImageTimeoutSec": 30,
-          "defaultVideoTimeoutSec": 300,
+          "defaultVideoTimeoutSec": 1800,
           "defaultMusicDurationSec": 30,
           "defaultMusicTimeoutSec": 600,
           "credentialsPath": "~/.config/sogni/credentials",

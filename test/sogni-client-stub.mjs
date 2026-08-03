@@ -40,6 +40,7 @@ function persistState() {
       lastAudioProject: state.lastAudioProject ?? null,
       lastEditProject: state.lastEditProject ?? null,
       lastEstimateVideoCost: state.lastEstimateVideoCost ?? null,
+      canceledProjectIds: state.canceledProjectIds ?? null,
       emittedJobs: state.emittedJobs ?? null
     }, replacer));
   } catch (err) {
@@ -124,7 +125,7 @@ class SogniClientWrapper extends EventEmitter {
       return JSON.parse(process.env.SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON);
     }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
-    return { project: { id: 'proj-1' } };
+    return { project: this._makeProject('proj-1') };
   }
 
   async createImageEditProject(config) {
@@ -136,7 +137,7 @@ class SogniClientWrapper extends EventEmitter {
       return JSON.parse(process.env.SOGNI_AGENT_TEST_IMAGE_EDIT_PROJECT_RESULT_JSON);
     }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
-    return { project: { id: 'proj-1' } };
+    return { project: this._makeProject('proj-1') };
   }
 
   async createVideoProject(config) {
@@ -155,7 +156,7 @@ class SogniClientWrapper extends EventEmitter {
       return JSON.parse(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON);
     }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
-    return { project: { id: 'proj-1' }, videoUrls: ['https://example.com/video.mp4'] };
+    return { project: this._makeProject('proj-1'), videoUrls: ['https://example.com/video.mp4'] };
   }
 
   async createAudioProject(config) {
@@ -164,7 +165,7 @@ class SogniClientWrapper extends EventEmitter {
     state.lastAudioProject = config;
     persistState();
     this._emitJobs('audioUrl', config.numberOfMedia ?? 1, config.seed);
-    return { project: { id: 'proj-1' }, audioUrls: ['https://example.com/audio.mp3'] };
+    return { project: this._makeProject('proj-1'), audioUrls: ['https://example.com/audio.mp3'] };
   }
 
   async getBalance() {
@@ -244,6 +245,7 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   _emitJobs(urlField, count, seed) {
+    if (process.env.SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS) return;
     queueMicrotask(() => {
       const state = getState();
       const ext = urlField === 'videoUrl' ? 'mp4' : urlField === 'audioUrl' ? 'mp3' : 'png';
@@ -259,6 +261,18 @@ class SogniClientWrapper extends EventEmitter {
       }
       persistState();
     });
+  }
+
+  _makeProject(id) {
+    return {
+      id,
+      cancel: async () => {
+        const state = getState();
+        state.canceledProjectIds = state.canceledProjectIds || [];
+        state.canceledProjectIds.push(id);
+        persistState();
+      }
+    };
   }
 }
 

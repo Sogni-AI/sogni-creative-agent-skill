@@ -158,7 +158,7 @@
       "defaultVideoTimeoutSec": {
         "type": "integer",
         "minimum": 30,
-        "default": 300
+        "default": 1800
       },
       "defaultMusicDurationSec": {
         "type": "integer",

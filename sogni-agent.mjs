@@ -3402,7 +3402,7 @@ Hosted API Modes:
   --api-base-url <url>  Sogni API base URL (default: ${DEFAULT_API_BASE_URL})
 
 General:
-  -t, --timeout <sec>   Timeout in seconds (default: 30, video: 300, music: 600)
+  -t, --timeout <sec>   Timeout in seconds (default: 30, video: 1800, music: 600)
   --steps <num>         Override steps (model-dependent)
   --guidance <num>      Override guidance (model-dependent)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
@@ -4225,7 +4225,7 @@ if (options.music) {
     }
   }
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
-    options.timeout = 300000; // 5 min for video
+    options.timeout = 1800000; // 30 min for queued and long-running video jobs
   }
 } else if (options.photobooth) {
   // Photobooth uses SDXL Turbo + InstantID ControlNet
@@ -9043,10 +9043,61 @@ async function runSourceReel(log) {
   }
 }
 
+async function buildProjectTimeoutError(projects, timeoutMs, label = 'Project') {
+  const timeoutSeconds = timeoutMs / 1000;
+  const cancellableProjects = [...new Set((projects || []).filter(Boolean))]
+    .filter((project) => typeof project.cancel === 'function');
+  const projectIds = cancellableProjects
+    .map((project) => project.id)
+    .filter(Boolean);
+
+  if (cancellableProjects.length === 0) {
+    const error = new Error(
+      `Timeout after ${timeoutSeconds}s; no cancellable Sogni project handle was available. ` +
+      'The project may still be running.'
+    );
+    error.code = 'PROJECT_TIMEOUT_CANCEL_UNAVAILABLE';
+    error.details = { timeoutSeconds, projectIds: [], canceled: false };
+    return error;
+  }
+
+  const failures = [];
+  for (const project of cancellableProjects) {
+    try {
+      await project.cancel();
+    } catch (cancelError) {
+      failures.push({
+        projectId: project.id || null,
+        message: cancelError?.message || String(cancelError)
+      });
+    }
+  }
+
+  if (failures.length > 0) {
+    const failedIds = failures.map((failure) => failure.projectId).filter(Boolean);
+    const error = new Error(
+      `Timeout after ${timeoutSeconds}s; failed to cancel Sogni ${label.toLowerCase()} ` +
+      `${failedIds.join(', ') || '(unknown id)'}. The project may still be running.`
+    );
+    error.code = 'PROJECT_TIMEOUT_CANCEL_FAILED';
+    error.details = { timeoutSeconds, projectIds, canceled: false, failures };
+    return error;
+  }
+
+  const error = new Error(
+    `Timeout after ${timeoutSeconds}s; canceled Sogni ${label.toLowerCase()} ` +
+    `${projectIds.join(', ') || '(unknown id)'}.`
+  );
+  error.code = 'PROJECT_TIMEOUT';
+  error.details = { timeoutSeconds, projectIds, canceled: true };
+  return error;
+}
+
 async function runImageEditProjectWithEvents(client, editConfig, expectedCount, log, timeoutMs, label) {
   const results = [];
   let completed = 0;
   let projectId = null;
+  let activeProject = null;
 
   let resolvePromise;
   let rejectPromise;
@@ -9088,7 +9139,8 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
 
   const timeout = setTimeout(() => {
     cleanup();
-    rejectPromise(new Error(`Timeout after ${timeoutMs / 1000}s`));
+    void buildProjectTimeoutError([activeProject], timeoutMs, 'image edit project')
+      .then(rejectPromise);
   }, timeoutMs);
 
   client.on(ClientEvent.JOB_COMPLETED, onCompleted);
@@ -9096,6 +9148,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
 
   try {
     const projectResult = await client.createImageEditProject(withBillingMode(editConfig));
+    activeProject = projectResult?.project || null;
     projectId = projectResult?.project?.id || projectId;
 
     // Check for errors in the response (e.g., insufficient tokens)
@@ -10274,10 +10327,16 @@ async function main() {
     const results = [];
     let completedJobs = 0;
     let loopingStartImageBuffer;
+    const activeProjects = new Set();
+    const trackProjectResult = (projectResult) => {
+      if (projectResult?.project) activeProjects.add(projectResult.project);
+      return projectResult;
+    };
     
     const completionPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error(`Timeout after ${options.timeout / 1000}s`));
+        void buildProjectTimeoutError([...activeProjects], options.timeout)
+          .then(reject);
       }, options.timeout);
       
       client.on(ClientEvent.JOB_COMPLETED, (data) => {
@@ -10718,7 +10777,9 @@ async function main() {
         projectConfig.loraStrengths = options.loraStrengths;
       }
 
-      const videoResult = await client.createVideoProject(withBillingMode(projectConfig));
+      const videoResult = trackProjectResult(
+        await client.createVideoProject(withBillingMode(projectConfig))
+      );
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (videoResult?.error || videoResult?.message) {
@@ -10780,7 +10841,9 @@ async function main() {
         projectConfig.seed = options.seed;
       }
 
-      const audioResult = await client.createAudioProject(withBillingMode(projectConfig));
+      const audioResult = trackProjectResult(
+        await client.createAudioProject(withBillingMode(projectConfig))
+      );
 
       if (audioResult?.error || audioResult?.message) {
         throw buildProjectResultError(audioResult);
@@ -10845,9 +10908,9 @@ async function main() {
         editConfig.seed = options.seed;
       }
       
-      const editResult = isGptImage2ModelSelection(options.model)
+      const editResult = trackProjectResult(isGptImage2ModelSelection(options.model)
         ? await client.createImageProject(withBillingMode(editConfig))
-        : await client.createImageEditProject(withBillingMode(editConfig));
+        : await client.createImageEditProject(withBillingMode(editConfig)));
       if (editResult?.error || editResult?.message) {
         throw buildProjectResultError(editResult);
       }
@@ -10892,7 +10955,9 @@ async function main() {
       if (options.loras.length > 0) projectConfig.loras = options.loras;
       if (options.loraStrengths.length > 0) projectConfig.loraStrengths = options.loraStrengths;
 
-      const projectResult = await client.createImageProject(withBillingMode(projectConfig));
+      const projectResult = trackProjectResult(
+        await client.createImageProject(withBillingMode(projectConfig))
+      );
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (projectResult?.error || projectResult?.message) {
@@ -10967,7 +11032,9 @@ async function main() {
           projectConfig.seed = options.seed;
         }
 
-        const imageResult = await client.createImageProject(withBillingMode(projectConfig));
+        const imageResult = trackProjectResult(
+          await client.createImageProject(withBillingMode(projectConfig))
+        );
         if (imageResult?.error || imageResult?.message) {
           throw buildProjectResultError(imageResult);
         }
@@ -11143,9 +11210,11 @@ async function main() {
           await disableLiveModelAvailabilityEvents(client2);
 
           // Create second clip and wait for completion via events
+          let activeClip2Project = null;
           const clip2Promise = new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-              reject(new Error('Second clip generation timed out'));
+              void buildProjectTimeoutError([activeClip2Project], options.timeout, 'second clip project')
+                .then(reject);
             }, options.timeout);
 
             client2.on(ClientEvent.JOB_COMPLETED, async (data) => {
@@ -11189,6 +11258,7 @@ async function main() {
           });
 
           const clip2Result = await client2.createVideoProject(withBillingMode(projectConfig2));
+          activeClip2Project = clip2Result?.project || null;
 
           // Check for errors in the response (e.g., insufficient tokens)
           if (clip2Result?.error || clip2Result?.message) {

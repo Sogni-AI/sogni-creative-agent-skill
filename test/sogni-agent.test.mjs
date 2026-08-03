@@ -1046,6 +1046,30 @@ test('invalid video output format returns a validation error', () => {
   expectCliError(['--video', '--output-format', 'jpg', 'a cat'], 'Video output format must be "mp4".');
 });
 
+test('help advertises a 30 minute default video timeout', () => {
+  const { exitCode, stdout } = runCli(['--help']);
+  assert.equal(exitCode, 0);
+  assert.match(stdout, /video: 1800/);
+});
+
+test('video timeout explicitly cancels the Sogni project before exiting', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v',
+    '--duration', '1',
+    '--steps', '4',
+    '--timeout', '1',
+    'timeout cancellation regression'
+  ], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.deepEqual(state?.canceledProjectIds, ['proj-1']);
+  assert.match(stderr, /Timeout after 1s; canceled Sogni project proj-1\./);
+});
+
 test('default music generation uses ACE-Step turbo defaults and prompt', () => {
   const { exitCode, state, stdout } = runCli([
     '--music',

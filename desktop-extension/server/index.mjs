@@ -20,7 +20,12 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROTOCOL_FALLBACK = '2025-06-18';
-const HARD_KILL_MS = 15 * 60 * 1000; // generation ceiling; CLI enforces its own -t timeouts sooner
+const MIN_HARD_KILL_MS = 15 * 60 * 1000;
+const HARD_KILL_GRACE_MS = 60 * 1000;
+const DEFAULT_TOOL_TIMEOUT_SECONDS = {
+  generate_video: 1800,
+  generate_music: 600,
+};
 const PROGRESS_INTERVAL_MS = 10_000;
 const MAX_RESULT_CHARS = 20_000;
 
@@ -41,6 +46,17 @@ function send(msg) {
 
 function textResult(text, isError = false) {
   return { content: [{ type: 'text', text }], isError };
+}
+
+function hardKillTimeoutMs(toolName, input) {
+  const explicitTimeoutSeconds = Number(input?.timeout_seconds);
+  const timeoutSeconds = Number.isFinite(explicitTimeoutSeconds) && explicitTimeoutSeconds > 0
+    ? explicitTimeoutSeconds
+    : DEFAULT_TOOL_TIMEOUT_SECONDS[toolName];
+  if (!timeoutSeconds) return MIN_HARD_KILL_MS;
+  // Let the CLI's own timeout run first so it can await the normal Sogni
+  // project cancellation protocol before this process-level safety valve.
+  return Math.max(MIN_HARD_KILL_MS, (timeoutSeconds * 1000) + HARD_KILL_GRACE_MS);
 }
 
 // Tools marked local in the registry run inside this process and must work
@@ -104,7 +120,10 @@ async function callTool(name, input, progressToken) {
             },
           });
         }, PROGRESS_INTERVAL_MS);
-    const killer = setTimeout(() => child.kill('SIGKILL'), HARD_KILL_MS);
+    const killer = setTimeout(
+      () => child.kill('SIGKILL'),
+      hardKillTimeoutMs(name, input),
+    );
 
     const finish = (result) => {
       if (ticker) clearInterval(ticker);

@@ -1,3 +1,17 @@
+# [3.23.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.22.0...v3.23.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **video:** raise the default generation timeout to 30 minutes and explicitly cancel every known Sogni project before reporting a timeout
+* **video:** keep desktop and OpenClaw process safety limits behind the CLI timeout so network cancellation can finish first
+
+
+### Features
+
+* **models:** add MiniMax H3 text-to-video, image-to-video, and first/last-frame aliases with native frame-grid alignment
+
+
 # [3.22.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.21.0...v3.22.0) (2026-07-30)
 
 

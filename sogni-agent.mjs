@@ -1588,6 +1588,7 @@ function getMaxContextImages(modelId) {
 }
 
 function videoDurationLimitsLikeWrapper(modelId) {
+  if (isMiniMaxH3Model(modelId)) return { min: 5, max: 15 };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
   if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
@@ -1608,6 +1609,9 @@ function videoDurationLimitsLikeWrapper(modelId) {
 // explicit -w/-h/--target-resolution, config, and prompt-derived dimensions
 // still win (see the video preflight defaults block).
 function videoModelDimensionDefaultsLikeWrapper(modelId) {
+  if (isMiniMaxH3Model(modelId)) {
+    return { defaultWidth: 1344, defaultHeight: 768, maxDimension: 1344, dimensionMultiple: 32 };
+  }
   if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
     return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
   }
@@ -1860,6 +1864,11 @@ const LTX_TRANSITION_LORA_ID = 'transition';
 const LTX_TRANSITION_TRIGGER = 'zhuanchang';
 const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
 const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
+const MINIMAX_H3_MODEL_IDS = new Set([
+  'minimax-h3-fl2va-fp8_t2v',
+  'minimax-h3-fl2va-fp8_i2v',
+  'minimax-h3-fl2va-fp8_flf2v'
+]);
 const LTX23_10EROS_FIXED_SETTINGS = Object.freeze({
   steps: 9,
   guidance: 1,
@@ -1875,11 +1884,26 @@ const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
   LTX23_10EROS_MODEL_ID
 ]);
 
-function resolveSkillVideoModelAlias(modelId) {
+function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = false) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  if (normalized === 'minimax-h3' && workflow) {
+    if (workflow === 'i2v') {
+      return hasEndFrame ? 'minimax-h3-fl2va-fp8_flf2v' : 'minimax-h3-fl2va-fp8_i2v';
+    }
+    return 'minimax-h3-fl2va-fp8_t2v';
+  }
+  if (normalized === 'minimax-h3-t2v') {
+    return 'minimax-h3-fl2va-fp8_t2v';
+  }
+  if (normalized === 'minimax-h3-i2v') return 'minimax-h3-fl2va-fp8_i2v';
+  if (normalized === 'minimax-h3-flf2v') return 'minimax-h3-fl2va-fp8_flf2v';
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
+}
+
+function isMiniMaxH3Model(modelId) {
+  return MINIMAX_H3_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
 }
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
@@ -4043,7 +4067,10 @@ if (options.video) {
     options.videoWorkflow = workflowFromModel || inferVideoWorkflowFromAssets(options) || configuredDefaultVideoWorkflow || 't2v';
   }
   if (options.model) {
-    options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
+    options.model = resolveVideoModelAlias(
+      resolveSkillVideoModelAlias(options.model, options.videoWorkflow, Boolean(options.refImageEnd)),
+      options.videoWorkflow
+    );
   }
 }
 
@@ -4631,6 +4658,22 @@ if (options.video && !options.frames) {
     }
     options.duration = clampedDuration;
   }
+  if (isMiniMaxH3Model(options.model)) {
+    const desiredFrames = options.duration * 24;
+    options.frames = Math.max(
+      124,
+      Math.min(362, 124 + Math.round((desiredFrames - 124) / 17) * 17)
+    );
+    options.fps = 24;
+  }
+} else if (options.video && isMiniMaxH3Model(options.model)) {
+  if (options.frames < 124 || options.frames > 362 || (options.frames - 124) % 17 !== 0) {
+    fatalCliError('MiniMax H3 frames must be 124 + n×17, from 124 through 362.', {
+      code: 'INVALID_ARGUMENT',
+      details: { frames: options.frames, minimum: 124, maximum: 362, step: 17 }
+    });
+  }
+  options.fps = 24;
 }
 
 // Video dimensions:
@@ -4700,6 +4743,12 @@ if (options.video) {
   const normalizedVideoDims = normalizeVideoDimensionsLikeWrapper(options.width, options.height, videoDimensionRules);
   options.width = normalizedVideoDims.width;
   options.height = normalizedVideoDims.height;
+  if (isMiniMaxH3Model(options.model) && options.width * options.height > 1344 * 768) {
+    const scale = Math.sqrt((1344 * 768) / (options.width * options.height));
+    options.width = Math.max(32, Math.floor((options.width * scale) / 32) * 32);
+    options.height = Math.max(32, Math.floor((options.height * scale) / 32) * 32);
+    normalizedVideoDims.adjusted = true;
+  }
   if (normalizedVideoDims.adjusted && !options.quiet) {
     console.error(
       `Auto-adjusted video dimensions from ${originalVideoWidth}x${originalVideoHeight} ` +

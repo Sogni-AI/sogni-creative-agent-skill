@@ -244,6 +244,8 @@ tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
+MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, or `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition. H3 generates native stereo audio at fixed 24 fps. The initial Sogni release is routed to 32 GB-class workers.
+
 For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini` or `seedance2-fast` for 4K; both remain capped to the 720p lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
 ### Video editing, stitching, 360 turnarounds

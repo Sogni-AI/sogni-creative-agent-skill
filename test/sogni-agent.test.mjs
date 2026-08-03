@@ -1200,6 +1200,43 @@ test('text-to-video defaults to LTX 2.3 for native audio capable generation', ()
   assert.equal(state.lastVideoProject.fps, 24);
 });
 
+test('MiniMax H3 alias pins FL2VA t2v and snaps duration to the native frame grid', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--duration', '5',
+    'A locked cinematic shot with rain ambience and one spoken line.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_t2v');
+  assert.equal(state.lastVideoProject.frames, 124);
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.equal(state.lastVideoProject.width, 1344);
+  assert.equal(state.lastVideoProject.height, 768);
+});
+
+test('MiniMax H3 bare alias selects the first/last-frame workflow when both references exist', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'The opening frame moves continuously into the final composition.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_flf2v');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.equal(state.lastVideoProject.loras, undefined);
+});
+
+test('MiniMax H3 rejects off-grid explicit frame counts', () => {
+  expectCliError(
+    ['--video', '-m', 'minimax-h3', '--frames', '125', 'A short clip.'],
+    'MiniMax H3 frames must be 124 + n×17'
+  );
+});
+
 test('target resolution scales video short side while preserving aspect', () => {
   const { exitCode, state } = runCli([
     '--video',

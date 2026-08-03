@@ -50,6 +50,9 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 
 | Model | Speed | Use Case |
 |-------|-------|----------|
+| `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 FL2VA text-to-video at 24 fps with native stereo audio |
+| `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
+| `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `z_image_turbo_bf16` | Fast (~5-10s) | General purpose, default |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
@@ -298,6 +301,7 @@ model recommendations.
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
+- **MiniMax H3 FL2VA** uses dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid, and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). The initial Sogni release requires a 32 GB-class worker.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

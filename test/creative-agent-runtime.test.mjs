@@ -41,6 +41,13 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   assert.equal(formatModelRef('seedance', 1, 'image'), '@Image1');
   assert.equal(formatModelRef('gpt-image-2', 1, 'image'), 'Image 1');
   assert.equal(formatModelRef('ltx23', 1, 'image'), 'context_image_0');
+  // MiniMax H3 Ref2VA labels references with the literal tags its text encoder
+  // splices in front of the prompt; the bare GPT "Image 1" fallback measurably
+  // underperforms because it shares no token sequence with those labels.
+  assert.equal(formatModelRef('minimax-h3-ref2va-fp8_r2v', 1, 'image'), '<Picture 1>');
+  assert.equal(formatModelRef('minimax-h3-r2v', 2, 'video'), '<Video 2>');
+  assert.equal(formatModelRef('minimax-h3-r2v', 3, 'audio'), '<Audio 3>');
+  assert.equal(formatModelRef('happyhorse-1.1-r2v', 1, 'image'), '[Image 1]');
   assert.ok(SESSION_CONTROL_SKILL.toolNames.includes('finalize_response'));
 
   const registry = new SkillRegistry();

@@ -1,3 +1,10 @@
+# [3.25.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.24.0...v3.25.0) (2026-08-04)
+
+
+### Features
+
+* **video:** document MiniMax H3 reference workflows ([22bece3](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/22bece3815ca9fb684e416a7ad2958ddc815f045))
+
 # [3.24.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.23.0...v3.24.0) (2026-08-04)
 
 

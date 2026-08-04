@@ -1,8 +1,16 @@
-# Video Prompting Guide (LTX-2.3, pacing, orientation, camera language)
+# Video Prompting Guide (LTX-2.3, MiniMax H3, pacing, orientation, camera language)
 
 Read this before writing any text-to-video or image-to-video prompt for LTX
-models, and whenever the user asks for "hd", "1080p", "4k", "uhd", or
-"high-res" video so you can choose between the LTX and Seedance paths.
+models, before writing any MiniMax H3 prompt, and whenever the user asks for
+"hd", "1080p", "4k", "uhd", or "high-res" video so you can choose between the
+LTX and Seedance paths.
+
+Both families take natural cinematic language, but they want different
+**shapes**. LTX wants one unbroken prose paragraph with no line breaks and no
+negative phrasing. MiniMax H3 wants free-form prose laid out as a timed shot
+list, with explicit audio direction and in-prompt negative direction. Do not
+carry LTX's single-paragraph, positive-only, no-markup rule into an H3 prompt.
+Pick the section that matches the model you are about to invoke.
 
 ## LTX-2.3 Prompt Rule
 
@@ -30,7 +38,7 @@ it into an LTX-2.3-safe prompt before calling `sogni-agent`.
   "she says something," or "the couple discusses the scene."
 - Budget spoken dialogue at about 3 words per second, plus about 1 second for each meaningful acting beat or pause.
 - Express emotion through visible physical cues such as posture, grip, jaw tension, breathing, or pacing. Ambient sound can be woven into the prose naturally.
-- Use positive phrasing only. Do not add negative prompts, "no ..." clauses, on-screen text/logo requests, vague filler words like `beautiful` or `nice`, or structural markup such as `[DIALOGUE]`.
+- Use positive phrasing only. Do not add negative prompts, "no ..." clauses, on-screen text/logo requests, vague filler words like `beautiful` or `nice`, or structural markup such as `[DIALOGUE]`. **This positive-only, no-markup rule is scoped to the LTX family only.** MiniMax H3 is the opposite on both counts: it responds unusually well to in-prompt negative direction ("no music, no slow motion") and to plain bracketed timecodes such as `[0-3 seconds]`, and any markup the user wrote themselves must be preserved rather than stripped — see [MiniMax H3 Prompting](#minimax-h3-prompting).
 - Keep action density proportional to duration. For short clips, describe one main beat rather than several separate events.
 - Preserve the user's request, but expand it into cinematic prose. Do not invent a different story just to make the prompt longer.
 
@@ -69,6 +77,293 @@ When the user uses loose camera language, translate it into concrete motion phra
 User ask: "4k video of a woman in a neon alley"
 
 Use this shape instead: "A medium cinematic shot frames a woman in her 30s standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement while warm steam drifts from street vents. She wears a dark trench coat with damp strands of black hair clinging near her cheek as light glances across the fabric texture and the brick walls behind her. She turns toward the camera and steps forward with measured focus, one hand tightening around the strap of her bag while rain taps softly on the metal fire escape and a distant train hum rolls through the block. The camera performs a slow push-in as her jaw sets and her breathing steadies, maintaining smooth stabilized motion and a tense urban-thriller mood."
+```
+
+## MiniMax H3 Prompting
+
+Write H3 prompts as **natural cinematic prose**. There is no required structure,
+no field names, and no mandatory tags. Still expand a one-line user request into
+a fully directed scene — H3 rewards detail and punishes slogans — but expand it
+in plain English, the way you would brief a DP and a sound designer.
+
+Applies to `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v`, and
+`minimax-h3-flf2v` (worker ids `minimax-h3-fl2va-fp8_t2v`,
+`minimax-h3-fl2va-fp8_i2v`, `minimax-h3-fl2va-fp8_flf2v`).
+
+### Why this guidance is natural-language-first
+
+The H3 tool contract accepts ordinary prompt text and does not require a tagged
+IR wrapper. Use natural cinematic prose by default. MiniMax's tagged dialogue
+and three-field IR forms remain valid optional inputs, so preserve them when a
+user supplies them; see
+[Optional / advanced: MiniMax's IR markup](#optional--advanced-minimaxs-ir-markup).
+
+### Fixed model facts
+
+- **24 fps, always.** Do not pass an fps override.
+- **Frame counts sit on the `124 + n×17` grid**, from `124` through `362` —
+  i.e. **5.17 s to 15.08 s**. The CLI snaps `--duration` onto that grid; an
+  off-grid explicit `--frames` is a hard error.
+- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
+  `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
+- **20 steps, guidance/CFG 1, distilled.** Do not send steps, guidance, sampler,
+  scheduler, or a **negative prompt**. The checkpoint is CFG-distilled with
+  guidance locked at 1, so there is no negative branch at all: a
+  `negativePrompt` parameter is ignored wherever it is accepted. Negative
+  direction goes in the prompt text instead.
+- **Native 32 kHz stereo audio is generated jointly with the picture.** Every
+  sound — dialogue, foley, ambience, score — exists only because the prompt
+  asked for it. `generateAudio=false` strips that generated track from the
+  delivered file; it does not skip audio generation.
+- **Sogni's H3 is the 768p-class open-weights release.** Do not offer or claim
+  2K; MiniMax's 2K stage is hosted-only and is not part of the open release.
+- **Prompt length:** fal documents up to **7,000 characters** for H3, and timed
+  shot lists get long. The Sogni CLI does not truncate. If the surface you are
+  writing for caps prompts shorter than that, flag the cap explicitly rather
+  than silently trimming a shot list.
+- The initial Sogni release is routed to 32 GB-class workers.
+
+Because `--duration` snaps to the frame grid, the delivered length is rarely the
+integer the user asked for:
+
+| `--duration` | Frames | Actual length |
+|---|---|---|
+| 5 | 124 | 5.17 s |
+| 6 | 141 | 5.88 s |
+| 8 | 192 | 8.00 s |
+| 10 | 243 | 10.13 s |
+| 12 | 294 | 12.25 s |
+| 15 | 362 | 15.08 s |
+
+### How to write an H3 prompt
+
+In priority order.
+
+**1. Write natural cinematic prose.** No required structure, no field names, no
+tags. Open with the setting, the look, and who is in frame, then direct what
+happens. Every detail should be something visible or audible.
+
+**2. Use a timed shot list for anything longer than a single beat.** Plain
+bracketed timecodes — `[0-2 seconds] …`, `[2-5 seconds] …` — one beat per
+bracket, in order, covering the whole duration. **This is the single
+highest-leverage technique for H3.** It fixes pacing and prevents slideshow
+drift, where a long clip decays into a sequence of near-still poses. Keep the
+beat count proportional to length: roughly one beat per 2-4 seconds, not a
+montage.
+
+**3. Direct the audio as deliberately as the picture.** Name the ambience, the
+specific spot effects, and the music by instrumentation and timing ("bring in
+the low beat at 3 seconds", "sparse upright bass, no drums"). Plain labels
+inside the prose work well and read naturally — `Audio:`, `Sound design:`, or
+`BGM:` on their own line. Say explicitly when you want **no music**; left
+unsaid, H3 will invent some.
+
+**4. Write dialogue as ordinary quoted prose.** Name the speaker, then the line
+in double quotes, plus the delivery:
+`The pilot says, flat and tired: "AI needs a lot more datacenters."` Preserve
+the user's exact words and punctuation — never translate, paraphrase, or clean
+them up. Budget roughly 3 words per second plus about 1 second for each
+meaningful acting beat or pause; at 10 seconds, two short lines with reactions
+is a full clip.
+
+**5. State what you do not want, directly in the prompt text.** Negative
+direction is unusually effective on H3 — "no music", "no slow motion", "no lens
+flare", "no on-screen text", "do not change her jacket". There is no
+negative-prompt field to put it in, so it belongs in the prose, usually as a
+short closing line.
+
+**6. Lock identity by naming concrete features, and give every reference image
+an explicit job.** "Use the first frame for the character; keep her olive
+jacket, chin-length dark hair, and the red vinyl seat." For `flf2v`, describe
+the *motion path* between the two images rather than describing two static
+frames. Reference images are the identity anchor — restate the features you
+need preserved instead of assuming the model will hold them.
+
+**7. Use real camera and film vocabulary.** Lens ("35mm", "long lens"), movement
+("slow push-in", "handheld tracking follow", "static"), exposure and stock
+("blown-out window highlights", "16mm grain"). Describe transitions as physical
+events rather than named editing effects: "a passing truck fills the frame and
+the next scene is already on the other side of it" beats "wipe transition".
+
+### Worked example — text-to-video
+
+```text
+User ask: "10 second video of a barista and a customer arguing about oat milk"
+
+sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./cafe.mp4 "<prompt below>"
+```
+
+```text
+A narrow espresso bar on a weekday morning, shot on a 35mm lens. Soft window
+light from the left rakes across a brushed-steel machine and a glass pastry
+case. Live-action, unstylized, slightly desaturated.
+
+[0-3 seconds] Medium two-shot. A barista in her late twenties slides a small
+white cup across the counter. A customer in a grey overcoat, mid-forties, stops
+the saucer with two fingers. The camera pushes in slowly. He says, quiet and
+clipped: "I asked for oat milk."
+
+[3-7 seconds] Close-up over his shoulder, static. She lifts the oat carton,
+turns it upside down to show it is empty, and sets it back on the wood. Flat,
+even delivery: "We ran out at six this morning."
+
+[7-10 seconds] Back to the two-shot. His jaw tightens, he pulls the cup toward
+himself, and steam curls past his face while she turns to the next ticket.
+
+Audio: low cafe room tone under everything, a steam wand hissing at 1 second,
+ceramic clinking on the saucer, the hollow knock of the empty carton on wood at
+5 seconds, a chair leg dragging behind them. Dialogue is close and dry, no
+reverb. No music.
+
+No slow motion, no lens flare, no on-screen text.
+```
+
+### Worked example — image-to-video
+
+```text
+User ask (with an uploaded portrait): "have her look up and say she's not going back"
+
+sogni-agent -q --video -m minimax-h3-i2v --ref ./portrait.png --duration 6 -w 768 -h 1344 -o ./reply.mp4 "<prompt below>"
+```
+
+```text
+Use the reference image as the first frame and keep the woman exactly as she is:
+dark chin-length hair, olive canvas jacket, the red vinyl seatback behind her,
+and the rain-streaked window to her right on a night bus.
+
+[0-2 seconds] Static medium close-up. She lowers her phone into her lap and
+lifts her gaze from her hands to the window. Passing sodium streetlights slide
+across her cheek and wash out her reflection in the glass.
+
+[2-4 seconds] She says, low and unhurried, barely above the engine: "I'm not
+going back."
+
+[4-6 seconds] She turns her head a few degrees toward the aisle, sets her jaw,
+and closes one hand around the strap of the bag in her lap. The camera holds.
+
+Sound design: steady diesel drone and the rattle of the bus frame throughout,
+rain ticking on the glass, canvas shifting as she moves, one air-brake hiss near
+the end. BGM: two widely spaced piano notes over sustained low strings, fading
+out before the last second.
+
+One continuous shot, no cuts. Do not change her hairstyle, jacket, or the seat
+colour.
+```
+
+Round the brackets to whole seconds even though the grid rarely delivers one:
+`--duration 6` renders 141 frames (5.88 s) and `--duration 10` renders 243
+frames (10.13 s). H3 reads the shot list as pacing, not as a frame-accurate
+edit decision list, so the last bracket does not need to match the delivered
+length exactly.
+
+### Optional / advanced: MiniMax's IR markup
+
+MiniMax also defines a tagged intermediate format. Treat it as optional: useful
+occasionally, never required, and **never strip a user's own markup if they
+wrote it** — pass it through verbatim.
+
+Where it can still earn its place: many speakers who need to stay distinct
+across cuts, non-English dialogue where an explicit language tag removes
+ambiguity, and speech that must survive a cut or run past the end of the clip.
+
+**Dialogue tags.** Only the language tag and the spoken words go inside
+`<d>…</d>`. The speaker's identifying phrase, ID, action, and delivery all stay
+outside it:
+
+```text
+The young woman with a quiet, breathy voice (S1) says: <d>[English] I get off at the next station.</d>
+The two children (S1,S2) shout together, <d>[English] Wait for us!</d>
+```
+
+- Speaker IDs are `(S1)`, `(S2)`, … assigned in order of first vocal event and
+  kept stable across every shot. A character who never vocalizes gets no ID. Two
+  or more already-numbered speakers vocalizing together use a compound ID such
+  as `(S1,S2)`.
+- Supported dialogue languages: Arabic, Chinese, English, French, German,
+  Italian, Japanese, Korean, Portuguese, Russian, Spanish. The tag is the
+  English language name in square brackets, e.g. `<d>[Japanese] …</d>`.
+- **Voiceover** uses the exact phrase `says in an off-screen voiceover`, and the
+  `<d>` block is followed by a statement that the on-screen character's lips
+  stay closed:
+
+  ```text
+  The man (S1) says in an off-screen voiceover: <d>[English] I still remember that road.</d> while his lips remain completely closed.
+  ```
+
+- `<scenetrans>` marks one line of dialogue or lyrics that crosses a cut: place
+  it at the connecting point in **both** parts, and state explicitly that the
+  audio continues across the cut (`continues seamlessly across the cut`,
+  `continues uninterrupted into the next shot`, `carries over from the previous
+  shot`, `remains audible across the transition`).
+- `<cutoff>` marks speech that is truncated by the end of the video.
+
+**Shot markers and the camera vocabulary.** In the IR format, `[Shot 1]` opens
+with the overall style and initial composition and takes no timestamp; every
+later shot opens with a strictly increasing cut time — `[Shot 2] At 00:03.500,
+the camera cuts to …` (also `the shot cuts to` / `transitions to` / `changes
+to` / `switches to`). The IR's camera motion types are `Zoom In/Out`, `Push
+In/Pull Out`, `Pan Left/Right`, `Truck Left/Right`, `Tilt Up/Down`, `Pedestal
+Up/Down`, `Arc Shot`, `Tracking Shot`, `Static Shot`, `Shake
+Slightly/Strongly`, `POV`, and `Roll Clockwise/Counterclockwise`, optionally
+qualified `with small amplitude` / `with large amplitude` and `at slow speed` /
+`at fast speed`. These are good words to use in plain prose too — a timed shot
+list with `[0-3 seconds]` timecodes carries the same information without the
+markers.
+
+**The three-field IR document.** MiniMax's rewriter emits an optional alignment
+line, a blank line, then exactly three labelled fields in this order:
+
+```text
+integrated_multimodal_description: [Shot 1] ...
+
+overall_soundscape: ...
+
+non_diegetic_music: ...
+```
+
+`integrated_multimodal_description` is the whole audiovisual timeline;
+`overall_soundscape` is 1-4 sentences of ambience, physical action sound, and
+non-verbal human sound (no dialogue, singing, or diegetic music);
+`non_diegetic_music` is 1-3 sentences of score-only instrumentation, tempo, and
+dynamics. `N/A` is the schema's token for "nothing here" — used in
+`non_diegetic_music` for no score, and in `overall_soundscape` only for a
+deliberately silent video. Writing this document by hand is supported but buys
+nothing over the prose examples above.
+
+**Alignment instruction lines (i2v / flf2v only).** These pin a reference image
+to a timestamp. Plain-English reference jobs ("use the reference image as the
+first frame") work as well in Sogni's testing, but the verbatim lines are
+available when a precise timestamp matters. Text-to-video has no alignment line.
+
+Image-to-video (`minimax-h3-i2v`, one `--ref`):
+
+```text
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+```
+
+First frame → last frame (`minimax-h3-flf2v`, `--ref` plus `--ref-end`). Note
+the bare `Picture 1` / `Shot 1` with **no** angle or square brackets, and the em
+dash (`—`) with a space on each side:
+
+```text
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.
+```
+
+`N` is the index of the actual final shot (`Shot 1` for the usual single-shot
+transition), and `S.SS` is the effective duration to exactly two decimal places
+— `10.13` for 243 frames at 24 fps (243 ÷ 24 = 10.125, rounded up).
+
+### Agent-ready H3 command shapes
+
+```bash
+# Text-to-video (landscape)
+sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt>"
+
+# Image-to-video from one first frame (portrait)
+sogni-agent -q --video -m minimax-h3-i2v --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<H3 prose prompt naming the reference image's job>"
+
+# First frame -> last frame transition
+sogni-agent -q --video -m minimax-h3-flf2v --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt describing the motion path between the two frames>"
 ```
 
 ## High-Res Video Routing

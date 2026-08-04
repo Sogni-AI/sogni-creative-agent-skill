@@ -166,6 +166,13 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
+# MiniMax H3 (fixed 24fps, native stereo audio + dialogue; natural prose prompt
+# with a timed shot list and audio direction — see references/video-prompting.md).
+# t2v default; --ref = i2v; --ref + --ref-end = flf2v.
+sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<H3 prose prompt>"
+sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<H3 prose prompt>"
+sogni-agent --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 "<H3 prose prompt>"
+
 # HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
 # i2v from one first-frame image (--ref); r2v from 1-9 reference images (-c).
 sogni-agent --video -m happyhorse --duration 8 "A glowing jellyfish drifts through a neon city"
@@ -244,7 +251,9 @@ tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
-MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, or `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition. H3 generates native stereo audio at fixed 24 fps. The initial Sogni release is routed to 32 GB-class workers.
+MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, or `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `generateAudio=false` can strip that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`; send no steps, guidance, sampler, scheduler, or negative prompt. It is the 768p-class open-weights release — do not claim 2K. The initial Sogni release is routed to 32 GB-class workers.
+
+**H3 takes natural cinematic prose**, not a required structured document. Expand the user's one-liner into a directed scene: a **timed shot list** with bracketed timecodes (`[0-2 seconds] …`) for anything longer than one beat, deliberate **audio direction** (ambience, specific SFX, music by instrumentation and timing; say so when you want no music), dialogue as ordinary quoted prose, and negative direction stated in the prompt text since there is no negative-prompt field. MiniMax's `<d>[Language] …</d>` + `(S1)` markup and three-field IR document are optional input forms; never invent or strip that markup when a user supplied it. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing an H3 prompt.
 
 For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini` or `seedance2-fast` for 4K; both remain capped to the 720p lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
@@ -272,7 +281,7 @@ When the requested image is meant to **repeat edge to edge without visible joins
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance or HappyHorse native audio, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / MiniMax H3 native audio and dialogue, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
 
 `ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 
@@ -355,7 +364,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 
 | Read this | When the task involves |
 |-----------|------------------------|
-| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; high-res/4K routing; orientation/aspect mapping; camera language |
+| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 prose prompts (timed shot lists, audio direction, quoted dialogue, optional IR markup); high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |

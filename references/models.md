@@ -50,9 +50,6 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 
 | Model | Speed | Use Case |
 |-------|-------|----------|
-| `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 FL2VA text-to-video at 24 fps with native stereo audio |
-| `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
-| `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `z_image_turbo_bf16` | Fast (~5-10s) | General purpose, default |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
@@ -147,6 +144,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
 | `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
 | `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
+| `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
+| `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
+| `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -230,6 +230,78 @@ and short in-scene text.
 
 *Source: fal "Happy Horse Prompting Guide" — <https://fal.ai/learn/tools/prompting-happy-horse>*
 
+## MiniMax H3 models
+
+MiniMax H3 is a Sogni-hosted video family (three discrete modes, no mini/fast
+variants) that generates picture and **native 32 kHz stereo audio jointly**.
+`generateAudio=false` strips the generated track from the delivered file rather
+than skipping audio generation. It is an explicit model choice, never a
+universal default. The bare `minimax-h3` selector resolves to the mode inferred
+from your references.
+
+| Model | Mode | Use Case |
+|-------|------|----------|
+| `minimax-h3` / `minimax-h3-t2v` | Text-to-video | Prompt-only clip with native audio (default for `-m minimax-h3` with no refs) |
+| `minimax-h3-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
+| `minimax-h3-flf2v` | First → last frame | Interpolate between `--ref` and `--ref-end` |
+
+The three modes share the FL2VA checkpoint: worker ids
+`minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
+`minimax-h3-fl2va-fp8_flf2v`. The CLI resolves those three short selectors,
+picking i2v vs flf2v from whether `--ref-end` is present.
+
+The H3 modes take image references only — they do not accept reference video or
+reference audio, because audio is generated natively. The initial Sogni release
+is routed to 32 GB-class workers.
+
+**Fixed parameters (do not override):**
+
+- **24 fps**, always.
+- **Frames on the `124 + n×17` grid**, `124` through `362` — **5.17 s to
+  15.08 s**. `--duration` snaps onto that grid; an off-grid explicit `--frames`
+  is a hard error.
+- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. `1344×768`
+  (landscape) and `768×1344` (portrait) are the primary sizes.
+- **20 steps, guidance/CFG 1, distilled** — send no steps, guidance, sampler,
+  scheduler, or **negative prompt**. The checkpoint is CFG-distilled with
+  guidance locked at 1, so there is no negative branch and a `negativePrompt`
+  parameter is ignored wherever it is accepted. Put negative direction in the
+  prompt text instead.
+- **768p-class open-weights release.** Do not offer or claim 2K; MiniMax's 2K
+  stage is hosted-only and not part of the open release.
+
+```bash
+sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt>"
+sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
+sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
+```
+
+### MiniMax H3 prompting
+
+H3 takes **natural cinematic prose** — no required structure, no field names, no
+mandatory tags. Still expand a one-line request into a fully directed scene, and
+in priority order:
+
+1. Write plain cinematic prose.
+2. For anything longer than a single beat, lay it out as a **timed shot list**
+   with bracketed timecodes (`[0-2 seconds] …`, `[2-5 seconds] …`). This is the
+   highest-leverage technique for H3 pacing and prevents slideshow drift.
+3. **Direct the audio** as deliberately as the picture — ambience, specific
+   spot effects, and music by instrumentation and timing. Plain `Audio:` /
+   `Sound design:` / `BGM:` labels inside the prose work well. Say explicitly
+   when you want no music.
+4. Write dialogue as ordinary quoted prose with the speaker and delivery named.
+5. State what you do **not** want in the prompt text; there is no
+   negative-prompt field.
+6. Give every reference image an explicit job and name the features to preserve.
+
+MiniMax's `<d>[Language] …</d>` + `(S1)` markup and the three-field IR document
+are optional input forms, not required wrappers around every prompt. Default to
+natural prose, and preserve markup a user supplied. **Read
+[`video-prompting.md`](video-prompting.md) § MiniMax H3 Prompting** for the full
+technique, worked natural-prose examples, the duration→frame snapping table, and
+the optional/advanced markup reference before writing an H3 prompt.
+
 ## LTX-2 / LTX-2.3 models
 
 ### LTX-2.3 10Eros
@@ -296,12 +368,15 @@ model recommendations.
 | HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
 | HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
 | HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
+| MiniMax H3 text-to-video with native stereo audio | `minimax-h3` (or `minimax-h3-t2v`) |
+| MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
+| MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 FL2VA** uses dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid, and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). The initial Sogni release requires a 32 GB-class worker.
+- **MiniMax H3** uses dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Steps 20, guidance 1, no negative prompt, native stereo audio, 32 GB-class workers. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

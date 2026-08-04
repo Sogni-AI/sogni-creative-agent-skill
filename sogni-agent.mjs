@@ -3508,6 +3508,15 @@ HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/108
   happyhorse-1.1-i2v                Image-to-video from a single first-frame image (--ref)
   happyhorse-1.1-r2v                Reference-to-video from 1-9 reference images (-c/--context)
 
+MiniMax H3 Video Model Selectors (fixed 24fps, native 32kHz stereo audio + dialogue,
+frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px, 32GB-class workers.
+Prompt is natural cinematic prose — a timed shot list ("[0-2 seconds] ...") plus
+explicit audio direction; see references/video-prompting.md "MiniMax H3
+Prompting". No negative prompt field: state negatives in the prompt text.):
+  minimax-h3                        Text-to-video (also accepts minimax-h3-t2v); --ref/--ref-end pick i2v/flf2v
+  minimax-h3-i2v                    Image-to-video from a single first-frame image (--ref)
+  minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
+
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
   wan_v2.2-14b-fp8_i2v_lightx2v   Default single-image image-to-video (fast)

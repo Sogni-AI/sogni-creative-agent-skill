@@ -595,7 +595,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 ## Video Sizing & Aspect Ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 FL2VA** uses a 32 px grid, fixed 24 fps, native stereo audio, 124–362 frames (`124 + n×17`), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). The initial Sogni release requires a 32 GB-class worker.
+- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.

@@ -407,6 +407,13 @@ sogni-agent --video -m seedance2 --workflow t2v \
   --ref-audio https://cdn.example.com/music.m4a \
   "Use @Image1 for product identity, @Video1 for camera movement, and @Audio1 for music rhythm"
 
+# MiniMax H3 text/image/reference-to-video (native 32 kHz stereo audio)
+sogni-agent --video -m minimax-h3 --duration 10 "<timed H3 prose prompt with audio direction>"
+sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<H3 image-to-video prompt>"
+sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png \
+  --ref-video motion.mp4 --ref-audio voice.m4a \
+  "<Picture 1> controls identity. <Picture 2> controls wardrobe. <Video 1> controls motion. <Audio 1> controls voice."
+
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
 
@@ -514,9 +521,10 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--video` | Generate video instead of image |
 | `--music` | Generate music/audio instead of image |
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | Music generation controls |
-| `--ref`, `--ref-audio`, `--ref-video` | Image/audio/video references; HTTPS refs are forwarded as URL context for Seedance |
+| `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio |
-| `--workflow <type>` | Force `t2v`, `i2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
+| `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
+| `--generate-audio`, `--no-generate-audio` | Keep or strip MiniMax H3's generated audio track; also controls generated-keyframe workflows |
 | `--api-chat` | Use `/v1/chat/completions` with Sogni creative-agent tools |
 | `--api-workflow` | Start a `/v1/creative-agent/workflows` durable workflow with explicit `input.steps`; optional `storyboard-video` preset |
 | `--workflow-input <json\|@path>` | Explicit durable workflow input JSON. Use `@path` to load JSON from a file. |
@@ -577,6 +585,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` or `minimax-h3-t2v` |
 | MiniMax H3 image-to-video | `minimax-h3-i2v` |
 | MiniMax H3 first-frame → last-frame video | `minimax-h3-flf2v` with `--ref A --ref-end B` |
+| MiniMax H3 reference-to-video | `minimax-h3-r2v` with up to 9 images, 3 videos, 3 audios / 12 files total |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
@@ -595,7 +604,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 ## Video Sizing & Aspect Ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
+- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. The separate `minimax-h3-r2v` checkpoint accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and prompts use per-type `<Picture 1>` / `<Video 1>` / `<Audio 1>` tags. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.

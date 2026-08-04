@@ -363,10 +363,11 @@ transition), and `S.SS` is the effective duration to exactly two decimal places
 locked frames: up to **9 reference images** (at least one is required),
 **3 reference videos** (24 fps, 2–15 s, each with an optional soundtrack) and
 **3 standalone audio clips**, **12 files maximum in total**. It runs a separate
-ref2va checkpoint, so it is never inferred — it must be chosen by name through
-the SDK's native upload fields or the `generate_video` tool with
-`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat;
-`sogni-agent` has no `-m minimax-h3-r2v` selector yet). Reference videos and
+ref2va checkpoint, so it is never inferred — it must be chosen by name with
+direct CLI `-m minimax-h3-r2v` or the `generate_video` tool's
+`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). Direct CLI
+uses `--ref` then repeatable `-c` for images, plus repeatable `--ref-video` and
+`--ref-audio` for those modalities. Reference videos and
 audio are additions to the image set, never replacements for it, and r2v has no
 frame anchors at all — for a locked opening frame use `minimax-h3-i2v`, and for a
 first-to-last-frame transition use `minimax-h3-flf2v`.
@@ -455,6 +456,9 @@ sogni-agent -q --video -m minimax-h3-i2v --ref ./first.png --duration 8 -w 768 -
 
 # First frame -> last frame transition
 sogni-agent -q --video -m minimax-h3-flf2v --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt describing the motion path between the two frames>"
+
+# Reference-to-video (reference order defines the prompt ordinals)
+sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<H3 prose assigning jobs to <Picture 1>, <Picture 2>, <Video 1>, and <Audio 1>>"
 ```
 
 ## High-Res Video Routing

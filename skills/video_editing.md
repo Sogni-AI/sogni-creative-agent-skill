@@ -1,6 +1,6 @@
 ---
 name: video_editing
-description: Source-conditioned video flows: animate a photo, audio-driven motion, video style transfer, Seedance/HappyHorse references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles).
+description: Source-conditioned video flows: animate a photo, audio-driven motion, video style transfer, Seedance/HappyHorse/MiniMax H3 references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles).
 always_loaded: false
 tool_names:
   - animate_photo
@@ -17,11 +17,11 @@ tool_names:
 
 # Video editing
 
-Convert a still image, audio track, or existing clip into video, plus Seedance multimodal references, HappyHorse image references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles) over previously rendered or uploaded clips.
+Convert a still image, audio track, or existing clip into video, plus Seedance and MiniMax H3 multimodal references, HappyHorse image references, stitching, orbits, dance-montage compositions, segment extend/replace, and pure-ffmpeg post-production (overlay, subtitles) over previously rendered or uploaded clips.
 
 ## Tools
 
-- `animate_photo` — photo-to-video animation with LTX/WAN/Seedance/HappyHorse routing.
+- `animate_photo` — photo-to-video animation with LTX/WAN/Seedance/HappyHorse/MiniMax H3 i2v and first/last-frame routing.
 - `sound_to_video` — audio-synced video generation.
 - `video_to_video` — video style transfer with ControlNet.
 - `stitch_video` — concatenate previously rendered clips.
@@ -39,3 +39,4 @@ Convert a still image, audio track, or existing clip into video, plus Seedance m
 - For multiple prompt-only takes from one fixed source/end image and shared settings, prefer one Dynamic Prompt request with `numberOfVariations`/`-n`, then stitch the returned clips if the user asked for a single final video.
 - Keep per-clip prompt arrays and source/end image arrays when clips need different assets, durations, audio windows, or other per-output settings.
 - HappyHorse i2v uses exactly one first-frame image and r2v uses 1-9 image references; do not attach reference audio, reference video, ControlNet, or negative prompts.
+- MiniMax H3 i2v uses one first frame and H3 flf2v uses both first and last frames. For a loose image/video/audio set use `generate_video` with explicit `minimax-h3-r2v`; r2v references are roles, not frame anchors.

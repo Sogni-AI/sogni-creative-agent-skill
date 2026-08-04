@@ -147,7 +147,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
 | `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
 | `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
-| `minimax-h3-r2v` | Standard | MiniMax H3 reference-to-video from a whole reference SET (up to 9 images / 3 videos / 3 audio); available through the SDK and creative-agent tool, with no CLI selector yet |
+| `minimax-h3-r2v` | Standard | MiniMax H3 reference-to-video from a whole reference set (up to 9 images / 3 videos / 3 audio, 12 files total) |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -235,8 +235,8 @@ and short in-scene text.
 
 MiniMax H3 is a Sogni-hosted video family (four discrete modes, no mini/fast
 variants) that generates picture and **native 32 kHz stereo audio jointly**.
-`generateAudio=false` strips the generated track from the delivered file rather
-than skipping audio generation. It is an explicit model choice, never a
+`--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
+from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3` selector resolves to the mode inferred
 from your references; **`minimax-h3-r2v` is never inferred** — it runs a
 different checkpoint and must be asked for by name.
@@ -252,10 +252,9 @@ The first three modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
 `minimax-h3-fl2va-fp8_flf2v`. The CLI resolves those three short selectors,
 picking i2v vs flf2v from whether `--ref-end` is present. Reference-to-video is a
-SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — and is not one of
-the CLI's `-m` selectors today; reach it through the SDK's native upload fields
-or the creative-agent `generate_video` tool with
-`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
+SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — selected directly
+with `-m minimax-h3-r2v`, or through the creative-agent `generate_video` tool
+with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -283,6 +282,7 @@ initial Sogni release is routed to 32 GB-class workers.
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt>"
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
+sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<H3 prompt using <Picture 1>/<Picture 2>/<Video 1>/<Audio 1>>"
 ```
 
 ### MiniMax H3 prompting
@@ -316,10 +316,11 @@ the optional/advanced markup reference before writing an H3 prompt.
 `minimax-h3-r2v` (worker id `minimax-h3-ref2va-fp8_r2v`) is the one H3 mode that
 conditions on a whole **reference set** instead of one or two locked frames. It
 runs its own ref2va checkpoint, so it is **never inferred** from stray uploads
-the way HappyHorse r2v is — the user or the plan must name it. It is reached
-through the SDK's native upload fields or the creative-agent `generate_video`
-tool (`videoModel="minimax-h3-r2v"`, including callers such as Sogni Chat);
-`sogni-agent` has no `-m minimax-h3-r2v` selector yet.
+the way HappyHorse r2v is — the user or the plan must name it. Direct CLI uses
+`-m minimax-h3-r2v`: `--ref` is optional loose image 1, repeatable `-c` supplies
+the remaining images, and repeatable `--ref-video` / `--ref-audio` supply those
+modalities. The creative-agent `generate_video` tool uses
+`videoModel="minimax-h3-r2v"` plus its typed reference-index arrays.
 
 Everything in [MiniMax H3 models](#minimax-h3-models) above still applies: 24 fps,
 the `124 + n×17` frame grid (5.17–15.08 s), dimensions divisible by 32 inside the
@@ -485,7 +486,7 @@ model recommendations.
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` (or `minimax-h3-t2v`) |
 | MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
 | MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
-| MiniMax H3 from a set of loose references (identity + wardrobe + location, a motion clip, a voice clip) | `minimax-h3-r2v` — SDK / `generate_video`; no CLI selector yet |
+| MiniMax H3 from a set of loose references (identity + wardrobe + location, a motion clip, a voice clip) | `minimax-h3-r2v` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios

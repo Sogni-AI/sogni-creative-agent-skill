@@ -1237,6 +1237,10 @@ test('MiniMax H3 alias pins FL2VA t2v and snaps duration to the native frame gri
   assert.equal(state.lastVideoProject.fps, 24);
   assert.equal(state.lastVideoProject.width, 1344);
   assert.equal(state.lastVideoProject.height, 768);
+  assert.equal(state.lastVideoProject.steps, undefined);
+  assert.equal(state.lastVideoProject.guidance, undefined);
+  assert.equal(state.lastVideoProject.sampler, undefined);
+  assert.equal(state.lastVideoProject.scheduler, undefined);
 });
 
 test('MiniMax H3 bare alias selects the first/last-frame workflow when both references exist', () => {
@@ -1258,6 +1262,103 @@ test('MiniMax H3 rejects off-grid explicit frame counts', () => {
   expectCliError(
     ['--video', '-m', 'minimax-h3', '--frames', '125', 'A short clip.'],
     'MiniMax H3 frames must be 124 + n×17'
+  );
+});
+
+test('MiniMax H3 i2v alias uses one first-frame image', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'minimax-h3-i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--duration', '8',
+    'Use the first frame for identity while she turns toward the window. Audio: rain and distant traffic. No music.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_i2v');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.equal(state.lastVideoProject.referenceImageEnd, undefined);
+  assert.equal(state.lastVideoProject.frames, 192);
+});
+
+test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-r2v-'));
+  const video1 = join(tempDir, 'motion-1.mp4');
+  const video2 = join(tempDir, 'motion-2.mp4');
+  const audio1 = join(tempDir, 'voice-1.m4a');
+  const audio2 = join(tempDir, 'voice-2.m4a');
+  writeFileSync(video1, Buffer.from('reference video one'));
+  writeFileSync(video2, Buffer.from('reference video two'));
+  writeFileSync(audio1, Buffer.from('reference audio one'));
+  writeFileSync(audio2, Buffer.from('reference audio two'));
+
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'minimax-h3-r2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '--ref-video', video1,
+    '--ref-video', video2,
+    '--ref-audio', audio1,
+    '--ref-audio', audio2,
+    '--no-generate-audio',
+    '--duration', '10',
+    '<Picture 1> controls identity. <Picture 2> controls wardrobe. <Video 1> controls motion. <Video 2> controls camera timing. <Audio 1> controls voice. <Audio 2> controls rhythm.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.equal(state.lastVideoProject.contextImages.length, 1);
+  assert.ok(state.lastVideoProject.referenceVideo);
+  assert.equal(state.lastVideoProject.referenceVideos.length, 1);
+  assert.ok(state.lastVideoProject.referenceAudio);
+  assert.equal(state.lastVideoProject.referenceAudios.length, 1);
+  assert.equal(state.lastVideoProject.generateAudio, false);
+  assert.equal(state.lastVideoProject.frames, 243);
+});
+
+test('MiniMax H3 r2v requires an image and is never inferred from loose references', () => {
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v', '--ref-video', 'motion.mp4', 'Use <Video 1> for motion.'],
+    'needs at least one reference image'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3', '-c', SCREENSHOT_FIXTURE, 'A reference-led scene.'],
+    't2v does not accept reference image/audio/video'
+  );
+});
+
+test('MiniMax H3 r2v enforces per-kind and total reference caps', () => {
+  expectCliError(
+    [
+      '--video', '-m', 'minimax-h3-r2v',
+      ...Array.from({ length: 10 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
+      'Assign every picture one role.'
+    ],
+    'at most 9 reference images'
+  );
+  expectCliError(
+    [
+      '--video', '-m', 'minimax-h3-r2v',
+      ...Array.from({ length: 9 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
+      '--ref-video', 'one.mp4', '--ref-video', 'two.mp4', '--ref-video', 'three.mp4',
+      '--ref-audio', 'one.m4a',
+      'Assign every reference one role.'
+    ],
+    'at most 12 reference files in total'
+  );
+});
+
+test('MiniMax H3 rejects sampling overrides and i2v end-frame misuse', () => {
+  expectCliError(
+    ['--video', '-m', 'minimax-h3', '--steps', '20', 'A short clip.'],
+    'omit --steps and --guidance'
+  );
+  expectCliError(
+    [
+      '--video', '-m', 'minimax-h3-i2v', '--ref', SCREENSHOT_FIXTURE,
+      '--ref-end', SCREENSHOT_FIXTURE, 'Move between frames.'
+    ],
+    'use -m minimax-h3-flf2v'
   );
 });
 
@@ -1730,7 +1831,7 @@ test('seedance v2v uploads local source video to v2 media URLs', async () => {
   });
 });
 
-test('non-seedance video rejects multiple --ref-audio entries', () => {
+test('non-seedance, non-H3-r2v video rejects multiple --ref-audio entries', () => {
   expectCliError(
     [
       '--video',
@@ -1741,7 +1842,7 @@ test('non-seedance video rejects multiple --ref-audio entries', () => {
       '--ref-audio', 'https://example.com/a2.m4a',
       'LTX should reject multi-audio.',
     ],
-    'Multiple --ref-audio entries are only supported for Seedance models'
+    'Multiple --ref-audio entries are supported only for Seedance loose references and MiniMax H3 r2v.'
   );
 });
 
@@ -4451,6 +4552,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--api-chat'), 'Help should include --api-chat');
   assert.ok(stdout.includes('--api-workflow'), 'Help should include --api-workflow');
   assert.ok(stdout.includes('--generate-audio'), 'Help should include --generate-audio');
+  assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
+  assert.ok(stdout.includes('9 images / 3 videos / 3 audios / 12 files total'), 'Help should include MiniMax H3 r2v limits');
   assert.ok(stdout.includes('--expand-prompt'), 'Help should include --expand-prompt');
   assert.ok(
     stdout.includes('sogni-agent --video \'A narrator says "welcome to the story" as ocean waves crash\''),

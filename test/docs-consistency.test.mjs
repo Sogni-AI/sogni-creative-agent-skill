@@ -172,6 +172,28 @@ test('Krea identity routing follows typed shared policy without prose parsing', 
   assert.match(skill, /agents must pass the Krea model explicitly/);
 });
 
+test('MiniMax H3 docs expose direct t2v, i2v, flf2v, and r2v support consistently', () => {
+  const checkedFiles = ['SKILL.md', 'README.md', 'references/models.md', 'references/video-prompting.md'];
+  for (const docFile of checkedFiles) {
+    const text = read(docFile);
+    assert.match(text, /minimax-h3-r2v/, `${docFile}: missing H3 r2v selector`);
+    assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
+      `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);
+  }
+  const skill = read('SKILL.md');
+  const models = read('references/models.md');
+  const prompting = read('references/video-prompting.md');
+  for (const text of [skill, models, prompting]) {
+    assert.match(text, /9 (?:reference )?images/);
+    assert.match(text, /3 (?:reference )?videos/);
+    assert.match(text, /3 (?:standalone |reference )?audio/);
+    assert.match(text, /12 files/);
+    assert.match(text, /<Picture 1>/);
+    assert.match(text, /<Video 1>/);
+    assert.match(text, /<Audio 1>/);
+  }
+});
+
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {
   const lineCount = read('SKILL.md').split('\n').length;
   assert.ok(lineCount <= 500,

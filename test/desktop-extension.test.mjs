@@ -135,6 +135,32 @@ test('generate_video maps refs and duration', () => {
   ]);
 });
 
+test('generate_video exposes MiniMax H3 r2v reference arrays and audio control', () => {
+  const tool = getTool('generate_video');
+  assert.ok(tool.inputSchema.properties.workflow.enum.includes('r2v'));
+  const args = tool.buildArgs({
+    prompt: '<Picture 1> controls identity. <Video 1> controls motion. <Audio 1> controls voice.',
+    workflow: 'r2v',
+    model: 'minimax-h3-r2v',
+    ref: '/tmp/identity.jpg',
+    reference_images: ['/tmp/wardrobe.jpg'],
+    ref_video: '/tmp/motion.mp4',
+    reference_videos: ['/tmp/camera.mp4'],
+    ref_audio: '/tmp/voice.m4a',
+    reference_audios: ['/tmp/rhythm.m4a'],
+    generate_audio: false,
+  });
+  assert.deepEqual(args, [
+    '--json', '-q', '--no-update-check', '--video',
+    '-m', 'minimax-h3-r2v', '--workflow', 'r2v',
+    '--ref', '/tmp/identity.jpg',
+    '--ref-audio', '/tmp/voice.m4a', '--ref-audio', '/tmp/rhythm.m4a',
+    '--ref-video', '/tmp/motion.mp4', '--ref-video', '/tmp/camera.mp4',
+    '-c', '/tmp/wardrobe.jpg', '--no-generate-audio',
+    '<Picture 1> controls identity. <Video 1> controls motion. <Audio 1> controls voice.',
+  ]);
+});
+
 test('generate_music maps lyrics and format', () => {
   const args = getTool('generate_music').buildArgs({
     prompt: 'bright indie pop chorus',

@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.25.0"
   homepage: https://sogni.ai
@@ -168,10 +168,11 @@ sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polish
 
 # MiniMax H3 (fixed 24fps, native stereo audio + dialogue; natural prose prompt
 # with a timed shot list and audio direction — see references/video-prompting.md).
-# t2v default; --ref = i2v; --ref + --ref-end = flf2v.
+# t2v default; --ref = i2v; --ref + --ref-end = flf2v; r2v is explicit.
 sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<H3 prose prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<H3 prose prompt>"
 sogni-agent --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 "<H3 prose prompt>"
+sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a "<H3 prompt using <Picture 1>/<Picture 2>/<Video 1>/<Audio 1>>"
 
 # HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
 # i2v from one first-frame image (--ref); r2v from 1-9 reference images (-c).
@@ -204,8 +205,9 @@ sogni-agent doctor --json
 | `-w` / `-h` | Width / height | 512×512 |
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
 | `--video`, `--music` | Generate video / music instead of image | - |
-| `--workflow <t>` | Force `t2v\|i2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
-| `--ref`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Start frame / end frame / audio / video / inpaint mask references | - |
+| `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
+| `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v | - |
+| `--generate-audio`, `--no-generate-audio` | Keep or strip MiniMax H3's jointly generated audio track | keep |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX-2.3 v2v control mode and outpaint canvas controls | - |
 | `--duration <sec>` | Video or music length | video 5, music 30 |
 | `--target-resolution <px>` | Short-side target preserving aspect ratio (use `2160` for Seedance 4K) | - |
@@ -251,7 +253,7 @@ tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
-MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, or `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `generateAudio=false` can strip that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`; send no steps, guidance, sampler, scheduler, or negative prompt. It is the 768p-class open-weights release — do not claim 2K. The initial Sogni release is routed to 32 GB-class workers.
+MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition, or explicitly select `-m minimax-h3-r2v` for a loose reference set. H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (repeat `--ref-video`), and **3 audio clips** (repeat `--ref-audio`), with **12 files total** and at least one image; it is never inferred. Address them as `<Picture 1>`, `<Video 1>`, and `<Audio 1>` in per-type submission order, give every reference one job, and never use `--ref-end` for r2v. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `--no-generate-audio` strips that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`; send no steps, guidance, sampler, scheduler, or negative prompt. It is the 768p-class open-weights release — do not claim 2K. The initial Sogni release is routed to 32 GB-class workers.
 
 **H3 takes natural cinematic prose**, not a required structured document. Expand the user's one-liner into a directed scene: a **timed shot list** with bracketed timecodes (`[0-2 seconds] …`) for anything longer than one beat, deliberate **audio direction** (ambience, specific SFX, music by instrumentation and timing; say so when you want no music), dialogue as ordinary quoted prose, and negative direction stated in the prompt text since there is no negative-prompt field. MiniMax's `<d>[Language] …</d>` + `(S1)` markup and three-field IR document are optional input forms; never invent or strip that markup when a user supplied it. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing an H3 prompt.
 

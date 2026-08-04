@@ -1867,8 +1867,16 @@ const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
 const MINIMAX_H3_MODEL_IDS = new Set([
   'minimax-h3-fl2va-fp8_t2v',
   'minimax-h3-fl2va-fp8_i2v',
-  'minimax-h3-fl2va-fp8_flf2v'
+  'minimax-h3-fl2va-fp8_flf2v',
+  'minimax-h3-ref2va-fp8_r2v'
 ]);
+const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
+const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
+  images: 9,
+  videos: 3,
+  audios: 3,
+  assets: 12
+});
 const LTX23_10EROS_FIXED_SETTINGS = Object.freeze({
   steps: 9,
   guidance: 1,
@@ -1887,6 +1895,7 @@ const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
 function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = false) {
   const normalized = String(modelId || '').trim().toLowerCase();
   if (normalized === 'minimax-h3' && workflow) {
+    if (workflow === 'r2v') return MINIMAX_H3_R2V_MODEL_ID;
     if (workflow === 'i2v') {
       return hasEndFrame ? 'minimax-h3-fl2va-fp8_flf2v' : 'minimax-h3-fl2va-fp8_i2v';
     }
@@ -1897,6 +1906,7 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
   }
   if (normalized === 'minimax-h3-i2v') return 'minimax-h3-fl2va-fp8_i2v';
   if (normalized === 'minimax-h3-flf2v') return 'minimax-h3-fl2va-fp8_flf2v';
+  if (normalized === 'minimax-h3-r2v') return MINIMAX_H3_R2V_MODEL_ID;
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
@@ -1904,6 +1914,29 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
 
 function isMiniMaxH3Model(modelId) {
   return MINIMAX_H3_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
+function isMiniMaxH3R2vModel(modelId) {
+  return String(modelId || '').trim().toLowerCase() === MINIMAX_H3_R2V_MODEL_ID;
+}
+
+function isMiniMaxH3ModelSelectionLocal(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === 'minimax-h3'
+    || normalized === 'minimax-h3-t2v'
+    || normalized === 'minimax-h3-i2v'
+    || normalized === 'minimax-h3-flf2v'
+    || normalized === 'minimax-h3-r2v'
+    || isMiniMaxH3Model(normalized);
+}
+
+function miniMaxH3ModeFromModelId(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  if (normalized === 'minimax-h3-t2v' || normalized === 'minimax-h3-fl2va-fp8_t2v') return 't2v';
+  if (normalized === 'minimax-h3-i2v' || normalized === 'minimax-h3-fl2va-fp8_i2v') return 'i2v';
+  if (normalized === 'minimax-h3-flf2v' || normalized === 'minimax-h3-fl2va-fp8_flf2v') return 'flf2v';
+  if (normalized === 'minimax-h3-r2v' || normalized === MINIMAX_H3_R2V_MODEL_ID) return 'r2v';
+  return null;
 }
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
@@ -3302,7 +3335,7 @@ Music Options:
 
 Video Options:
   --video, -v           Generate video instead of image
-  --workflow <type>     Video workflow: t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
+  --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5)
   --frames <num>        Override total frames (optional)
@@ -3310,21 +3343,22 @@ Video Options:
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
-  --ref <path|url>      Reference image for video (start/first frame on Seedance)
+  --ref <path|url>      Reference image for video (start frame; Picture 1 on H3 r2v)
   --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
                          defaults to the LTX-2.3 transition/morph model
                          (last frame on Seedance)
-  --ref-audio <path|url> Audio reference. Repeatable on Seedance models (up to 3 total);
+  --ref-audio <path|url> Audio reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
-                         direct-gen (use --api-chat for multi local-file uploads).
+                         direct-gen for Seedance; H3 r2v uploads local/remote files.
                          On LTX/WAN: single primary only (for ia2v/a2v/s2v lip-sync).
   --audio-start <sec>   Start offset into --ref-audio for audio-driven clips
   --audio-duration <sec> Duration slice from --ref-audio
   --reference-audio-identity <path>  Voice identity clip for LTX native audio
   --voice-persona <name>  Use saved persona voice clip as LTX voice identity
-  --ref-video <path|url> Video reference. Repeatable on Seedance models (up to 3 total);
+  --ref-video <path|url> Video reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
-                         direct-gen. On LTX/WAN: single primary for animate/v2v workflows.
+                         direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
+  --generate-audio, --no-generate-audio  Keep or strip MiniMax H3's generated audio track
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
@@ -3516,6 +3550,8 @@ Prompting". No negative prompt field: state negatives in the prompt text.):
   minimax-h3                        Text-to-video (also accepts minimax-h3-t2v); --ref/--ref-end pick i2v/flf2v
   minimax-h3-i2v                    Image-to-video from a single first-frame image (--ref)
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
+  minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
+                                     (9 images / 3 videos / 3 audios / 12 files total)
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
@@ -4006,12 +4042,15 @@ if (options.video) {
     const normalized = normalizeVideoWorkflow(options.videoWorkflow);
     if (normalized) {
       options.videoWorkflow = normalized;
-    } else if (options.videoWorkflow === 'r2v' && isHappyHorseModelSelectionLocal(options.model)) {
-      // HappyHorse adds a reference-to-video (r2v) mode that the shared
-      // SkillVideoWorkflow enum does not carry; accept it for HappyHorse only.
+    } else if (
+      options.videoWorkflow === 'r2v'
+      && (isHappyHorseModelSelectionLocal(options.model) || isMiniMaxH3ModelSelectionLocal(options.model))
+    ) {
+      // HappyHorse and MiniMax H3 add reference-to-video (r2v) modes that the
+      // shared SkillVideoWorkflow enum does not carry yet.
       options.videoWorkflow = 'r2v';
     } else {
-      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace (r2v on HappyHorse).`, {
+      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace (r2v on HappyHorse or MiniMax H3).`, {
         code: 'INVALID_ARGUMENT',
         details: { workflow: options.videoWorkflow }
       });
@@ -4037,6 +4076,31 @@ if (options.video) {
     } else {
       options.videoWorkflow = 't2v';
     }
+  }
+
+  // MiniMax H3 has four concrete modes. The FL2VA checkpoint covers t2v, i2v,
+  // and first/last-frame (represented by the CLI's i2v workflow); Ref2VA is a
+  // separate r2v checkpoint and is never inferred from loose references alone.
+  // Selecting minimax-h3-r2v or explicitly passing --workflow r2v is required.
+  if (isMiniMaxH3ModelSelectionLocal(options.model)) {
+    const pinnedMode = miniMaxH3ModeFromModelId(options.model);
+    const pinnedWorkflow = pinnedMode === 'flf2v' ? 'i2v' : pinnedMode;
+    if (pinnedWorkflow) {
+      if (options.videoWorkflow && options.videoWorkflow !== pinnedWorkflow) {
+        fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
+          code: 'INVALID_ARGUMENT',
+          details: { workflow: options.videoWorkflow, model: options.model }
+        });
+      }
+      options.videoWorkflow = pinnedWorkflow;
+    } else if (!options.videoWorkflow) {
+      options.videoWorkflow = (options.refImage || options.refImageEnd) ? 'i2v' : 't2v';
+    }
+    options.model = resolveSkillVideoModelAlias(
+      options.model,
+      options.videoWorkflow,
+      Boolean(options.refImageEnd)
+    );
   }
 
   // HappyHorse 1.1 has no v2v/ia2v. A concrete `happyhorse-1.1-<mode>` id pins
@@ -4401,6 +4465,8 @@ if (options.photobooth) {
 if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isHappyHorseVideo = isHappyHorseModel(options.model);
+  const isMiniMaxH3Video = isMiniMaxH3Model(options.model);
+  const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
   if (isSeedanceVideo && !['t2v', 'ia2v', 'v2v'].includes(options.videoWorkflow)) {
     fatalCliError('Seedance models support only t2v, ia2v, or v2v workflows.', {
       code: 'INVALID_ARGUMENT',
@@ -4413,15 +4479,42 @@ if (options.video) {
       details: { workflow: options.videoWorkflow, model: options.model }
     });
   }
+  if (isMiniMaxH3Video && !['t2v', 'i2v', 'r2v'].includes(options.videoWorkflow)) {
+    fatalCliError('MiniMax H3 models support only t2v, i2v/flf2v, or r2v workflows.', {
+      code: 'INVALID_ARGUMENT',
+      details: { workflow: options.videoWorkflow, model: options.model }
+    });
+  }
   if (isHappyHorseVideo && options.videoControlNetName) {
     fatalCliError('HappyHorse video models do not support ControlNet.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, controlNetName: options.videoControlNetName }
     });
   }
+  if (isMiniMaxH3Video && (options.videoControlNetName || options.refMask || options.referenceAudioIdentity)) {
+    fatalCliError('MiniMax H3 does not support ControlNet, masks, or LTX voice-identity references.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
+  }
+  if (isMiniMaxH3Video && (cliSet.steps || cliSet.guidance)) {
+    fatalCliError('MiniMax H3 uses fixed sampling settings; omit --steps and --guidance.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, steps: options.steps, guidance: options.guidance }
+    });
+  }
+  if (isHappyHorseVideo && options.apiGenerateAudio !== null) {
+    fatalCliError('HappyHorse native audio is always on; omit --generate-audio/--no-generate-audio.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
+  }
 
   if (options.videoWorkflow === 't2v') {
-    if (!isSeedanceVideo && (options.refImage || options.refImageEnd || options.refAudio || options.refVideo)) {
+    if (!isSeedanceVideo && (
+      options.refImage || options.refImageEnd || options.refAudio || options.refVideo
+      || options.contextImages.length > 0 || options.refAudios.length > 0 || options.refVideos.length > 0
+    )) {
       fatalCliError('t2v does not accept reference image/audio/video.', {
         code: 'INVALID_ARGUMENT'
       });
@@ -4437,6 +4530,23 @@ if (options.video) {
       if (options.refAudio || options.refVideo) {
         fatalCliError('HappyHorse i2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
       }
+    } else if (isMiniMaxH3Video) {
+      const h3Mode = miniMaxH3ModeFromModelId(options.model);
+      if (h3Mode === 'flf2v') {
+        if (!options.refImage || !options.refImageEnd) {
+          fatalCliError('MiniMax H3 flf2v requires both --ref and --ref-end.', { code: 'INVALID_ARGUMENT' });
+        }
+      } else {
+        if (!options.refImage) {
+          fatalCliError('MiniMax H3 i2v requires --ref (a single first-frame image).', { code: 'INVALID_ARGUMENT' });
+        }
+        if (options.refImageEnd) {
+          fatalCliError('MiniMax H3 i2v accepts one first-frame image; use -m minimax-h3-flf2v for --ref plus --ref-end.', { code: 'INVALID_ARGUMENT' });
+        }
+      }
+      if (options.contextImages.length > 0 || options.refAudio || options.refVideo || options.refAudios.length > 0 || options.refVideos.length > 0) {
+        fatalCliError('MiniMax H3 i2v/flf2v accepts only --ref and optional --ref-end image anchors; use minimax-h3-r2v for loose image/video/audio references.', { code: 'INVALID_ARGUMENT' });
+      }
     } else {
       if (!options.refImage && !options.refImageEnd) {
         fatalCliError('i2v requires --ref and/or --ref-end.', { code: 'INVALID_ARGUMENT' });
@@ -4446,15 +4556,25 @@ if (options.video) {
       }
     }
   } else if (options.videoWorkflow === 'r2v') {
-    // HappyHorse reference-to-video: 1-9 loose image references via -c/--context.
-    if (!Array.isArray(options.contextImages) || options.contextImages.length === 0) {
-      fatalCliError('HappyHorse r2v requires 1-9 reference images via -c/--context.', { code: 'INVALID_ARGUMENT' });
-    }
-    if (options.refImage || options.refImageEnd) {
-      fatalCliError('HappyHorse r2v takes reference images via -c/--context, not --ref/--ref-end.', { code: 'INVALID_ARGUMENT' });
-    }
-    if (options.refAudio || options.refVideo) {
-      fatalCliError('HappyHorse r2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
+    if (isMiniMaxH3R2v) {
+      const imageCount = (options.refImage ? 1 : 0) + options.contextImages.length;
+      if (imageCount === 0) {
+        fatalCliError('MiniMax H3 r2v needs at least one reference image via --ref or -c/--context.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refImageEnd) {
+        fatalCliError('MiniMax H3 r2v has no end-frame anchor; use -c/--context for another loose image or minimax-h3-flf2v for first/last frames.', { code: 'INVALID_ARGUMENT' });
+      }
+    } else {
+      // HappyHorse reference-to-video: 1-9 loose image references via -c/--context.
+      if (!Array.isArray(options.contextImages) || options.contextImages.length === 0) {
+        fatalCliError('HappyHorse r2v requires 1-9 reference images via -c/--context.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refImage || options.refImageEnd) {
+        fatalCliError('HappyHorse r2v takes reference images via -c/--context, not --ref/--ref-end.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refAudio || options.refVideo || options.refAudios.length > 0 || options.refVideos.length > 0) {
+        fatalCliError('HappyHorse r2v does not accept reference audio/video.', { code: 'INVALID_ARGUMENT' });
+      }
     }
   } else if (options.videoWorkflow === 's2v') {
     if (!options.refImage || !options.refAudio) {
@@ -4534,15 +4654,15 @@ if (options.video) {
   }
   // Non-Seedance video models do not understand multi-ref audio/video extras —
   // they only support a single primary --ref-audio / --ref-video each.
-  if (!isSeedanceVideo) {
+  if (!isSeedanceVideo && !isMiniMaxH3R2v) {
     if (Array.isArray(options.refAudios) && options.refAudios.length > 0) {
-      fatalCliError('Multiple --ref-audio entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
+      fatalCliError('Multiple --ref-audio entries are supported only for Seedance loose references and MiniMax H3 r2v.', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refAudios },
       });
     }
     if (Array.isArray(options.refVideos) && options.refVideos.length > 0) {
-      fatalCliError('Multiple --ref-video entries are only supported for Seedance models (seedance2, seedance2-mini, seedance2-fast).', {
+      fatalCliError('Multiple --ref-video entries are supported only for Seedance loose references and MiniMax H3 r2v.', {
         code: 'INVALID_ARGUMENT',
         details: { model: options.model, extras: options.refVideos },
       });
@@ -7999,6 +8119,34 @@ function enforceHappyHorseReferenceCaps() {
   }
 }
 
+function enforceMiniMaxH3ReferenceCaps() {
+  const { images, videos, audios } = effectiveSeedanceReferenceCounts();
+  const total = images + videos + audios;
+  const checks = [
+    ['images', images, MINIMAX_H3_REFERENCE_LIMITS.images],
+    ['videos', videos, MINIMAX_H3_REFERENCE_LIMITS.videos],
+    ['audios', audios, MINIMAX_H3_REFERENCE_LIMITS.audios]
+  ];
+  for (const [kind, count, maximum] of checks) {
+    if (count > maximum) {
+      fatalCliError(`MiniMax H3 r2v supports at most ${maximum} reference ${kind} (got ${count}).`, {
+        code: 'MINIMAX_H3_REFERENCE_LIMIT_EXCEEDED',
+        details: { kind, count, maximum, limits: MINIMAX_H3_REFERENCE_LIMITS }
+      });
+    }
+  }
+  if (total > MINIMAX_H3_REFERENCE_LIMITS.assets) {
+    fatalCliError(
+      `MiniMax H3 r2v supports at most ${MINIMAX_H3_REFERENCE_LIMITS.assets} reference files in total `
+      + `(got ${total}: ${images} image, ${videos} video, ${audios} audio).`,
+      {
+        code: 'MINIMAX_H3_REFERENCE_LIMIT_EXCEEDED',
+        details: { images, videos, audios, total, limits: MINIMAX_H3_REFERENCE_LIMITS }
+      }
+    );
+  }
+}
+
 function resolveMultiAngleOutputConfig(outputPath, outputFormat) {
   if (!outputPath) return null;
   const ext = extname(outputPath);
@@ -10406,11 +10554,17 @@ async function main() {
       if (options.refImage) log(`Reference image: ${options.refImage}`);
       if (options.refImageEnd) log(`End frame: ${options.refImageEnd}`);
       if (options.refAudio) log(`Reference audio: ${options.refAudio}`);
+      for (const referenceAudio of options.refAudios) log(`Additional reference audio: ${referenceAudio}`);
       if (options.referenceAudioIdentity) log(`Voice identity: ${options._voicePersonaResolvedName || options.referenceAudioIdentity}`);
       if (options.refVideo) log(`Reference video: ${options.refVideo}`);
+      for (const referenceVideo of options.refVideos) log(`Additional reference video: ${referenceVideo}`);
+      if (options.videoWorkflow === 'r2v') {
+        for (const contextImage of options.contextImages) log(`Loose reference image: ${contextImage}`);
+      }
 
       const isSeedanceVideo = isSeedanceModel(options.model);
       const isHappyHorseVideo = isHappyHorseModel(options.model);
+      const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
       // Vendor video models forward image references as HTTPS URL arrays (or
       // Sogni-hosted uploads) instead of inline buffers; HappyHorse takes
       // image-only references (i2v first_frame, r2v reference_image).
@@ -10424,6 +10578,9 @@ async function main() {
         // Source of truth: @sogni-ai/sogni-intelligence-client/tools
         // HAPPYHORSE_REFERENCE_LIMITS (per-mode image-only caps).
         enforceHappyHorseReferenceCaps();
+      }
+      if (isMiniMaxH3R2v) {
+        enforceMiniMaxH3ReferenceCaps();
       }
       const seedanceReferenceImageUrls = [];
       const seedanceReferenceVideoUrls = [];
@@ -10540,8 +10697,24 @@ async function main() {
       let audioBuffer = options.refAudio && !useRefAudioUrl ? await fetchMediaBuffer(options.refAudio) : undefined;
       let videoBuffer = options.refVideo && !useRefVideoUrl ? await fetchMediaBuffer(options.refVideo) : undefined;
       let maskBuffer = options.refMask ? await fetchMediaBuffer(options.refMask) : undefined;
+      const contextImageBuffers = isMiniMaxH3R2v
+        ? await Promise.all(options.contextImages.map((reference) => fetchMediaBuffer(reference)))
+        : [];
+      let additionalAudioBuffers = isMiniMaxH3R2v
+        ? await Promise.all(options.refAudios.map((reference) => fetchMediaBuffer(reference)))
+        : [];
+      const additionalVideoBuffers = isMiniMaxH3R2v
+        ? await Promise.all(options.refVideos.map((reference) => fetchMediaBuffer(reference)))
+        : [];
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
+      }
+      if (additionalAudioBuffers.length > 0) {
+        additionalAudioBuffers = await Promise.all(
+          additionalAudioBuffers.map((buffer, index) =>
+            prepareReferenceAudioForVideoBuffer(buffer, options.refAudios[index])
+          )
+        );
       }
       if (
         videoBuffer
@@ -10698,6 +10871,9 @@ async function main() {
       if (endImageBuffer) {
         projectConfig.referenceImageEnd = endImageBuffer;
       }
+      if (contextImageBuffers.length > 0) {
+        projectConfig.contextImages = contextImageBuffers;
+      }
       applyLtxTransitionLora(
         projectConfig,
         options.model,
@@ -10706,6 +10882,9 @@ async function main() {
       );
       if (audioBuffer) {
         projectConfig.referenceAudio = audioBuffer;
+      }
+      if (additionalAudioBuffers.length > 0) {
+        projectConfig.referenceAudios = additionalAudioBuffers;
       }
       if (options.audioStart !== null && !useRefAudioUrl) {
         projectConfig.audioStart = options.audioStart;
@@ -10718,6 +10897,9 @@ async function main() {
       }
       if (videoBuffer) {
         projectConfig.referenceVideo = videoBuffer;
+      }
+      if (additionalVideoBuffers.length > 0) {
+        projectConfig.referenceVideos = additionalVideoBuffers;
       }
       if (seedanceReferenceImageUrls.length > 0) {
         projectConfig.referenceImageUrls = seedanceReferenceImageUrls;
@@ -10734,21 +10916,25 @@ async function main() {
       if (options.seed !== null && options.seed !== undefined) {
         projectConfig.seed = options.seed;
       }
-      if (Number.isFinite(steps) && !isHappyHorseVideo) {
+      if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+        projectConfig.generateAudio = options.apiGenerateAudio;
+      }
+      if (Number.isFinite(steps) && !isHappyHorseVideo && !isMiniMaxH3Model(options.model)) {
         // HappyHorse routes through the vendor-job path and ignores `steps`,
-        // mirroring Seedance (whose model defaults already omit them).
+        // mirroring Seedance (whose model defaults already omit them). H3 has
+        // fixed sampling parameters and should receive no overrides.
         projectConfig.steps = steps;
       }
-      if (guidance !== null && guidance !== undefined) {
+      if (guidance !== null && guidance !== undefined && !isMiniMaxH3Model(options.model)) {
         projectConfig.guidance = guidance;
       }
-      if (modelDefaults?.sampler) {
+      if (modelDefaults?.sampler && !isMiniMaxH3Model(options.model)) {
         projectConfig.sampler = modelDefaults.sampler;
       }
-      if (modelDefaults?.scheduler) {
+      if (modelDefaults?.scheduler && !isMiniMaxH3Model(options.model)) {
         projectConfig.scheduler = modelDefaults.scheduler;
       }
-      if (modelDefaults?.shift !== null && modelDefaults?.shift !== undefined) {
+      if (modelDefaults?.shift !== null && modelDefaults?.shift !== undefined && !isMiniMaxH3Model(options.model)) {
         projectConfig.shift = modelDefaults.shift;
       }
       if (options.videoControlNetName && !isSeedanceModel(options.model)) {
@@ -11123,6 +11309,7 @@ async function main() {
           if (options.audioStart !== null) renderInfo.audioStart = options.audioStart;
           if (options.audioDuration !== null) renderInfo.audioDuration = options.audioDuration;
         }
+        if (options.refAudios.length > 0) renderInfo.refAudios = options.refAudios;
         if (options.referenceAudioIdentity) {
           renderInfo.referenceAudioIdentity = options.referenceAudioIdentity;
           if (options._voicePersonaResolvedName || options.voicePersonaName) {
@@ -11132,6 +11319,10 @@ async function main() {
         if (options.refVideo) {
           renderInfo.refVideo = options.refVideo;
           if (options.videoStart !== null) renderInfo.videoStart = options.videoStart;
+        }
+        if (options.refVideos.length > 0) renderInfo.refVideos = options.refVideos;
+        if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+          renderInfo.generateAudio = options.apiGenerateAudio;
         }
         if (options.videoControlNetName && !isSeedanceModel(options.model)) {
           renderInfo.controlNet = {
@@ -11350,6 +11541,7 @@ async function main() {
             if (options.audioStart !== null) output.audioStart = options.audioStart;
             if (options.audioDuration !== null) output.audioDuration = options.audioDuration;
           }
+          if (options.refAudios.length > 0) output.refAudios = options.refAudios;
           if (options.referenceAudioIdentity) {
             output.referenceAudioIdentity = options.referenceAudioIdentity;
             if (options._voicePersonaResolvedName || options.voicePersonaName) {
@@ -11359,6 +11551,10 @@ async function main() {
           if (options.refVideo) {
             output.refVideo = options.refVideo;
             if (options.videoStart !== null) output.videoStart = options.videoStart;
+          }
+          if (options.refVideos.length > 0) output.refVideos = options.refVideos;
+          if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+            output.generateAudio = options.apiGenerateAudio;
           }
           if (options.videoControlNetName && !isSeedanceModel(options.model)) {
             output.controlNet = {

@@ -75,6 +75,8 @@ export const TOOLS = [
       'Generate a video from a text prompt, optionally driven by reference media. ' +
       'ref = start frame image (alone defaults to wan_v2.2-14b-fp8_i2v_lightx2v), ' +
       'ref_end = end frame (with ref, defaults to ltx23-22b-fp8_i2v_distilled and its auto-applied transition/morph LoRA), ' +
+      'MiniMax H3 supports t2v, i2v, first/last-frame, and r2v; H3 r2v accepts up to 9 images, 3 videos, ' +
+      'and 3 audios (12 files total) through the repeatable reference arrays and uses <Picture 1>/<Video 1>/<Audio 1> prompt tags. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
@@ -83,12 +85,16 @@ export const TOOLS = [
         prompt: str('Motion/scene description'),
         output_path: str('Absolute .mp4 path to save (optional)'),
         model: str('Video model id (optional)'),
-        workflow: { type: 'string', enum: ['t2v', 'i2v', 's2v', 'ia2v', 'a2v', 'v2v', 'animate-move', 'animate-replace'] },
+        workflow: { type: 'string', enum: ['t2v', 'i2v', 'r2v', 's2v', 'ia2v', 'a2v', 'v2v', 'animate-move', 'animate-replace'] },
         duration: num('Duration in seconds (default 5)'),
-        ref: str('Absolute path or URL of the start-frame image'),
+        ref: str('Absolute path or URL of the start-frame image; loose Picture 1 for MiniMax H3 r2v'),
         ref_end: str('Absolute path or URL of the end-frame image'),
         ref_audio: str('Absolute path or URL of reference audio'),
         ref_video: str('Absolute path or URL of reference video'),
+        reference_images: { type: 'array', items: { type: 'string' }, description: 'Loose image reference paths/URLs (-c); repeatable for MiniMax H3 r2v' },
+        reference_audios: { type: 'array', items: { type: 'string' }, description: 'Additional reference audio paths/URLs; MiniMax H3 r2v supports up to 3 total' },
+        reference_videos: { type: 'array', items: { type: 'string' }, description: 'Additional reference video paths/URLs; MiniMax H3 r2v supports up to 3 total' },
+        generate_audio: { type: 'boolean', description: 'For MiniMax H3, keep generated audio (true) or strip it from the returned video (false)' },
         persona: str('Saved persona name (reference frame)'),
         target_resolution: num('Short-side target in px, preserves aspect'),
         timeout_seconds: num('Generation timeout override (default 1800)'),
@@ -105,7 +111,12 @@ export const TOOLS = [
       push(args, '--ref', input.ref);
       push(args, '--ref-end', input.ref_end);
       push(args, '--ref-audio', input.ref_audio);
+      for (const refAudio of input.reference_audios ?? []) push(args, '--ref-audio', refAudio);
       push(args, '--ref-video', input.ref_video);
+      for (const refVideo of input.reference_videos ?? []) push(args, '--ref-video', refVideo);
+      for (const refImage of input.reference_images ?? []) push(args, '-c', refImage);
+      if (input.generate_audio === true) args.push('--generate-audio');
+      if (input.generate_audio === false) args.push('--no-generate-audio');
       push(args, '--persona', input.persona);
       push(args, '--target-resolution', input.target_resolution);
       push(args, '-t', input.timeout_seconds);

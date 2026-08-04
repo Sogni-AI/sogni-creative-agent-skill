@@ -1,3 +1,10 @@
+# [3.26.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.25.0...v3.26.0) (2026-08-04)
+
+
+### Features
+
+* **video:** support MiniMax H3 multimodal workflows ([d9f1737](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d9f17378db498d73bf231b286affe34f26b97c57))
+
 # [3.25.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.24.0...v3.25.0) (2026-08-04)
 
 

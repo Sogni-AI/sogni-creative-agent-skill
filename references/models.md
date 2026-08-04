@@ -147,6 +147,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
 | `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
 | `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
+| `minimax-h3-r2v` | Standard | MiniMax H3 reference-to-video from a whole reference SET (up to 9 images / 3 videos / 3 audio); available through the SDK and creative-agent tool, with no CLI selector yet |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -232,27 +233,35 @@ and short in-scene text.
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family (three discrete modes, no mini/fast
+MiniMax H3 is a Sogni-hosted video family (four discrete modes, no mini/fast
 variants) that generates picture and **native 32 kHz stereo audio jointly**.
 `generateAudio=false` strips the generated track from the delivered file rather
 than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3` selector resolves to the mode inferred
-from your references.
+from your references; **`minimax-h3-r2v` is never inferred** — it runs a
+different checkpoint and must be asked for by name.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
 | `minimax-h3` / `minimax-h3-t2v` | Text-to-video | Prompt-only clip with native audio (default for `-m minimax-h3` with no refs) |
 | `minimax-h3-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
 | `minimax-h3-flf2v` | First → last frame | Interpolate between `--ref` and `--ref-end` |
+| `minimax-h3-r2v` | Reference-to-video | Compose from a labelled reference SET: up to 9 images, 3 videos, 3 audio clips, 12 files total |
 
-The three modes share the FL2VA checkpoint: worker ids
+The first three modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
 `minimax-h3-fl2va-fp8_flf2v`. The CLI resolves those three short selectors,
-picking i2v vs flf2v from whether `--ref-end` is present.
+picking i2v vs flf2v from whether `--ref-end` is present. Reference-to-video is a
+SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — and is not one of
+the CLI's `-m` selectors today; reach it through the SDK's native upload fields
+or the creative-agent `generate_video` tool with
+`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
 
-The H3 modes take image references only — they do not accept reference video or
-reference audio, because audio is generated natively. The initial Sogni release
-is routed to 32 GB-class workers.
+The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
+accept reference video or reference audio, because audio is generated natively.
+**r2v is the one H3 mode that does**: see
+[MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v). The
+initial Sogni release is routed to 32 GB-class workers.
 
 **Fixed parameters (do not override):**
 
@@ -301,6 +310,111 @@ natural prose, and preserve markup a user supplied. **Read
 [`video-prompting.md`](video-prompting.md) § MiniMax H3 Prompting** for the full
 technique, worked natural-prose examples, the duration→frame snapping table, and
 the optional/advanced markup reference before writing an H3 prompt.
+
+### MiniMax H3 reference-to-video (r2v)
+
+`minimax-h3-r2v` (worker id `minimax-h3-ref2va-fp8_r2v`) is the one H3 mode that
+conditions on a whole **reference set** instead of one or two locked frames. It
+runs its own ref2va checkpoint, so it is **never inferred** from stray uploads
+the way HappyHorse r2v is — the user or the plan must name it. It is reached
+through the SDK's native upload fields or the creative-agent `generate_video`
+tool (`videoModel="minimax-h3-r2v"`, including callers such as Sogni Chat);
+`sogni-agent` has no `-m minimax-h3-r2v` selector yet.
+
+Everything in [MiniMax H3 models](#minimax-h3-models) above still applies: 24 fps,
+the `124 + n×17` frame grid (5.17–15.08 s), dimensions divisible by 32 inside the
+1,032,192-pixel budget, 20 steps, guidance 1, no negative prompt, jointly
+generated stereo audio.
+
+**Reference ceilings** (from the `MiniMaxH3ReferenceToVideo` node, enforced by
+Sogni Socket before the job is priced):
+
+| Kind | Max | Notes |
+|------|-----|-------|
+| Reference images | 9 | **At least one is required** — r2v with no image is rejected |
+| Reference videos | 3 | Read as 24 fps, 2–15 s each; a clip's own soundtrack is presented too |
+| Reference audio | 3 | Standalone clips, separate from any video soundtrack |
+| Total files | 12 | 9 + 3 + 3 = 15 does **not** fit; trade slots (e.g. 6 + 3 + 3) |
+
+Reference videos and reference audio are **additions to** the image set, never
+replacements for it. For a prompt-only render use `minimax-h3-t2v`; for a locked
+opening frame use `minimax-h3-i2v`; to interpolate between two anchors use
+`minimax-h3-flf2v`. r2v has no frame anchors at all, so an end-frame parameter is
+rejected rather than ignored.
+
+#### Ordinals and the prompt tag form
+
+References are presented to the model grouped by type and numbered **from 1 per
+type**: images first, then each reference video (its own soundtrack numbered
+immediately **before** it), then standalone audio. H3's text encoder splices a
+literal label in front of each one before your prompt text — it emits
+`"<Picture i>: "`, `"<Video k>: "` and `"<Audio j>: "` — so write the prompt with
+**those same tags, angle brackets included**. A sentence written that way shares
+a token sequence with the label of the reference it is about; prose aliases
+("Image 1", "the second photo", `@Image1`, `[Image 1]`) do not.
+
+This mirrors Seedance's loose-reference grammar — same 9 / 3 / 12 shape, same
+"give every reference one explicit job" rule — but the tag form differs: Seedance
+uses `@Image1` / `@Video1` / `@Audio1`, H3 uses `<Picture 1>` / `<Video 1>` /
+`<Audio 1>`. Never carry one model's tags into the other's prompt.
+
+Ordinal traps worth stating explicitly:
+
+- Numbering restarts per type, so the first image is `<Picture 1>` even when a
+  video was attached before it.
+- A reference video **with sound** contributes an `<Audio j>` of its own,
+  counted immediately before its `<Video k>`. With one soundtracked video plus
+  one standalone track, the soundtrack is `<Audio 1>` and the standalone clip is
+  `<Audio 2>`.
+- Submission order is ordinal order. Never reorder or drop a reference after the
+  prompt has been written — every later ordinal shifts and "use `<Picture 3>`
+  for the jacket" lands on the wrong file.
+
+#### One explicit job per reference
+
+H3 blends everything it is shown unless told what to take from where. Give every
+attached reference a single, non-overlapping job — identity, wardrobe, location,
+camera movement, voice character — and state who wins when two disagree. An
+unassigned reference is the most common cause of identity drift and washed-out
+style on this model.
+
+Worked example — 3 images, 1 soundtracked video, 1 standalone audio clip
+(6 files, within the 12-file cap):
+
+```text
+<Picture 1> is the identity reference for the woman: her face, her bone
+structure, and her hairstyle carry over exactly, and nothing else from that
+frame does. <Picture 2> is the wardrobe reference: the dark red jacket, its
+collar, and the way it hangs — take the garment, not the person wearing it.
+<Picture 3> is the location, lighting palette, and film texture: the wet street,
+the sodium and neon colour, the grain. Do not copy any person, vehicle, or
+signage from <Picture 3>. Use <Video 1> only for the camera movement — the slow
+handheld push-in and its timing — and take nothing else from it; <Audio 1> is
+that clip's own soundtrack and is reference only, do not reproduce it.
+<Audio 2> is the voice character for her single line: dry, low, close-miked.
+Where <Picture 1> and <Picture 3> disagree on colour or exposure, <Picture 1>
+wins on her face and <Picture 3> wins on everything behind her.
+
+[0-3 seconds] She walks toward camera along the rain-slicked street, hands in
+the jacket pockets. Handheld medium shot, shallow focus, neon reflections
+sliding across the wet asphalt.
+
+[3-6 seconds] She stops and glances back over her shoulder as a bus passes
+behind her, its headlights sweeping across her face.
+
+[6-8 seconds] Medium close-up, street lights blooming behind her. She says,
+quietly: "It was never going to be the last train."
+
+Audio: steady rain on asphalt, tyres hissing through standing water, a bus
+engine passing left to right at 4 seconds. No music.
+```
+
+Note what that example does: every one of the six references is named exactly
+once with a bounded job, the video is explicitly fenced to camera movement, the
+video's own soundtrack is explicitly marked as reference-only so it is not
+reproduced, the conflict rule is stated, and the shot list still carries the
+pacing. Trim assignments for references you did not actually attach — a tag with
+nothing behind it just adds noise.
 
 ## LTX-2 / LTX-2.3 models
 
@@ -371,6 +485,7 @@ model recommendations.
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` (or `minimax-h3-t2v`) |
 | MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
 | MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
+| MiniMax H3 from a set of loose references (identity + wardrobe + location, a motion clip, a voice clip) | `minimax-h3-r2v` — SDK / `generate_video`; no CLI selector yet |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios

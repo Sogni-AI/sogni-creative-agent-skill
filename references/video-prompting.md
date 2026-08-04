@@ -88,7 +88,11 @@ in plain English, the way you would brief a DP and a sound designer.
 
 Applies to `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v`, and
 `minimax-h3-flf2v` (worker ids `minimax-h3-fl2va-fp8_t2v`,
-`minimax-h3-fl2va-fp8_i2v`, `minimax-h3-fl2va-fp8_flf2v`).
+`minimax-h3-fl2va-fp8_i2v`, `minimax-h3-fl2va-fp8_flf2v`), and — with one extra
+rule about reference tags — to `minimax-h3-r2v` (worker id
+`minimax-h3-ref2va-fp8_r2v`). See
+[MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v) below
+before writing an r2v prompt.
 
 ### Why this guidance is natural-language-first
 
@@ -352,6 +356,93 @@ How the reference pictures align with the target video — Picture 1 (from Shot 
 `N` is the index of the actual final shot (`Shot 1` for the usual single-shot
 transition), and `S.SS` is the effective duration to exactly two decimal places
 — `10.13` for 243 frames at 24 fps (243 ÷ 24 = 10.125, rounded up).
+
+### MiniMax H3 reference-to-video (r2v)
+
+`minimax-h3-r2v` conditions on a whole **reference set** rather than one or two
+locked frames: up to **9 reference images** (at least one is required),
+**3 reference videos** (24 fps, 2–15 s, each with an optional soundtrack) and
+**3 standalone audio clips**, **12 files maximum in total**. It runs a separate
+ref2va checkpoint, so it is never inferred — it must be chosen by name through
+the SDK's native upload fields or the `generate_video` tool with
+`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat;
+`sogni-agent` has no `-m minimax-h3-r2v` selector yet). Reference videos and
+audio are additions to the image set, never replacements for it, and r2v has no
+frame anchors at all — for a locked opening frame use `minimax-h3-i2v`, and for a
+first-to-last-frame transition use `minimax-h3-flf2v`.
+
+Everything else on this page still applies — natural cinematic prose, the timed
+shot list, deliberate audio direction, in-prompt negative direction, and no
+negative-prompt field. r2v adds exactly one rule on top.
+
+**Reference grammar.** References are numbered **from 1 per type**, in the order
+images → videos → standalone audio, and H3's text encoder splices a literal label
+in front of each one before your prompt text (`"<Picture i>: "`, `"<Video k>: "`,
+`"<Audio j>: "`). Write the prompt with the same tags, **angle brackets
+included**, so the sentence about a reference shares a token sequence with that
+reference's own label:
+
+- `<Picture 1>` … `<Picture 9>` for images
+- `<Video 1>` … `<Video 3>` for videos
+- `<Audio 1>` … for audio
+
+Rewrite any alias the user typed — "image 2", "the second photo", `@Image2`,
+`[Image 2]` — into `<Picture 2>`. This is deliberately **not** the Seedance
+grammar: Seedance uses `@Image1` / `@Video1` / `@Audio1` (see the Seedance
+reference modes in `models.md`), and the two must never be mixed. Never invent a
+reference that was not attached, never mention file names, URLs or asset indices,
+and never renumber the ones you were given.
+
+Two ordinal traps:
+
+- Numbering restarts per type, so the first image is `<Picture 1>` even when a
+  video was attached before it.
+- A reference video with sound contributes an `<Audio j>` of its own, counted
+  immediately **before** its `<Video k>`. One soundtracked video plus one
+  standalone clip means the soundtrack is `<Audio 1>` and the standalone clip is
+  `<Audio 2>`.
+
+**One explicit job per reference.** H3 blends everything it is shown unless told
+what to take from where, so give every attached reference a single,
+non-overlapping job in a plain sentence, and say who wins when two disagree. An
+unassigned reference is the most common cause of identity drift and washed-out
+style on this model.
+
+Worked example — 3 images, 1 soundtracked video, 1 standalone audio clip (6
+files):
+
+```text
+<Picture 1> is the identity reference for the woman: her face, her bone
+structure, and her hairstyle carry over exactly, and nothing else from that
+frame does. <Picture 2> is the wardrobe reference: the dark red jacket, its
+collar, and the way it hangs — take the garment, not the person wearing it.
+<Picture 3> is the location, lighting palette, and film texture: the wet street,
+the sodium and neon colour, the grain. Do not copy any person, vehicle, or
+signage from <Picture 3>. Use <Video 1> only for the camera movement — the slow
+handheld push-in and its timing — and take nothing else from it; <Audio 1> is
+that clip's own soundtrack and is reference only, do not reproduce it.
+<Audio 2> is the voice character for her single line: dry, low, close-miked.
+Where <Picture 1> and <Picture 3> disagree on colour or exposure, <Picture 1>
+wins on her face and <Picture 3> wins on everything behind her.
+
+[0-3 seconds] She walks toward camera along the rain-slicked street, hands in
+the jacket pockets. Handheld medium shot, shallow focus, neon reflections
+sliding across the wet asphalt.
+
+[3-6 seconds] She stops and glances back over her shoulder as a bus passes
+behind her, its headlights sweeping across her face.
+
+[6-8 seconds] Medium close-up, street lights blooming behind her. She says,
+quietly: "It was never going to be the last train."
+
+Audio: steady rain on asphalt, tyres hissing through standing water, a bus
+engine passing left to right at 4 seconds. No music.
+```
+
+Trim assignments for references that were not actually attached — a tag with
+nothing behind it is noise. And do not reorder or drop a reference after the
+prompt is written: submission order is ordinal order, so every later tag would
+then point at the wrong file.
 
 ### Agent-ready H3 command shapes
 

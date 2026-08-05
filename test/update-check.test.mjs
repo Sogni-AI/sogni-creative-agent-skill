@@ -472,3 +472,17 @@ test('runSelfUpdate — nonzero npm exit prints permission recovery hint', () =>
   assert.match(output, /exited with code 1/);
   assert.match(output, /sudo sogni-agent self-update/);
 });
+
+test('runSelfUpdate — success distinguishes the global CLI from copied skill bundles', () => {
+  const logs = [];
+  const code = runSelfUpdate({
+    env: {},
+    stdio: 'pipe',
+    log: (line) => logs.push(line),
+    spawnSyncFn: () => ({ status: 0 }),
+  });
+  const output = logs.join('\n');
+  assert.equal(code, 0);
+  assert.match(output, /Updated the global CLI/);
+  assert.match(output, /Copied personal skill bundles are not refreshed/);
+});

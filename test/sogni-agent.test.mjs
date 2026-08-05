@@ -1243,6 +1243,42 @@ test('MiniMax H3 alias pins FL2VA t2v and snaps duration to the native frame gri
   assert.equal(state.lastVideoProject.scheduler, undefined);
 });
 
+test('MiniMax H3 over 10s explains a stale estimator cap without blocking generation', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--duration', '15',
+    'A timed dialogue scene.'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_COST_ERROR: 'Duration must be between 1 and 10 seconds'
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.frames, 362);
+  assert.match(stderr, /generation supports clips through 15\.08 seconds/);
+  assert.match(stderr, /server can validate balance/);
+  assert.doesNotMatch(stderr, /Warning: Could not estimate video cost/);
+});
+
+test('MiniMax H3 over 10s returns an actionable explicit cost-estimate error', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '--estimate-video-cost',
+    '-m', 'minimax-h3',
+    '--duration', '15'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_COST_ERROR: 'Duration must be between 1 and 10 seconds'
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'VIDEO_COST_ESTIMATE_UNAVAILABLE');
+  assert.equal(payload.retryable, false);
+  assert.match(payload.error, /generation supports clips through 15\.08 seconds/);
+  assert.match(payload.hint, /Submit without --estimate-video-cost/);
+});
+
 test('MiniMax H3 bare alias selects the first/last-frame workflow when both references exist', () => {
   const { exitCode, state } = runCli([
     '--video',

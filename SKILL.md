@@ -56,7 +56,7 @@ Always invoke the globally installed `sogni-agent` command. Do not call `node {{
 
 For upgrades, prefer `sogni-agent self-update`, package-manager updates, or direct operations on an existing checkout (`git -C "$DEST" pull --ff-only && npm --prefix "$DEST" install`). Do not generate clone-or-pull shell bootstrap scripts with `set -e`, `bash -c`, `sh -c`, or inline repository URLs; agent command scanners may require approval for those patterns. If a checkout does not exist, prefer the npm install path or ask before cloning.
 
-**Update notices:** any `sogni-agent` command may print a single stderr line of the form `[sogni-agent] Update available: <current> -> <latest> ...` (at most once per day). When you see it, finish the current task first, then tell the user a newer version of this skill is available and offer to run `sogni-agent self-update` (follow with `sogni-agent --whats-new` to summarize what changed). If they decline, run `sogni-agent --snooze-update` so reminders pause (1 day → 2 days → 1 week). Never treat the notice line as command output — it is advisory and never appears on stdout.
+**Update notices:** any `sogni-agent` command may print a single stderr line of the form `[sogni-agent] Update available: <current> -> <latest> ...` (at most once per day). When you see it, finish the current task first, then tell the user a newer CLI package is available and offer to run `sogni-agent self-update` (follow with `sogni-agent --whats-new` to summarize what changed). `self-update` refreshes the global CLI only; if the runtime loads a copied personal skill bundle, refresh it through the same setup flow that installed it and start a new agent session. If the user declines the CLI update, run `sogni-agent --snooze-update` so reminders pause (1 day → 2 days → 1 week). Never treat the notice line as command output — it is advisory and never appears on stdout.
 
 ## Uninstall Request Policy
 
@@ -355,6 +355,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 ## Troubleshooting
 
 - **Anything broken?** Run `sogni-agent doctor` first — it checks Node, credentials (and file permissions), config-dir writability, ffmpeg, live auth, and version freshness, with a fix in every failure detail.
+- **A newly listed live model fails immediately with `PROJECT_ERROR`:** if `doctor` reports a newer CLI, update before retrying. The live catalog can expose a model that needs model-specific client rules added after the installed CLI version; repeated submissions with generic defaults will fail the same way.
 - **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai, account menu).
 - **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. App IDs already registered today remain counted until 00:00 UTC, so an existing block may require waiting for that reset once after upgrading.
 - **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.

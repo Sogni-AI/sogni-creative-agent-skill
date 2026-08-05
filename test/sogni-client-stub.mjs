@@ -233,6 +233,9 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   async estimateVideoCost() {
+    if (process.env.SOGNI_AGENT_TEST_VIDEO_COST_ERROR) {
+      throw new Error(process.env.SOGNI_AGENT_TEST_VIDEO_COST_ERROR);
+    }
     const state = getState();
     state.lastEstimateVideoCost = arguments[0] ?? null;
     persistState();

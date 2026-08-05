@@ -9694,6 +9694,26 @@ function buildVideoEstimateParams({ tokenType, steps }) {
   return params;
 }
 
+function isMiniMaxH3ExtendedDurationEstimateError(err) {
+  const actualDuration = options.frames
+    ? options.frames / options.fps
+    : options.duration;
+  return isMiniMaxH3Model(options.model)
+    && actualDuration > 10
+    && /duration must be between 1 and 10 seconds/i.test(String(err?.message || err || ''));
+}
+
+function buildMiniMaxH3EstimateUnavailableError(cause) {
+  const err = new Error(
+    'MiniMax H3 generation supports clips through 15.08 seconds, but this client cannot pre-estimate clips over 10 seconds.'
+  );
+  err.code = 'VIDEO_COST_ESTIMATE_UNAVAILABLE';
+  err.retryable = false;
+  err.hint = 'Submit without --estimate-video-cost so the server can validate balance when the render starts, or estimate a clip of 10 seconds or less.';
+  err.cause = cause;
+  return err;
+}
+
 async function ensureSufficientVideoBalance(client, log) {
   if (!options.video || options.estimateVideoCost) return;
   // Sogni Unlimited bills covered video jobs to the subscription, so a low
@@ -9735,7 +9755,12 @@ async function ensureSufficientVideoBalance(client, log) {
     estimate = await client.estimateVideoCost(buildVideoEstimateParams({ tokenType, steps }));
   } catch (err) {
     if (!options.quiet) {
-      log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
+      if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
+        const estimateError = buildMiniMaxH3EstimateUnavailableError(err);
+        log(`Note: ${estimateError.message} ${estimateError.hint}`);
+      } else {
+        log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
+      }
     }
     return;
   }
@@ -10450,7 +10475,15 @@ async function main() {
         tokenType: options.tokenType || 'spark',
         steps
       });
-      const estimate = await client.estimateVideoCost(estimateParams);
+      let estimate;
+      try {
+        estimate = await client.estimateVideoCost(estimateParams);
+      } catch (err) {
+        if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
+          throw buildMiniMaxH3EstimateUnavailableError(err);
+        }
+        throw err;
+      }
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
         console.log(JSON.stringify({

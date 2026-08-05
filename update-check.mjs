@@ -292,8 +292,9 @@ export const AGENT_NOTICE_THROTTLE_MS = 24 * 60 * 60 * 1000;
 
 export function formatAgentUpdateNotice({ currentVersion, latestVersion } = {}) {
   return `[sogni-agent] Update available: ${currentVersion} -> ${latestVersion}. ` +
-    'Agent: after finishing the current task, let the user know a newer Sogni Creative Agent Skill exists ' +
+    'Agent: after finishing the current task, let the user know a newer Sogni CLI package exists ' +
     'and offer to run `sogni-agent self-update` (then `sogni-agent --whats-new`). ' +
+    'That updates the global CLI only; copied personal skill bundles must be refreshed through their original setup flow and loaded in a new session. ' +
     'If they decline, run `sogni-agent --snooze-update` to pause these reminders.';
 }
 
@@ -472,6 +473,7 @@ export function runSelfUpdate({
     return result.status;
   }
   clearState(statePath);
-  log('Updated. Run `sogni-agent --whats-new` to see what changed.');
+  log('Updated the global CLI. Run `sogni-agent --whats-new` to see what changed.');
+  log('Copied personal skill bundles are not refreshed by self-update; rerun their original setup flow and start a new agent session.');
   return 0;
 }

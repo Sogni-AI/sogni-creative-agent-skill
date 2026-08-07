@@ -58,6 +58,20 @@ bootstrap scripts with `set -e`, `bash -c`, `sh -c`, or inline repository URLs.
 Use the npm upgrade command above, update an existing checkout with `git -C`, or
 ask before cloning.
 
+## Host launchers
+
+The package installs one launcher shim per host next to `sogni-agent`. Each is
+the same CLI with the same flags and output; it only attributes the request to
+the host that ran it. Use the shim matching your runtime wherever these docs say
+`sogni-agent`, and fall back to `sogni-agent` when it is not on PATH.
+
+```bash
+sogni-agent-hermes       # Hermes Agent
+sogni-agent-codex        # OpenAI Codex CLI
+sogni-agent-claude-code  # Claude Code
+sogni-agent              # OpenClaw (auto-detected) and everything else
+```
+
 ## Configure Sogni API key
 
 Once-only setup, used by every integration above. The API key can always be

@@ -54,6 +54,18 @@ Agents should run `sogni-agent doctor --json` and confirm `"success": true` befo
 
 Always invoke the globally installed `sogni-agent` command. Do not call `node {{skillDir}}/sogni-agent.mjs` or `node sogni-agent.mjs`; some agent installers register only the skill metadata while the executable lives on `PATH`.
 
+**Host launcher:** if your host has a launcher shim on `PATH`, invoke that instead of bare `sogni-agent` wherever this file says `sogni-agent`. Each shim behaves identically to `sogni-agent` and only attributes the request to the host that ran it:
+
+| Host | Command |
+| --- | --- |
+| Hermes | `sogni-agent-hermes` |
+| Codex CLI | `sogni-agent-codex` |
+| Claude Code | `sogni-agent-claude-code` |
+| OpenClaw | `sogni-agent` (detected automatically from `OPENCLAW_PLUGIN_CONFIG`) |
+| Anything else | `sogni-agent` |
+
+Pick the one matching the host you are running in, and fall back to `sogni-agent` if that command is not found. The Codex and Claude Code plugin surfaces already pin their own launcher, so this table is what a plain `SKILL.md` install (Hermes and other runtimes) should follow.
+
 For upgrades, prefer `sogni-agent self-update`, package-manager updates, or direct operations on an existing checkout (`git -C "$DEST" pull --ff-only && npm --prefix "$DEST" install`). Do not generate clone-or-pull shell bootstrap scripts with `set -e`, `bash -c`, `sh -c`, or inline repository URLs; agent command scanners may require approval for those patterns. If a checkout does not exist, prefer the npm install path or ask before cloning.
 
 **Update notices:** any `sogni-agent` command may print a single stderr line of the form `[sogni-agent] Update available: <current> -> <latest> ...` (at most once per day). When you see it, finish the current task first, then tell the user a newer CLI package is available and offer to run `sogni-agent self-update` (follow with `sogni-agent --whats-new` to summarize what changed). `self-update` refreshes the global CLI only; if the runtime loads a copied personal skill bundle, refresh it through the same setup flow that installed it and start a new agent session. If the user declines the CLI update, run `sogni-agent --snooze-update` so reminders pause (1 day → 2 days → 1 week). Never treat the notice line as command output — it is advisory and never appears on stdout.

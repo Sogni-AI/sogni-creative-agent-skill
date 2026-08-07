@@ -35,3 +35,20 @@ test('Claude and Codex plugin skills select their fixed launchers', () => {
   assert.match(codex, /sogni-agent-codex/);
   assert.match(codexLoop, /sogni-agent-codex/);
 });
+
+test('root SKILL.md points plain installs at their host launcher', () => {
+  // The Codex and Claude Code plugin surfaces pin their own launcher, but the
+  // root SKILL.md is what a Hermes (or other plain) install receives, so it has
+  // to name every launcher itself or those hosts fall back to bare
+  // `sogni-agent` and report agentFramework "unknown".
+  const skill = readFileSync(join(ROOT, 'SKILL.md'), 'utf8');
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  for (const command of Object.keys(pkg.bin)) {
+    if (command === 'sogni-agent') continue;
+    assert.match(
+      skill,
+      new RegExp(`\`${command}\``),
+      `root SKILL.md does not document the ${command} launcher`,
+    );
+  }
+});

@@ -1588,7 +1588,7 @@ function getMaxContextImages(modelId) {
 }
 
 function videoDurationLimitsLikeWrapper(modelId) {
-  if (isMiniMaxH3Model(modelId)) return { min: 5, max: 15 };
+  if (isMiniMaxH3Model(modelId)) return { ...MINIMAX_H3_DURATION_LIMITS };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
   if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
@@ -1881,6 +1881,33 @@ const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   audios: 3,
   assets: 12
 });
+// H3 renders on a fixed 24fps frame grid: frames are 124 + n×17, from 124
+// through 362. Every duration the user asks for is snapped to that grid, so the
+// deliverable range is 5.17-15.08s — not the round 5-15s it rounds to.
+const MINIMAX_H3_FRAME_GRID = Object.freeze({
+  fps: 24,
+  min: 124,
+  max: 362,
+  step: 17
+});
+const MINIMAX_H3_DURATION_LIMITS = Object.freeze({
+  min: MINIMAX_H3_FRAME_GRID.min / MINIMAX_H3_FRAME_GRID.fps,
+  max: MINIMAX_H3_FRAME_GRID.max / MINIMAX_H3_FRAME_GRID.fps
+});
+
+// Grid-snapped durations are rarely whole seconds; keep the printed form short
+// without implying more precision than the frame count carries.
+function formatDurationSeconds(seconds) {
+  return String(Number(Number(seconds).toFixed(2)));
+}
+
+// Snap a duration in seconds onto the H3 frame grid.
+function miniMaxH3FramesForDuration(durationSeconds) {
+  const { fps, min, max, step } = MINIMAX_H3_FRAME_GRID;
+  const desiredFrames = durationSeconds * fps;
+  return Math.max(min, Math.min(max, min + Math.round((desiredFrames - min) / step) * step));
+}
+
 const LTX23_10EROS_FIXED_SETTINGS = Object.freeze({
   steps: 9,
   guidance: 1,
@@ -4781,9 +4808,13 @@ if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(option
 
 if (options.video && !options.frames) {
   const durationLimits = videoDurationLimitsLikeWrapper(options.model);
+  const requestedDuration = options.duration;
   const clampedDuration = Math.max(durationLimits.min, Math.min(durationLimits.max, options.duration));
   if (clampedDuration !== options.duration) {
-    if (!options.quiet) {
+    // H3 reports its own adjustment below, after the frame grid decides the
+    // duration actually delivered; announcing the clamp here would name a
+    // duration H3 cannot render.
+    if (!options.quiet && !isMiniMaxH3Model(options.model)) {
       console.error(
         `Adjusted video duration from ${options.duration}s to ${clampedDuration}s ` +
         `(supported range for ${options.model}: ${durationLimits.min}-${durationLimits.max}s).`
@@ -4792,21 +4823,28 @@ if (options.video && !options.frames) {
     options.duration = clampedDuration;
   }
   if (isMiniMaxH3Model(options.model)) {
-    const desiredFrames = options.duration * 24;
-    options.frames = Math.max(
-      124,
-      Math.min(362, 124 + Math.round((desiredFrames - 124) / 17) * 17)
-    );
-    options.fps = 24;
+    options.frames = miniMaxH3FramesForDuration(options.duration);
+    options.fps = MINIMAX_H3_FRAME_GRID.fps;
+    const deliveredDuration = options.frames / MINIMAX_H3_FRAME_GRID.fps;
+    if (!options.quiet && Math.abs(deliveredDuration - requestedDuration) > 1e-6) {
+      console.error(
+        `Adjusted video duration from ${formatDurationSeconds(requestedDuration)}s to ` +
+        `${formatDurationSeconds(deliveredDuration)}s (${options.frames} frames). ` +
+        `MiniMax H3 renders ${MINIMAX_H3_FRAME_GRID.min} + n×${MINIMAX_H3_FRAME_GRID.step} frames at ` +
+        `${MINIMAX_H3_FRAME_GRID.fps}fps, so ${options.model} delivers ` +
+        `${formatDurationSeconds(durationLimits.min)}-${formatDurationSeconds(durationLimits.max)}s.`
+      );
+    }
   }
 } else if (options.video && isMiniMaxH3Model(options.model)) {
-  if (options.frames < 124 || options.frames > 362 || (options.frames - 124) % 17 !== 0) {
-    fatalCliError('MiniMax H3 frames must be 124 + n×17, from 124 through 362.', {
+  const { min: minFrames, max: maxFrames, step: frameStep, fps: h3Fps } = MINIMAX_H3_FRAME_GRID;
+  if (options.frames < minFrames || options.frames > maxFrames || (options.frames - minFrames) % frameStep !== 0) {
+    fatalCliError(`MiniMax H3 frames must be ${minFrames} + n×${frameStep}, from ${minFrames} through ${maxFrames}.`, {
       code: 'INVALID_ARGUMENT',
-      details: { frames: options.frames, minimum: 124, maximum: 362, step: 17 }
+      details: { frames: options.frames, minimum: minFrames, maximum: maxFrames, step: frameStep }
     });
   }
-  options.fps = 24;
+  options.fps = h3Fps;
 }
 
 // Video dimensions:

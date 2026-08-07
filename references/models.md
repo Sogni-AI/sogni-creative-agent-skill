@@ -148,6 +148,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
 | `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v` | Standard | MiniMax H3 reference-to-video from a whole reference set (up to 9 images / 3 videos / 3 audio, 12 files total) |
+| `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
+| `minimax-h3-i2v-turbo` | 4-step | H3 Turbo first-frame image-to-video |
+| `minimax-h3-flf2v-turbo` | 4-step | H3 Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -233,13 +236,15 @@ and short in-scene text.
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family (four discrete modes, no mini/fast
-variants) that generates picture and **native 32 kHz stereo audio jointly**.
+MiniMax H3 is a Sogni-hosted video family with **seven current modes**: four
+standard workflows plus three 4-step H3 Turbo FL2VA workflows. Every mode
+generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3` selector resolves to the mode inferred
-from your references; **`minimax-h3-r2v` is never inferred** — it runs a
-different checkpoint and must be asked for by name.
+from your references; `minimax-h3-turbo` does the same for Turbo t2v/i2v/flf2v.
+**`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
+be asked for by name. There is no Turbo Ref2VA workflow.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -247,11 +252,17 @@ different checkpoint and must be asked for by name.
 | `minimax-h3-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
 | `minimax-h3-flf2v` | First → last frame | Interpolate between `--ref` and `--ref-end` |
 | `minimax-h3-r2v` | Reference-to-video | Compose from a labelled reference SET: up to 9 images, 3 videos, 3 audio clips, 12 files total |
+| `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | Turbo text-to-video | 4-step prompt-only path; generic `minimax-h3-turbo` infers the frame workflow |
+| `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
+| `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
 
-The first three modes share the FL2VA checkpoint: worker ids
+The three standard frame modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
 `minimax-h3-fl2va-fp8_flf2v`. The CLI resolves those three short selectors,
-picking i2v vs flf2v from whether `--ref-end` is present. Reference-to-video is a
+picking i2v vs flf2v from whether `--ref-end` is present. Turbo applies
+LightX2V's 4-step distillation LoRA to those same workflows through worker ids
+`minimax-h3-fl2va-fp8_t2v_turbo`, `minimax-h3-fl2va-fp8_i2v_turbo`, and
+`minimax-h3-fl2va-fp8_flf2v_turbo`. Reference-to-video is a
 SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — selected directly
 with `-m minimax-h3-r2v`, or through the creative-agent `generate_video` tool
 with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
@@ -270,46 +281,50 @@ initial Sogni release is routed to 32 GB-class workers.
   is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. `1344×768`
   (landscape) and `768×1344` (portrait) are the primary sizes.
-- **20 steps, guidance/CFG 1, distilled** — send no steps, guidance, sampler,
-  scheduler, or **negative prompt**. The checkpoint is CFG-distilled with
+- **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1** — send no
+  steps, guidance, sampler, scheduler, or **negative prompt**. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch and a `negativePrompt`
   parameter is ignored wherever it is accepted. Put negative direction in the
   prompt text instead.
+- **Turbo uses the same prompt contract as standard H3.** Its documented
+  execution difference here is the fixed 4-step workflow.
 - **768p-class open-weights release.** Do not offer or claim 2K; MiniMax's 2K
   stage is hosted-only and not part of the open release.
 
 ```bash
-sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<H3 prose prompt>"
-sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
-sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<H3 prose prompt>"
-sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<H3 prompt using <Picture 1>/<Picture 2>/<Video 1>/<Audio 1>>"
+sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"
+sogni-agent -q --video -m minimax-h3-turbo --duration 8 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 ```
 
 ### MiniMax H3 prompting
 
-H3 takes **natural cinematic prose** — no required structure, no field names, no
-mandatory tags. Still expand a one-line request into a fully directed scene, and
-in priority order:
+Base and Turbo T2V, I2V, and FLF2V use MiniMax's exact three-field rewrite
+contract, in this order:
 
-1. Write plain cinematic prose.
-2. For anything longer than a single beat, lay it out as a **timed shot list**
-   with bracketed timecodes (`[0-2 seconds] …`, `[2-5 seconds] …`). This is the
-   highest-leverage technique for H3 pacing and prevents slideshow drift.
-3. **Direct the audio** as deliberately as the picture — ambience, specific
-   spot effects, and music by instrumentation and timing. Plain `Audio:` /
-   `Sound design:` / `BGM:` labels inside the prose work well. Say explicitly
-   when you want no music.
-4. Write dialogue as ordinary quoted prose with the speaker and delivery named.
-5. State what you do **not** want in the prompt text; there is no
-   negative-prompt field.
-6. Give every reference image an explicit job and name the features to preserve.
+```text
+integrated_multimodal_description: [Shot 1] ...
 
-MiniMax's `<d>[Language] …</d>` + `(S1)` markup and the three-field IR document
-are optional input forms, not required wrappers around every prompt. Default to
-natural prose, and preserve markup a user supplied. **Read
-[`video-prompting.md`](video-prompting.md) § MiniMax H3 Prompting** for the full
-technique, worked natural-prose examples, the duration→frame snapping table, and
-the optional/advanced markup reference before writing an H3 prompt.
+overall_soundscape: ...
+
+non_diegetic_music: ...
+```
+
+I2V prepends the exact first-frame alignment line; FLF2V prepends the exact
+first-and-last-frame alignment line. The preamble must be the first line,
+followed by one blank line before the fields. T2V has no preamble. Turbo uses
+the same structure as its corresponding standard mode.
+
+Vocal sources receive stable `(S1)`, `(S2)`, ... IDs across all shots. Put only
+the language tag and exact spoken words inside `<d>`, for example
+`<d>[English] I kept this one behind the counter for you.</d>`. Do not translate
+or paraphrase dialogue. **Read [`video-prompting.md`](video-prompting.md) §
+MiniMax H3 Prompting** for the exact preambles, shot notation, field semantics,
+and complete Ref2VA contract.
 
 ### MiniMax H3 reference-to-video (r2v)
 
@@ -317,9 +332,10 @@ the optional/advanced markup reference before writing an H3 prompt.
 conditions on a whole **reference set** instead of one or two locked frames. It
 runs its own ref2va checkpoint, so it is **never inferred** from stray uploads
 the way HappyHorse r2v is — the user or the plan must name it. Direct CLI uses
-`-m minimax-h3-r2v`: `--ref` is optional loose image 1, repeatable `-c` supplies
-the remaining images, and repeatable `--ref-video` / `--ref-audio` supply those
-modalities. The creative-agent `generate_video` tool uses
+`-m minimax-h3-r2v`: `--ref` supplies loose image 1, repeatable `-c` supplies
+additional images, and repeatable `--ref-video` / `--ref-audio` supply those
+modalities. At least one image must be provided through `--ref` or `-c`. The
+creative-agent `generate_video` tool uses
 `videoModel="minimax-h3-r2v"` plus its typed reference-index arrays.
 
 Everything in [MiniMax H3 models](#minimax-h3-models) above still applies: 24 fps,
@@ -332,44 +348,54 @@ Sogni Socket before the job is priced):
 
 | Kind | Max | Notes |
 |------|-----|-------|
-| Reference images | 9 | **At least one is required** — r2v with no image is rejected |
+| Reference images | 9 | At least one is required through `--ref` or `-c` |
 | Reference videos | 3 | Read as 24 fps, 2–15 s each; a clip's own soundtrack is presented too |
 | Reference audio | 3 | Standalone clips, separate from any video soundtrack |
 | Total files | 12 | 9 + 3 + 3 = 15 does **not** fit; trade slots (e.g. 6 + 3 + 3) |
 
-Reference videos and reference audio are **additions to** the image set, never
-replacements for it. For a prompt-only render use `minimax-h3-t2v`; for a locked
-opening frame use `minimax-h3-i2v`; to interpolate between two anchors use
-`minimax-h3-flf2v`. r2v has no frame anchors at all, so an end-frame parameter is
-rejected rather than ignored.
+At least one reference image is required; reference videos and audio augment
+that image set rather than replacing it. For a prompt-only render use
+`minimax-h3-t2v`; for a locked opening frame use `minimax-h3-i2v`; to
+interpolate between two anchors use `minimax-h3-flf2v`. r2v has no frame anchors
+at all, so an end-frame parameter is rejected rather than ignored.
+
+Ref2VA uses exactly six fields in this order:
+
+```text
+subject_definitions:
+
+summary:
+
+retention_analysis:
+
+detailed_description:
+
+overall_soundscape:
+
+non_diegetic_music:
+```
+
+This is a different prompt contract from Base/Turbo H3. There is no Turbo
+Ref2VA selector or workflow.
 
 #### Ordinals and the prompt tag form
 
-References are presented to the model grouped by type and numbered **from 1 per
-type**: images first, then each reference video (its own soundtrack numbered
-immediately **before** it), then standalone audio. H3's text encoder splices a
-literal label in front of each one before your prompt text — it emits
-`"<Picture i>: "`, `"<Video k>: "` and `"<Audio j>: "` — so write the prompt with
-**those same tags, angle brackets included**. A sentence written that way shares
-a token sequence with the label of the reference it is about; prose aliases
-("Image 1", "the second photo", `@Image1`, `[Image 1]`) do not.
+References are numbered **from 1 independently per type**. Use `<Subject N>`
+for visible referenced people, objects, scenes, or effects; cite the source
+`<Picture N>` or `<Video N>` in that subject definition. Reserve `<Picture N>`
+for a concrete frame or storyboard relationship, `<Video N>` for a whole-video
+edit, continuation, camera, cut, rhythm, or temporal relationship, and
+`<Audio N>` for a standalone audio asset or an explicitly enabled audio track.
 
 This mirrors Seedance's loose-reference grammar — same 9 / 3 / 12 shape, same
 "give every reference one explicit job" rule — but the tag form differs: Seedance
 uses `@Image1` / `@Video1` / `@Audio1`, H3 uses `<Picture 1>` / `<Video 1>` /
 `<Audio 1>`. Never carry one model's tags into the other's prompt.
 
-Ordinal traps worth stating explicitly:
-
-- Numbering restarts per type, so the first image is `<Picture 1>` even when a
-  video was attached before it.
-- A reference video **with sound** contributes an `<Audio j>` of its own,
-  counted immediately before its `<Video k>`. With one soundtracked video plus
-  one standalone track, the soundtrack is `<Audio 1>` and the standalone clip is
-  `<Audio 2>`.
-- Submission order is ordinal order. Never reorder or drop a reference after the
-  prompt has been written — every later ordinal shifts and "use `<Picture 3>`
-  for the jacket" lands on the wrong file.
+Numbering restarts per type, so the first image is `<Picture 1>` even when a
+video was attached before it. A video file does not automatically create an
+`<Audio N>` label merely because it contains sound. Submission order remains
+ordinal order; never reorder or drop a reference after writing the prompt.
 
 #### One explicit job per reference
 
@@ -379,43 +405,35 @@ camera movement, voice character — and state who wins when two disagree. An
 unassigned reference is the most common cause of identity drift and washed-out
 style on this model.
 
-Worked example — 3 images, 1 soundtracked video, 1 standalone audio clip
-(6 files, within the 12-file cap):
+Compact format example:
 
 ```text
-<Picture 1> is the identity reference for the woman: her face, her bone
-structure, and her hairstyle carry over exactly, and nothing else from that
-frame does. <Picture 2> is the wardrobe reference: the dark red jacket, its
-collar, and the way it hangs — take the garment, not the person wearing it.
-<Picture 3> is the location, lighting palette, and film texture: the wet street,
-the sodium and neon colour, the grain. Do not copy any person, vehicle, or
-signage from <Picture 3>. Use <Video 1> only for the camera movement — the slow
-handheld push-in and its timing — and take nothing else from it; <Audio 1> is
-that clip's own soundtrack and is reference only, do not reproduce it.
-<Audio 2> is the voice character for her single line: dry, low, close-miked.
-Where <Picture 1> and <Picture 3> disagree on colour or exposure, <Picture 1>
-wins on her face and <Picture 3> wins on everything behind her.
+subject_definitions:
+<Subject 1> is the woman in <Picture 1>; preserve her face, hairstyle, and dark-red jacket.
+<Video 1> is the camera-motion reference for a slow handheld push-in.
+<Audio 1> is the voice-timbre reference for <Subject 1> (S1).
 
-[0-3 seconds] She walks toward camera along the rain-slicked street, hands in
-the jacket pockets. Handheld medium shot, shallow focus, neon reflections
-sliding across the wet asphalt.
+summary:
+[reference generation + audio reference] The target video follows <Subject 1> through a rain-slicked street using <Video 1>'s camera movement and <Audio 1>'s voice timbre.
 
-[3-6 seconds] She stops and glances back over her shoulder as a bus passes
-behind her, its headlights sweeping across her face.
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): fully_preserved - her identity, hairstyle, and jacket are retained.
+<Video 1> (camera movement): weak_reference - its slow handheld push-in guides the new shot.
+<Audio 1>: reference - its vocal timbre guides <Subject 1>'s dialogue without copying the source signal.
 
-[6-8 seconds] Medium close-up, street lights blooming behind her. She says,
-quietly: "It was never going to be the last train."
+detailed_description:
+The target video uses a live-action cinematic style with wet neon street lighting. [Shot 1] <Subject 1> (S1) walks toward the camera while it performs the slow handheld push-in referenced from <Video 1>. She stops beneath a streetlight and says with the dry, low timbre referenced from <Audio 1>: <d>[English] It was never going to be the last train.</d>
 
-Audio: steady rain on asphalt, tyres hissing through standing water, a bus
-engine passing left to right at 4 seconds. No music.
+overall_soundscape:
+Steady rain falls on asphalt while tyres hiss through standing water and a bus engine passes from left to right.
+
+non_diegetic_music:
+N/A
 ```
 
-Note what that example does: every one of the six references is named exactly
-once with a bounded job, the video is explicitly fenced to camera movement, the
-video's own soundtrack is explicitly marked as reference-only so it is not
-reproduced, the conflict rule is stated, and the shot list still carries the
-pacing. Trim assignments for references you did not actually attach — a tag with
-nothing behind it just adds noise.
+Trim definitions for references that were not attached; unresolved labels are
+invalid. See the full Ref2VA section in `video-prompting.md` for relationship
+markers and detailed field semantics.
 
 ## LTX-2 / LTX-2.3 models
 
@@ -487,12 +505,15 @@ model recommendations.
 | MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
 | MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
 | MiniMax H3 from a set of loose references (identity + wardrobe + location, a motion clip, a voice clip) | `minimax-h3-r2v` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
+| MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
+| MiniMax H3 Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
+| MiniMax H3 Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3** uses dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Steps 20, guidance 1, no negative prompt, native stereo audio, 32 GB-class workers. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. Guidance 1, no negative prompt, native stereo audio, and 32 GB-class workers apply to both. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

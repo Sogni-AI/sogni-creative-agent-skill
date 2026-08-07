@@ -574,6 +574,21 @@ test('auto token fallback does not treat freeform insufficient text as balance a
   assert.doesNotMatch(stderr, /retrying with SOGNI tokens/);
 });
 
+test('generic project wrappers expose the underlying server failure', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    'a cinematic skyline at dusk'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_WRAPPED_ERROR: 'Target worker 474 cannot run minimax-h3-ref2va-fp8_r2v.'
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.error, 'Target worker 474 cannot run minimax-h3-ref2va-fp8_r2v.');
+  assert.equal(payload.technicalError, undefined);
+});
+
 test('insufficient token balance offers Spark packs purchase link in json output', () => {
   const { exitCode, state, stdout, stderr } = runCli([
     '--json',
@@ -1327,6 +1342,62 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
     assert.equal(state.lastVideoProject.sampler, undefined);
     assert.equal(state.lastVideoProject.scheduler, undefined);
   }
+});
+
+test('MiniMax H3 Turbo friendly selectors resolve all three supported FL2VA modes', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-t2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      args: []
+    },
+    {
+      model: 'minimax-h3-i2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_i2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-flf2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_flf2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, expected, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video', '-m', model, '--duration', '5', ...args,
+      'A detailed continuous shot with synchronized native audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+  }
+});
+
+test('bare MiniMax H3 Turbo selector infers t2v, i2v, and flf2v but rejects r2v', () => {
+  const t2v = runCli(['--video', '-m', 'minimax-h3-turbo', 'A record store conversation.']);
+  assert.equal(t2v.exitCode, 0);
+  assert.equal(t2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_t2v_turbo');
+
+  const i2v = runCli([
+    '--video', '-m', 'minimax-h3-turbo', '--ref', SCREENSHOT_FIXTURE,
+    'The clerk lifts a record sleeve and speaks.'
+  ]);
+  assert.equal(i2v.exitCode, 0);
+  assert.equal(i2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_i2v_turbo');
+
+  const flf2v = runCli([
+    '--video', '-m', 'minimax-h3-turbo', '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE, 'Move continuously between the anchors.'
+  ]);
+  assert.equal(flf2v.exitCode, 0);
+  assert.equal(flf2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_flf2v_turbo');
+
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-turbo', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    'MiniMax H3 Turbo does not support r2v'
+  );
 });
 
 test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
@@ -4687,6 +4758,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--api-workflow'), 'Help should include --api-workflow');
   assert.ok(stdout.includes('--generate-audio'), 'Help should include --generate-audio');
   assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
+  assert.ok(stdout.includes('minimax-h3-t2v-turbo'), 'Help should include the MiniMax H3 Turbo selectors');
+  assert.ok(stdout.includes('Turbo has no r2v/Ref2VA variant'), 'Help should state the Turbo mode boundary');
   assert.ok(stdout.includes('9 images / 3 videos / 3 audios / 12 files total'), 'Help should include MiniMax H3 r2v limits');
   assert.ok(stdout.includes('--expand-prompt'), 'Help should include --expand-prompt');
   assert.ok(

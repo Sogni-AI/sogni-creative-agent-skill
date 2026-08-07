@@ -145,6 +145,13 @@ class SogniClientWrapper extends EventEmitter {
     this.lastVideoProject = config;
     state.lastVideoProject = config;
     persistState();
+    if (process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_WRAPPED_ERROR) {
+      const originalError = new Error(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_WRAPPED_ERROR);
+      const error = new Error('Project creation failed');
+      error.code = 'PROJECT_ERROR';
+      error.originalError = originalError;
+      throw error;
+    }
     if (process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR) {
       throw new Error(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR);
     }

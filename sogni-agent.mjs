@@ -656,7 +656,22 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   return payload;
 }
 
+function unwrapGenericProjectError(error) {
+  let current = error;
+  const seen = new Set();
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const message = typeof current.message === 'string' ? current.message.trim() : '';
+    if (message !== 'Project creation failed') break;
+    const next = current.originalError || current.cause;
+    if (!next) break;
+    current = next;
+  }
+  return current;
+}
+
 function cliErrorMessage(error) {
+  error = unwrapGenericProjectError(error);
   if (typeof error === 'string') return error;
   if (error instanceof Error) return error.message || String(error);
   if (error && typeof error === 'object') {
@@ -716,6 +731,7 @@ function classifyHappyHorseCliError(error, rawMessage) {
 }
 
 function classifyCliError(error, context = {}) {
+  error = unwrapGenericProjectError(error);
   const rawMessage = cliErrorMessage(error);
 
   // Client-side CLI rejections are the plain `{ message, code }` shape built by
@@ -1938,6 +1954,29 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
   if (normalized === 'minimax-h3-i2v') return 'minimax-h3-fl2va-fp8_i2v';
   if (normalized === 'minimax-h3-flf2v') return 'minimax-h3-fl2va-fp8_flf2v';
   if (normalized === 'minimax-h3-r2v') return MINIMAX_H3_R2V_MODEL_ID;
+  if (normalized === 'minimax-h3-turbo' && workflow) {
+    if (workflow === 'r2v') {
+      fatalCliError('MiniMax H3 Turbo does not support r2v; use minimax-h3-r2v for Ref2VA.', {
+        code: 'INVALID_ARGUMENT',
+        details: { workflow, model: normalized }
+      });
+    }
+    if (workflow === 'i2v') {
+      return hasEndFrame
+        ? 'minimax-h3-fl2va-fp8_flf2v_turbo'
+        : 'minimax-h3-fl2va-fp8_i2v_turbo';
+    }
+    return 'minimax-h3-fl2va-fp8_t2v_turbo';
+  }
+  if (normalized === 'minimax-h3-t2v-turbo') {
+    return 'minimax-h3-fl2va-fp8_t2v_turbo';
+  }
+  if (normalized === 'minimax-h3-i2v-turbo') {
+    return 'minimax-h3-fl2va-fp8_i2v_turbo';
+  }
+  if (normalized === 'minimax-h3-flf2v-turbo') {
+    return 'minimax-h3-fl2va-fp8_flf2v_turbo';
+  }
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
@@ -1958,6 +1997,10 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-i2v'
     || normalized === 'minimax-h3-flf2v'
     || normalized === 'minimax-h3-r2v'
+    || normalized === 'minimax-h3-turbo'
+    || normalized === 'minimax-h3-t2v-turbo'
+    || normalized === 'minimax-h3-i2v-turbo'
+    || normalized === 'minimax-h3-flf2v-turbo'
     || isMiniMaxH3Model(normalized);
 }
 
@@ -1967,6 +2010,9 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-i2v') return 'i2v';
   if (normalized === 'minimax-h3-flf2v') return 'flf2v';
   if (normalized === 'minimax-h3-r2v') return 'r2v';
+  if (normalized === 'minimax-h3-t2v-turbo') return 't2v';
+  if (normalized === 'minimax-h3-i2v-turbo') return 'i2v';
+  if (normalized === 'minimax-h3-flf2v-turbo') return 'flf2v';
   return MINIMAX_H3_MODEL_MODES.get(normalized) || null;
 }
 
@@ -3583,6 +3629,11 @@ Prompting". No negative prompt field: state negatives in the prompt text.):
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
   minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
                                      (9 images / 3 videos / 3 audios / 12 files total)
+  minimax-h3-turbo                  4-step Turbo; --ref/--ref-end select i2v/flf2v
+  minimax-h3-t2v-turbo              4-step Turbo text-to-video
+  minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
+  minimax-h3-flf2v-turbo            4-step Turbo first-frame -> last-frame (--ref plus --ref-end)
+                                     (Turbo has no r2v/Ref2VA variant)
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)

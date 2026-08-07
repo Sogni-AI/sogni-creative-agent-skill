@@ -422,12 +422,14 @@ sogni-agent --video -m seedance2 --workflow t2v \
   --ref-audio https://cdn.example.com/music.m4a \
   "Use @Image1 for product identity, @Video1 for camera movement, and @Audio1 for music rhythm"
 
-# MiniMax H3 text/image/reference-to-video (native 32 kHz stereo audio)
-sogni-agent --video -m minimax-h3 --duration 10 "<timed H3 prose prompt with audio direction>"
-sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<H3 image-to-video prompt>"
+# MiniMax H3 standard and 4-step Turbo video (native 32 kHz stereo audio)
+sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png \
   --ref-video motion.mp4 --ref-audio voice.m4a \
-  "<Picture 1> controls identity. <Picture 2> controls wardrobe. <Video 1> controls motion. <Audio 1> controls voice."
+  "<six-field Ref2VA prompt>"
+sogni-agent --video -m minimax-h3-turbo --duration 8 "<three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
@@ -601,6 +603,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 image-to-video | `minimax-h3-i2v` |
 | MiniMax H3 first-frame → last-frame video | `minimax-h3-flf2v` with `--ref A --ref-end B` |
 | MiniMax H3 reference-to-video | `minimax-h3-r2v` with up to 9 images, 3 videos, 3 audios / 12 files total |
+| MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
+| MiniMax H3 Turbo image-to-video | `minimax-h3-i2v-turbo` with `--ref` |
+| MiniMax H3 Turbo first-frame → last-frame video | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
 | Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
@@ -619,7 +624,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 ## Video Sizing & Aspect Ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` is snapped to that frame grid, so H3 delivers the nearest grid point rather than the exact seconds you ask for — `--duration 3` renders the 124-frame floor (5.17 s) and `--duration 6` renders 141 frames (5.88 s). The CLI prints the duration it will actually deliver; pass `--frames` directly for exact control. Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. The separate `minimax-h3-r2v` checkpoint accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and prompts use per-type `<Picture 1>` / `<Video 1>` / `<Audio 1>` tags. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
+- **MiniMax H3 and H3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` snaps to that frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds: `--duration 3` renders the 124-frame floor (5.17 s), while `--duration 6` renders 141 frames (5.88 s). The CLI prints the delivered duration; pass `--frames` directly for exact control. Standard H3 uses 20 steps; Turbo uses 4 steps. Guidance 1 is fixed and there is no negative-prompt input. Base and Turbo t2v/i2v/flf2v prompts use the exact ordered fields `integrated_multimodal_description`, `overall_soundscape`, and `non_diegetic_music`; i2v/flf2v also require their exact alignment preamble. Spoken lines use stable `(S1)` IDs and `<d>[Language] exact words</d>`. The separate standard `minimax-h3-r2v` checkpoint uses exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`, in that order. It accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and there is no Turbo Ref2VA. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. Standard and Turbo modes require 32 GB-class workers. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact preambles, shot notation, and reference labels.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
@@ -808,6 +813,8 @@ On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the
 | **Unlimited Pro** | $50 / mo | $498 / yr |
 
 App Store and Google Play prices may differ from web pricing due to platform fees. A 3-day free trial is available once per account (a payment method is required and the subscription converts to paid when the trial ends unless cancelled first).
+
+Plan pricing, included features and models, usage allowances, fair-use thresholds, and other limits are subject to change at Sogni AI's discretion, subject to applicable law. Sogni will provide advance notice of material changes affecting an active paid subscription when required. Treat the live plan catalog and checkout as authoritative.
 
 ### What the subscription covers
 

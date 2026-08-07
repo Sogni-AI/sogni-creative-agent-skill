@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.26.1"
   homepage: https://sogni.ai
@@ -178,13 +178,16 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
-# MiniMax H3 (fixed 24fps, native stereo audio + dialogue; natural prose prompt
-# with a timed shot list and audio direction — see references/video-prompting.md).
-# t2v default; --ref = i2v; --ref + --ref-end = flf2v; r2v is explicit.
-sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<H3 prose prompt>"
-sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<H3 prose prompt>"
-sogni-agent --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 "<H3 prose prompt>"
-sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a "<H3 prompt using <Picture 1>/<Picture 2>/<Video 1>/<Audio 1>>"
+# MiniMax H3 (fixed 24fps, native stereo audio + dialogue; use the official
+# ordered-field prompt contract — see references/video-prompting.md).
+# Standard H3 has four modes; 4-step H3 Turbo adds t2v/i2v/flf2v.
+sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a "<six-field Ref2VA prompt>"
+sogni-agent --video -m minimax-h3-turbo --duration 8 "<three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 
 # HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
 # i2v from one first-frame image (--ref); r2v from 1-9 reference images (-c).
@@ -265,9 +268,11 @@ tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
-MiniMax H3 is an explicit model choice, not a universal default. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition, or explicitly select `-m minimax-h3-r2v` for a loose reference set. H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (repeat `--ref-video`), and **3 audio clips** (repeat `--ref-audio`), with **12 files total** and at least one image; it is never inferred. Address them as `<Picture 1>`, `<Video 1>`, and `<Audio 1>` in per-type submission order, give every reference one job, and never use `--ref-end` for r2v. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `--no-generate-audio` strips that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`; send no steps, guidance, sampler, scheduler, or negative prompt. It is the 768p-class open-weights release — do not claim 2K. The initial Sogni release is routed to 32 GB-class workers.
+MiniMax H3 is an explicit model choice, not a universal default. All **seven current H3 modes** are available in the Creative Agent Skill and direct Sogni API: four standard workflows and three Turbo workflows. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition, or explicitly select `-m minimax-h3-r2v` for a loose reference set. Use `-m minimax-h3-turbo` for automatic Turbo t2v/i2v/flf2v routing, or the explicit `minimax-h3-t2v-turbo`, `minimax-h3-i2v-turbo`, and `minimax-h3-flf2v-turbo` selectors. Turbo is the fixed 4-step execution path; standard H3 uses 20 steps. Do not claim a quality or speed multiple without current production-parity measurements and manual output review. There is no Turbo Ref2VA mode.
 
-**H3 takes natural cinematic prose**, not a required structured document. Expand the user's one-liner into a directed scene: a **timed shot list** with bracketed timecodes (`[0-2 seconds] …`) for anything longer than one beat, deliberate **audio direction** (ambience, specific SFX, music by instrumentation and timing; say so when you want no music), dialogue as ordinary quoted prose, and negative direction stated in the prompt text since there is no negative-prompt field. MiniMax's `<d>[Language] …</d>` + `(S1)` markup and three-field IR document are optional input forms; never invent or strip that markup when a user supplied it. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing an H3 prompt.
+H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (repeat `--ref-video`), and **3 audio clips** (repeat `--ref-audio`), with **12 files total** and at least one reference image; it is never inferred. Reference videos and audio augment the image set rather than replacing it. Address references as `<Picture 1>`, `<Video 1>`, and `<Audio 1>` in per-type submission order, give every reference one job, and never use `--ref-end` for r2v. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `--no-generate-audio` strips that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`; send no steps, guidance, sampler, scheduler, or negative prompt. It is the 768p-class open-weights release — do not claim 2K. Standard and Turbo modes are routed to 32 GB-class workers.
+
+**H3 requires MiniMax's official ordered-field prompt contract.** Base and Turbo T2V/I2V/FLF2V use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for I2V or FLF2V. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and exact dialogue as `<d>[Language] words</d>`; do not substitute quoted prose or bracketed timecode lists. Ref2VA uses its separate six-field contract. Negative direction belongs inside the structured prompt because there is no negative-prompt field. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
 
 For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini` or `seedance2-fast` for 4K; both remain capped to the 720p lower-resolution path. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
@@ -309,7 +314,7 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 ### Sogni Unlimited Subscription & Billing Errors
 
-On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast**, and **HappyHorse 1.1** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Current plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. Plan pricing, included features and models, usage allowances, fair-use thresholds, and other limits are subject to change at Sogni AI's discretion, subject to applicable law; retrieve the current catalog before quoting them as current. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast**, and **HappyHorse 1.1** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
 
 **Do not infer a Spark charge from `tokenType: "spark"`.** `tokenType` is the quote/accounting denomination and may remain `spark` on a covered Unlimited job. Billing is decided separately by the server's `paymentModel`: `subscription` means the artist Spark/SOGNI debit was skipped; `paid_spark`, `free_spark`, or `sogni` means token billing. If a result does not expose `paymentModel`, treat the payment source as unknown rather than warning that Spark was spent. Check the structured subscription state or transaction history when available. A successful request made with `--billing-mode subscription` is covered: if the server cannot use Unlimited, it rejects the request with `4078` or `4080` instead of silently falling back to Spark.
 
@@ -379,7 +384,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 
 | Read this | When the task involves |
 |-----------|------------------------|
-| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 prose prompts (timed shot lists, audio direction, quoted dialogue, optional IR markup); high-res/4K routing; orientation/aspect mapping; camera language |
+| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, and dialogue tags; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |

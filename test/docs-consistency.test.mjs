@@ -172,11 +172,16 @@ test('Krea identity routing follows typed shared policy without prose parsing', 
   assert.match(skill, /agents must pass the Krea model explicitly/);
 });
 
-test('MiniMax H3 docs expose direct t2v, i2v, flf2v, and r2v support consistently', () => {
+test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () => {
   const checkedFiles = ['SKILL.md', 'README.md', 'references/models.md', 'references/video-prompting.md'];
   for (const docFile of checkedFiles) {
     const text = read(docFile);
     assert.match(text, /minimax-h3-r2v/, `${docFile}: missing H3 r2v selector`);
+    assert.match(text, /minimax-h3-turbo/, `${docFile}: missing generic H3 Turbo selector`);
+    assert.match(text, /minimax-h3-i2v-turbo/, `${docFile}: missing H3 Turbo i2v selector`);
+    assert.match(text, /minimax-h3-flf2v-turbo/, `${docFile}: missing H3 Turbo flf2v selector`);
+    assert.match(text, /4-step|4 steps/, `${docFile}: missing H3 Turbo step count`);
+    assert.match(text, /no Turbo Ref2VA/i, `${docFile}: missing Turbo Ref2VA boundary`);
     assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
       `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);
   }
@@ -191,6 +196,7 @@ test('MiniMax H3 docs expose direct t2v, i2v, flf2v, and r2v support consistentl
     assert.match(text, /<Picture 1>/);
     assert.match(text, /<Video 1>/);
     assert.match(text, /<Audio 1>/);
+    assert.match(text, /at least one (?:reference )?image/i);
   }
 });
 

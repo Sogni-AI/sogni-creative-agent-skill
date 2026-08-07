@@ -1,3 +1,16 @@
+## [3.26.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.26.0...v3.26.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* **video:** report the MiniMax H3 duration actually delivered instead of a 5-15s range no H3 render can produce ([#28](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/28)) ([33f1f8b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/33f1f8bf4997dd369339ea5f41d5fd45c2572332))
+* **skill:** point plain SKILL.md installs at their host launcher so Hermes renders stop reporting agentFramework "unknown" ([#28](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/28)) ([33f1f8b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/33f1f8bf4997dd369339ea5f41d5fd45c2572332))
+
+
+### Documentation
+
+* document the host launchers in README.md and llm.txt, and note MiniMax H3 duration snapping ([#28](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/28)) ([33f1f8b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/33f1f8bf4997dd369339ea5f41d5fd45c2572332))
+
 # [3.26.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.25.0...v3.26.0) (2026-08-04)
 
 

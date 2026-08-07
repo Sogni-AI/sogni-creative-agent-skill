@@ -1243,6 +1243,55 @@ test('MiniMax H3 alias pins FL2VA t2v and snaps duration to the native frame gri
   assert.equal(state.lastVideoProject.scheduler, undefined);
 });
 
+test('MiniMax H3 reports the frame-grid duration it actually delivers', () => {
+  // 3s is below the grid, so H3 renders its 124-frame floor: 5.17s, not the
+  // round "5s" the clamp range used to advertise.
+  const belowFloor = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--duration', '3',
+    'A locked cinematic shot with rain ambience.'
+  ]);
+  assert.equal(belowFloor.exitCode, 0);
+  assert.equal(belowFloor.state.lastVideoProject.frames, 124);
+  assert.match(belowFloor.stderr, /Adjusted video duration from 3s to 5\.17s \(124 frames\)/);
+  assert.match(belowFloor.stderr, /delivers 5\.17-15\.08s/);
+  assert.doesNotMatch(belowFloor.stderr, /supported range/);
+
+  // A request inside the range still snaps: 6s lands on 141 frames = 5.88s.
+  const insideRange = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--duration', '6',
+    'A locked cinematic shot with rain ambience.'
+  ]);
+  assert.equal(insideRange.exitCode, 0);
+  assert.equal(insideRange.state.lastVideoProject.frames, 141);
+  assert.match(insideRange.stderr, /Adjusted video duration from 6s to 5\.88s \(141 frames\)/);
+
+  // Above the ceiling clamps to the 362-frame maximum, 15.08s.
+  const aboveCeiling = runCli([
+    '--video',
+    '-m', 'minimax-h3',
+    '--duration', '20',
+    'A locked cinematic shot with rain ambience.'
+  ]);
+  assert.equal(aboveCeiling.exitCode, 0);
+  assert.equal(aboveCeiling.state.lastVideoProject.frames, 362);
+  assert.match(aboveCeiling.stderr, /Adjusted video duration from 20s to 15\.08s \(362 frames\)/);
+});
+
+test('non-H3 video models keep the plain duration clamp message', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    '-m', 'seedance2',
+    '--duration', '30',
+    'A locked cinematic shot.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.match(stderr, /Adjusted video duration from 30s to 15s \(supported range for seedance-2-0: 4-15s\)\./);
+});
+
 test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', () => {
   const cases = [
     {

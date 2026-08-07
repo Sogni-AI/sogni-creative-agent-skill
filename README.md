@@ -50,6 +50,7 @@ With this skill, an agent can:
   - [ChatGPT (Custom GPT)](#chatgpt-custom-gpt)
   - [Manus / other SKILL.md frameworks](#manus--other-skillmd-frameworks)
   - [Manual install from source](#manual-install-from-source)
+  - [Host launchers](#host-launchers)
   - [Verify your install](#verify-your-install)
   - [Upgrading safely from inside an agent](#upgrading-safely-from-inside-an-agent)
 - [Claude Desktop](#claude-desktop)
@@ -254,6 +255,20 @@ gh repo clone Sogni-AI/sogni-creative-agent-skill
 cd sogni-creative-agent-skill
 npm install
 ```
+
+### Host launchers
+
+The package installs one launcher shim per host alongside `sogni-agent`. Each shim is the same CLI with the same flags and output — it only tags the request with the agent framework that ran it, so Sogni can tell a Codex render from a Claude Code render:
+
+| Host | Command | Reported framework |
+| --- | --- | --- |
+| Hermes | `sogni-agent-hermes` | `hermes-agent` |
+| OpenAI Codex CLI | `sogni-agent-codex` | `codex` |
+| Claude Code | `sogni-agent-claude-code` | `claude-code` |
+| OpenClaw | `sogni-agent` | `openclaw` (detected from `OPENCLAW_PLUGIN_CONFIG`) |
+| Anything else | `sogni-agent` | `unknown` |
+
+The Claude Code and Codex plugin surfaces already pin their launcher, and OpenClaw is detected automatically, so this mostly matters for Hermes and other plain [`SKILL.md`](./SKILL.md) installs: use `sogni-agent-hermes` wherever the docs say `sogni-agent`. Everything works normally through bare `sogni-agent` — the render is just attributed to `unknown`. Falling back to `sogni-agent` is always safe if a shim is not on `PATH`.
 
 ### Verify your install
 
@@ -604,7 +619,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 ## Video Sizing & Aspect Ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. The separate `minimax-h3-r2v` checkpoint accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and prompts use per-type `<Picture 1>` / `<Video 1>` / `<Audio 1>` tags. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
+- **MiniMax H3** uses a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` is snapped to that frame grid, so H3 delivers the nearest grid point rather than the exact seconds you ask for — `--duration 3` renders the 124-frame floor (5.17 s) and `--duration 6` renders 141 frames (5.88 s). The CLI prints the duration it will actually deliver; pass `--frames` directly for exact control. Steps 20 and guidance 1 are fixed and it takes no negative prompt (state negatives in the prompt text instead). Its prompt is natural cinematic prose — a timed shot list with bracketed timecodes plus explicit audio direction works best; see `references/video-prompting.md` § MiniMax H3 Prompting. The separate `minimax-h3-r2v` checkpoint accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and prompts use per-type `<Picture 1>` / `<Video 1>` / `<Audio 1>` tags. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. The initial Sogni release requires a 32 GB-class worker.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.

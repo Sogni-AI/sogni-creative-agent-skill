@@ -1243,6 +1243,55 @@ test('MiniMax H3 alias pins FL2VA t2v and snaps duration to the native frame gri
   assert.equal(state.lastVideoProject.scheduler, undefined);
 });
 
+test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      args: []
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_i2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_flf2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video',
+      '-m', model,
+      '--duration', '5',
+      ...args,
+      'A single continuous cinematic shot with synchronized ambient audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, model);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+    assert.equal(state.lastVideoProject.width, 1344);
+    assert.equal(state.lastVideoProject.height, 768);
+    assert.equal(state.lastVideoProject.steps, undefined);
+    assert.equal(state.lastVideoProject.guidance, undefined);
+    assert.equal(state.lastVideoProject.sampler, undefined);
+    assert.equal(state.lastVideoProject.scheduler, undefined);
+  }
+});
+
+test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'minimax-h3-fl2va-fp8_t2v_turbo',
+      '--frames', '125',
+      'A short clip.'
+    ],
+    'MiniMax H3 frames must be 124 + n×17'
+  );
+});
+
 test('MiniMax H3 over 10s explains a stale estimator cap without blocking generation', () => {
   const { exitCode, state, stderr } = runCli([
     '--video',

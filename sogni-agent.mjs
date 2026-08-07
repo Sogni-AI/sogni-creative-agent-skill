@@ -1864,12 +1864,16 @@ const LTX_TRANSITION_LORA_ID = 'transition';
 const LTX_TRANSITION_TRIGGER = 'zhuanchang';
 const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
 const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
-const MINIMAX_H3_MODEL_IDS = new Set([
-  'minimax-h3-fl2va-fp8_t2v',
-  'minimax-h3-fl2va-fp8_i2v',
-  'minimax-h3-fl2va-fp8_flf2v',
-  'minimax-h3-ref2va-fp8_r2v'
+const MINIMAX_H3_MODEL_MODES = new Map([
+  ['minimax-h3-fl2va-fp8_t2v', 't2v'],
+  ['minimax-h3-fl2va-fp8_i2v', 'i2v'],
+  ['minimax-h3-fl2va-fp8_flf2v', 'flf2v'],
+  ['minimax-h3-ref2va-fp8_r2v', 'r2v'],
+  ['minimax-h3-fl2va-fp8_t2v_turbo', 't2v'],
+  ['minimax-h3-fl2va-fp8_i2v_turbo', 'i2v'],
+  ['minimax-h3-fl2va-fp8_flf2v_turbo', 'flf2v']
 ]);
+const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
@@ -1932,11 +1936,11 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
 
 function miniMaxH3ModeFromModelId(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
-  if (normalized === 'minimax-h3-t2v' || normalized === 'minimax-h3-fl2va-fp8_t2v') return 't2v';
-  if (normalized === 'minimax-h3-i2v' || normalized === 'minimax-h3-fl2va-fp8_i2v') return 'i2v';
-  if (normalized === 'minimax-h3-flf2v' || normalized === 'minimax-h3-fl2va-fp8_flf2v') return 'flf2v';
-  if (normalized === 'minimax-h3-r2v' || normalized === MINIMAX_H3_R2V_MODEL_ID) return 'r2v';
-  return null;
+  if (normalized === 'minimax-h3-t2v') return 't2v';
+  if (normalized === 'minimax-h3-i2v') return 'i2v';
+  if (normalized === 'minimax-h3-flf2v') return 'flf2v';
+  if (normalized === 'minimax-h3-r2v') return 'r2v';
+  return MINIMAX_H3_MODEL_MODES.get(normalized) || null;
 }
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {

@@ -75,7 +75,7 @@ class SogniClientWrapper extends EventEmitter {
 
   async connect() {
     if (process.env.SOGNI_AGENT_TEST_CONNECT_APP_ID_LIMIT) {
-      const err = new Error('Too many app-ids for this address, you need to connect with the same ones each time. This limit resets each UTC day.');
+      const err = new Error('Too many app IDs for this address. Reuse the same application ID and wait before retrying.');
       err.code = 4061;
       err.reason = err.message;
       throw err;

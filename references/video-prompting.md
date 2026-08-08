@@ -121,7 +121,8 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   2K; MiniMax's 2K stage is hosted-only and is not part of the open release.
 - The Sogni CLI does not truncate H3 prompts. If another surface has a shorter
   cap, flag it explicitly instead of silently removing required fields.
-- The initial Sogni release is routed to 32 GB-class workers.
+- FL2VA/Turbo and image-only R2V are routed to 32 GB-class workers;
+  video-conditioned R2V requires a worker above 40 GB.
 
 Because `--duration` snaps to the frame grid, the delivered length is rarely the
 integer the user asked for:
@@ -307,8 +308,9 @@ ref2va checkpoint, so it is never inferred — it must be chosen by name with
 direct CLI `-m minimax-h3-r2v` or the `generate_video` tool's
 `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). Direct CLI
 uses `--ref` then repeatable `-c` for images, plus repeatable `--ref-video` and
-`--ref-audio` for those modalities. At least one reference image is required;
-reference videos and audio augment the image set rather than replacing it. r2v
+`--ref-audio` for those modalities. At least one visual reference (image or
+video) is required. A reference video can be the only visual input; audio alone
+is invalid. r2v
 has no frame anchors at all—for
 a locked opening frame use `minimax-h3-i2v`, and for a first-to-last-frame
 transition use `minimax-h3-flf2v`.

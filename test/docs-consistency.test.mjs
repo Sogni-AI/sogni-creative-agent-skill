@@ -196,7 +196,8 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
     assert.match(text, /<Picture 1>/);
     assert.match(text, /<Video 1>/);
     assert.match(text, /<Audio 1>/);
-    assert.match(text, /at least one (?:reference )?image/i);
+    assert.match(text, /at least one visual reference/i);
+    assert.match(text, /audio(?:-only| alone)\s+(?:input\s+)?is invalid/i);
   }
 });
 

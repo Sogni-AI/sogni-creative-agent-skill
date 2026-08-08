@@ -93,7 +93,8 @@ The CLI leases a stable app ID per process from a persistent slot pool in
 OpenCode, hermes, ...) never share one socket identity and routine runs never
 mint new IDs. Preserve that directory between sessions. In ephemeral
 containers, set one stable `SOGNI_APP_ID` value; rotating IDs on each run can
-trigger Sogni error 4061 (allowance resets at 00:00 UTC).
+trigger Sogni error 4061. If blocked, preserve the stable ID and wait before
+retrying.
 
 ## Hosted API modes (require SOGNI_API_KEY)
 
@@ -144,9 +145,11 @@ the quote/accounting denomination and can remain `spark` on a covered job.
 debit was skipped. If `paymentModel` is absent, call the payment source unknown
 instead of claiming Spark was spent. A successful `--billing-mode subscription`
 request is covered; unavailable coverage fails with 4078 or 4080 rather than
-silently falling back to Spark. Fair-use throttling lowers per-UTC-day concurrency as completed renders
-climb (resets UTC midnight) and demotes over-allowance jobs to a lower-priority
-standard queue — describe this as fair use / standard queue, never "relaxed".
+silently falling back to Spark. Describe only the concurrency and queue limits
+shown in the current plan catalog. Actual throughput varies with demand,
+available Supernet capacity, and fair-use controls; do not speculate about
+unpublished scheduling mechanics or availability windows, and never call the plan
+"relaxed".
 Subscription-billing failures use `errorCategory: "subscription_billing"` with
 `errorCode` 4078 (vendor/no-entitlement -> use Premium Spark or reconnect), 4079
 (queue cap -> wait), 4080 (renewal retry, access paused -> pay with Spark/SOGNI,

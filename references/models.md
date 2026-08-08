@@ -270,8 +270,9 @@ with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
 **r2v is the one H3 mode that does**: see
-[MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v). The
-initial Sogni release is routed to 32 GB-class workers.
+[MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v).
+FL2VA/Turbo and image-only R2V are routed to 32 GB-class workers;
+video-conditioned R2V requires a worker above 40 GB.
 
 **Fixed parameters (do not override):**
 
@@ -334,7 +335,8 @@ runs its own ref2va checkpoint, so it is **never inferred** from stray uploads
 the way HappyHorse r2v is — the user or the plan must name it. Direct CLI uses
 `-m minimax-h3-r2v`: `--ref` supplies loose image 1, repeatable `-c` supplies
 additional images, and repeatable `--ref-video` / `--ref-audio` supply those
-modalities. At least one image must be provided through `--ref` or `-c`. The
+modalities. At least one visual reference must be supplied: an image or a
+video. A video can be the only visual input; audio alone is invalid. The
 creative-agent `generate_video` tool uses
 `videoModel="minimax-h3-r2v"` plus its typed reference-index arrays.
 
@@ -348,13 +350,12 @@ Sogni Socket before the job is priced):
 
 | Kind | Max | Notes |
 |------|-----|-------|
-| Reference images | 9 | At least one is required through `--ref` or `-c` |
+| Reference images | 9 | Optional when a reference video supplies the required visual input |
 | Reference videos | 3 | Read as 24 fps, 2–15 s each; a clip's own soundtrack is presented too |
 | Reference audio | 3 | Standalone clips, separate from any video soundtrack |
 | Total files | 12 | 9 + 3 + 3 = 15 does **not** fit; trade slots (e.g. 6 + 3 + 3) |
 
-At least one reference image is required; reference videos and audio augment
-that image set rather than replacing it. For a prompt-only render use
+At least one image or video is required; audio alone is invalid. For a prompt-only render use
 `minimax-h3-t2v`; for a locked opening frame use `minimax-h3-i2v`; to
 interpolate between two anchors use `minimax-h3-flf2v`. r2v has no frame anchors
 at all, so an end-frame parameter is rejected rather than ignored.
@@ -513,7 +514,7 @@ model recommendations.
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. Guidance 1, no negative prompt, native stereo audio, and 32 GB-class workers apply to both. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

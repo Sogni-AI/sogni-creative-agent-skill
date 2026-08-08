@@ -133,7 +133,7 @@ const KNOWN_MODEL_CATALOG_TAGS = new Set([
 const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081']);
 const APP_ID_LIMIT_ERROR_CODE = '4061';
 const APP_ID_LIMIT_HINT =
-  'This CLI now persists and reuses one installation app ID. Keep ~/.config/sogni/app-id between sessions; for ephemeral/container homes, set one stable SOGNI_APP_ID or persist SOGNI_APP_ID_PATH. App IDs already registered from this address remain counted until 00:00 UTC, so wait for the next UTC reset once if the address is already blocked.';
+  'This CLI persists and reuses one installation app ID. Keep ~/.config/sogni/app-id between sessions; for ephemeral/container homes, set one stable SOGNI_APP_ID or persist SOGNI_APP_ID_PATH. If the address is already blocked, preserve the stable ID and wait before retrying.';
 
 function subscriptionBillingFallback(code) {
   if (code === undefined || code === null) return null;
@@ -3620,15 +3620,16 @@ HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/108
   happyhorse-1.1-r2v                Reference-to-video from 1-9 reference images (-c/--context)
 
 MiniMax H3 Video Model Selectors (fixed 24fps, native 32kHz stereo audio + dialogue,
-frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px, 32GB-class workers.
-Prompt is natural cinematic prose — a timed shot list ("[0-2 seconds] ...") plus
-explicit audio direction; see references/video-prompting.md "MiniMax H3
-Prompting". No negative prompt field: state negatives in the prompt text.):
+frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px. FL2VA/Turbo and
+image-only R2V need 32GB-class workers; video-conditioned R2V needs above 40GB.
+Prompts use MiniMax's exact ordered-field contracts and [Shot N] notation; see
+references/video-prompting.md "MiniMax H3 Prompting". No negative prompt field:
+state negatives in the structured prompt.):
   minimax-h3                        Text-to-video (also accepts minimax-h3-t2v); --ref/--ref-end pick i2v/flf2v
   minimax-h3-i2v                    Image-to-video from a single first-frame image (--ref)
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
   minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
-                                     (9 images / 3 videos / 3 audios / 12 files total)
+                                     (9 images / 3 videos / 3 audios / 12 files total; requires an image or video)
   minimax-h3-turbo                  4-step Turbo; --ref/--ref-end select i2v/flf2v
   minimax-h3-t2v-turbo              4-step Turbo text-to-video
   minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
@@ -4640,8 +4641,9 @@ if (options.video) {
   } else if (options.videoWorkflow === 'r2v') {
     if (isMiniMaxH3R2v) {
       const imageCount = (options.refImage ? 1 : 0) + options.contextImages.length;
-      if (imageCount === 0) {
-        fatalCliError('MiniMax H3 r2v needs at least one reference image via --ref or -c/--context.', { code: 'INVALID_ARGUMENT' });
+      const videoCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
+      if (imageCount === 0 && videoCount === 0) {
+        fatalCliError('MiniMax H3 r2v needs at least one visual reference via --ref, -c/--context, or --ref-video; audio-only input is invalid.', { code: 'INVALID_ARGUMENT' });
       }
       if (options.refImageEnd) {
         fatalCliError('MiniMax H3 r2v has no end-frame anchor; use -c/--context for another loose image or minimax-h3-flf2v for first/last frames.', { code: 'INVALID_ARGUMENT' });

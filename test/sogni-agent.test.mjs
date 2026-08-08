@@ -408,7 +408,7 @@ test('SOGNI_APP_ID supplies a stable deployment identity without a home file', (
   assert.equal(state?.clientConfigs?.[0]?.appId, 'fixed-container-install-id');
 });
 
-test('app-id limit error explains persistence and the one-time UTC reset', () => {
+test('app-id limit error explains persistence without exposing reset timing', () => {
   const { exitCode, stdout } = runCli(
     ['--json', 'a cat'],
     { SOGNI_AGENT_TEST_CONNECT_APP_ID_LIMIT: '1' },
@@ -417,7 +417,8 @@ test('app-id limit error explains persistence and the one-time UTC reset', () =>
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.errorCode, '4061');
   assert.match(payload.hint, /persists and reuses one installation app ID/i);
-  assert.match(payload.hint, /00:00 UTC/);
+  assert.match(payload.hint, /wait before retrying/i);
+  assert.doesNotMatch(payload.hint, /UTC|midnight|reset/i);
 });
 
 test('unknown CLI flag returns a validation error', () => {
@@ -1521,10 +1522,23 @@ test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', 
   assert.equal(state.lastVideoProject.frames, 243);
 });
 
-test('MiniMax H3 r2v requires an image and is never inferred from loose references', () => {
+test('MiniMax H3 r2v accepts video-only visual input, rejects audio-only input, and is never inferred', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-video-only-r2v-'));
+  const video = join(tempDir, 'motion.mp4');
+  writeFileSync(video, Buffer.from('reference video'));
+
+  const videoOnly = runCli([
+    '--video', '-m', 'minimax-h3-r2v', '--ref-video', video,
+    'Use <Video 1> as the complete motion and composition reference.'
+  ]);
+  assert.equal(videoOnly.exitCode, 0);
+  assert.equal(videoOnly.state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v');
+  assert.equal(videoOnly.state.lastVideoProject.referenceImage, undefined);
+  assert.ok(videoOnly.state.lastVideoProject.referenceVideo);
+
   expectCliError(
-    ['--video', '-m', 'minimax-h3-r2v', '--ref-video', 'motion.mp4', 'Use <Video 1> for motion.'],
-    'needs at least one reference image'
+    ['--video', '-m', 'minimax-h3-r2v', '--ref-audio', 'voice.m4a', 'Use <Audio 1> for the voice.'],
+    'needs at least one visual reference'
   );
   expectCliError(
     ['--video', '-m', 'minimax-h3', '-c', SCREENSHOT_FIXTURE, 'A reference-led scene.'],

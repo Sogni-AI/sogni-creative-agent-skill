@@ -1,3 +1,27 @@
+## [3.27.0] - 2026-08-07
+
+### Added
+
+- **MiniMax H3 Turbo now has explicit public CLI selectors for every supported workflow.** Text-to-video,
+  image-to-video, and first/last-frame generation use the official structured prompt contracts and fixed
+  four-step Turbo path; Ref2VA remains available through the standard H3 model.
+
+### Changed
+
+- **MiniMax H3 Ref2VA now accepts a reference video as its only visual input.** Image and video references can
+  independently satisfy the visual-input requirement, while audio-only requests fail before dispatch with an
+  actionable validation error. Public guidance also reflects the worker capacity required by each H3 mode.
+- **Updated the Sogni dependency stack.** The skill now uses
+  `@sogni-ai/sogni-intelligence-client` `3.14.2`, `@sogni-ai/sogni-client` `5.7.0`, and the producer-pinned
+  `@sogni-ai/sogni-protocol` `1.0.0-alpha.17` for the current public video contracts and LTX 2.3 model registry.
+- **Subscription, queue, and app-ID recovery guidance now matches the current public product contract.** The
+  CLI and agent-facing documentation direct users to live plan limits and actionable retry choices.
+
+### Fixed
+
+- **Video project failures preserve the actionable server message.** Generic project-creation wrappers no
+  longer hide the underlying user-facing error returned by the generation service.
+
 ## [3.26.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.26.0...v3.26.1) (2026-08-07)
 
 

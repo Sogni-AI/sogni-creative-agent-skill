@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  animatePhotoDefinition,
+  generateVideoDefinition
+} from '@sogni-ai/sogni-intelligence-client/tools';
 
 import {
   SEEDANCE_STORYBOARD_REFERENCE_PROMPT,
@@ -35,6 +39,25 @@ import {
 test('runtime resolves public video model aliases by workflow', () => {
   assert.equal(resolveVideoModelAlias('seedance2', 'v2v'), 'seedance-2-0');
   assert.equal(resolveVideoModelAlias('ltx23', 'ia2v'), 'ltx23-22b-fp8_ia2v_distilled');
+});
+
+test('intelligence contracts expose every real MiniMax H3 Turbo mode at fixed 24fps', () => {
+  const generateVideoModel = generateVideoDefinition.function.parameters.properties.videoModel;
+  const animatePhotoModel = animatePhotoDefinition.function.parameters.properties.videoModel;
+  const generateModels = generateVideoModel.enum;
+  const animateModels = animatePhotoModel.enum;
+
+  assert.ok(generateModels.includes('minimax-h3-t2v-turbo'));
+  assert.ok(animateModels.includes('minimax-h3-i2v-turbo'));
+  assert.ok(animateModels.includes('minimax-h3-flf2v-turbo'));
+  assert.ok(!generateModels.includes('minimax-h3-r2v-turbo'));
+  assert.ok(!animateModels.includes('minimax-h3-r2v-turbo'));
+
+  assert.match(generateVideoModel.description, /fixed 24fps/);
+  assert.match(generateVideoModel.description, /integrated_multimodal_description/);
+  assert.match(generateVideoModel.description, /at least one visual reference \(image or video\)/);
+  assert.match(generateVideoModel.description, /audio alone is invalid/);
+  assert.match(animatePhotoModel.description, /official mode-specific alignment line/);
 });
 
 test('runtime exposes public storyboard adapters and skill manifests', () => {

@@ -1,10 +1,10 @@
 /**
  * Persistent Sogni application identity.
  *
- * Sogni limits how many distinct app IDs may connect from one address each
- * UTC day. An app ID therefore represents an installation, not a process or
- * request. Keep it outside credentials so rotating an API key does not rotate
- * the installation identity.
+ * Repeatedly registering distinct app IDs can exhaust the service allowance.
+ * An app ID therefore represents an installation, not a process or request.
+ * Keep it outside credentials so rotating an API key does not rotate the
+ * installation identity.
  *
  * A single shared app ID is not enough once several agent harnesses (Claude
  * Code, Codex, OpenCode, hermes, ...) drive this CLI concurrently: the socket

@@ -358,7 +358,7 @@ You can also skip the file and export `SOGNI_API_KEY` in your environment.
 
 Defaults live under `~/.config/sogni/` for credentials, last-render metadata, personas, memories, and personality.
 
-**Running several agents at once** (Claude Code, Codex, OpenCode, hermes, ...) works out of the box: each process leases its own stable app ID from a persistent slot pool in `~/.config/sogni/app-ids/`, so concurrent runs never fight over one socket identity (SWITCH_CONNECTION 4015) and routine runs never mint new IDs against the per-address daily allowance (error 4061). Leases are released on exit and reclaimed automatically if a process dies. Long-lived daemons should pin their own `SOGNI_APP_ID` to stay out of the shared pool, and each harness can set its own `SOGNI_LAST_RENDER_PATH` so `--last` stays per-tool. Override individual paths with:
+**Running several agents at once** (Claude Code, Codex, OpenCode, hermes, ...) works out of the box: each process leases its own stable app ID from a persistent slot pool in `~/.config/sogni/app-ids/`, so concurrent runs never fight over one socket identity (SWITCH_CONNECTION 4015) and routine runs do not create unnecessary IDs (error 4061). Leases are released on exit and reclaimed automatically if a process dies. Long-lived daemons should pin their own `SOGNI_APP_ID` to stay out of the shared pool, and each harness can set its own `SOGNI_LAST_RENDER_PATH` so `--last` stays per-tool. Override individual paths with:
 
 | Variable | Purpose |
 |----------|---------|
@@ -624,7 +624,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 ## Video Sizing & Aspect Ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 and H3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` snaps to that frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds: `--duration 3` renders the 124-frame floor (5.17 s), while `--duration 6` renders 141 frames (5.88 s). The CLI prints the delivered duration; pass `--frames` directly for exact control. Standard H3 uses 20 steps; Turbo uses 4 steps. Guidance 1 is fixed and there is no negative-prompt input. Base and Turbo t2v/i2v/flf2v prompts use the exact ordered fields `integrated_multimodal_description`, `overall_soundscape`, and `non_diegetic_music`; i2v/flf2v also require their exact alignment preamble. Spoken lines use stable `(S1)` IDs and `<d>[Language] exact words</d>`. The separate standard `minimax-h3-r2v` checkpoint uses exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`, in that order. It accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one image is required, r2v is never inferred, and there is no Turbo Ref2VA. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. Standard and Turbo modes require 32 GB-class workers. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact preambles, shot notation, and reference labels.
+- **MiniMax H3 and H3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` snaps to that frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds: `--duration 3` renders the 124-frame floor (5.17 s), while `--duration 6` renders 141 frames (5.88 s). The CLI prints the delivered duration; pass `--frames` directly for exact control. Standard H3 uses 20 steps; Turbo uses 4 steps. Guidance 1 is fixed and there is no negative-prompt input. Base and Turbo t2v/i2v/flf2v prompts use the exact ordered fields `integrated_multimodal_description`, `overall_soundscape`, and `non_diegetic_music`; i2v/flf2v also require their exact alignment preamble. Spoken lines use stable `(S1)` IDs and `<d>[Language] exact words</d>`. The separate standard `minimax-h3-r2v` checkpoint uses exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`, in that order. It accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one visual reference (image or video) is required, audio-only input is invalid, r2v is never inferred, and there is no Turbo Ref2VA. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact preambles, shot notation, and reference labels.
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
@@ -814,7 +814,7 @@ On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the
 
 App Store and Google Play prices may differ from web pricing due to platform fees. A 3-day free trial is available once per account (a payment method is required and the subscription converts to paid when the trial ends unless cancelled first).
 
-Plan pricing, included features and models, usage allowances, fair-use thresholds, and other limits are subject to change at Sogni AI's discretion, subject to applicable law. Sogni will provide advance notice of material changes affecting an active paid subscription when required. Treat the live plan catalog and checkout as authoritative.
+Plan pricing, included features and models, usage allowances, fair-use controls, and other limits are subject to change at Sogni AI's discretion, subject to applicable law. Sogni will provide advance notice of material changes affecting an active paid subscription when required. Treat the live plan catalog and checkout as authoritative.
 
 ### What the subscription covers
 
@@ -828,21 +828,18 @@ Do not use `tokenType: "spark"` by itself to determine that Spark paid for a ren
 
 With an active subscription, the CLI also skips its client-side "insufficient SPARK" pre-flight for covered video renders — a low token balance no longer blocks jobs the plan pays for. Vendor models and `--billing-mode tokens` keep the pre-flight, and the server remains authoritative either way.
 
-### Free-trial usage limits
+### Free-trial access
 
-Trials include anti-abuse evaluation limits so the full plan experience is reserved for paid periods. As shipped (server-tunable): up to **30 jobs per UTC day**, a **100-render lifetime trial allowance**, images up to **~1.1 MP**, video up to **5 s / 720p**, and — for programmatic/API callers — a single allowed model (Z-Image Turbo). Full plan limits apply once the trial converts to paid. Cancelling during the trial ends Unlimited access immediately and prevents the first charge.
+Trials include evaluation limits on generation volume, media size, and API access. Full plan limits apply once the trial converts to paid. Cancelling during the trial ends Unlimited access immediately and prevents the first charge.
 
-### Fair-use throttling
+### Fair-use scheduling
 
-Unlimited is fair-use, not unmetered. Limits are per UTC day and reset at UTC midnight; only successfully completed renders count toward the daily thresholds (failed / cancelled / retried renders do not).
+Unlimited is fair-use, not unmetered. Published plan limits are:
 
-- **Concurrent renders (base):** Unlimited — 4 images / 1 video in flight; Unlimited Pro — 16 images / 4 videos. Up to 512 jobs may be queued per account.
-- **Daily slot decay** (active-concurrency ceiling drops as completed renders climb, per UTC day):
-  - Unlimited images: 4 → 2 → 1 → 0 at 1024 / 2048 / 3072 completed.
-  - Unlimited video: 1 → 0 at 32 completed.
-  - Unlimited Pro images: 16 → 8 → 4 → 1 at 2048 / 4096 / 6144 completed (never fully cut off).
-  - Unlimited Pro video: 4 → 2 → 1 → 0 at 32 / 64 / 128 completed.
-- **Queue priority:** paid Spark and SOGNI jobs are dispatched ahead of subscription jobs; Unlimited Pro outranks Unlimited, which outranks free Spark. When a subscription exceeds its fast-lane fair-use allowance, further jobs run best-effort in the lowest-priority standard queue until capacity resets — they still complete, just later. Subscription jobs cannot target specific workers.
+- **Unlimited:** up to 4 concurrent image jobs and 1 concurrent video job, or 2 video jobs with fast/turbo models; queue up to 64 media, including up to 8 videos.
+- **Unlimited Pro:** up to 16 concurrent image jobs and 4 concurrent video jobs, with standard MiniMax H3 limited to 2; queue up to 192 media, including up to 24 videos.
+
+Actual throughput varies with demand, available Supernet capacity, and fair-use controls. Sustained high-volume or automated use may be delayed or rate-limited. Unlimited Pro receives higher subscription queue priority than Unlimited, and Premium Spark remains available for fastest paid priority. Subscription jobs cannot target specific workers.
 
 ### Billing states & cancellation
 

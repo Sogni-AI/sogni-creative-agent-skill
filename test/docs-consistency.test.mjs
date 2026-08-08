@@ -181,6 +181,9 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
     assert.match(text, /minimax-h3-i2v-turbo/, `${docFile}: missing H3 Turbo i2v selector`);
     assert.match(text, /minimax-h3-flf2v-turbo/, `${docFile}: missing H3 Turbo flf2v selector`);
     assert.match(text, /4-step|4 steps/, `${docFile}: missing H3 Turbo step count`);
+    assert.match(text, /euler/, `${docFile}: missing H3 Turbo default sampler`);
+    assert.match(text, /er_sde/, `${docFile}: missing H3 Turbo ER-SDE sampler`);
+    assert.match(text, /sa_solver/, `${docFile}: missing H3 Turbo SA-Solver sampler`);
     assert.match(text, /no Turbo Ref2VA/i, `${docFile}: missing Turbo Ref2VA boundary`);
     assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
       `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);

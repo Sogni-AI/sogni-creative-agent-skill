@@ -107,12 +107,16 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
 - **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1.** Do not
-  send steps, guidance, sampler, scheduler, or a **negative prompt**. The checkpoint is CFG-distilled with
+  send steps, guidance, scheduler, or a **negative prompt**. Standard H3 and
+  R2V accept no sampler override. Turbo defaults to `euler`; direct CLI A/B
+  tests may pass exactly `--sampler euler`, `--sampler er_sde`, or
+  `--sampler sa_solver`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch at all: a
   `negativePrompt` parameter is ignored wherever it is accepted. Negative
   direction goes in the prompt text instead.
-- **Turbo uses the same prompt contract as standard H3.** Its documented
-  execution difference here is the fixed 4-step workflow.
+- **Turbo uses the same prompt contract as standard H3.** Its execution path is
+  fixed at 4 steps with the `simple` scheduler; only the sampler has the three
+  explicit variants above.
 - **Native 32 kHz stereo audio is generated jointly with the picture.** Every
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the

@@ -1345,6 +1345,87 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
   }
 });
 
+test('MiniMax H3 Turbo accepts and propagates only its three supported sampler overrides', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-turbo',
+      expected: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      sampler: 'euler',
+      args: []
+    },
+    {
+      model: 'minimax-h3-t2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      sampler: 'er_sde',
+      args: []
+    },
+    {
+      model: 'minimax-h3-i2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_i2v_turbo',
+      sampler: 'sa_solver',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-flf2v-turbo',
+      expected: 'minimax-h3-fl2va-fp8_flf2v_turbo',
+      sampler: 'euler',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      expected: 'minimax-h3-fl2va-fp8_t2v_turbo',
+      sampler: 'er_sde',
+      args: []
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_i2v_turbo',
+      expected: 'minimax-h3-fl2va-fp8_i2v_turbo',
+      sampler: 'sa_solver',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_flf2v_turbo',
+      expected: 'minimax-h3-fl2va-fp8_flf2v_turbo',
+      sampler: 'euler',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, expected, sampler, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video', '-m', model, '--sampler', sampler, ...args,
+      'A detailed continuous shot with synchronized native audio.'
+    ]);
+    assert.equal(exitCode, 0, `${model} with ${sampler}`);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.sampler, sampler);
+    assert.equal(state.lastVideoProject.scheduler, undefined);
+  }
+});
+
+test('MiniMax H3 Turbo rejects unsupported samplers while other video sampler behavior stays unchanged', () => {
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-turbo', '--sampler', 'res_multistep', 'A record store conversation.'],
+    'must be one of: euler, er_sde, sa_solver'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3', '--sampler', 'euler', 'A record store conversation.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v', '--sampler', 'euler', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo'
+  );
+  expectCliError(
+    ['--video', '-m', 'ltx23-22b-fp8_t2v_distilled', '--sampler', 'euler', 'A record store conversation.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-turbo', '--scheduler', 'simple', 'A record store conversation.'],
+    '--scheduler is an image-only option'
+  );
+});
+
 test('MiniMax H3 Turbo friendly selectors resolve all three supported FL2VA modes', () => {
   const cases = [
     {
@@ -2408,8 +2489,9 @@ test('10Eros supports last-frame-only generation', () => {
   assert.ok(state.lastVideoProject.referenceImageEnd);
 });
 
-test('video rejects sampler/scheduler options', () => {
-  expectCliError(['--video', '--sampler', 'euler', 'a cat'], '--sampler/--scheduler are image-only options.');
+test('non-Turbo video rejects sampler/scheduler options', () => {
+  expectCliError(['--video', '--sampler', 'euler', 'a cat'], '--sampler is supported for video only with MiniMax H3 Turbo.');
+  expectCliError(['--video', '--scheduler', 'simple', 'a cat'], '--scheduler is an image-only option.');
 });
 
 test('non-video rejects auto-resize-assets', () => {

@@ -283,12 +283,15 @@ video-conditioned R2V requires a worker above 40 GB.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. `1344×768`
   (landscape) and `768×1344` (portrait) are the primary sizes.
 - **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1** — send no
-  steps, guidance, sampler, scheduler, or **negative prompt**. The checkpoint is CFG-distilled with
+  steps, guidance, scheduler, or **negative prompt**. Standard H3 and R2V accept
+  no sampler override. Turbo defaults to `euler`; direct CLI A/B tests may pass
+  exactly `--sampler euler`, `--sampler er_sde`, or `--sampler sa_solver`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch and a `negativePrompt`
   parameter is ignored wherever it is accepted. Put negative direction in the
   prompt text instead.
-- **Turbo uses the same prompt contract as standard H3.** Its documented
-  execution difference here is the fixed 4-step workflow.
+- **Turbo uses the same prompt contract as standard H3.** Its execution path is
+  fixed at 4 steps with the `simple` scheduler; only the sampler has the three
+  explicit variants above.
 - **768p-class open-weights release.** Do not offer or claim 2K; MiniMax's 2K
   stage is hosted-only and not part of the open release.
 
@@ -514,7 +517,7 @@ model recommendations.
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4 with `euler` as the default sampler and `euler`, `er_sde`, or `sa_solver` as its only direct CLI sampler choices. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

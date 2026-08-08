@@ -1890,6 +1890,13 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_flf2v_turbo', 'flf2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
+const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
+  'minimax-h3-fl2va-fp8_t2v_turbo',
+  'minimax-h3-fl2va-fp8_i2v_turbo',
+  'minimax-h3-fl2va-fp8_flf2v_turbo'
+]);
+const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']);
+const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
@@ -1986,6 +1993,10 @@ function isMiniMaxH3Model(modelId) {
   return MINIMAX_H3_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
 }
 
+function isMiniMaxH3TurboModel(modelId) {
+  return MINIMAX_H3_TURBO_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
 function isMiniMaxH3R2vModel(modelId) {
   return String(modelId || '').trim().toLowerCase() === MINIMAX_H3_R2V_MODEL_ID;
 }
@@ -2002,6 +2013,15 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-i2v-turbo'
     || normalized === 'minimax-h3-flf2v-turbo'
     || isMiniMaxH3Model(normalized);
+}
+
+function isMiniMaxH3TurboModelSelectionLocal(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === 'minimax-h3-turbo'
+    || normalized === 'minimax-h3-t2v-turbo'
+    || normalized === 'minimax-h3-i2v-turbo'
+    || normalized === 'minimax-h3-flf2v-turbo'
+    || isMiniMaxH3TurboModel(normalized);
 }
 
 function miniMaxH3ModeFromModelId(modelId) {
@@ -3378,7 +3398,7 @@ Image Options:
   --angle-strength <n>  LoRA strength for multiple_angles (default: 0.9)
   --angle-description <text>  Optional subject description
   --output-format <f>   Image output format: png|jpg (webp for gpt-image-2)
-  --sampler <name>      Sampler (model-dependent)
+  --sampler <name>      Sampler (images/music; H3 Turbo video: euler|er_sde|sa_solver)
   --scheduler <name>    Scheduler (model-dependent)
   --lora <id>           Image LoRA id (repeatable; order is significant)
   --loras <ids>         Comma-separated LoRA ids
@@ -3635,6 +3655,8 @@ state negatives in the structured prompt.):
   minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
   minimax-h3-flf2v-turbo            4-step Turbo first-frame -> last-frame (--ref plus --ref-end)
                                      (Turbo has no r2v/Ref2VA variant)
+  H3 Turbo sampler override         --sampler euler|er_sde|sa_solver (default: euler)
+                                     (scheduler remains fixed to simple)
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
@@ -4101,8 +4123,23 @@ if (options.video && options.loras.length > 0) {
   }
 }
 
-if (options.video && (options.sampler || options.scheduler)) {
-  fatalCliError('--sampler/--scheduler are image-only options.', { code: 'INVALID_ARGUMENT' });
+if (options.video && options.scheduler) {
+  fatalCliError('--scheduler is an image-only option.', { code: 'INVALID_ARGUMENT' });
+}
+
+if (options.video && options.sampler) {
+  if (!isMiniMaxH3TurboModelSelectionLocal(options.model)) {
+    fatalCliError('--sampler is supported for video only with MiniMax H3 Turbo.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
+  }
+  if (!MINIMAX_H3_TURBO_SAMPLER_SET.has(options.sampler)) {
+    fatalCliError(`MiniMax H3 Turbo --sampler must be one of: ${MINIMAX_H3_TURBO_SAMPLERS.join(', ')}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, sampler: options.sampler, allowed: MINIMAX_H3_TURBO_SAMPLERS }
+    });
+  }
 }
 
 applyPersonaAndVoiceReferences();
@@ -11056,7 +11093,9 @@ async function main() {
       if (guidance !== null && guidance !== undefined && !isMiniMaxH3Model(options.model)) {
         projectConfig.guidance = guidance;
       }
-      if (modelDefaults?.sampler && !isMiniMaxH3Model(options.model)) {
+      if (cliSet.sampler && isMiniMaxH3TurboModel(options.model)) {
+        projectConfig.sampler = options.sampler;
+      } else if (modelDefaults?.sampler && !isMiniMaxH3Model(options.model)) {
         projectConfig.sampler = modelDefaults.sampler;
       }
       if (modelDefaults?.scheduler && !isMiniMaxH3Model(options.model)) {

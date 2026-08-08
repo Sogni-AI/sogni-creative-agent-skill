@@ -3662,7 +3662,8 @@ state negatives in the structured prompt.):
   minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
   minimax-h3-flf2v-turbo            4-step Turbo first-frame -> last-frame (--ref plus --ref-end)
                                      (Turbo has no r2v/Ref2VA variant)
-  H3 Turbo sampler override         --sampler euler|er_sde|sa_solver (default: euler)
+  H3 Turbo sampler override         --sampler euler|er_sde|sa_solver
+                                     (Socket default: er_sde; CLI omits unless set)
                                      (scheduler remains fixed to simple)
 
 WAN 2.2 Video Models:

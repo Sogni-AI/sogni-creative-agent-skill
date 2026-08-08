@@ -108,8 +108,9 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
 - **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard H3 and
-  R2V accept no sampler override. Turbo defaults to `euler`; direct CLI A/B
-  tests may pass exactly `--sampler euler`, `--sampler er_sde`, or
+  R2V accept no sampler override. H3 Turbo defaults to `er_sde` on Socket, and
+  the CLI omits the sampler unless `--sampler` is passed. Direct CLI A/B tests
+  may pass exactly `--sampler euler`, `--sampler er_sde`, or
   `--sampler sa_solver`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch at all: a
   `negativePrompt` parameter is ignored wherever it is accepted. Negative

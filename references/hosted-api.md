@@ -158,8 +158,8 @@ private media that must not leave the local machine.**
 
 ## Seedance reference modes (mutually exclusive)
 
-When `--video -m seedance2`, `-m seedance2-mini`, or `-m seedance2-fast` is selected, pick one mode
-per video request:
+When `--video -m seedance2`, `-m seedance2-mini`, `-m seedance2-fast`, or
+`-m seedance2-5` is selected, pick one mode per video request:
 
 - **Dedicated frame mode — `--ref` and/or `--ref-end`.** First-class
   first-frame / last-frame anchoring; the Seedance worker pins them as
@@ -170,9 +170,11 @@ per video request:
   reference"*). Each `-c/--context` image may be a **local file or an HTTPS
   URL** (PNG, JPEG, WebP, or GIF) — local files are uploaded to Sogni media
   storage automatically, so you do **not** need `--api-chat` / `--durable-chat`
-  just to attach a local loose-reference image. Supports up to 9 image refs, 3 video refs, 3 audio
-  refs, and 12 total reference assets per request (canonical caps come from
-  `SEEDANCE_REFERENCE_LIMITS` / `validateSeedanceReferenceCounts()` in
+  just to attach a local loose-reference image. The 2.0 family supports up to
+  9 image refs, 3 video refs, 3 audio refs, and 12 total reference assets per
+  request; `seedance2-5` raises the caps to 30 image / 10 video / 10 audio /
+  30 total (canonical per-model caps come from `SEEDANCE_REFERENCE_LIMITS` /
+  `validateSeedanceReferenceCounts()` in
   `@sogni-ai/sogni-intelligence-client/tools`).
 
 Combining `--ref` / `--ref-end` with `-c/--context` on Seedance is rejected

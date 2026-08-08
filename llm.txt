@@ -134,8 +134,8 @@ image, video, and music generation under a fair-use policy instead of spending
 Spark or SOGNI per render. Plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro
 ($50/mo, $498/yr), with a one-per-account 3-day free trial (trial usage is
 capped). External-vendor models — GPT Image 2 (`gpt-image-2`), Seedance 2.0 /
-Mini / Fast (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`), and
-HappyHorse 1.1 (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`,
+Mini / Fast / 2.5 (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`,
+`seedance-2-5`), and HappyHorse 1.1 (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`,
 `happyhorse-1.1-r2v`) — are never covered and always need Premium Spark;
 selecting SOGNI opts a job out of coverage. The server decides
 coverage from the verified entitlement + resolved model; the CLI never asserts

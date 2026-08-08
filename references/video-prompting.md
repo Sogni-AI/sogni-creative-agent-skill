@@ -420,7 +420,7 @@ sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png 
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
-- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini` or `seedance2-fast` for 4K.
+- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders 480p/720p only.
 - For **non-vendor HD / 1080p text-to-video**, use `-m ltx23-22b-fp8_t2v_distilled`.
 - For **non-vendor HD / 1080p image-to-video**, use `-m ltx23-22b-fp8_i2v_distilled`.
 - Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.
@@ -446,6 +446,9 @@ sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my
 
 # Seedance 2.0 standard (4-15s vendor video path with native audio)
 sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with native ambient sound"
+
+# Seedance 2.5 (4-30s single clips, 480p/720p only — the one Seedance that renders past 15s in one call)
+sogni-agent --video -m seedance2-5 --duration 24 "A continuous one-take product story with native ambient sound"
 ```
 
 Prefer `.webm`, `.m4a`, or `.mp3` voice clips. Local `.wav` clips are normalized

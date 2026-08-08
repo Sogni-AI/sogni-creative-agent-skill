@@ -3457,13 +3457,15 @@ Video Options:
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
   --generate-audio, --no-generate-audio  Keep or strip MiniMax H3's generated audio track
 
-Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast):
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; max 2 images.
   - LOOSE REFERENCE MODE: -c/--context image refs plus optional --ref-audio /
     --ref-video extras. Anchor frame intent in the prompt with @Image1, @Image2,
     @Video1, @Audio1 etc. (e.g. "Use @Image1 as the opening shot reference").
-    Up to 9 image / 3 video / 3 audio / 12 total references per video request.
+    Up to 9 image / 3 video / 3 audio / 12 total references per video request
+    on the 2.0 family; seedance2-5 raises the caps to 30 image / 10 video /
+    10 audio / 30 total.
   Combining --ref/--ref-end with -c/--context on Seedance is rejected client-side.
   All three modalities pull caps from the canonical
   @sogni-ai/sogni-protocol seedance-reference-limits catalog.
@@ -3627,12 +3629,17 @@ Music Models:
   ace_step_1.5_turbo              Legacy direct music generation
   ace_step_1.5_sft                Legacy lyric-focused music generation
 
-Seedance 2.0 Video Model Selectors:
-  seedance2                         Text-to-video, 4-15s, native audio, HTTPS multimodal refs
+Seedance Video Model Selectors:
+  seedance2                         Seedance 2.0 text-to-video, 4-15s, native audio, HTTPS multimodal refs
   seedance2-mini                    Lower-cost 720p-capped text-to-video
   seedance2-fast                    Legacy fast 720p-capped text-to-video
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet
+  seedance2-5                       Seedance 2.5 text-to-video (alias seedance2-5-t2v): 4-30s single clips,
+                                     480p/720p only (no 1080p/4K), native audio, first/last frame via
+                                     --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (30 total)
+  seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
+  seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
 
 HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/1080P):
   happyhorse-1.1-t2v                Text-to-video (also accepts the bare "happyhorse" alias)

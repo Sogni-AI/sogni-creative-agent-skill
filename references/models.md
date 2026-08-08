@@ -141,6 +141,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
+| `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p only |
+| `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
+| `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
 | `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
 | `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
@@ -157,6 +160,34 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `wan_v2.2-14b-fp8_s2v_lightx2v` | Fast | Face lip-sync with uploaded audio |
 | `wan_v2.2-14b-fp8_animate-move_lightx2v` | Fast | Animate-move |
 | `wan_v2.2-14b-fp8_animate-replace_lightx2v` | Fast | Animate-replace |
+
+### CLI selector aliases
+
+Every key below is a valid `-m` value. The shared intelligence-client
+`VIDEO_MODEL_ALIASES` map resolves aliases (workflow-aware, so one Seedance
+alias can serve several workflows) to canonical worker/vendor model ids.
+`test/docs-consistency.test.mjs` asserts every alias key in that map appears
+in this file, so a new runtime model family fails CI until it is documented
+here. The bare `happyhorse` / `happyhorse-1.1` selector is resolved by the CLI
+itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
+
+| Alias | Resolves to |
+|-------|-------------|
+| `ltx23`, `ltx23-t2v` | `ltx23-22b-fp8_t2v_distilled` |
+| `ltx23-i2v` | `ltx23-22b-fp8_i2v_distilled` |
+| `ltx23-ia2v` | `ltx23-22b-fp8_ia2v_distilled` |
+| `ltx23-a2v` | `ltx23-22b-fp8_a2v_distilled` |
+| `ltx23-v2v` | `ltx23-22b-fp8_v2v_distilled` |
+| `ltx23-eros`, `10eros` | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
+| `wan22`, `wan22-t2v` | `wan_v2.2-14b-fp8_t2v_lightx2v` |
+| `wan22-i2v` | `wan_v2.2-14b-fp8_i2v_lightx2v` |
+| `wan22-s2v` | `wan_v2.2-14b-fp8_s2v_lightx2v` |
+| `wan22-animate-move` | `wan_v2.2-14b-fp8_animate-move_lightx2v` |
+| `wan22-animate-replace` | `wan_v2.2-14b-fp8_animate-replace_lightx2v` |
+| `seedance2`, `seedance2-t2v`, `seedance2-ia2v`, `seedance2-v2v` | `seedance-2-0` (suffix picks the workflow) |
+| `seedance2-mini`, `seedance2-mini-t2v` | `seedance-2-0-mini` |
+| `seedance2-fast`, `seedance2-fast-t2v` | `seedance-2-0-fast` |
+| `seedance2-5`, `seedance2-5-t2v`, `seedance2-5-ia2v`, `seedance2-5-v2v` | `seedance-2-5` (suffix picks the workflow) |
 
 ### Default image-to-video routing
 
@@ -178,6 +209,36 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
   WAN path (silent clip, no transition LoRA).
 - A configured `videoModels.i2v` (OpenClaw plugin config) overrides both
   defaults.
+
+## Seedance 2.5
+
+`seedance2-5` (vendor model `seedance-2-5`) is the newest Seedance generation.
+Like the rest of the family it is an external-vendor Premium-Spark path (never
+subscription-covered), renders at a fixed 24 fps with native audio, and takes
+no negative prompt and no ControlNet.
+
+- **Duration**: 4-30 s per clip (97-721 frames) — the only Seedance that
+  renders past 15 s in a single call. Prefer `seedance2-5` over splitting and
+  stitching 2.0 segments when the user wants one continuous Seedance clip
+  longer than 15 s.
+- **Resolution**: 480p/720p only (max dimension 1280; default 1280×720). It
+  cannot render 1080p or 4K — keep full `seedance2` for those requests.
+- **Workflows**: text-to-video, image-to-video from a first frame, first- and
+  last-frame conditioning (`--ref` + `--ref-end`), image+audio-to-video
+  (`seedance2-5-ia2v`), and multimodal reference / video-to-video including
+  video editing and extension (`seedance2-5-v2v`).
+- **Reference budget**: up to 30 image / 10 video / 10 standalone audio refs,
+  30 reference files total — much larger than the 2.0 family's 9 / 3 / 3 / 12.
+  Per-model caps come from `@sogni-ai/sogni-protocol`'s
+  `seedance-reference-limits` catalog.
+- **Prompting**: the same `@Image1` / `@Video1` / `@Audio1` loose-reference
+  grammar and the same mutually exclusive dedicated-frame vs loose-reference
+  modes as Seedance 2.0.
+
+The pinned `@sogni-ai/sogni-intelligence-client` 3.14.3 runtime recognizes
+`seedance-2-5`, so the direct CLI applies Seedance's fixed 24 fps, 4-30 s
+duration window, larger reference caps, reference-mode exclusivity, and HTTPS
+reference forwarding before dispatch.
 
 ## HappyHorse 1.1 models
 
@@ -502,6 +563,8 @@ model recommendations.
 | Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
+| Seedance 2.5 single clip up to 30s (480p/720p only) | `seedance2-5` |
+| Seedance 2.5 video-to-video, editing, or extension | `seedance2-5-v2v` |
 | HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
 | HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
 | HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
@@ -519,7 +582,7 @@ model recommendations.
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4 with `euler` as the default sampler and `euler`, `er_sde`, or `sa_solver` as its only direct CLI sampler choices. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps and supports 4–15 s durations. Full `seedance2` supports native 4K via `--target-resolution 2160`; `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.

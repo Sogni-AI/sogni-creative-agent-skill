@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { QUALITY_TIERS } from '../generated/creative-agent-runtime.mjs';
+import { VIDEO_MODEL_ALIASES } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
 import { checkVersionSync } from '../scripts/check-version-sync.mjs';
 
 const repoRoot = process.cwd();
@@ -170,6 +171,19 @@ test('Krea identity routing follows typed shared policy without prose parsing', 
     assert.match(text, /any\s+language; never route from keyword or regex matching/);
   }
   assert.match(skill, /agents must pass the Krea model explicitly/);
+});
+
+test('every runtime video model alias is documented in references/models.md', () => {
+  // Data-driven guard: the alias map ships with the pinned intelligence-client,
+  // so a new model family (e.g. Seedance 2.5) fails this test until models.md
+  // documents its selectors — no hardcoded per-family checklist to forget.
+  const aliases = Object.keys(VIDEO_MODEL_ALIASES);
+  assert.ok(aliases.includes('seedance2') && aliases.includes('wan22-i2v'),
+    'VIDEO_MODEL_ALIASES extraction sanity check');
+  const models = read('references/models.md');
+  const missing = aliases.filter((alias) => !models.includes(alias));
+  assert.deepEqual(missing, [],
+    `references/models.md never mentions these CLI video selectors the runtime resolves:\n${missing.join('\n')}`);
 });
 
 test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () => {

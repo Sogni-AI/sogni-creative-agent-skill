@@ -235,7 +235,7 @@ no negative prompt and no ControlNet.
   grammar and the same mutually exclusive dedicated-frame vs loose-reference
   modes as Seedance 2.0.
 
-The pinned `@sogni-ai/sogni-intelligence-client` 3.14.3 runtime recognizes
+The pinned `@sogni-ai/sogni-intelligence-client` 3.14.4 runtime recognizes
 `seedance-2-5`, so the direct CLI applies Seedance's fixed 24 fps, 4-30 s
 duration window, larger reference caps, reference-mode exclusivity, and HTTPS
 reference forwarding before dispatch.

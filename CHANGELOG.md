@@ -1,3 +1,17 @@
+# [3.28.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.27.0...v3.28.0) (2026-08-10)
+
+
+### Bug Fixes
+
+* **deps:** align bundled skill client version ([8eb0119](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/8eb0119725bd6e5417ea3877d20b849337dd8598))
+* **deps:** bump sogni-intelligence-client to 3.14.3 ([0b418ba](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/0b418bad2b930f2757f09e9ae29c66446b0054b9))
+* **docs:** document Seedance 2.5 models and alias coverage ([9a4994b](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/9a4994b2486f6dd926911cf3433c3ea15b2939c8))
+
+
+### Features
+
+* **video:** support MiniMax H3 Turbo sampler overrides ([5cf7e53](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/5cf7e53c5f1f886ddd9e7dee13d8d9da187a4d1f))
+
 ## [3.27.0] - 2026-08-07
 
 ### Added

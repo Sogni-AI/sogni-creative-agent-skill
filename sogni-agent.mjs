@@ -1500,6 +1500,17 @@ function isWanAnimateVideoModelId(modelId) {
   );
 }
 
+const WAN_ANIMATE_2_MODEL_ID = 'wan_animate_2-14b-distill-int8-convrot_animate-move';
+const WAN_ANIMATE_2_MODEL_SELECTORS = new Set([
+  WAN_ANIMATE_2_MODEL_ID,
+  'wan-animate-2',
+  'wan-animate2'
+]);
+
+function isWanAnimate2ModelId(modelId) {
+  return WAN_ANIMATE_2_MODEL_SELECTORS.has(String(modelId || '').trim().toLowerCase());
+}
+
 function isGptImage2ModelSelection(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
   return ['gpt-image-2', 'gptimage2', 'gpt-image', 'gpt_image_2'].includes(normalized);
@@ -1607,6 +1618,7 @@ function videoDurationLimitsLikeWrapper(modelId) {
   if (isMiniMaxH3Model(modelId)) return { ...MINIMAX_H3_DURATION_LIMITS };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
+  if (isWanAnimate2ModelId(modelId)) return { min: 17 / 24, max: 81 / 24 };
   if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
   return { min: 1, max: 10 };
 }
@@ -2293,6 +2305,12 @@ const options = {
   refVideo: null, // Reference video for animate workflows (primary)
   refVideos: [], // Additional Seedance loose video refs; first --ref-video fills refVideo, subsequent calls append here
   videoStart: null, // Optional start offset into reference video
+  posePrompt: null, // Wan Animate 2 pose/camera-motion prompt
+  poseStrength: null, // Wan Animate 2 pose conditioning strength
+  poseStartPercent: null, // Wan Animate 2 pose conditioning start
+  poseEndPercent: null, // Wan Animate 2 pose conditioning end
+  referenceImageStrength: null, // Wan Animate 2 identity/reference strength
+  enableContextWindow: false, // Wan Animate 2 optional temporal context-window path
   refMask: null, // Inpaint mask image for LTX-2.3 v2v inpaint
   outpaintPosition: null, // LTX-2.3 v2v outpaint canvas anchor
   outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
@@ -2462,6 +2480,12 @@ const cliSet = {
   refVideo: false,
   refVideos: false,
   videoStart: false,
+  posePrompt: false,
+  poseStrength: false,
+  poseStartPercent: false,
+  poseEndPercent: false,
+  referenceImageStrength: false,
+  enableContextWindow: false,
   refMask: false,
   outpaintPosition: false,
   outpaintAspectRatio: false,
@@ -2805,6 +2829,29 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.videoStart = parseNonNegativeNumberValue(raw, arg);
     cliSet.videoStart = true;
+  } else if (arg === '--pose-prompt') {
+    options.posePrompt = requireFlagValue(args, i, arg);
+    i++;
+    cliSet.posePrompt = true;
+  } else if (arg === '--pose-strength') {
+    options.poseStrength = parseNumberValue(requireFlagValue(args, i, arg), arg);
+    i++;
+    cliSet.poseStrength = true;
+  } else if (arg === '--pose-start-percent') {
+    options.poseStartPercent = parseNumberValue(requireFlagValue(args, i, arg), arg);
+    i++;
+    cliSet.poseStartPercent = true;
+  } else if (arg === '--pose-end-percent') {
+    options.poseEndPercent = parseNumberValue(requireFlagValue(args, i, arg), arg);
+    i++;
+    cliSet.poseEndPercent = true;
+  } else if (arg === '--reference-image-strength') {
+    options.referenceImageStrength = parseNumberValue(requireFlagValue(args, i, arg), arg);
+    i++;
+    cliSet.referenceImageStrength = true;
+  } else if (arg === '--enable-context-window') {
+    options.enableContextWindow = true;
+    cliSet.enableContextWindow = true;
   } else if (arg === '--looping' || arg === '--loop') {
     options.looping = true;
     cliSet.looping = true;
@@ -3455,6 +3502,12 @@ Video Options:
   --ref-video <path|url> Video reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
+  --pose-prompt <text>   Wan Animate 2 pose/camera-motion conditioning prompt
+  --pose-strength <n>    Wan Animate 2 pose strength (0-10, default 1)
+  --pose-start-percent <n> Wan Animate 2 pose window start (0-1, default 0)
+  --pose-end-percent <n> Wan Animate 2 pose window end (0-1, default 1)
+  --reference-image-strength <n> Wan Animate 2 identity strength (0-10, default 1)
+  --enable-context-window Enable the official optional 21-frame/8-overlap temporal path (default off)
   --generate-audio, --no-generate-audio  Keep or strip MiniMax H3's generated audio track
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5):
@@ -3675,6 +3728,10 @@ WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_animate-move_lightx2v     Animate-move (fast)
   wan_v2.2-14b-fp8_animate-replace_lightx2v  Animate-replace (fast)
 
+Wan Animate 2 Motion Transfer:
+  wan-animate-2                      Native image + raw driving-video motion transfer
+                                     (24fps, 17-81 frames, fixed 10-step Euler/simple recipe)
+
 LTX-2 / LTX-2.3 Video Models:
   ltx2-19b-fp8_t2v_distilled      Text-to-video, fast 8-step
   ltx2-19b-fp8_t2v                Text-to-video, quality 20-step
@@ -3706,6 +3763,7 @@ Examples:
   sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2 and Seedance"
   sogni-agent --video -m ltx23-22b-fp8_t2v_distilled --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
+  sogni-agent --video -m wan-animate-2 --ref original-still.png --ref-video driving-with-audio.mp4 --workflow animate-move --pose-prompt "The actor speaks and gestures naturally" "preserve the actor and scene"
   sogni-agent --video --last-image "gentle camera pan"
   sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
   sogni-agent -c person.jpg -m krea2_identity_edit_v1_2 "editorial portrait, same identity, new wardrobe"
@@ -4132,17 +4190,27 @@ if (options.video && options.loras.length > 0) {
 }
 
 if (options.video && options.scheduler) {
-  fatalCliError('--scheduler is an image-only option.', { code: 'INVALID_ARGUMENT' });
+  if (!isWanAnimate2ModelId(options.model) || options.scheduler !== 'simple') {
+    fatalCliError('--scheduler is an image-only option. Wan Animate 2 accepts only simple.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
 }
 
 if (options.video && options.sampler) {
-  if (!isMiniMaxH3TurboModelSelectionLocal(options.model)) {
-    fatalCliError('--sampler is supported for video only with MiniMax H3 Turbo.', {
+  if (isWanAnimate2ModelId(options.model)) {
+    if (options.sampler !== 'euler') {
+      fatalCliError('Wan Animate 2 --sampler must be euler.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, sampler: options.sampler, allowed: ['euler'] }
+      });
+    }
+  } else if (!isMiniMaxH3TurboModelSelectionLocal(options.model)) {
+    fatalCliError('--sampler is supported for video only with MiniMax H3 Turbo. Wan Animate 2 accepts only its fixed euler sampler.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
     });
-  }
-  if (!MINIMAX_H3_TURBO_SAMPLER_SET.has(options.sampler)) {
+  } else if (!MINIMAX_H3_TURBO_SAMPLER_SET.has(options.sampler)) {
     fatalCliError(`MiniMax H3 Turbo --sampler must be one of: ${MINIMAX_H3_TURBO_SAMPLERS.join(', ')}.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, sampler: options.sampler, allowed: MINIMAX_H3_TURBO_SAMPLERS }
@@ -4352,6 +4420,25 @@ if (options.music) {
     });
   }
   const videoModelDefaults = getModelDefaults(options.model, openclawConfig);
+  const isWanAnimate2Video = isWanAnimate2ModelId(options.model);
+  if (isWanAnimate2Video) {
+    const fixedSettings = {
+      fps: 24,
+      steps: 10,
+      guidance: 1,
+      sampler: 'euler',
+      scheduler: 'simple'
+    };
+    for (const [setting, expected] of Object.entries(fixedSettings)) {
+      if (cliSet[setting] && options[setting] !== expected) {
+        fatalCliError(`Wan Animate 2 requires --${setting} ${expected}.`, {
+          code: 'INVALID_ARGUMENT',
+          details: { model: options.model, setting, expected, received: options[setting] }
+        });
+      }
+      options[setting] = expected;
+    }
+  }
   if (videoModelDefaults?.requiresDisabledSafetyFilter) {
     if (!options.noFilter) {
       fatalCliError('LTX-2.3 10Eros requires explicit --no-filter acknowledgement.', {
@@ -4401,6 +4488,7 @@ if (options.music) {
   if (videoQuality) {
     if (
       !isSeedanceVideo
+      && !isWanAnimate2Video
       && options.model !== LTX23_10EROS_MODEL_ID
       && !cliSet.steps
       && Number.isFinite(videoQuality.steps)
@@ -4904,6 +4992,52 @@ if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(option
   }
 }
 
+if (options.video && isWanAnimate2ModelId(options.model)) {
+  options.fps = 24;
+  if (options.videoWorkflow !== 'animate-move') {
+    fatalCliError('Wan Animate 2 supports only --workflow animate-move.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, workflow: options.videoWorkflow }
+    });
+  }
+  const boundedControls = [
+    ['poseStrength', 0, 10],
+    ['poseStartPercent', 0, 1],
+    ['poseEndPercent', 0, 1],
+    ['referenceImageStrength', 0, 10]
+  ];
+  for (const [field, min, max] of boundedControls) {
+    const value = options[field];
+    if (value !== null && (!Number.isFinite(value) || value < min || value > max)) {
+      fatalCliError(`--${field.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} must be between ${min} and ${max}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, field, value, min, max }
+      });
+    }
+  }
+  if (
+    options.poseStartPercent !== null &&
+    options.poseEndPercent !== null &&
+    options.poseStartPercent > options.poseEndPercent
+  ) {
+    fatalCliError('--pose-start-percent must not exceed --pose-end-percent.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+} else if (
+  options.video &&
+  (cliSet.posePrompt ||
+    cliSet.poseStrength ||
+    cliSet.poseStartPercent ||
+    cliSet.poseEndPercent ||
+    cliSet.referenceImageStrength ||
+    cliSet.enableContextWindow)
+) {
+  fatalCliError('Wan Animate 2 conditioning flags require -m wan-animate-2.', {
+    code: 'INVALID_ARGUMENT'
+  });
+}
+
 if (options.video && !options.frames) {
   const durationLimits = videoDurationLimitsLikeWrapper(options.model);
   const requestedDuration = options.duration;
@@ -4943,6 +5077,15 @@ if (options.video && !options.frames) {
     });
   }
   options.fps = h3Fps;
+}
+
+if (options.video && isWanAnimate2ModelId(options.model) && options.frames) {
+  if (options.frames < 17 || options.frames > 81 || (options.frames - 1) % 4 !== 0) {
+    fatalCliError('Wan Animate 2 frames must be 1 + n×4, from 17 through 81.', {
+      code: 'INVALID_ARGUMENT',
+      details: { frames: options.frames, minimum: 17, maximum: 81, step: 4 }
+    });
+  }
 }
 
 // Video dimensions:
@@ -11085,6 +11228,23 @@ async function main() {
       }
       if (projectVideoStart !== null) {
         projectConfig.videoStart = projectVideoStart;
+      }
+      if (isWanAnimate2ModelId(options.model)) {
+        if (options.posePrompt !== null) projectConfig.posePrompt = options.posePrompt;
+        if (options.poseStrength !== null) projectConfig.poseStrength = options.poseStrength;
+        if (options.poseStartPercent !== null) {
+          projectConfig.poseStartPercent = options.poseStartPercent;
+        }
+        if (options.poseEndPercent !== null) {
+          projectConfig.poseEndPercent = options.poseEndPercent;
+        }
+        if (options.referenceImageStrength !== null) {
+          projectConfig.referenceImageStrength = options.referenceImageStrength;
+        }
+        if (cliSet.enableContextWindow) {
+          projectConfig.enableContextWindow = options.enableContextWindow;
+        }
+        projectConfig.generateAudio = true;
       }
       if (options.seed !== null && options.seed !== undefined) {
         projectConfig.seed = options.seed;

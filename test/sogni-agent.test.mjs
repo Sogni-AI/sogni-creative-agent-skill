@@ -2494,6 +2494,73 @@ test('non-Turbo video rejects sampler/scheduler options', () => {
   expectCliError(['--video', '--scheduler', 'simple', 'a cat'], '--scheduler is an image-only option.');
 });
 
+test('Wan Animate 2 alias applies the native distilled motion-transfer recipe', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-wan-animate-2-'));
+  const drivingVideo = join(tempDir, 'driving.mp4');
+  writeFileSync(drivingVideo, Buffer.from('reference video'));
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '-m', 'wan-animate-2',
+    '--workflow', 'animate-move',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-video', drivingVideo,
+    '--pose-prompt', 'The character dances and speaks with expressive facial movement.',
+    'Preserve the reference character and transfer the driving performance.'
+  ]);
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastVideoProject, 'createVideoProject was called');
+  assert.equal(state.lastVideoProject.modelId, 'wan_animate_2-14b-distill-int8-convrot_animate-move');
+  assert.equal(state.lastVideoProject.fps, 24);
+  assert.equal(state.lastVideoProject.steps, 10);
+  assert.equal(state.lastVideoProject.guidance, 1);
+  assert.equal(state.lastVideoProject.shift, 5);
+  assert.equal(state.lastVideoProject.sampler, 'euler');
+  assert.equal(state.lastVideoProject.scheduler, 'simple');
+  assert.equal(state.lastVideoProject.generateAudio, true);
+  assert.equal(state.lastVideoProject.enableContextWindow, undefined);
+  assert.equal(state.lastVideoProject.posePrompt, 'The character dances and speaks with expressive facial movement.');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceVideo);
+});
+
+test('Wan Animate 2 rejects the superseded LightX2V sampling recipe', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-wan-animate-2-invalid-'));
+  const drivingVideo = join(tempDir, 'driving.mp4');
+  writeFileSync(drivingVideo, Buffer.from('reference video'));
+  expectCliError(
+    [
+      '--video', '-m', 'wan-animate-2', '--workflow', 'animate-move',
+      '--ref', SCREENSHOT_FIXTURE, '--ref-video', drivingVideo,
+      '--sampler', 'lcm', 'transfer motion'
+    ],
+    'Wan Animate 2 --sampler must be euler.'
+  );
+  const invalidSteps = runCli([
+    '--video', '-m', 'wan-animate-2', '--workflow', 'animate-move',
+    '--ref', SCREENSHOT_FIXTURE, '--ref-video', drivingVideo,
+    '--steps', '6', 'transfer motion'
+  ]);
+  assert.equal(
+    invalidSteps.exitCode,
+    1,
+    `Expected fixed-step rejection; stderr=${invalidSteps.stderr} model=${invalidSteps.state?.lastVideoProject?.modelId} steps=${invalidSteps.state?.lastVideoProject?.steps}`
+  );
+  assert.match(invalidSteps.stderr, /Wan Animate 2 requires --steps 10\./);
+});
+
+test('Wan Animate 2 forwards the official optional context-window switch', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-wan-animate-2-context-'));
+  const drivingVideo = join(tempDir, 'driving.mp4');
+  writeFileSync(drivingVideo, Buffer.from('reference video'));
+  const result = runCli([
+    '--video', '-m', 'wan-animate-2', '--ref', SCREENSHOT_FIXTURE, '--ref-video', drivingVideo,
+    '--enable-context-window', 'transfer motion'
+  ]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.state?.lastVideoProject?.enableContextWindow, true);
+});
+
 test('non-video rejects auto-resize-assets', () => {
   expectCliError(['--auto-resize-assets', 'a cat'], '--auto-resize-assets is only valid with --video.');
 });

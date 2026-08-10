@@ -193,6 +193,25 @@ The prompt is auto-built with the required `<sks>` token plus the selected camer
 - "bird's eye" / "top-down" → `--elevation high-angle`
 - "closeup" → `--distance close-up`
 
+## Wan Animate 2 motion transfer
+
+Wan Animate 2 uses a reference image for identity and scene appearance plus a raw driving video for body, facial, hand, and camera motion. It is an `animate-move` workflow, not ControlNet V2V and not a replacement for the default WAN 2.2 workflow. Select it explicitly:
+
+```bash
+sogni-agent --video -m wan-animate-2 --workflow animate-move \
+  --ref original-image-model-still.png \
+  --ref-video driving-video-with-dialogue.mp4 \
+  --pose-prompt "The actor speaks while walking forward and gesturing naturally" \
+  --duration 3.375 \
+  "Preserve the actor's identity, wardrobe, and finely detailed practical set"
+```
+
+The workflow is fixed at 24 fps, 17-81 frames on a `1+n×4` grid, 10 steps, guidance 1, shift 5, sampler `euler`, and scheduler `simple`. The source video's audio is retained. `--pose-strength` and `--reference-image-strength` accept 0-10; `--pose-start-percent` and `--pose-end-percent` accept 0-1 with start no greater than end. `--enable-context-window` selects the official optional 21-frame/8-overlap temporal path; it defaults off for the full-sequence release-quality recipe.
+
+Production routing requires a 32 GB-class worker for every supported Animate 2 size; do not bypass the router's VRAM gate.
+
+For release-quality checks, use an original still generated directly by an image model. Never use a screenshot or a frame extracted from the driving video or any generated video. Test a visible person, meaningful motion, fine detail, and spoken dialogue, and require manual user approval before making Animate 2 the default.
+
 ## Video-to-Video (V2V) with ControlNet
 
 ```bash

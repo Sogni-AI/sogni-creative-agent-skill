@@ -195,6 +195,15 @@ sogni-agent --video -m happyhorse --duration 8 "A glowing jellyfish drifts throu
 sogni-agent --video -m happyhorse --ref first-frame.png "Bring the scene to life"
 sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the references into one continuous shot"
 
+# Wan Animate 2 motion transfer. The reference image must be an original still,
+# never a screenshot or frame extracted from a video. The driving video's audio
+# is retained, including spoken dialogue. Production 720p requires a 32 GB-class
+# worker; production routing requires at least 32 GB VRAM at every size.
+sogni-agent --video -m wan-animate-2 --workflow animate-move \
+  --ref original-image-model-still.png --ref-video driving-video-with-dialogue.mp4 \
+  --pose-prompt "The actor walks forward, speaks, and gestures with both hands" \
+  --duration 3.375 "Preserve the actor's identity, wardrobe, and detailed film-set background"
+
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
 sogni-agent --last --json
@@ -225,6 +234,7 @@ sogni-agent doctor --json
 | `--generate-audio`, `--no-generate-audio` | Keep or strip MiniMax H3's jointly generated audio track | keep |
 | `--sampler <name>` | Image/music sampler; for MiniMax H3 Turbo video only: `euler\|er_sde\|sa_solver` | H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX-2.3 v2v control mode and outpaint canvas controls | - |
+| `--pose-prompt`, `--pose-strength`, `--pose-start-percent`, `--pose-end-percent`, `--reference-image-strength`, `--enable-context-window` | Wan Animate 2 motion/identity conditioning; context windows are optional and default off | model defaults |
 | `--duration <sec>` | Video or music length | video 5, music 30 |
 | `--target-resolution <px>` | Short-side target preserving aspect ratio (use `2160` for Seedance 4K) | - |
 | `--photobooth` | Face transfer mode (with `--ref`) | - |
@@ -274,6 +284,10 @@ MiniMax H3 is an explicit model choice, not a universal default. All **seven cur
 H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (repeat `--ref-video`), and **3 audio clips** (repeat `--ref-audio`), with **12 files total** and at least one visual reference (image or video); it is never inferred. A video can be the only visual input, while audio alone is invalid. Address references as `<Picture 1>`, `<Video 1>`, and `<Audio 1>` in per-type submission order, give every reference one job, and never use `--ref-end` for r2v. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `--no-generate-audio` strips that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s); use `-w 1344 -h 768` or `-w 768 -h 1344`. Send no steps, guidance, scheduler, or negative prompt. Standard H3 and R2V accept no sampler override. H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed. Direct CLI A/B tests may pass exactly `--sampler euler`, `--sampler er_sde`, or `--sampler sa_solver`. It is the 768p-class open-weights release — do not claim 2K. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V is reserved for workers above 40 GB.
 
 **H3 requires MiniMax's official ordered-field prompt contract.** Base and Turbo T2V/I2V/FLF2V use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for I2V or FLF2V. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and exact dialogue as `<d>[Language] words</d>`; do not substitute quoted prose or bracketed timecode lists. Ref2VA uses its separate six-field contract. Negative direction belongs inside the structured prompt because there is no negative-prompt field. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
+
+### Wan Animate 2 motion transfer
+
+Select `-m wan-animate-2 --workflow animate-move` only when the user supplies both an identity/reference image and a raw driving video. It runs at fixed 24 fps for 17-81 frames on a `1+n×4` grid, using the official distilled 10-step, guidance-1, shift-5, `euler`/`simple` recipe. It preserves the driving video's audio. The main prompt describes appearance and background; `--pose-prompt` describes motion and camera behavior. Use the optional strength/window controls only for deliberate tuning. The official `--enable-context-window` branch uses a 21-frame window with 8-frame overlap and defaults off for full-sequence release quality. Keep WAN 2.2 as the default and rollback path until the creator manually approves production-parity Animate 2 outputs. For release-quality validation, the still must be generated directly by an image model—not captured or extracted from any video—and the scene must test a visible person, fine detail, meaningful motion, and spoken dialogue.
 
 For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders 480p/720p only. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx23-22b-fp8_t2v_distilled` (text) or `-m ltx23-22b-fp8_i2v_distilled` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 

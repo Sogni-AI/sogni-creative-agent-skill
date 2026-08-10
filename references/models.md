@@ -160,6 +160,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `wan_v2.2-14b-fp8_s2v_lightx2v` | Fast | Face lip-sync with uploaded audio |
 | `wan_v2.2-14b-fp8_animate-move_lightx2v` | Fast | Animate-move |
 | `wan_v2.2-14b-fp8_animate-replace_lightx2v` | Fast | Animate-replace |
+| `wan_animate_2-14b-distill-int8-convrot_animate-move` | 10-step | Wan Animate 2 native distilled image + raw driving-video motion transfer, fixed 24 fps, source audio retained |
 
 ### CLI selector aliases
 
@@ -184,6 +185,7 @@ itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
 | `wan22-s2v` | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 | `wan22-animate-move` | `wan_v2.2-14b-fp8_animate-move_lightx2v` |
 | `wan22-animate-replace` | `wan_v2.2-14b-fp8_animate-replace_lightx2v` |
+| `wan-animate-2`, `wan-animate2` | `wan_animate_2-14b-distill-int8-convrot_animate-move` |
 | `seedance2`, `seedance2-t2v`, `seedance2-ia2v`, `seedance2-v2v` | `seedance-2-0` (suffix picks the workflow) |
 | `seedance2-mini`, `seedance2-mini-t2v` | `seedance-2-0-mini` |
 | `seedance2-fast`, `seedance2-fast-t2v` | `seedance-2-0-fast` |

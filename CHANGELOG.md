@@ -1,3 +1,15 @@
+# [3.29.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.28.0...v3.29.0) (2026-08-13)
+
+
+### Bug Fixes
+
+* **deps:** align shared agent runtime dependencies ([a1ba39c](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/a1ba39cd6e41f0669a2ac057cf97105532f2b8ad))
+
+
+### Features
+
+* **video:** add LTX 2.5 skill routing ([b7a77ae](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/b7a77ae48212e3f4c9ae187ca1feb9cb22f4390a))
+
 # [3.28.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.27.0...v3.28.0) (2026-08-10)
 
 

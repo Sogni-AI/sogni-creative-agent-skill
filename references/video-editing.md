@@ -19,11 +19,11 @@ sogni-agent -q --video --ref ./imageA.png --ref-end ./imageB.png -o ./transition
 ```
 
 **Default model:** with both `--ref` and `--ref-end` set and no `-m`, the CLI
-defaults to `ltx23-22b-fp8_i2v_distilled` — the LTX-2.3 transition/morph path
-described in the callout below — so write the prompt as an LTX paragraph per
+defaults to `ltx25-22b-int8_i2v_distilled` and its dedicated FLF template, so
+write the prompt as an LTX paragraph per
 [`video-prompting.md`](video-prompting.md). Pass
 `-m wan_v2.2-14b-fp8_i2v_lightx2v` only when the user explicitly wants the
-WAN path (silent clip, no transition LoRA). Plain single-image i2v (one
+WAN path (silent clip). Plain single-image i2v (one
 `--ref`, no end frame) defaults to `wan_v2.2-14b-fp8_i2v_lightx2v` instead.
 
 **Always apply this pattern when:**
@@ -31,7 +31,7 @@ WAN path (silent clip, no transition LoRA). Plain single-image i2v (one
 - User says "animate this video to this image" → extract last frame, use as `--ref`, target image as `--ref-end`, then stitch
 - User says "continue this video" with a target image → same as above
 
-> **LTX-2.3 transition / morph LoRA (auto-applied).** When an LTX-2.3
+> **Explicit LTX-2.3 rollback: transition / morph LoRA.** When an LTX-2.3
 > image-to-video render (`ltx23-22b-fp8_i2v_distilled`) is given **both** a start
 > image (`--ref`) and an end image (`--ref-end`) — two keyframes — it
 > automatically applies the ValiantCat transition/morph LoRA (lora id
@@ -41,7 +41,8 @@ WAN path (silent clip, no transition LoRA). Plain single-image i2v (one
 > sogni-client SDK example uses `image <first>` and `end-image <last>` to supply
 > the two frames (the morph LoRA engages automatically), and additionally exposes
 > manual `transition` / `transition-strength` SDK arguments for the SDK path. Do
-> **not** confuse this single-render morph with the manual "Transition Between Two
+> Pin `-m ltx23-22b-fp8_i2v_distilled` to request this legacy path; LTX-2.5
+> FLF does not use that LoRA. Do **not** confuse this single-render morph with the manual "Transition Between Two
 > Videos (Bridge Clip)" recipe below, which bridges two *finished videos* with a
 > separately generated clip and `--concat-videos`.
 
@@ -55,7 +56,7 @@ WAN path (silent clip, no transition LoRA). Plain single-image i2v (one
    ```bash
    sogni-agent -q --video --ref ./lastframe.png --ref-end ./target.png -o ./continuation.mp4 "<4-8 sentence LTX transition paragraph into the target image>"
    ```
-   (No `-m` needed — the two-frame default is `ltx23-22b-fp8_i2v_distilled` with the auto-applied transition/morph LoRA.)
+   (No `-m` needed — the two-frame default is `ltx25-22b-int8_i2v_distilled` with the standard FLF template.)
 3. **Concatenate the videos**:
    ```bash
    sogni-agent --concat-videos ./full_sequence.mp4 ./existing.mp4 ./continuation.mp4
@@ -68,8 +69,8 @@ When the final stitched output needs a single external soundtrack, add `--concat
 ## Transition Between Two Videos (Bridge Clip)
 
 This recipe transitions between two **finished videos**. To morph between two
-**still images** in a single render, use the LTX-2.3 two-keyframe i2v path with
-its auto-applied transition/morph LoRA (see "Animate Between Two Images" above) —
+**still images** in a single render, use the LTX-2.5 FLF path (see "Animate
+Between Two Images" above) —
 do not build a bridge clip for that case.
 
 To **create a transition between two existing videos** (A → B), bridge them with a generated clip anchored on both boundary frames:
@@ -202,6 +203,7 @@ sogni-agent --video --workflow v2v --ref-video input.mp4 \
 
 # V2V with pose detection and custom strength
 sogni-agent --video --workflow v2v --ref-video dance.mp4 \
+  --ref robot-subject.png \
   --controlnet-name pose --controlnet-strength 0.7 "robot dancing"
 
 # Seedance V2V without ControlNet
@@ -209,11 +211,11 @@ sogni-agent --video --workflow v2v -m seedance2-v2v \
   --ref-video input.mp4 "make the clip more cinematic"
 ```
 
-ControlNet types: `canny` (edges), `pose` (body pose), `depth` (depth map), `detailer` (detail enhancement). Default strengths are tuned from Sogni Chat: `canny`/`pose`/`depth` use `0.85` plus detailer assist; `detailer` uses `1.0` for preservation. For Seedance V2V, use `-m seedance2-v2v` and omit ControlNet. Audio references must be paired with an image or video reference.
+ControlNet types: `canny` (edges), `pose` (body pose), `depth` (depth map), `detailer` (detail enhancement). LTX 2.5 `pose` requires both `--ref-video` for the motion/pose sequence and `--ref` for the subject appearance; explicit LTX 2.3 rollback keeps its existing optional-image behavior. Default strengths are tuned from Sogni Chat: `canny`/`pose`/`depth` use `0.85` plus detailer assist; `detailer` uses `1.0` for preservation. For Seedance V2V, use `-m seedance2-v2v` and omit ControlNet. Audio references must be paired with an image or video reference.
 
 ### V2V Outpaint (Canvas Extension) and Inpaint (Masked Region)
 
-The LTX-2.3 v2v model `ltx23-22b-fp8_v2v_distilled` adds two control modes
+The LTX-2.5 v2v selector `ltx25-v2v` adds two control modes
 beyond `canny`/`pose`/`depth`/`detailer`:
 
 - **`outpaint`** — extend/expand the video canvas (for example, make a vertical
@@ -241,12 +243,12 @@ for direct inpaint (white = region to regenerate), `--outpaint-position`
 extension/inpaint controls are video-only.
 
 ```bash
-sogni-agent -q --video --workflow v2v -m ltx23 \
+sogni-agent -q --video --workflow v2v -m ltx25-v2v \
   --ref-video ./source.mp4 --control-type outpaint \
   --outpaint-position center --outpaint-aspect-ratio 16:9 \
   -o ./outpainted.mp4 "Extend the surrounding scene naturally"
 
-sogni-agent -q --video --workflow v2v -m ltx23 \
+sogni-agent -q --video --workflow v2v -m ltx25-v2v \
   --ref-video ./source.mp4 --control-type inpaint --mask ./mask.png \
   -o ./inpainted.mp4 "Replace the masked region with clean matching detail"
 ```
@@ -254,7 +256,7 @@ sogni-agent -q --video --workflow v2v -m ltx23 \
 ## Music-to-Video Pipeline
 
 1. Use the provided/generated audio file as `--ref-audio`
-2. If there is also a reference image, omit `--workflow` and let the CLI auto-select LTX 2.3 `ia2v`
-3. If there is no reference image, omit `--workflow` and let the CLI auto-select LTX 2.3 `a2v`
+2. If there is also a reference image, omit `--workflow` and let the CLI auto-select LTX 2.5 `ia2v`
+3. If there is no reference image, omit `--workflow` and let the CLI auto-select LTX 2.5 `a2v`
 4. Use `--workflow s2v` only for explicit face lip-sync with a face image
 5. If only part of the song/audio should drive the clip, pass `--audio-start <sec>` and optionally `--audio-duration <sec>`

@@ -4,6 +4,7 @@ import {
   animatePhotoDefinition,
   generateVideoDefinition
 } from '@sogni-ai/sogni-intelligence-client/tools';
+import { getVideoModelConfig } from '@sogni-ai/sogni-intelligence-client/media';
 
 import {
   SEEDANCE_STORYBOARD_REFERENCE_PROMPT,
@@ -64,6 +65,7 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   assert.equal(formatModelRef('seedance', 1, 'image'), '@Image1');
   assert.equal(formatModelRef('gpt-image-2', 1, 'image'), 'Image 1');
   assert.equal(formatModelRef('ltx23', 1, 'image'), 'context_image_0');
+  assert.equal(formatModelRef('ltx25', 1, 'image'), 'context_image_0');
   // MiniMax H3 Ref2VA labels references with the literal tags its text encoder
   // splices in front of the prompt; the bare GPT "Image 1" fallback measurably
   // underperforms because it shares no token sequence with those labels.
@@ -80,6 +82,7 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   assert.deepEqual(storyboardAdapterRegistry.list().map((adapter) => adapter.modelId).sort(), [
     'gpt-image-2',
     'ltx23',
+    'ltx25',
     'seedance',
     'wan'
   ]);
@@ -177,8 +180,17 @@ test('runtime guardrail plan extends implicit duration for quoted dialogue', () 
 test('runtime default model selection keeps native audio prompts on LTX', () => {
   assert.equal(
     selectDefaultVideoModel('i2v', { prompt: 'a host says "hello there"', quality: null }, {}),
-    'ltx23-22b-fp8_i2v_distilled'
+    'ltx25-22b-int8_i2v_distilled'
   );
+});
+
+test('published LTX 2.5 I2V settings retain the official sampler and guide strength', () => {
+  for (const quality of ['fast', 'pro']) {
+    const config = getVideoModelConfig('ltx25', quality);
+    assert.equal(config.sampler, 'euler_ancestral', `${quality} sampler`);
+    assert.equal(config.scheduler, 'manual_sigmas', `${quality} scheduler`);
+    assert.equal(config.strength, 0.7, `${quality} image guide strength`);
+  }
 });
 
 test('runtime exposes shared media preparation decisions for CLI adapters', () => {

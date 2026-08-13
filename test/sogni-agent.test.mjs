@@ -1196,7 +1196,7 @@ test('audio-only video input infers a2v and LTX audio-to-video default model', (
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_a2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_a2v_distilled');
   assert.equal(state.lastVideoProject.referenceAudio != null, true);
   assert.equal(state.lastVideoProject.referenceImage == null, true);
 });
@@ -1210,7 +1210,7 @@ test('image plus audio infers LTX image-audio-to-video instead of WAN s2v by def
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_ia2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_ia2v_distilled');
   assert.equal(state.lastVideoProject.referenceImage != null, true);
   assert.equal(state.lastVideoProject.referenceAudio != null, true);
 });
@@ -1229,14 +1229,14 @@ test('lip-sync image plus audio prompt infers WAN s2v', () => {
   assert.equal(state.lastVideoProject.referenceAudio != null, true);
 });
 
-test('text-to-video defaults to LTX 2.3 for native audio capable generation', () => {
+test('text-to-video defaults to LTX 2.5 for native audio capable generation', () => {
   const { exitCode, state } = runCli([
     '--video',
     'a narrator says "welcome to the story" while ocean waves crash'
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_t2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_t2v_distilled');
   assert.equal(state.lastVideoProject.fps, 24);
 });
 
@@ -1670,7 +1670,7 @@ test('target resolution scales video short side while preserving aspect', () => 
   ]);
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_t2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_t2v_distilled');
   assert.equal(state.lastVideoProject.width, 1344);
   assert.equal(state.lastVideoProject.height, 768);
 });
@@ -1822,11 +1822,11 @@ test('--last-image participates in video workflow inference', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'wan_v2.2-14b-fp8_i2v_lightx2v');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_i2v_distilled');
   assert.equal(state.lastVideoProject.referenceImage != null, true);
 });
 
-test('two-image first/last-frame animation defaults to the LTX-2.3 morph model', () => {
+test('two-image first/last-frame animation defaults to the LTX-2.5 FLF workflow', () => {
   const { exitCode, state } = runCli([
     '--video',
     '--ref', SCREENSHOT_FIXTURE,
@@ -1836,11 +1836,11 @@ test('two-image first/last-frame animation defaults to the LTX-2.3 morph model',
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_i2v_distilled');
   assert.ok(state.lastVideoProject.referenceImage);
   assert.ok(state.lastVideoProject.referenceImageEnd);
-  assert.deepEqual(state.lastVideoProject.loras, ['transition']);
-  assert.match(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+  assert.equal(state.lastVideoProject.loras, undefined);
+  assert.doesNotMatch(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
 });
 
 test('explicit -m wan keeps WAN for first/last-frame pairs', () => {
@@ -3766,6 +3766,7 @@ test('i2v infers a 16-multiple video size from non-square reference when width/h
   const { exitCode, state } = runCli([
     '--video',
     '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', SCREENSHOT_FIXTURE,
     '--duration', '1',
     'gentle camera pan'
@@ -4200,6 +4201,7 @@ test('json error: i2v rejects mismatched explicit size and suggests a compatible
     '--strict-size',
     '--video',
     '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', SCREENSHOT_FIXTURE,
     '--width', '512',
     '--height', '512',
@@ -4244,6 +4246,7 @@ test('i2v auto-adjust handles near-matching aspects that still round to a non-16
   const { exitCode, state } = runCli([
     '--video',
     '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', refPath,
     '--duration', '1',
     'gentle camera pan'
@@ -4499,6 +4502,7 @@ test('json error: i2v explicit size that rounds to non-16 suggests a compatible 
     '--strict-size',
     '--video',
     '--workflow', 'i2v',
+    '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', refPath,
     '--width', '1024',
     '--height', '1536',
@@ -4565,9 +4569,29 @@ test('v2v ControlNet applies chat-derived defaults', () => {
     'stylized edges'
   ]);
   assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_v2v_distilled');
   assert.equal(state.lastVideoProject.controlNet.name, 'canny');
   assert.equal(state.lastVideoProject.controlNet.strength, 0.85);
   assert.equal(state.lastVideoProject.detailerStrength, 0.6);
+});
+
+test('LTX 2.5 pose requires and forwards a subject reference image', () => {
+  expectCliError(
+    [
+      '--video', '--workflow', 'v2v', '-m', 'ltx25-v2v',
+      '--ref-video', SCREENSHOT_FIXTURE, '--controlnet-name', 'pose', 'robot dance'
+    ],
+    'LTX 2.5 pose control requires both --ref-video and --ref'
+  );
+
+  const { exitCode, state } = runCli([
+    '--video', '--workflow', 'v2v', '-m', 'ltx25-v2v',
+    '--ref-video', SCREENSHOT_FIXTURE, '--ref', SCREENSHOT_FIXTURE,
+    '--controlnet-name', 'pose', 'robot dance'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_v2v_distilled');
+  assert.ok(state.lastVideoProject.referenceImage);
 });
 
 test('detailer ControlNet defaults to full preservation strength', () => {
@@ -4600,11 +4624,38 @@ test('LTX i2v with first and end frames auto-attaches transition LoRA', () => {
   assert.match(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
 });
 
+test('LTX 2.5 i2v accepts first and end frames without the 2.3 transition LoRA', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'i2v',
+    '-m', 'ltx25-i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    'move continuously between the opening and final frames'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_i2v_distilled');
+  assert.equal(state.lastVideoProject.loras, undefined);
+  assert.doesNotMatch(state.lastVideoProject.positivePrompt, /\bzhuanchang\b/);
+});
+
+test('LTX 2.5 rejects the LTX 2.3-only voice identity input', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'ltx25',
+      '--reference-audio-identity', SCREENSHOT_FIXTURE,
+      'a presenter speaks to camera'
+    ],
+    'requires an LTX-2.3 video model'
+  );
+});
+
 test('LTX v2v outpaint forwards IC-LoRA control and positional canvas options', () => {
   const { exitCode, state } = runCli([
     '--video',
     '--workflow', 'v2v',
-    '-m', 'ltx23',
+    '-m', 'ltx25-v2v',
     '--ref-video', SCREENSHOT_FIXTURE,
     '--control-type', 'outpaint',
     '--outpaint-position', 'right',
@@ -4612,7 +4663,7 @@ test('LTX v2v outpaint forwards IC-LoRA control and positional canvas options', 
     'extend the street scene into the new area'
   ]);
   assert.equal(exitCode, 0);
-  assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_v2v_distilled');
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_v2v_distilled');
   assert.deepEqual(state.lastVideoProject.controlNet, { name: 'outpaint', strength: 1.0 });
   assert.equal(state.lastVideoProject.outpaintPosition, 'right');
   assert.equal(state.lastVideoProject.detailerStrength, undefined);
@@ -4647,7 +4698,7 @@ test('LTX v2v inpaint requires a direct CLI mask image', () => {
       '--control-type', 'inpaint',
       'make the masked region clean'
     ],
-    'LTX-2.3 v2v inpaint requires --mask'
+    'LTX v2v inpaint requires --mask'
   );
 });
 
@@ -4667,12 +4718,14 @@ test('audio and video start offsets are passed to video projects', () => {
     '--video',
     '--workflow', 'v2v',
     '--ref-video', SCREENSHOT_FIXTURE,
+    '--ref', SCREENSHOT_FIXTURE,
     '--video-start', '12.25',
     '--controlnet-name', 'pose',
     'robot dance'
   ]);
   assert.equal(videoRun.exitCode, 0);
   assert.equal(videoRun.state.lastVideoProject.videoStart, 12.25);
+  assert.ok(videoRun.state.lastVideoProject.referenceImage);
 });
 
 test('--sam2-coordinates is only supported with animate-replace', () => {

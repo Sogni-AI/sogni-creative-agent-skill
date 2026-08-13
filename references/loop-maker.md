@@ -10,7 +10,7 @@ Use this workflow for one-command requests to turn a folder of still images into
 - Use the strongest retained image as the opener unless the user names another, then rotate the ordered list without otherwise reordering it.
 - Render one 3-second clip per image pair: about 2 seconds of restrained motion followed by a smooth transition into the next supplied image.
 - Close the loop with the last retained image to the opener.
-- Use `ltx23-22b-fp8_i2v_distilled`, `--token-type auto`, and the exact original files as both `--ref` and `--ref-end` for every pair.
+- Use `ltx25-22b-int8_i2v_distilled`, `--token-type auto`, and the exact original files as both `--ref` and `--ref-end` for every pair.
 - Pin both endpoint strengths to `1` and disable SDK asset auto-resizing after choosing a valid LTX canvas.
 - Target a 768px short side unless the user requests another resolution. Choose dimensions divisible by 64, preserve the dominant source aspect ratio, and keep the long side at or below 2048px. For a 4:3 source set, use `1024x768`.
 - Normalize the stitched result to 32 fps.
@@ -80,7 +80,7 @@ Pass the exact original paths directly. Do not make normalized JPEG copies or us
 
 ```bash
 sogni-agent -q --video \
-  -m ltx23-22b-fp8_i2v_distilled \
+  -m ltx25-22b-int8_i2v_distilled \
   --ref ./from-image.jpg \
   --ref-end ./to-image.jpg \
   --no-auto-resize-assets \

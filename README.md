@@ -26,7 +26,7 @@ It ships three ways:
 With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
-- create videos from text, images, audio, or reference video (LTX-2.3, WAN 2.2, Seedance 2.0, HappyHorse 1.1)
+- create videos from text, images, first/last frames, audio, or source video (LTX-2.5), with LTX-2.3 retained for voice ID, transition, and 10Eros workflows
 - turn an image folder into a visually deduplicated, music-backed seamless loop with one plugin skill invocation
 - generate instrumental music or full songs with lyrics
 - run hosted creative workflows including storyboard-driven video
@@ -62,7 +62,7 @@ With this skill, an agent can:
   - [Quality presets](#quality-presets)
   - [Recommended models](#recommended-models)
 - [Video Sizing & Aspect Ratios](#video-sizing--aspect-ratios)
-- [LTX-2.3 Prompting Guide](#ltx-23-prompting-guide)
+- [LTX-2.x Prompting Guide](#ltx-2x-prompting-guide)
 - [Photobooth (Face Transfer)](#photobooth-face-transfer)
 - [Personas, Memory, and Personality](#personas-memory-and-personality)
 - [Hosted API Modes](#hosted-api-modes)
@@ -436,11 +436,11 @@ sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png
 sogni-agent --video --ref cat.jpg "gentle camera pan"
 
 # Animate two images together (first frame → last frame; defaults to
-# ltx23-22b-fp8_i2v_distilled with the auto-applied transition/morph LoRA)
+# ltx25-22b-int8_i2v_distilled using the standard first/last-frame template)
 sogni-agent --video --ref first.png --ref-end last.png \
   "the opening frame flows smoothly into the final frame"
 
-# Image+audio-to-video (auto-routes to LTX-2.3 ia2v)
+# Image+audio-to-video (auto-routes to LTX-2.5 ia2v)
 sogni-agent --video --ref cover.jpg --ref-audio song.mp3 \
   "music video with synchronized motion"
 
@@ -608,11 +608,12 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
 | MiniMax H3 Turbo image-to-video | `minimax-h3-i2v-turbo` with `--ref` |
 | MiniMax H3 Turbo first-frame → last-frame video | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
-| Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
+| Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
-| Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
-| Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
-| Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
+| Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |
+| Image+audio-to-video | `ltx25-ia2v` |
+| Audio-to-video | `ltx25-a2v` |
+| Video-to-video with ControlNet/edit templates | `ltx25-v2v` |
 | Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-mini` for the lower-cost 720p path; `seedance2-fast` for the legacy 720p fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p only) | `seedance2-5` (`seedance2-5-ia2v` / `seedance2-5-v2v` for image+audio and v2v/editing) |
@@ -628,26 +629,26 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **MiniMax H3 and H3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap (normally 1344×768 or 768×1344). `--duration` snaps to that frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds: `--duration 3` renders the 124-frame floor (5.17 s), while `--duration 6` renders 141 frames (5.88 s). The CLI prints the delivered duration; pass `--frames` directly for exact control. Standard H3 uses 20 steps; Turbo uses 4 steps. H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed. Explicit A/B tests may select exactly `euler`, `er_sde`, or `sa_solver`; Standard H3, R2V, and other video modes still reject sampler overrides, and H3 scheduling remains fixed to `simple`. Guidance 1 is fixed and there is no negative-prompt input. Base and Turbo t2v/i2v/flf2v prompts use the exact ordered fields `integrated_multimodal_description`, `overall_soundscape`, and `non_diegetic_music`; i2v/flf2v also require their exact alignment preamble. Spoken lines use stable `(S1)` IDs and `<d>[Language] exact words</d>`. The separate standard `minimax-h3-r2v` checkpoint uses exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`, in that order. It accepts up to 9 images (`--ref` plus `-c`), 3 videos, and 3 audios, capped at 12 files; at least one visual reference (image or video) is required, audio-only input is invalid, r2v is never inferred, and there is no Turbo Ref2VA. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact preambles, shot notation, and reference labels.
-- **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
+- **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips but caps at 480p/720p (no 1080p or 4K). Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.
 - The script auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but ref becomes `1024×1535`). `sogni-agent` detects this for local refs and auto-adjusts to a nearby safe size.
-- **LTX-2.3 two-keyframe morph (the default for `--ref` + `--ref-end` when no `-m` is given):** when the LTX-2.3 i2v model `ltx23-22b-fp8_i2v_distilled` gets **both** a start frame (`--ref`) and an end frame (`--ref-end`), it auto-applies the ValiantCat transition/morph LoRA (lora id `transition`, trigger word `zhuanchang`, strength ~1.0) and morphs the first image into the last in a single render — no bridge clip or `--concat-videos` needed. The sogni-client SDK example feeds the two frames as its `image` / `end-image` arguments and additionally exposes manual `transition` / `transition-strength` SDK arguments.
+- **LTX-2.5 first/last-frame default:** `--ref` + `--ref-end` with no `-m` uses `ltx25-22b-int8_i2v_distilled` and the dedicated FLF workflow template. It shares the I2V public model ID and does not attach the LTX-2.3 transition LoRA. Pin `ltx23-22b-fp8_i2v_distilled` explicitly only when the legacy transition-LoRA behavior is required.
 - **Private mature-theme creativity:** optional uncensored LTX-2.3 video models are available for adults who explicitly want them. They remain opt-in and are not part of ordinary model recommendations; the agent loads their specialized guidance only for a relevant request.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 
-V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. Audio references must be paired with an image or video reference.
+V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. LTX 2.5 `pose` requires both `--ref-video` for the motion/pose sequence and `--ref` for the subject appearance; explicit LTX 2.3 rollback keeps its existing optional-image behavior. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. Audio references must be paired with an image or video reference.
 
-The LTX-2.3 v2v model `ltx23-22b-fp8_v2v_distilled` also supports two extra control modes: **`outpaint`** extends/expands the video canvas (e.g. make a vertical clip widescreen, or add space in a direction) — it is positional and mask-free, anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio (`16:9|9:16|1:1|4:3|3:4|21:9`), and the canvas only grows, never crops; **`inpaint`** regenerates a masked region of the source video and **requires a mask image** (white pixels = region to regenerate) in direct CLI/SDK mode. The hosted `video_to_video` tool selects these with `controlMode` `outpaint`/`inpaint` and can derive an inpaint mask when the user did not upload one. The direct CLI and sogni-client SDK example expose them via `--control-type` / `control-type` (`canny|pose|depth|detailer|outpaint|inpaint`), with `--outpaint-position` for outpaint and `--mask` for inpaint. See `references/video-editing.md` for details.
+The LTX-2.5 v2v selector `ltx25-v2v` supports two extra control modes: **`outpaint`** extends/expands the video canvas (e.g. make a vertical clip widescreen, or add space in a direction) — it is positional and mask-free, anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio (`16:9|9:16|1:1|4:3|3:4|21:9`), and the canvas only grows, never crops; **`inpaint`** regenerates a masked region of the source video and **requires a mask image** (white pixels = region to regenerate) in direct CLI/SDK mode. The hosted `video_to_video` tool selects these with `controlMode` `outpaint`/`inpaint` and can derive an inpaint mask when the user did not upload one. The direct CLI and sogni-client SDK example expose them via `--control-type` / `control-type` (`canny|pose|depth|detailer|outpaint|inpaint`), with `--outpaint-position` for outpaint and `--mask` for inpaint. Pin `ltx23-v2v` only for rollback. See `references/video-editing.md` for details.
 
 ---
 
-## LTX-2.3 Prompting Guide
+## LTX-2.x Prompting Guide
 
-When you use `ltx23-22b-fp8_t2v_distilled`, do **not** feed it short tag prompts like `"cinematic drone shot over tropical cliffs"`. LTX-2.3 renders more reliably from a dense natural-language scene description.
+When you use LTX-2.5 or an LTX-2.3 rollback model, do **not** feed it short tag prompts like `"cinematic drone shot over tropical cliffs"`. LTX renders more reliably from a dense natural-language scene description.
 
 - Write one unbroken paragraph — no line breaks, bullets, headers, or tag blocks.
 - Use 4–8 flowing present-tense sentences describing one continuous shot, not a montage.
@@ -663,7 +664,7 @@ When you use `ltx23-22b-fp8_t2v_distilled`, do **not** feed it short tag prompts
 ```text
 User ask: "make a 4k video of a woman in a neon alley"
 
-LTX-2.3 prompt: "A medium cinematic shot frames a woman in her 30s standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement while warm steam drifts from street vents. She wears a dark trench coat with damp strands of black hair clinging near her cheek as light glances across the fabric texture and the brick walls behind her. She turns toward the camera and steps forward with measured focus, one hand tightening around the strap of her bag while rain taps softly on the metal fire escape and a distant train hum rolls through the block. The camera performs a slow push-in as her jaw sets and her breathing steadies, maintaining smooth stabilized motion and a tense urban-thriller mood."
+LTX prompt: "A medium cinematic shot frames a woman in her 30s standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement while warm steam drifts from street vents. She wears a dark trench coat with damp strands of black hair clinging near her cheek as light glances across the fabric texture and the brick walls behind her. She turns toward the camera and steps forward with measured focus, one hand tightening around the strap of her bag while rain taps softly on the metal fire escape and a distant train hum rolls through the block. The camera performs a slow push-in as her jaw sets and her breathing steadies, maintaining smooth stabilized motion and a tense urban-thriller mood."
 ```
 
 ---

@@ -23,14 +23,14 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
           "defaultPhotoboothModel": "coreml-sogniXLturbo_alpha1_ad",
           "defaultMusicModel": "ace_step_1.5_xl_turbo",
           "videoModels": {
-            "t2v": "ltx23-22b-fp8_t2v_distilled",
+            "t2v": "ltx25-22b-int8_t2v_distilled",
             "i2v": "wan_v2.2-14b-fp8_i2v_lightx2v",
             "s2v": "wan_v2.2-14b-fp8_s2v_lightx2v",
-            "ia2v": "ltx23-22b-fp8_ia2v_distilled",
-            "a2v": "ltx23-22b-fp8_a2v_distilled",
+            "ia2v": "ltx25-22b-int8_ia2v_distilled",
+            "a2v": "ltx25-22b-int8_a2v_distilled",
             "animate-move": "wan_v2.2-14b-fp8_animate-move_lightx2v",
             "animate-replace": "wan_v2.2-14b-fp8_animate-replace_lightx2v",
-            "v2v": "ltx23-22b-fp8_v2v_distilled"
+            "v2v": "ltx25-22b-int8_v2v_distilled"
           },
           "defaultVideoWorkflow": "t2v",
           "defaultNetwork": "fast",
@@ -71,8 +71,8 @@ Notes:
 
 - Seed strategies: `prompt-hash` (deterministic) or `random`.
 - `videoModels.i2v` also governs two-image `--ref` + `--ref-end` renders:
-  when set, it overrides the built-in LTX-2.3 transition/morph default
-  (`ltx23-22b-fp8_i2v_distilled`) that otherwise applies to first/last-frame
+  when set, it overrides the built-in LTX-2.5 first/last-frame default
+  (`ltx25-22b-int8_i2v_distilled`) that otherwise applies to first/last-frame
   pairs. Unset, single-image i2v defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`.
 - `defaultCount` is clamped to the CLI's safety cap (16 unless raised with
   `SOGNI_MAX_COUNT`).

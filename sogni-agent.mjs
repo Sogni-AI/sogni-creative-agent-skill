@@ -1607,7 +1607,7 @@ function videoDurationLimitsLikeWrapper(modelId) {
   if (isMiniMaxH3Model(modelId)) return { ...MINIMAX_H3_DURATION_LIMITS };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
-  if (isLtx2Model(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
+  if (isLtxFamilyModel(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
   return { min: 1, max: 10 };
 }
 
@@ -1880,6 +1880,13 @@ const LTX_TRANSITION_LORA_ID = 'transition';
 const LTX_TRANSITION_TRIGGER = 'zhuanchang';
 const LTX_TRANSITION_DEFAULT_STRENGTH = 1.0;
 const LTX23_10EROS_MODEL_ID = 'ltx23-22b-10eros-v1.4-fp8mixed_i2v';
+const LTX25_DISTILLED_WORKFLOW_MODELS = Object.freeze({
+  t2v: 'ltx25-22b-int8_t2v_distilled',
+  i2v: 'ltx25-22b-int8_i2v_distilled',
+  a2v: 'ltx25-22b-int8_a2v_distilled',
+  ia2v: 'ltx25-22b-int8_ia2v_distilled',
+  v2v: 'ltx25-22b-int8_v2v_distilled'
+});
 const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_t2v', 't2v'],
   ['minimax-h3-fl2va-fp8_i2v', 'i2v'],
@@ -1948,6 +1955,14 @@ const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
 
 function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = false) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  if (normalized === 'ltx25' || normalized === 'ltx25-t2v') {
+    const mode = ['i2v', 'a2v', 'ia2v', 'v2v'].includes(workflow) ? workflow : 't2v';
+    return LTX25_DISTILLED_WORKFLOW_MODELS[mode];
+  }
+  if (normalized === 'ltx25-i2v') return LTX25_DISTILLED_WORKFLOW_MODELS.i2v;
+  if (normalized === 'ltx25-a2v') return LTX25_DISTILLED_WORKFLOW_MODELS.a2v;
+  if (normalized === 'ltx25-ia2v') return LTX25_DISTILLED_WORKFLOW_MODELS.ia2v;
+  if (normalized === 'ltx25-v2v') return LTX25_DISTILLED_WORKFLOW_MODELS.v2v;
   if (normalized === 'minimax-h3' && workflow) {
     if (workflow === 'r2v') return MINIMAX_H3_R2V_MODEL_ID;
     if (workflow === 'i2v') {
@@ -2080,15 +2095,43 @@ function parseOutpaintAspectRatio(value) {
   return width / height;
 }
 
-function isLtx23V2VModelId(modelId) {
-  return !!modelId && modelId.includes('ltx23') && /_v2v(_|$)/.test(modelId);
+function isLtxV2VModelId(modelId) {
+  return !!modelId && (modelId.includes('ltx23') || modelId.includes('ltx25')) && /_v2v(_|$)/.test(modelId);
+}
+
+function isLtx23ModelId(modelId) {
+  return String(modelId || '').trim().toLowerCase().startsWith('ltx23-');
+}
+
+function isLtx25ModelId(modelId) {
+  return String(modelId || '').trim().toLowerCase().startsWith('ltx25-');
+}
+
+function isLtxFamilyModel(modelId) {
+  return isLtx2Model(modelId) || isLtx25ModelId(modelId);
+}
+
+function ltx25WorkflowFromModelSelection(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  const exact = normalized.match(/^ltx25-22b-int8_(t2v|i2v|a2v|ia2v|v2v)_(?:distilled|dev)$/);
+  if (exact) return exact[1];
+  const alias = normalized.match(/^ltx25-(t2v|i2v|a2v|ia2v|v2v)$/);
+  return alias ? alias[1] : null;
+}
+
+function upgradeBuiltInLtx23Default(modelId, workflow) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  const match = normalized.match(/^ltx23-22b-fp8_(t2v|i2v|a2v|ia2v|v2v)_(distilled|dev)$/);
+  if (!match) return modelId;
+  const mode = ['t2v', 'i2v', 'a2v', 'ia2v', 'v2v'].includes(workflow) ? workflow : match[1];
+  return `ltx25-22b-int8_${mode}_${match[2]}`;
 }
 
 function isLtxI2vTransitionModelId(modelId) {
   return (
     !!modelId &&
     modelId !== LTX23_10EROS_MODEL_ID &&
-    modelId.includes('ltx') &&
+    isLtx23ModelId(modelId) &&
     /_i2v(_|$)/.test(modelId)
   );
 }
@@ -2293,8 +2336,8 @@ const options = {
   refVideo: null, // Reference video for animate workflows (primary)
   refVideos: [], // Additional Seedance loose video refs; first --ref-video fills refVideo, subsequent calls append here
   videoStart: null, // Optional start offset into reference video
-  refMask: null, // Inpaint mask image for LTX-2.3 v2v inpaint
-  outpaintPosition: null, // LTX-2.3 v2v outpaint canvas anchor
+  refMask: null, // Inpaint mask image for LTX v2v inpaint
+  outpaintPosition: null, // LTX v2v outpaint canvas anchor
   outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
@@ -2403,7 +2446,7 @@ const options = {
   // Tier 2 local storyboard planning surface:
   storyboardPlanAction: false,
   storyboardPlanFrames: null,
-  storyboardPlanModel: null, // seedance|seedance2|gpt-image-2|ltx23|wan
+  storyboardPlanModel: null, // seedance|seedance2|gpt-image-2|ltx25|ltx23|wan
   storyboardPlanStage: null, // storyboard_image|scene_clip
   noFilter: false // Disable NSFW content filter
 };
@@ -3442,7 +3485,7 @@ Video Options:
   --estimate-video-cost Estimate video cost and exit
   --ref <path|url>      Reference image for video (start frame; Picture 1 on H3 r2v)
   --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
-                         defaults to the LTX-2.3 transition/morph model
+                         defaults to the LTX-2.5 i2v first/last-frame workflow
                          (last frame on Seedance)
   --ref-audio <path|url> Audio reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
@@ -3473,9 +3516,9 @@ Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / see
   --controlnet-name <n> ControlNet type for v2v: canny|pose|depth|detailer|outpaint|inpaint
   --control-type <n>    Alias for --controlnet-name
   --controlnet-strength <n>  ControlNet strength for v2v (0.0-1.0, default: 0.8)
-  --mask <path|url>     Inpaint mask image for LTX-2.3 v2v inpaint (white = regenerate)
-  --outpaint-position <p> LTX-2.3 outpaint anchor: center|top|bottom|left|right
-  --outpaint-aspect-ratio <r> LTX-2.3 outpaint target ratio, e.g. 16:9 or 9:16
+  --mask <path|url>     Inpaint mask image for LTX v2v inpaint (white = regenerate)
+  --outpaint-position <p> LTX outpaint anchor: center|top|bottom|left|right
+  --outpaint-aspect-ratio <r> LTX outpaint target ratio, e.g. 16:9 or 9:16
   --sam2-coordinates <coords>  SAM2 click coords for animate-replace (x,y or x1,y1;x2,y2)
   --trim-end-frame      Trim last frame for seamless video stitching
   --first-frame-strength <n>  Keyframe strength for start frame (0.0-1.0)
@@ -3614,13 +3657,21 @@ Image Models:
   qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
   qwen_image_edit_2511_fp8_lightning  Fast image editing
 
-Recommended LTX 2.3 Video Models:
+Recommended LTX 2.5 Video Models:
+  ltx25 / ltx25-t2v               Distilled text-to-video with native dialogue/audio
+  ltx25-i2v                        Distilled image-to-video and first/last-frame workflow
+  ltx25-a2v                        Distilled audio-to-video
+  ltx25-ia2v                       Distilled image+audio-to-video
+  ltx25-v2v                        Distilled video-to-video control, inpaint, and outpaint
+  ltx25-22b-int8_<mode>_dev        Dev/HQ two-stage workflow for t2v/i2v/a2v/ia2v/v2v
+
+LTX 2.3 rollback-only capabilities:
   ltx23-22b-fp8_t2v_distilled     Text-to-video with native dialogue/audio
-  ltx23-22b-fp8_i2v_distilled     Image-to-video with native dialogue/audio; default for --ref + --ref-end pairs
+  ltx23-22b-fp8_i2v_distilled     Image-to-video; transition LoRA only when both frames are supplied
   ltx23-eros                       Explicit uncensored I2V (30GB+ worker; requires --no-filter)
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
-  ltx23-22b-fp8_v2v_distilled     Video-to-video with ControlNet
+  ltx23-22b-fp8_v2v_distilled     Video-to-video rollback
   ltx23-22b-10eros-v1.4-fp8mixed_i2v  Private mature-theme I2V; first and/or last frame; requires --no-filter
 
 Music Models:
@@ -3675,7 +3726,14 @@ WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_animate-move_lightx2v     Animate-move (fast)
   wan_v2.2-14b-fp8_animate-replace_lightx2v  Animate-replace (fast)
 
-LTX-2 / LTX-2.3 Video Models:
+LTX-2.5 standard models (Distilled fast path; replace _distilled with _dev for Dev/HQ):
+  ltx25-22b-int8_t2v_distilled    Text-to-video with native audio
+  ltx25-22b-int8_i2v_distilled    Image-to-video; also first/last-frame conditioning
+  ltx25-22b-int8_a2v_distilled    Audio-to-video
+  ltx25-22b-int8_ia2v_distilled   Image+audio-to-video
+  ltx25-22b-int8_v2v_distilled    Video-to-video controls, inpaint, and outpaint
+
+LTX-2 / LTX-2.3 rollback models:
   ltx2-19b-fp8_t2v_distilled      Text-to-video, fast 8-step
   ltx2-19b-fp8_t2v                Text-to-video, quality 20-step
   ltx2-19b-fp8_i2v_distilled      Image-to-video, fast 8-step
@@ -3704,7 +3762,7 @@ Examples:
   sogni-agent --api-workflow --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
   sogni-agent --api-workflow --workflow-input @workflow.json
   sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2 and Seedance"
-  sogni-agent --video -m ltx23-22b-fp8_t2v_distilled --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
+  sogni-agent --video -m ltx25 --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
   sogni-agent --video --last-image "gentle camera pan"
   sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
@@ -4257,7 +4315,9 @@ if (options.video) {
     options.model = resolveHappyHorseModelId(options.model, options.videoWorkflow);
   }
 
-  const workflowFromModel = inferVideoWorkflowFromModel(resolveVideoModelAlias(options.model, options.videoWorkflow));
+  const workflowFromModel =
+    ltx25WorkflowFromModelSelection(options.model) ||
+    inferVideoWorkflowFromModel(resolveVideoModelAlias(options.model, options.videoWorkflow));
   if (options.videoWorkflow && workflowFromModel && options.videoWorkflow !== workflowFromModel) {
     fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
       code: 'INVALID_ARGUMENT',
@@ -4329,18 +4389,33 @@ if (options.music) {
 } else if (options.video) {
   if (!options.model) {
     let defaultVideoModel = selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig);
-    // Two-image first/last-frame animation defaults to the LTX-2.3 i2v morph
-    // path (transition LoRA auto-applies); a configured videoModels.i2v or an
-    // LTX pick from audio/quality routing still wins.
+    const configuredWorkflowModel = openclawConfig?.videoModels?.[options.videoWorkflow];
+    if (!configuredWorkflowModel) {
+      defaultVideoModel = upgradeBuiltInLtx23Default(defaultVideoModel, options.videoWorkflow);
+    }
+    // Two-image first/last-frame animation defaults to the current LTX-2.5
+    // i2v/FLF workflow. A configured videoModels.i2v or an LTX pick from
+    // audio/quality routing still wins.
     if (
       options.videoWorkflow === 'i2v'
       && options.refImage && options.refImageEnd
       && !openclawConfig?.videoModels?.i2v
-      && !isLtx2Model(defaultVideoModel)
+      && !isLtxFamilyModel(defaultVideoModel)
     ) {
-      defaultVideoModel = 'ltx23-22b-fp8_i2v_distilled';
+      defaultVideoModel = LTX25_DISTILLED_WORKFLOW_MODELS.i2v;
     }
     options.model = defaultVideoModel || 'wan_v2.2-14b-fp8_i2v_lightx2v';
+  }
+  // Voice identity is a legacy LTX 2.3-only capability. Route an implicit
+  // request (including an OpenClaw default) to the matching 2.3 workflow, but
+  // preserve an explicit -m choice so the validation below can reject an
+  // incompatible LTX 2.5 selection clearly.
+  if (
+    (options.referenceAudioIdentity || options.voicePersonaName)
+    && !cliSet.model
+    && (options.videoWorkflow === 't2v' || options.videoWorkflow === 'i2v')
+  ) {
+    options.model = LTX23_WORKFLOW_MODELS[options.videoWorkflow];
   }
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
   try {
@@ -4737,6 +4812,16 @@ if (options.video) {
     if (!options.videoControlNetName && !isSeedanceModel(options.model)) {
       fatalCliError(`v2v requires --controlnet-name/--control-type (${VIDEO_CONTROLNET_NAMES.join('|')}).`, { code: 'INVALID_ARGUMENT' });
     }
+    if (
+      options.videoControlNetName === 'pose'
+      && isLtx25ModelId(options.model)
+      && !options.refImage
+    ) {
+      fatalCliError('LTX 2.5 pose control requires both --ref-video and --ref (a still image that defines the subject appearance).', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, controlType: 'pose', requiredFlag: '--ref' }
+      });
+    }
     if (!isSeedanceVideo && options.refAudio) {
       fatalCliError('v2v does not accept reference audio.', { code: 'INVALID_ARGUMENT' });
     }
@@ -4803,9 +4888,10 @@ if (options.video) {
       code: 'INVALID_ARGUMENT'
     });
   }
-  if (options.referenceAudioIdentity && !isLtx2Model(options.model)) {
-    fatalCliError('--reference-audio-identity/--voice-persona requires an LTX video model.', {
+  if (options.referenceAudioIdentity && !isLtx23ModelId(options.model)) {
+    fatalCliError('--reference-audio-identity/--voice-persona requires an LTX-2.3 video model.', {
       code: 'INVALID_ARGUMENT',
+      details: { model: options.model, unsupportedOnLtx25: isLtx25ModelId(options.model) },
       hint: `Use -m ${LTX23_WORKFLOW_MODELS[options.videoWorkflow] || LTX23_WORKFLOW_MODELS.t2v}`
     });
   }
@@ -4818,15 +4904,15 @@ if (options.video) {
         details: { flag: '--controlnet-name', value: options.videoControlNetName, allowed: VIDEO_CONTROLNET_NAMES }
       });
     }
-    if ((options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint') && !isLtx23V2VModelId(options.model)) {
-      fatalCliError(`${options.videoControlNetName} control requires the LTX-2.3 v2v model.`, {
+    if ((options.videoControlNetName === 'outpaint' || options.videoControlNetName === 'inpaint') && !isLtxV2VModelId(options.model)) {
+      fatalCliError(`${options.videoControlNetName} control requires an LTX v2v model.`, {
         code: 'INVALID_ARGUMENT',
         details: { controlNetName: options.videoControlNetName, model: options.model },
-        hint: 'Use --workflow v2v -m ltx23 --control-type ' + options.videoControlNetName
+        hint: 'Use --workflow v2v -m ltx25-v2v --control-type ' + options.videoControlNetName
       });
     }
     if (options.videoControlNetName === 'inpaint' && !options.refMask) {
-      fatalCliError('LTX-2.3 v2v inpaint requires --mask <image> (white pixels = region to regenerate).', {
+      fatalCliError('LTX v2v inpaint requires --mask <image> (white pixels = region to regenerate).', {
         code: 'INVALID_ARGUMENT'
       });
     }
@@ -4977,7 +5063,7 @@ if (options.video) {
     heightFromPrompt ||
     targetResolutionFromPrompt;
   if (
-    isLtx2Model(options.model) &&
+    isLtxFamilyModel(options.model) &&
     options.videoWorkflow === 'i2v' &&
     !hasRequestedVideoCanvas
   ) {
@@ -7158,7 +7244,7 @@ function runStoryboardPlanAction() {
     promptAuthorship: 'user',
   });
   // --storyboard-plan is a model-agnostic preview surface that hands off to
-  // a per-model adapter (seedance / gpt-image-2 / ltx23 / wan). When the
+  // a per-model adapter (seedance / gpt-image-2 / ltx25 / ltx23 / wan). When the
   // user doesn't pick one, prefer the seedance adapter because it owns the
   // canonical storyboard-reference prompt; the user's currently-set image
   // model (e.g., z_image_turbo_bf16) is not a registered storyboard adapter.

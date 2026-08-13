@@ -129,6 +129,12 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 
 | Model | Speed | Use Case |
 |-------|-------|----------|
+| `ltx25` → `ltx25-22b-int8_t2v_distilled` | Distilled | Default text-to-video with native synchronized audio |
+| `ltx25-i2v` → `ltx25-22b-int8_i2v_distilled` | Distilled | Image-to-video; also first/last-frame conditioning through the separate FLF template |
+| `ltx25-ia2v` → `ltx25-22b-int8_ia2v_distilled` | Distilled | Image+audio-to-video |
+| `ltx25-a2v` → `ltx25-22b-int8_a2v_distilled` | Distilled | Audio-to-video |
+| `ltx25-v2v` → `ltx25-22b-int8_v2v_distilled` | Distilled | Video-to-video canny, depth, pose, detailer, inpaint, and outpaint templates; pose requires both source video and subject reference image |
+| `ltx25-22b-int8_{t2v,i2v,ia2v,a2v,v2v}_dev` | Dev/HQ | Official two-stage Dev workflow for the matching mode |
 | `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Default text-to-video with native dialogue/audio |
 | `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio; **default for two-image first-frame → last-frame animation** (transition/morph LoRA auto-applies) |
 | `ltx23-eros` → `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast | Explicit uncensored I2V; 30GB+ GPU and `--no-filter` required |
@@ -173,6 +179,11 @@ itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
 
 | Alias | Resolves to |
 |-------|-------------|
+| `ltx25`, `ltx25-t2v` | `ltx25-22b-int8_t2v_distilled` |
+| `ltx25-i2v` | `ltx25-22b-int8_i2v_distilled` |
+| `ltx25-ia2v` | `ltx25-22b-int8_ia2v_distilled` |
+| `ltx25-a2v` | `ltx25-22b-int8_a2v_distilled` |
+| `ltx25-v2v` | `ltx25-22b-int8_v2v_distilled` |
 | `ltx23`, `ltx23-t2v` | `ltx23-22b-fp8_t2v_distilled` |
 | `ltx23-i2v` | `ltx23-22b-fp8_i2v_distilled` |
 | `ltx23-ia2v` | `ltx23-22b-fp8_ia2v_distilled` |
@@ -194,19 +205,17 @@ itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
 - **Single-image i2v** (`--ref` only, no `-m`) defaults to
   `wan_v2.2-14b-fp8_i2v_lightx2v`. Keep that default for plain "animate this
   image" requests. The CLI auto-routes single-image i2v to
-  `ltx23-22b-fp8_i2v_distilled` only when the prompt calls for native audio
+  `ltx25-22b-int8_i2v_distilled` only when the prompt calls for native audio
   (quoted dialogue; words like audio, music, sound, speech, sings) or reads
   as story direction (story, scene, script, narrative, commercial), or when
   `-Q hq`/`-Q pro` is set — WAN clips render silent. If the prompt must
   contain such words but the WAN path is still wanted, pin it explicitly
   with `-m wan_v2.2-14b-fp8_i2v_lightx2v`.
 - **Two-image first-frame → last-frame animation** (`--ref` + `--ref-end`,
-  no `-m`) defaults to `ltx23-22b-fp8_i2v_distilled`: the transition/morph
-  LoRA auto-attaches (trigger `zhuanchang`) and morphs the first image into
-  the end image in a single render. Use this default whenever the user asks
-  to animate two images together or supplies a first and last frame. Pass
-  `-m wan_v2.2-14b-fp8_i2v_lightx2v` only when the user explicitly wants the
-  WAN path (silent clip, no transition LoRA).
+  no `-m`) defaults to `ltx25-22b-int8_i2v_distilled` and uses the dedicated
+  FLF template. FLF shares the I2V public model ID; it does not attach the
+  LTX-2.3 transition LoRA. Pin `ltx23-22b-fp8_i2v_distilled` only when the
+  legacy LoRA-assisted transition behavior is explicitly required.
 - A configured `videoModels.i2v` (OpenClaw plugin config) overrides both
   defaults.
 
@@ -235,7 +244,7 @@ no negative prompt and no ControlNet.
   grammar and the same mutually exclusive dedicated-frame vs loose-reference
   modes as Seedance 2.0.
 
-The pinned `@sogni-ai/sogni-intelligence-client` 3.14.5 runtime recognizes
+The pinned `@sogni-ai/sogni-intelligence-client` 3.15.1 runtime recognizes
 `seedance-2-5`, so the direct CLI applies Seedance's fixed 24 fps, 4-30 s
 duration window, larger reference caps, reference-mode exclusivity, and HTTPS
 reference forwarding before dispatch.
@@ -554,13 +563,13 @@ model recommendations.
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
-| Text-to-video with native dialogue/audio | `ltx23-22b-fp8_t2v_distilled` |
+| Text-to-video with native dialogue/audio | `ltx25` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
-| Animate two images together (first frame → last frame) | `ltx23-22b-fp8_i2v_distilled` with `--ref A --ref-end B` (transition/morph LoRA auto-applies) |
+| Animate two images together (first frame → last frame) | `ltx25-i2v` with `--ref A --ref-end B` (FLF template, no transition LoRA) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
-| Image+audio-to-video | `ltx23-22b-fp8_ia2v_distilled` |
-| Audio-to-video | `ltx23-22b-fp8_a2v_distilled` |
-| Video-to-video with ControlNet | `ltx23-22b-fp8_v2v_distilled` |
+| Image+audio-to-video | `ltx25-ia2v` |
+| Audio-to-video | `ltx25-a2v` |
+| Video-to-video with ControlNet/edit templates | `ltx25-v2v` |
 | Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
@@ -582,7 +591,7 @@ model recommendations.
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed; `euler`, `er_sde`, and `sa_solver` are its only explicit direct CLI choices. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
-- **LTX family** (`ltx2-*`, `ltx23-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
+- **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.

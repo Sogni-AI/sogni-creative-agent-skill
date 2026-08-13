@@ -1,4 +1,4 @@
-# Video Prompting Guide (LTX-2.3, MiniMax H3, pacing, orientation, camera language)
+# Video Prompting Guide (LTX-2.x, MiniMax H3, pacing, orientation, camera language)
 
 Read this before writing any text-to-video or image-to-video prompt for LTX
 models, before writing any MiniMax H3 prompt, and whenever the user asks for
@@ -12,11 +12,11 @@ tags, and mode-specific alignment preamble. Do not carry LTX's
 single-paragraph, positive-only, no-markup rule into an H3 prompt. Pick the
 section that matches the model you are about to invoke.
 
-## LTX-2.3 Prompt Rule
+## LTX-2.x Prompt Rule
 
-Whenever the chosen video model is `ltx23-22b-fp8_t2v_distilled` (or any LTX
-family model), do not pass the user's short request through unchanged. Rewrite
-it into an LTX-2.3-safe prompt before calling `sogni-agent`.
+Whenever the chosen video model is LTX-2.5 (or an LTX-2.3 rollback model), do
+not pass the user's short request through unchanged. Rewrite it into an
+LTX-safe prompt before calling `sogni-agent`.
 
 - Output one single paragraph only. No line breaks, bullet points, section labels, tag lists, or screenplay formatting.
 - Use 4-8 flowing present-tense sentences describing one continuous shot. No cuts, montage, or unrelated scene jumps.
@@ -422,13 +422,13 @@ sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
 - For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders 480p/720p only.
-- For **non-vendor HD / 1080p text-to-video**, use `-m ltx23-22b-fp8_t2v_distilled`.
-- For **non-vendor HD / 1080p image-to-video**, use `-m ltx23-22b-fp8_i2v_distilled`.
+- For **non-vendor HD / 1080p text-to-video**, use `-m ltx25`.
+- For **non-vendor HD / 1080p image-to-video**, use `-m ltx25-i2v`.
 - Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.
 - For bare named resolutions such as "720p" without orientation or exact pixels, prefer `--target-resolution 768` or the closest requested short side instead of forcing landscape dimensions.
 - When the prompt combines a named resolution with an aspect ratio, such as "720p 9:16", let the CLI infer both instead of forcing manual `-w`/`-h` unless the user gave exact pixels.
 - If the user explicitly asks for `vertical`, `portrait`, `story`, `reel`, `tiktok`, `square`, or `4:3`, apply the matching dimensions from the **Orientation Mapping** rules instead of defaulting to 16:9.
-- Rewrite the user's request using the **LTX-2.3 Prompt Rule** only when invoking an LTX model. Do not send short slogan-style prompts to LTX.
+- Rewrite the user's request using the **LTX-2.x Prompt Rule** only when invoking an LTX model. Do not send short slogan-style prompts to LTX.
 
 ## Agent-ready command shapes
 
@@ -436,11 +436,11 @@ When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or *
 # Native Seedance 4K / UHD text-to-video
 sogni-agent -q --video -m seedance2 --target-resolution 2160 -o ./video.mp4 "A polished cinematic product reveal with native ambient sound"
 
-# HD / 1080p text-to-video without the Seedance vendor path: prefer LTX-2.3
-sogni-agent -q --video -m ltx23-22b-fp8_t2v_distilled -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
+# HD / 1080p text-to-video without the Seedance vendor path: prefer LTX-2.5
+sogni-agent -q --video -m ltx25 -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
 
 # HD / 1080p image-to-video without the Seedance vendor path: prefer LTX i2v
-sogni-agent -q --video --ref /path/to/image.png -m ltx23-22b-fp8_i2v_distilled -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
+sogni-agent -q --video --ref /path/to/image.png -m ltx25-i2v -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
 
 # LTX-2.3 voice identity / persona
 sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'

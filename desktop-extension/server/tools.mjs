@@ -74,7 +74,7 @@ export const TOOLS = [
     description:
       'Generate a video from a text prompt, optionally driven by reference media. ' +
       'ref = start frame image (alone defaults to wan_v2.2-14b-fp8_i2v_lightx2v), ' +
-      'ref_end = end frame (with ref, defaults to ltx23-22b-fp8_i2v_distilled and its auto-applied transition/morph LoRA), ' +
+      'ref_end = end frame (with ref, defaults to ltx25-22b-int8_i2v_distilled and the standard first/last-frame template; no transition LoRA), ' +
       'MiniMax H3 supports t2v, i2v, first/last-frame, and r2v; H3 r2v accepts up to 9 images, 3 videos, ' +
       'and 3 audios (12 files total) through the repeatable reference arrays and uses <Picture 1>/<Video 1>/<Audio 1> prompt tags. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +

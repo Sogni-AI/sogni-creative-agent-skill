@@ -18,7 +18,7 @@ test('loop-maker plugin skill routes to the canonical workflow', () => {
 
 test('loop-maker workflow pins direct LTX first/last-frame rendering and verification', () => {
   const workflow = read('references/loop-maker.md');
-  assert.match(workflow, /ltx23-22b-fp8_i2v_distilled/);
+  assert.match(workflow, /ltx25-22b-int8_i2v_distilled/);
   assert.match(workflow, /--ref .*--ref-end|--ref-end/s);
   assert.match(workflow, /--no-auto-resize-assets/);
   assert.match(workflow, /--first-frame-strength 1 --last-frame-strength 1/);

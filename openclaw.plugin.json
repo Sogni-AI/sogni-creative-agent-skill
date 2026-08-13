@@ -35,12 +35,12 @@
         "additionalProperties": false,
         "description": "Override per-workflow default video models.",
         "properties": {
-          "t2v": { "type": "string", "default": "ltx23-22b-fp8_t2v_distilled" },
+          "t2v": { "type": "string", "default": "ltx25-22b-int8_t2v_distilled" },
           "i2v": { "type": "string", "default": "wan_v2.2-14b-fp8_i2v_lightx2v" },
           "s2v": { "type": "string", "default": "wan_v2.2-14b-fp8_s2v_lightx2v" },
-          "ia2v": { "type": "string", "default": "ltx23-22b-fp8_ia2v_distilled" },
-          "a2v": { "type": "string", "default": "ltx23-22b-fp8_a2v_distilled" },
-          "v2v": { "type": "string", "default": "ltx23-22b-fp8_v2v_distilled" },
+          "ia2v": { "type": "string", "default": "ltx25-22b-int8_ia2v_distilled" },
+          "a2v": { "type": "string", "default": "ltx25-22b-int8_a2v_distilled" },
+          "v2v": { "type": "string", "default": "ltx25-22b-int8_v2v_distilled" },
           "animate-move": { "type": "string", "default": "wan_v2.2-14b-fp8_animate-move_lightx2v" },
           "animate-replace": { "type": "string", "default": "wan_v2.2-14b-fp8_animate-replace_lightx2v" }
         }

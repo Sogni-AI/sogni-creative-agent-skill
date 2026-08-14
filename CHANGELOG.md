@@ -1,3 +1,16 @@
+# [3.30.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.29.0...v3.30.0) (2026-08-14)
+
+
+### Bug Fixes
+
+* **deps:** adopt intelligence-client 3.16.2 ([0413dcc](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/0413dcc51549d71585708a2f49dd485c1a080eef))
+* **video:** adopt the client's model-aware dimension ceilings ([bcb1c65](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/bcb1c654532b4162060456ddf3e33b53f2ed65a9))
+
+
+### Features
+
+* **video:** expose MiniMax H3 R2V Turbo ([813aa66](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/813aa66e3ad612ab579ea9e06eadec7df21e8476))
+
 # [3.29.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.28.0...v3.29.0) (2026-08-13)
 
 

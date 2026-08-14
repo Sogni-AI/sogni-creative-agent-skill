@@ -231,7 +231,11 @@ const {
   SogniClientWrapper,
   ClientEvent,
   getMaxContextImages: getWrapperMaxContextImages,
-  parseCreativeWorkflowSseChunk
+  parseCreativeWorkflowSseChunk,
+  // Model-aware wrapper dimension rules (intelligence-client > 3.15.1). On
+  // older pinned clients this is undefined and the CLI falls back to the
+  // historical mirror constants below.
+  getVideoDimensionRules: getWrapperVideoDimensionRules
 } = rootClientModule;
 
 // ---------------------------------------------------------------------------
@@ -1471,13 +1475,14 @@ const DEFAULT_VIDEO_DIMENSION_RULES = {
 const WRAPPER_MAX_VIDEO_DIMENSION = 2048;
 const WRAPPER_MAX_WAN_VIDEO_DIMENSION = 1536;
 
-// SogniClientWrapper.normalizeVideoDimensions in @sogni-ai/sogni-intelligence-client clamps to
-// MAX_VIDEO_DIMENSION = 1536 for every model before it resizes a reference image and overwrites
-// the project dimensions with the resized reference's. So on any reference-bearing workflow a
-// larger ceiling is not reachable: the CLI waves 1600x896 through as "valid", the wrapper then
-// clamps to 1536x848 and hands the model a 1514x848 reference that is off-divisor — the exact
-// failure the i2v sizing logic exists to prevent. Applied only to reference-bearing workflows;
-// t2v never goes through the reference resize. Keep in sync with the pinned client version.
+// Historical mirror of SogniClientWrapper.normalizeVideoDimensions in
+// @sogni-ai/sogni-intelligence-client, which used to clamp every model to
+// MAX_VIDEO_DIMENSION = 1536 before resizing a reference image and overwriting
+// the project dimensions with the resized reference's — silently downscaling
+// LTX-2.5 1920x1088 requests to 1536x864. Newer clients export
+// getVideoDimensionRules() with per-family envelopes (LTX-2.x up to 3840) and
+// these constants only apply as a fallback when the pinned client predates it
+// (see wrapperMaxVideoDimension / wrapperRefVideoDimensionCeiling).
 const WRAPPER_MAX_REF_VIDEO_DIMENSION = 1536;
 const VIDEO_DIMENSION_MULTIPLE = DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
 
@@ -1638,7 +1643,26 @@ function videoModelDimensionDefaultsLikeWrapper(modelId) {
 }
 
 function wrapperMaxVideoDimension(modelId) {
+  // Prefer the wrapper's own model-aware envelope so the CLI ceiling can never
+  // drift from what the pinned client will actually accept (LTX-2.x: 3840).
+  if (typeof getWrapperVideoDimensionRules === 'function') {
+    const rules = getWrapperVideoDimensionRules(modelId);
+    if (Number.isFinite(rules?.maxDimension) && rules.maxDimension > 0) {
+      return rules.maxDimension;
+    }
+  }
   return isWanVideoModelId(modelId) ? WRAPPER_MAX_WAN_VIDEO_DIMENSION : WRAPPER_MAX_VIDEO_DIMENSION;
+}
+
+// Ceiling for reference-bearing workflows: the wrapper resizes the reference
+// and adopts its dimensions, so the CLI must pick sizes the wrapper will not
+// re-clamp. Model-aware on newer clients; the blanket 1536 applies only to
+// legacy pinned clients that still clamp every model.
+function wrapperRefVideoDimensionCeiling(modelId) {
+  if (typeof getWrapperVideoDimensionRules === 'function') {
+    return wrapperMaxVideoDimension(modelId);
+  }
+  return WRAPPER_MAX_REF_VIDEO_DIMENSION;
 }
 
 function videoDimensionRulesFromDefaults(modelDefaults, modelId) {
@@ -5061,14 +5085,16 @@ if (options.video && !options.frames) {
 //   That means a "valid" requested size can still fail if the resized ref lands off the model divisor.
 if (options.video) {
   const baseVideoDimensionRules = videoDimensionRulesFromDefaults(getModelDefaults(options.model, openclawConfig), options.model);
-  // A reference image routes through the wrapper's resize, which caps at 1536 for every model
-  // and then adopts the resized reference's dimensions as the project's. Honour that ceiling up
-  // front so the CLI picks a divisor-valid size instead of letting the wrapper clamp blindly.
+  // A reference image routes through the wrapper's resize, and the wrapper then adopts the
+  // resized reference's dimensions as the project's. Honour the wrapper's ceiling up front so
+  // the CLI picks a divisor-valid size instead of letting the wrapper clamp blindly (on modern
+  // clients that ceiling is model-aware — e.g. 3840 for LTX-2.x — on legacy clients it is a
+  // blanket 1536).
   const hasVideoReference = Boolean(options.refImage || options.refImageEnd);
   const videoDimensionRules = hasVideoReference
     ? {
       ...baseVideoDimensionRules,
-      maxDimension: Math.min(baseVideoDimensionRules.maxDimension, WRAPPER_MAX_REF_VIDEO_DIMENSION)
+      maxDimension: Math.min(baseVideoDimensionRules.maxDimension, wrapperRefVideoDimensionCeiling(options.model))
     }
     : baseVideoDimensionRules;
 

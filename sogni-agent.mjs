@@ -1625,6 +1625,9 @@ function videoDurationLimitsLikeWrapper(modelId) {
 // explicit -w/-h/--target-resolution, config, and prompt-derived dimensions
 // still win (see the video preflight defaults block).
 function videoModelDimensionDefaultsLikeWrapper(modelId) {
+  if (String(modelId || '').trim().toLowerCase() === MINIMAX_H3_R2V_TURBO_MODEL_ID) {
+    return { defaultWidth: 960, defaultHeight: 544, maxDimension: 1344, dimensionMultiple: 32 };
+  }
   if (isMiniMaxH3Model(modelId)) {
     return { defaultWidth: 1344, defaultHeight: 768, maxDimension: 1344, dimensionMultiple: 32 };
   }
@@ -1894,17 +1897,20 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-ref2va-fp8_r2v', 'r2v'],
   ['minimax-h3-fl2va-fp8_t2v_turbo', 't2v'],
   ['minimax-h3-fl2va-fp8_i2v_turbo', 'i2v'],
-  ['minimax-h3-fl2va-fp8_flf2v_turbo', 'flf2v']
+  ['minimax-h3-fl2va-fp8_flf2v_turbo', 'flf2v'],
+  ['minimax-h3-ref2va-fp8_r2v_turbo', 'r2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
 const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fl2va-fp8_t2v_turbo',
   'minimax-h3-fl2va-fp8_i2v_turbo',
-  'minimax-h3-fl2va-fp8_flf2v_turbo'
+  'minimax-h3-fl2va-fp8_flf2v_turbo',
+  'minimax-h3-ref2va-fp8_r2v_turbo'
 ]);
 const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']);
 const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
+const MINIMAX_H3_R2V_TURBO_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_turbo';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
   videos: 3,
@@ -1976,12 +1982,10 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
   if (normalized === 'minimax-h3-i2v') return 'minimax-h3-fl2va-fp8_i2v';
   if (normalized === 'minimax-h3-flf2v') return 'minimax-h3-fl2va-fp8_flf2v';
   if (normalized === 'minimax-h3-r2v') return MINIMAX_H3_R2V_MODEL_ID;
+  if (normalized === 'minimax-h3-r2v-turbo') return MINIMAX_H3_R2V_TURBO_MODEL_ID;
   if (normalized === 'minimax-h3-turbo' && workflow) {
     if (workflow === 'r2v') {
-      fatalCliError('MiniMax H3 Turbo does not support r2v; use minimax-h3-r2v for Ref2VA.', {
-        code: 'INVALID_ARGUMENT',
-        details: { workflow, model: normalized }
-      });
+      return MINIMAX_H3_R2V_TURBO_MODEL_ID;
     }
     if (workflow === 'i2v') {
       return hasEndFrame
@@ -2013,7 +2017,15 @@ function isMiniMaxH3TurboModel(modelId) {
 }
 
 function isMiniMaxH3R2vModel(modelId) {
-  return String(modelId || '').trim().toLowerCase() === MINIMAX_H3_R2V_MODEL_ID;
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === MINIMAX_H3_R2V_MODEL_ID || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID;
+}
+
+function isMiniMaxH3R2vTurboSelectionLocal(modelId, workflow = null) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === 'minimax-h3-r2v-turbo'
+    || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
+    || (normalized === 'minimax-h3-turbo' && workflow === 'r2v');
 }
 
 function isMiniMaxH3ModelSelectionLocal(modelId) {
@@ -2027,6 +2039,7 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-t2v-turbo'
     || normalized === 'minimax-h3-i2v-turbo'
     || normalized === 'minimax-h3-flf2v-turbo'
+    || normalized === 'minimax-h3-r2v-turbo'
     || isMiniMaxH3Model(normalized);
 }
 
@@ -2036,6 +2049,7 @@ function isMiniMaxH3TurboModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-t2v-turbo'
     || normalized === 'minimax-h3-i2v-turbo'
     || normalized === 'minimax-h3-flf2v-turbo'
+    || normalized === 'minimax-h3-r2v-turbo'
     || isMiniMaxH3TurboModel(normalized);
 }
 
@@ -2048,6 +2062,7 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-t2v-turbo') return 't2v';
   if (normalized === 'minimax-h3-i2v-turbo') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-turbo') return 'flf2v';
+  if (normalized === 'minimax-h3-r2v-turbo') return 'r2v';
   return MINIMAX_H3_MODEL_MODES.get(normalized) || null;
 }
 
@@ -3712,10 +3727,12 @@ state negatives in the structured prompt.):
   minimax-h3-t2v-turbo              4-step Turbo text-to-video
   minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
   minimax-h3-flf2v-turbo            4-step Turbo first-frame -> last-frame (--ref plus --ref-end)
-                                     (Turbo has no r2v/Ref2VA variant)
-  H3 Turbo sampler override         --sampler euler|er_sde|sa_solver
+  minimax-h3-r2v-turbo              4-step Ref2VA Turbo with loose image/video/audio references
+                                     (upstream default: 960x544, Euler/simple)
+  H3 FL2VA Turbo sampler override   --sampler euler|er_sde|sa_solver
                                      (Socket default: er_sde; CLI omits unless set)
                                      (scheduler remains fixed to simple)
+  H3 Ref2VA Turbo sampler           Euler only; CLI omits unless --sampler euler is passed
 
 WAN 2.2 Video Models:
   wan_v2.2-14b-fp8_t2v_lightx2v   Text-to-video (fast)
@@ -4204,6 +4221,12 @@ if (options.video && options.sampler) {
     fatalCliError(`MiniMax H3 Turbo --sampler must be one of: ${MINIMAX_H3_TURBO_SAMPLERS.join(', ')}.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, sampler: options.sampler, allowed: MINIMAX_H3_TURBO_SAMPLERS }
+    });
+  }
+  if (isMiniMaxH3R2vTurboSelectionLocal(options.model, options.videoWorkflow) && options.sampler !== 'euler') {
+    fatalCliError('MiniMax H3 Ref2VA Turbo --sampler must be euler.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, sampler: options.sampler, allowed: ['euler'] }
     });
   }
 }

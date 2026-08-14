@@ -2585,6 +2585,23 @@ export function createPublicSkillDefaultContractRuntime(input = {}) {
   });
 }
 
+import { resolveLtx25WorkflowModelForQuality as resolveUpstreamLtx25WorkflowModelForQuality, selectDefaultVideoModel as selectUpstreamDefaultVideoModel, } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
+function forceLtx25DistilledModel(modelId) {
+    return modelId?.startsWith('ltx25-') && modelId.endsWith('_dev')
+        ? `${modelId.slice(0, -'_dev'.length)}_distilled`
+        : modelId;
+}
+/**
+ * Keep every public LTX 2.5 quality tier on the release-validated Distilled
+ * workflows even while older intelligence-client installations still map Pro
+ * to the unpublished Dev recipe.
+ */
+export function resolveLtx25WorkflowModelForQuality(workflow, qualityTier) {
+    return forceLtx25DistilledModel(resolveUpstreamLtx25WorkflowModelForQuality(workflow, qualityTier));
+}
+export function selectDefaultVideoModel(workflow, opts = {}, config) {
+    return forceLtx25DistilledModel(selectUpstreamDefaultVideoModel(workflow, opts, config));
+}
 // Moved to @sogni-ai/sogni-intelligence-client/skill-runtime-source in Phase 8.4 follow-up.
 // This file is kept as a thin re-export so existing internal `testing/`
 // callers keep working. New code should import from the public mid-tier:

@@ -306,15 +306,16 @@ and short in-scene text.
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family with **seven current modes**: four
-standard workflows plus three 4-step H3 Turbo FL2VA workflows. Every mode
+MiniMax H3 is a Sogni-hosted video family with **eight current modes**: four
+standard workflows plus four 4-step H3 Turbo workflows. Every mode
 generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3` selector resolves to the mode inferred
-from your references; `minimax-h3-turbo` does the same for Turbo t2v/i2v/flf2v.
+from your references; `minimax-h3-turbo` does the same for Turbo t2v/i2v/flf2v
+and accepts an explicit `--workflow r2v`.
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
-be asked for by name. There is no Turbo Ref2VA workflow.
+be asked for by name. Its Turbo counterpart is `minimax-h3-r2v-turbo`.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -325,6 +326,7 @@ be asked for by name. There is no Turbo Ref2VA workflow.
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | Turbo text-to-video | 4-step prompt-only path; generic `minimax-h3-turbo` infers the frame workflow |
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
+| `minimax-h3-r2v-turbo` | Turbo reference-to-video | Dedicated 4-step Ref2VA LoRA; Euler/simple and 960×544 by default |
 
 The three standard frame modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
@@ -335,7 +337,9 @@ LightX2V's 4-step distillation LoRA to those same workflows through worker ids
 `minimax-h3-fl2va-fp8_flf2v_turbo`. Reference-to-video is a
 SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — selected directly
 with `-m minimax-h3-r2v`, or through the creative-agent `generate_video` tool
-with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat).
+with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). The
+dedicated LightX2V LoRA exposes it as `minimax-h3-ref2va-fp8_r2v_turbo` through
+the public `minimax-h3-r2v-turbo` selector.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -350,13 +354,15 @@ video-conditioned R2V requires a worker above 40 GB.
 - **Frames on the `124 + n×17` grid**, `124` through `362` — **5.17 s to
   15.08 s**. `--duration` snaps onto that grid; an off-grid explicit `--frames`
   is a hard error.
-- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. `1344×768`
-  (landscape) and `768×1344` (portrait) are the primary sizes.
+- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Standard and
+  FL2VA Turbo default to `1344×768`; Ref2VA Turbo defaults to `960×544`.
 - **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1** — send no
-  steps, guidance, scheduler, or **negative prompt**. Standard H3 and R2V accept
-  no sampler override. H3 Turbo defaults to `er_sde` on Socket, and the CLI
-  omits the sampler unless `--sampler` is passed. Direct CLI A/B tests may pass
-  exactly `--sampler euler`, `--sampler er_sde`, or `--sampler sa_solver`. The checkpoint is CFG-distilled with
+  steps, guidance, scheduler, or **negative prompt**. Standard H3 accepts no
+  sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and the CLI
+  omits the sampler unless `--sampler` is passed. Direct FL2VA CLI A/B tests may pass
+  exactly `--sampler euler`, `--sampler er_sde`, or `--sampler sa_solver`.
+  Ref2VA Turbo uses the exact upstream Euler/simple recipe and accepts only
+  `--sampler euler`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch and a `negativePrompt`
   parameter is ignored wherever it is accepted. Put negative direction in the
   prompt text instead.
@@ -450,8 +456,8 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-This is a different prompt contract from Base/Turbo H3. There is no Turbo
-Ref2VA selector or workflow.
+This is a different prompt contract from FL2VA H3. Standard and Turbo Ref2VA
+share it.
 
 #### Ordinals and the prompt tag form
 
@@ -585,12 +591,13 @@ model recommendations.
 | MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
 | MiniMax H3 Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
 | MiniMax H3 Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
+| MiniMax H3 Turbo from loose references | `minimax-h3-r2v-turbo` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
 
 - **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (1344×768 and 768×1344 are the primary landscape/portrait sizes). Standard H3 uses 20 steps; Turbo uses 4. H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed; `euler`, `er_sde`, and `sa_solver` are its only explicit direct CLI choices. Guidance 1 and native stereo audio apply to both, and neither has a negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard/FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard H3 uses 20 steps; Turbo uses 4. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

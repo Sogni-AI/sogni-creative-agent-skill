@@ -1321,6 +1321,10 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
     {
       model: 'minimax-h3-fl2va-fp8_flf2v_turbo',
       args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-ref2va-fp8_r2v_turbo',
+      args: ['-c', SCREENSHOT_FIXTURE]
     }
   ];
 
@@ -1336,8 +1340,8 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
     assert.equal(state.lastVideoProject.modelId, model);
     assert.equal(state.lastVideoProject.frames, 124);
     assert.equal(state.lastVideoProject.fps, 24);
-    assert.equal(state.lastVideoProject.width, 1344);
-    assert.equal(state.lastVideoProject.height, 768);
+    assert.equal(state.lastVideoProject.width, model.includes('ref2va') ? 960 : 1344);
+    assert.equal(state.lastVideoProject.height, model.includes('ref2va') ? 544 : 768);
     assert.equal(state.lastVideoProject.steps, undefined);
     assert.equal(state.lastVideoProject.guidance, undefined);
     assert.equal(state.lastVideoProject.sampler, undefined);
@@ -1345,7 +1349,7 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
   }
 });
 
-test('MiniMax H3 Turbo accepts and propagates only its three supported sampler overrides', () => {
+test('MiniMax H3 Turbo accepts its workflow-specific sampler overrides', () => {
   const cases = [
     {
       model: 'minimax-h3-turbo',
@@ -1388,6 +1392,12 @@ test('MiniMax H3 Turbo accepts and propagates only its three supported sampler o
       expected: 'minimax-h3-fl2va-fp8_flf2v_turbo',
       sampler: 'euler',
       args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-r2v-turbo',
+      expected: 'minimax-h3-ref2va-fp8_r2v_turbo',
+      sampler: 'euler',
+      args: ['-c', SCREENSHOT_FIXTURE]
     }
   ];
 
@@ -1417,6 +1427,10 @@ test('MiniMax H3 Turbo rejects unsupported samplers while other video sampler be
     '--sampler is supported for video only with MiniMax H3 Turbo'
   );
   expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-turbo', '--sampler', 'er_sde', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    'MiniMax H3 Ref2VA Turbo --sampler must be euler'
+  );
+  expectCliError(
     ['--video', '-m', 'ltx23-22b-fp8_t2v_distilled', '--sampler', 'euler', 'A record store conversation.'],
     '--sampler is supported for video only with MiniMax H3 Turbo'
   );
@@ -1426,7 +1440,7 @@ test('MiniMax H3 Turbo rejects unsupported samplers while other video sampler be
   );
 });
 
-test('MiniMax H3 Turbo friendly selectors resolve all three supported FL2VA modes', () => {
+test('MiniMax H3 Turbo friendly selectors resolve all four supported modes', () => {
   const cases = [
     {
       model: 'minimax-h3-t2v-turbo',
@@ -1442,6 +1456,11 @@ test('MiniMax H3 Turbo friendly selectors resolve all three supported FL2VA mode
       model: 'minimax-h3-flf2v-turbo',
       expected: 'minimax-h3-fl2va-fp8_flf2v_turbo',
       args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-r2v-turbo',
+      expected: 'minimax-h3-ref2va-fp8_r2v_turbo',
+      args: ['-c', SCREENSHOT_FIXTURE]
     }
   ];
 
@@ -1457,7 +1476,7 @@ test('MiniMax H3 Turbo friendly selectors resolve all three supported FL2VA mode
   }
 });
 
-test('bare MiniMax H3 Turbo selector infers t2v, i2v, and flf2v but rejects r2v', () => {
+test('bare MiniMax H3 Turbo selector infers frame modes and accepts explicit r2v', () => {
   const t2v = runCli(['--video', '-m', 'minimax-h3-turbo', 'A record store conversation.']);
   assert.equal(t2v.exitCode, 0);
   assert.equal(t2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_t2v_turbo');
@@ -1476,10 +1495,13 @@ test('bare MiniMax H3 Turbo selector infers t2v, i2v, and flf2v but rejects r2v'
   assert.equal(flf2v.exitCode, 0);
   assert.equal(flf2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_flf2v_turbo');
 
-  expectCliError(
+  const r2v = runCli(
     ['--video', '-m', 'minimax-h3-turbo', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
-    'MiniMax H3 Turbo does not support r2v'
   );
+  assert.equal(r2v.exitCode, 0);
+  assert.equal(r2v.state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v_turbo');
+  assert.equal(r2v.state.lastVideoProject.width, 960);
+  assert.equal(r2v.state.lastVideoProject.height, 544);
 });
 
 test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
@@ -4908,7 +4930,7 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--generate-audio'), 'Help should include --generate-audio');
   assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
   assert.ok(stdout.includes('minimax-h3-t2v-turbo'), 'Help should include the MiniMax H3 Turbo selectors');
-  assert.ok(stdout.includes('Turbo has no r2v/Ref2VA variant'), 'Help should state the Turbo mode boundary');
+  assert.ok(stdout.includes('minimax-h3-r2v-turbo'), 'Help should include the MiniMax H3 Ref2VA Turbo selector');
   assert.ok(stdout.includes('9 images / 3 videos / 3 audios / 12 files total'), 'Help should include MiniMax H3 r2v limits');
   assert.ok(stdout.includes('--expand-prompt'), 'Help should include --expand-prompt');
   assert.ok(

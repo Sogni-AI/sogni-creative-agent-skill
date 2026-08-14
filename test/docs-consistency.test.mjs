@@ -194,20 +194,21 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
     assert.match(text, /minimax-h3-turbo/, `${docFile}: missing generic H3 Turbo selector`);
     assert.match(text, /minimax-h3-i2v-turbo/, `${docFile}: missing H3 Turbo i2v selector`);
     assert.match(text, /minimax-h3-flf2v-turbo/, `${docFile}: missing H3 Turbo flf2v selector`);
+    assert.match(text, /minimax-h3-r2v-turbo/, `${docFile}: missing H3 Turbo r2v selector`);
     assert.match(text, /4-step|4 steps/, `${docFile}: missing H3 Turbo step count`);
-    assert.match(text, /H3 Turbo defaults to `er_sde`/, `${docFile}: missing H3 Turbo ER-SDE default`);
+    assert.match(text, /FL2VA H3 Turbo defaults to `er_sde`/, `${docFile}: missing FL2VA Turbo ER-SDE default`);
     assert.match(text, /CLI omits (?:this field|the sampler) unless/, `${docFile}: missing Socket-owned default boundary`);
     assert.match(text, /euler/, `${docFile}: missing H3 Turbo Euler override`);
     assert.match(text, /er_sde/, `${docFile}: missing H3 Turbo ER-SDE override`);
     assert.match(text, /sa_solver/, `${docFile}: missing H3 Turbo SA-Solver sampler`);
-    assert.match(text, /no Turbo Ref2VA/i, `${docFile}: missing Turbo Ref2VA boundary`);
+    assert.match(text, /Ref2VA Turbo[\s\S]{0,120}(?:Euler|euler)/, `${docFile}: missing Ref2VA Turbo Euler recipe`);
     assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
       `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);
   }
   const cliSource = read('sogni-agent.mjs');
   assert.match(
     cliSource,
-    /H3 Turbo sampler override[\s\S]{0,160}\(Socket default: er_sde; CLI omits unless set\)/,
+    /H3 FL2VA Turbo sampler override[\s\S]{0,160}\(Socket default: er_sde; CLI omits unless set\)/,
     'sogni-agent --help must identify ER-SDE as the Socket-owned H3 Turbo default'
   );
   const skill = read('SKILL.md');

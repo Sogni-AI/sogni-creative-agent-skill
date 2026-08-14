@@ -89,9 +89,9 @@ are part of the model contract.
 Applies to standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v`, and
 `minimax-h3-flf2v`; their 4-step `minimax-h3-turbo`,
 `minimax-h3-i2v-turbo`, and `minimax-h3-flf2v-turbo` variants; and—with its own
-six-field contract—to standard `minimax-h3-r2v`. The exact worker
+six-field contract—to standard `minimax-h3-r2v` and `minimax-h3-r2v-turbo`. The exact worker
 ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an optional `_turbo`
-suffix, plus `minimax-h3-ref2va-fp8_r2v`. There is no Turbo Ref2VA. See
+suffix, plus `minimax-h3-ref2va-fp8_r2v` and `minimax-h3-ref2va-fp8_r2v_turbo`. See
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v) below
 before writing an r2v prompt.
 
@@ -108,10 +108,11 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
 - **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard H3 and
-  R2V accept no sampler override. H3 Turbo defaults to `er_sde` on Socket, and
-  the CLI omits the sampler unless `--sampler` is passed. Direct CLI A/B tests
+  R2V accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and
+  the CLI omits the sampler unless `--sampler` is passed. Direct FL2VA CLI A/B tests
   may pass exactly `--sampler euler`, `--sampler er_sde`, or
-  `--sampler sa_solver`. The checkpoint is CFG-distilled with
+  `--sampler sa_solver`. Ref2VA Turbo uses the exact upstream Euler/simple recipe,
+  defaults to 960×544, and accepts only `--sampler euler`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch at all: a
   `negativePrompt` parameter is ignored wherever it is accepted. Negative
   direction goes in the prompt text instead.

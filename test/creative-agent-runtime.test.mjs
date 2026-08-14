@@ -51,7 +51,7 @@ test('intelligence contracts expose every real MiniMax H3 Turbo mode at fixed 24
   assert.ok(generateModels.includes('minimax-h3-t2v-turbo'));
   assert.ok(animateModels.includes('minimax-h3-i2v-turbo'));
   assert.ok(animateModels.includes('minimax-h3-flf2v-turbo'));
-  assert.ok(!generateModels.includes('minimax-h3-r2v-turbo'));
+  assert.ok(generateModels.includes('minimax-h3-r2v-turbo'));
   assert.ok(!animateModels.includes('minimax-h3-r2v-turbo'));
 
   assert.match(generateVideoModel.description, /fixed 24fps/);
@@ -72,6 +72,7 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   assert.equal(formatModelRef('minimax-h3-ref2va-fp8_r2v', 1, 'image'), '<Picture 1>');
   assert.equal(formatModelRef('minimax-h3-r2v', 2, 'video'), '<Video 2>');
   assert.equal(formatModelRef('minimax-h3-r2v', 3, 'audio'), '<Audio 3>');
+  assert.equal(formatModelRef('minimax-h3-ref2va-fp8_r2v_turbo', 1, 'image'), '<Picture 1>');
   assert.equal(formatModelRef('happyhorse-1.1-r2v', 1, 'image'), '[Image 1]');
   assert.ok(SESSION_CONTROL_SKILL.toolNames.includes('finalize_response'));
 

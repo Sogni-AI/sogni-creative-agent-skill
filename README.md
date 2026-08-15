@@ -581,7 +581,7 @@ Skip remembering model IDs — `--quality` / `-Q` selects the right model, steps
 |--------|-------|-------|------|-------|
 | `fast` | `z_image_turbo_bf16` | 8 | 512×512 | ~5–10s |
 | `hq` | `z_image_turbo_bf16` | default | 768×768 | ~10–15s |
-| `pro` | `flux2_dev_fp8` | 40 | 1024×1024 | ~2 min |
+| `pro` | `qwen_image_2512_fp8` | 20 | 1024×1024 | ~30 sec |
 
 Explicit `--model` overrides the preset's model. Explicit `-w`/`-h` overrides dimensions.
 
@@ -593,8 +593,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 |------|----------------------|
 | Default images | `z_image_turbo_bf16` |
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
-| Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
+| Highest-quality images | `qwen_image_2512_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
+| Deterministic image upscaling | `rtx_vsr_pro` via `--upscale` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |

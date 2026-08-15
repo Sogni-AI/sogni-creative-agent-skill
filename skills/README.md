@@ -21,7 +21,7 @@ Available to every per-skill consumer. Sogni-hosted chat loads all capabilities 
 | Skill | Tools |
 |---|---|
 | [`image_generation`](./image_generation.md) | `generate_image` |
-| [`image_editing`](./image_editing.md) | `edit_image`, `restore_photo`, `apply_style`, `change_angle`, `refine_result` |
+| [`image_editing`](./image_editing.md) | `edit_image`, `upscale_image`, `restore_photo`, `apply_style`, `change_angle`, `refine_result` |
 | [`video_generation`](./video_generation.md) | `generate_video` |
 | [`video_editing`](./video_editing.md) | `animate_photo`, `sound_to_video`, `video_to_video`, `stitch_video`, `orbit_video`, `dance_montage`, `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles` |
 | [`music_generation`](./music_generation.md) | `generate_music` |

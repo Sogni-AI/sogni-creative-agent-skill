@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports promptless RTX VSR image upscaling, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.30.0"
   homepage: https://sogni.ai
@@ -153,6 +153,10 @@ sogni-agent -q -n 3 -o ./cars.png "a {red|blue|green} sports car"
 # Edit an existing image (source-preserving)
 sogni-agent -q -c /path/to/input.jpg -o ./edited.png "make it pop art style"
 
+# Deterministic RTX VSR upscale (promptless; 2x by default, up to an 8192px longest edge)
+sogni-agent -q --upscale /path/to/input.jpg -o ./upscaled.png
+sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 4096 -o ./upscaled-4k.png
+
 # Photobooth (face transfer — new portrait from a face photo)
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
@@ -217,6 +221,9 @@ sogni-agent doctor --json
 | `-Q fast\|hq\|pro` | Quality preset (model+steps+size); `-m` overrides model | - |
 | `-o <path>` | Save output locally (relative → PWD) | prints URL |
 | `-c <path>` | Context image for editing (repeatable) | - |
+| `--upscale <path\|url>` | Promptless deterministic RTX VSR upscale | - |
+| `--upscale-scale 2\|3\|4` | Upscale factor when no explicit target is supplied | 2 |
+| `--target-longest-edge <px>` | RTX VSR target longest edge, preserving aspect ratio | 512–8192 box |
 | `-m <id>` | Explicit model | `z_image_turbo_bf16` |
 | `-w` / `-h` | Width / height | 512×512 |
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
@@ -244,6 +251,11 @@ sogni-agent doctor --json
 | `doctor`, `self-update`, `--whats-new`, `--snooze-update` | Health check / upgrade / changelog / snooze reminder | - |
 
 ## Routing Rules (always apply)
+
+### Upscaling vs. generative editing
+
+- For a pure resolution increase that must preserve the source composition, use `--upscale` in direct CLI mode or `upscale_image` on hosted tool surfaces. RTX VSR is deterministic and promptless: never invent a prompt, and never route this request through `restore_photo`, `refine_result`, or `edit_image`.
+- `--upscale-scale` accepts 2, 3, or 4; `--target-longest-edge` overrides it. The CLI derives an aspect-preserving target box and aligns both edges to the worker's 8-pixel step. Both output edges must remain within 512–8192px. If a scale would make the short edge smaller than 512px, the CLI reports the minimum valid `--target-longest-edge` instead of stretching the image; aspect ratios that cannot fit the box are rejected.
 
 ### Photobooth vs. context editing
 

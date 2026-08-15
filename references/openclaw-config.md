@@ -46,7 +46,7 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
           "seedStrategy": "prompt-hash",
           "modelDefaults": {
             "flux1-schnell-fp8": { "steps": 4, "guidance": 3.5 },
-            "flux2_dev_fp8": { "steps": 20, "guidance": 7.5 }
+            "qwen_image_2512_fp8": { "steps": 20, "guidance": 7.5 }
           },
           "defaultWidth": 512,
           "defaultHeight": 512,

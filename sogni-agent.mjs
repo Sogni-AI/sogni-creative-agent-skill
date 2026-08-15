@@ -1299,6 +1299,64 @@ function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
 // just large enough to catch obvious typos (e.g. a stray extra zero) before
 // they waste a round-trip or blow up local memory.
 const MAX_IMAGE_DIMENSION = 8192;
+const RTX_VSR_MODEL_ID = 'rtx_vsr_pro';
+const RTX_VSR_MIN_DIMENSION = 512;
+const RTX_VSR_DIMENSION_STEP = 8;
+
+function alignRtxVsrDimension(value) {
+  return Math.floor(value / RTX_VSR_DIMENSION_STEP) * RTX_VSR_DIMENSION_STEP;
+}
+
+function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetLongestEdge = null } = {}) {
+  if (!Number.isFinite(sourceWidth) || sourceWidth <= 0 || !Number.isFinite(sourceHeight) || sourceHeight <= 0) {
+    fatalCliError('Could not determine the source image dimensions for RTX VSR upscaling.', {
+      code: 'INVALID_UPSCALE_SOURCE'
+    });
+  }
+
+  const sourceLongestEdge = Math.max(sourceWidth, sourceHeight);
+  if (sourceLongestEdge >= MAX_IMAGE_DIMENSION) {
+    fatalCliError(`RTX VSR cannot enlarge an image whose longest edge is already ${MAX_IMAGE_DIMENSION}px or larger.`, {
+      code: 'INVALID_UPSCALE_SIZE',
+      details: { sourceWidth, sourceHeight, maxDimension: MAX_IMAGE_DIMENSION }
+    });
+  }
+
+  const requestedLongestEdge = targetLongestEdge ?? sourceLongestEdge * scale;
+  if (requestedLongestEdge <= sourceLongestEdge) {
+    fatalCliError('RTX VSR output must be larger than the source image.', {
+      code: 'INVALID_UPSCALE_SIZE',
+      details: { sourceWidth, sourceHeight, requestedLongestEdge }
+    });
+  }
+  const factor = Math.min(requestedLongestEdge / sourceLongestEdge, MAX_IMAGE_DIMENSION / sourceLongestEdge);
+  const width = alignRtxVsrDimension(sourceWidth * factor);
+  const height = alignRtxVsrDimension(sourceHeight * factor);
+  if (width < RTX_VSR_MIN_DIMENSION || height < RTX_VSR_MIN_DIMENSION) {
+    const sourceShortestEdge = Math.min(sourceWidth, sourceHeight);
+    const minimumLongestEdge = Math.ceil(
+      (sourceLongestEdge * RTX_VSR_MIN_DIMENSION / sourceShortestEdge) / RTX_VSR_DIMENSION_STEP
+    ) * RTX_VSR_DIMENSION_STEP;
+    const message = minimumLongestEdge <= MAX_IMAGE_DIMENSION
+      ? `The requested RTX VSR output would be ${width}×${height}px. To preserve aspect ratio, choose --target-longest-edge ${minimumLongestEdge} or larger so every output edge is at least ${RTX_VSR_MIN_DIMENSION}px.`
+      : `The ${sourceWidth}×${sourceHeight}px source aspect ratio cannot fit RTX VSR's supported ${RTX_VSR_MIN_DIMENSION}–${MAX_IMAGE_DIMENSION}px output bounds without stretching.`;
+    fatalCliError(message, {
+      code: 'INVALID_UPSCALE_SIZE',
+      details: {
+        sourceWidth,
+        sourceHeight,
+        requestedLongestEdge,
+        minimumLongestEdge,
+        minDimension: RTX_VSR_MIN_DIMENSION,
+        maxDimension: MAX_IMAGE_DIMENSION
+      }
+    });
+  }
+  return {
+    width,
+    height
+  };
+}
 
 // Safety cap for -n/--count: every output is a paid generation, so a typo like
 // `-n 1000` (meant `-n 10`) must not launch a thousand-render batch. Raise
@@ -2379,6 +2437,9 @@ const options = {
   outpaintPosition: null, // LTX v2v outpaint canvas anchor
   outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
+  upscaleImage: null, // Source image for promptless RTX VSR upscaling
+  upscaleScale: 2,
+  upscaleTargetLongestEdge: null,
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
   photobooth: false, // Photobooth mode (InstantID face transfer)
   cnStrength: null, // ControlNet strength override
@@ -2548,6 +2609,9 @@ const cliSet = {
   outpaintPosition: false,
   outpaintAspectRatio: false,
   context: false,
+  upscaleImage: false,
+  upscaleScale: false,
+  upscaleTargetLongestEdge: false,
   looping: false,
   photobooth: false,
   cnStrength: false,
@@ -2895,6 +2959,26 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.contextImages.push(raw);
     cliSet.context = true;
+  } else if (arg === '--upscale') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.upscaleImage = raw;
+    cliSet.upscaleImage = true;
+  } else if (arg === '--upscale-scale') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.upscaleScale = parsePositiveIntegerValue(raw, arg, 2, 4);
+    cliSet.upscaleScale = true;
+  } else if (arg === '--target-longest-edge') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.upscaleTargetLongestEdge = parsePositiveIntegerValue(
+      raw,
+      arg,
+      RTX_VSR_MIN_DIMENSION,
+      MAX_IMAGE_DIMENSION
+    );
+    cliSet.upscaleTargetLongestEdge = true;
   } else if (arg === '--photobooth') {
     options.photobooth = true;
     cliSet.photobooth = true;
@@ -3488,6 +3572,9 @@ Image Options:
   --lora-strengths <n>  Comma-separated LoRA strengths
   -c, --context <path>  Context image for editing (can use multiple)
   --last-image          Use last generated image as context
+  --upscale <path|url>  Promptless NVIDIA RTX VSR upscale (one source image)
+  --upscale-scale <n>   Enlarge longest edge by 2, 3, or 4 (default: 2)
+  --target-longest-edge <px>  Explicit output longest edge, up to 8192 (overrides scale)
 
 Photobooth (Face Transfer):
   --photobooth            Face transfer mode (InstantID + SDXL Turbo)
@@ -3692,9 +3779,10 @@ Image Models:
   krea2_identity_edit_v1_2        Krea 2 Identity Edit LoRA (up to 2 context images)
   dark_beast_krea2_identity_edit_v1_2  Dark Beast Krea 2 Identity Edit (up to 2 context images)
   flux1-schnell-fp8               Very fast
-  flux2_dev_fp8                   High quality (slow)
+  qwen_image_2512_fp8             High quality
   qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
   qwen_image_edit_2511_fp8_lightning  Fast image editing
+  rtx_vsr_pro                     Promptless deterministic RTX VSR upscale (--upscale)
 
 Recommended LTX 2.5 Video Models:
   ltx25 / ltx25-t2v               Distilled text-to-video with native dialogue/audio
@@ -4550,6 +4638,17 @@ if (options.music) {
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 1800000; // 30 min for queued and long-running video jobs
   }
+} else if (options.upscaleImage) {
+  if (options.model && options.model !== RTX_VSR_MODEL_ID) {
+    fatalCliError(`--upscale requires model ${RTX_VSR_MODEL_ID}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, requiredModel: RTX_VSR_MODEL_ID }
+    });
+  }
+  options.model = RTX_VSR_MODEL_ID;
+  if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
+    options.timeout = 120000;
+  }
 } else if (options.photobooth) {
   // Photobooth uses SDXL Turbo + InstantID ControlNet
   options.model = options.model || openclawConfig?.defaultPhotoboothModel || 'coreml-sogniXLturbo_alpha1_ad';
@@ -4659,6 +4758,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.concatVideos &&
   !options.sourceReelDir &&
   !options.remixAudio &&
+  !options.upscaleImage &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -4679,7 +4779,7 @@ if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.live
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -4692,6 +4792,34 @@ if (storyboardPlanUtilityAction && !options.prompt) {
 
 if (options.apiChat && !options.prompt && getApiModeMediaReferences().length === 0) {
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
+}
+
+if (options.upscaleImage) {
+  if (options.prompt) {
+    fatalCliError('--upscale is promptless and does not accept a prompt.', { code: 'INVALID_ARGUMENT' });
+  }
+  if (options.video || options.music || options.photobooth || options.contextImages.length > 0 || options.refImage || options.refImageEnd) {
+    fatalCliError('--upscale cannot be combined with video, music, photobooth, --ref, --ref-end, or -c/--context.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+  if (options.count !== 1) {
+    fatalCliError('--upscale produces exactly one output; omit -n/--count or set it to 1.', {
+      code: 'INVALID_ARGUMENT',
+      details: { count: options.count }
+    });
+  }
+  if (cliSet.width || cliSet.height) {
+    fatalCliError('--upscale derives dimensions from the source; use --upscale-scale or --target-longest-edge.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+}
+
+if (!options.upscaleImage && (cliSet.upscaleScale || cliSet.upscaleTargetLongestEdge)) {
+  fatalCliError('--upscale-scale and --target-longest-edge require --upscale <path|url>.', {
+    code: 'INVALID_ARGUMENT'
+  });
 }
 
 if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
@@ -11352,6 +11480,51 @@ async function main() {
 
       if (audioResult?.error || audioResult?.message) {
         throw buildProjectResultError(audioResult);
+      }
+    } else if (options.upscaleImage) {
+      log(`Upscaling with ${RTX_VSR_MODEL_ID}...`);
+      const sourceBuffer = await fetchMediaBuffer(options.upscaleImage);
+      const sourceDimensions = getImageDimensionsFromBuffer(sourceBuffer);
+      const targetDimensions = resolveRtxVsrDimensions(
+        sourceDimensions?.width,
+        sourceDimensions?.height,
+        {
+          scale: options.upscaleScale,
+          targetLongestEdge: options.upscaleTargetLongestEdge
+        }
+      );
+      options.width = targetDimensions.width;
+      options.height = targetDimensions.height;
+      log(
+        `Source ${sourceDimensions.width}x${sourceDimensions.height}; ` +
+        `target box ${options.width}x${options.height} (aspect ratio preserved).`
+      );
+
+      const upscaleConfig = {
+        modelId: RTX_VSR_MODEL_ID,
+        positivePrompt: '',
+        negativePrompt: '',
+        stylePrompt: '',
+        numberOfMedia: 1,
+        tokenType: options.tokenType || 'spark',
+        waitForCompletion: false,
+        sizePreset: 'custom',
+        width: options.width,
+        height: options.height,
+        steps: 1,
+        guidance: 1,
+        outputFormat: 'png',
+        disableNSFWFilter: true,
+        startingImage: sourceBuffer,
+        startingImageStrength: 1,
+        sourceType: 'upscale-rtx-vsr'
+      };
+
+      const upscaleResult = trackProjectResult(
+        await client.createImageProject(withBillingMode(upscaleConfig))
+      );
+      if (upscaleResult?.error || upscaleResult?.message) {
+        throw buildProjectResultError(upscaleResult);
       }
     } else if (options.contextImages.length > 0) {
       // Image editing with context images

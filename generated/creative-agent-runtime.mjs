@@ -26,6 +26,7 @@ const GATING_POLICIES = [
                 "generate_image",
                 "edit_image",
                 "restore_photo",
+                "upscale_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -59,6 +60,7 @@ const GATING_POLICIES = [
                 "generate_image",
                 "edit_image",
                 "restore_photo",
+                "upscale_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -91,6 +93,7 @@ const GATING_POLICIES = [
                 "generate_image",
                 "edit_image",
                 "restore_photo",
+                "upscale_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -124,6 +127,7 @@ const GATING_POLICIES = [
                 "generate_image",
                 "edit_image",
                 "restore_photo",
+                "upscale_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -415,6 +419,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
     },
     {
+        "recipeId": "upscale_image.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
         "recipeId": "apply_style.user_input_incomplete",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -577,6 +590,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
+        "recipeId": "upscale_image.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
         "recipeId": "apply_style.cost_limit_exceeded",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -733,6 +755,15 @@ const REPAIR_RECIPES = [
         "recipeId": "restore_photo.asset_not_found",
         "version": "1.0.0",
         "toolName": "restore_photo",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "upscale_image.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
         "errorCode": "ASSET_NOT_FOUND",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -928,6 +959,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
     },
     {
+        "recipeId": "upscale_image.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
         "recipeId": "apply_style.workflow_validation_failed",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -1090,6 +1130,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
     },
     {
+        "recipeId": "upscale_image.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
         "recipeId": "apply_style.parameter_invalid",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -1228,6 +1277,15 @@ const REPAIR_RECIPES = [
         "recipeId": "restore_photo.gpu_worker_failed",
         "version": "1.0.0",
         "toolName": "restore_photo",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "upscale_image.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
         "errorCode": "GPU_WORKER_FAILED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1381,6 +1439,15 @@ const REPAIR_RECIPES = [
         "recipeId": "restore_photo.model_unavailable",
         "version": "1.0.0",
         "toolName": "restore_photo",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
+        "recipeId": "upscale_image.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
         "errorCode": "MODEL_UNAVAILABLE",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1543,6 +1610,15 @@ const REPAIR_RECIPES = [
         "recipeId": "restore_photo.permission_required",
         "version": "1.0.0",
         "toolName": "restore_photo",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "upscale_image.permission_required",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
         "errorCode": "PERMISSION_REQUIRED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1811,6 +1887,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
     },
     {
+        "recipeId": "upscale_image.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
         "recipeId": "apply_style.provider_timeout",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -1973,6 +2058,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
     },
     {
+        "recipeId": "upscale_image.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
         "recipeId": "apply_style.user_cancelled",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -2113,12 +2207,23 @@ const PROMPT_CONTRACTS = [
         "contractId": "restore_photo_v1",
         "version": "1.0.0",
         "toolName": "restore_photo",
-        "baseDescription": "restore_photo edits or restores the ORIGINAL uploaded photograph. Use this for the first\nrestoration/edit on an upload, or when the user explicitly asks to start over from the\noriginal/source photo. Use refine_result for follow-up edits to an existing generated result.\n\nFor photos with people, front-load identity preservation before the restoration or edit.\nUse positive constraints such as preserve exact facial likeness, face structure, apparent\nage, pose, and composition. End with preservation of unmentioned details.\n\nUse Dynamic Prompt syntax only when the user explicitly asks to compare multiple restoration\napproaches. Default restoration batches should keep the same prompt and vary only by seed.",
+        "baseDescription": "restore_photo edits or restores the ORIGINAL uploaded photograph. Use this for the first\nrestoration/edit on an upload, or when the user explicitly asks to start over from the\noriginal/source photo. Use refine_result for follow-up edits to an existing generated result.\n\nFor photos with people, front-load identity preservation before the restoration or edit.\nUse positive constraints such as preserve exact facial likeness, face structure, apparent\nage, pose, and composition. End with preservation of unmentioned details.\n\nUse Dynamic Prompt syntax only when the user explicitly asks to compare multiple restoration\napproaches. Default restoration batches should keep the same prompt and vary only by seed.\nIf the user only wants a larger, higher-resolution copy without restoration or other creative\nchanges, use upscale_image instead. restore_photo is a generative edit and is not a substitute\nfor deterministic upscaling.",
         "parameterDocs": {
             "prompt": "Natural-language edit/restoration prompt. Start with identity preservation for people, then requested restoration/edit, then preserve unmentioned details.",
             "numberOfVariations": "Use 1 unless the user explicitly asks for multiple outputs or comparison options.",
             "scale": "Set only when the user asks to upscale, enlarge, or increase resolution.",
             "quality": "Omit unless the user explicitly asks for fast or high quality."
+        }
+    },
+    {
+        "contractId": "upscale_image_v1",
+        "version": "1.0.0",
+        "toolName": "upscale_image",
+        "baseDescription": "upscale_image performs promptless, deterministic NVIDIA RTX VSR enlargement of exactly one\nuploaded or generated image. Use it when the user asks for a larger copy, higher resolution,\n2x/3x/4x enlargement, 4K/8K output, or more pixels while preserving the source composition.\n\nDo not invent a prompt and do not route a pure upscale through restore_photo, refine_result,\nedit_image, or apply_style. Those tools are generative and can change image content.\n\nOmit sourceImageIndex to use the latest generated image, falling back to the first upload.\nUse zero-based non-negative indices for generated results; -1 selects the first upload and\n-2 the second upload. Set either scale (2, 3, or 4) or targetLongestEdge (512-8192).\ntargetLongestEdge takes precedence. Never request a target at or below the source size.\nBoth 8px-aligned output edges must remain between 512 and 8192px. If a wide or tall source\nneeds a larger target to preserve its aspect ratio, use the minimum target returned by the tool.",
+        "parameterDocs": {
+            "sourceImageIndex": "Omit for the latest generated image, then first upload. Generated results are zero-based; -1/-2 select uploaded images.",
+            "scale": "Integer enlargement factor 2, 3, or 4. Defaults to 2 and is ignored when targetLongestEdge is set. A too-small result is rejected rather than stretched to the 512px edge minimum.",
+            "targetLongestEdge": "Explicit output longest edge in pixels, 512-8192. Must be larger than the source, and large enough that the other 8px-aligned edge remains at least 512px; aspect ratio is preserved."
         }
     },
     {

@@ -40,7 +40,7 @@ from `/v1/models`, not Supernet media models.
 |--------|-------|-------|------|-------|
 | `fast` | `z_image_turbo_bf16` | 8 | 512x512 | ~5-10s |
 | `hq` | `z_image_turbo_bf16` | default | 768x768 | ~10-15s |
-| `pro` | `flux2_dev_fp8` | 40 | 1024x1024 | ~2min |
+| `pro` | `qwen_image_2512_fp8` | 20 | 1024x1024 | ~30sec |
 
 Explicit `-m` overrides the preset's model. Explicit `-w`/`-h` overrides
 dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts →
@@ -53,7 +53,7 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | `z_image_turbo_bf16` | Fast (~5-10s) | General purpose, default |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
-| `flux2_dev_fp8` | Slow (~2min) | High quality |
+| `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
 | `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
 | `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
@@ -62,6 +62,15 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
+| `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-8192 target box, 8px step |
+
+RTX VSR is not a text-to-image or restoration model. Invoke it with
+`sogni-agent --upscale <path|url>` (optionally `--upscale-scale 2|3|4` or
+`--target-longest-edge <px>`), or use the hosted `upscale_image` tool. The
+source is sent through `startingImage`, the prompt stays empty, and the worker
+fits the result inside the requested box without cropping or stretching. Both
+8px-aligned output edges must be 512-8192px. If a scale leaves the short edge
+below 512px, use the minimum target longest edge reported by the CLI/tool.
 
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
@@ -561,7 +570,7 @@ model recommendations.
 |------|----------------------|
 | Default images | `z_image_turbo_bf16` |
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
-| Highest-quality images | `flux2_dev_fp8` (or `-Q pro`) |
+| Highest-quality images | `qwen_image_2512_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |

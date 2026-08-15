@@ -71,7 +71,7 @@ server-side, so do not rely on `--no-thinking` as a hard suppression switch).
 
 - `creative-tools` — the public API default when `sogni_tools` is omitted or
   true. Generation/editing tools (`generate_image`, `generate_video`,
-  `generate_music`, `edit_image`, `apply_style`, `restore_photo`,
+  `generate_music`, `edit_image`, `upscale_image`, `apply_style`, `restore_photo`,
   `refine_result`, `animate_photo`, `change_angle`, `video_to_video`,
   `stitch_video`, `orbit_video`, `dance_montage`, `sound_to_video`,
   `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles`),

@@ -30,6 +30,19 @@ if (!isVersionAtLeast(currentNodeVersion, MIN_NODE_VERSION)) {
 const PACKAGE_VERSION = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).version;
 const SCREENSHOT_FIXTURE = join(process.cwd(), 'docs', 'screenshot.jpg');
 
+function createPngDimensionFixture(width, height) {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-upscale-dimensions-'));
+  const path = join(dir, `${width}x${height}.png`);
+  const bytes = Buffer.alloc(24);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write('IHDR', 12, 'ascii');
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  writeFileSync(path, bytes);
+  return path;
+}
+
 function prepareCliRun(envOverrides = {}) {
   const tempHome = mkdtempSync(join(tmpdir(), 'sogni-agent-test-'));
   const statePath = join(tempHome, 'state.json');
@@ -752,6 +765,49 @@ test('Krea identity edit accepts two context images with worker-owned defaults',
   assert.equal(state.lastEditProject.guidance, undefined);
   assert.equal(state.lastEditProject.sampler, undefined);
   assert.equal(state.lastEditProject.scheduler, undefined);
+});
+
+test('RTX VSR upscale is promptless and sends the source as startingImage', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--upscale', SCREENSHOT_FIXTURE,
+    '--target-longest-edge', '4096'
+  ]);
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastImageProject, 'createImageProject was called');
+  assert.equal(state.lastImageProject.modelId, 'rtx_vsr_pro');
+  assert.equal(state.lastImageProject.positivePrompt, '');
+  assert.equal(state.lastImageProject.width, 4096);
+  assert.equal(state.lastImageProject.height, 2120);
+  assert.equal(state.lastImageProject.numberOfMedia, 1);
+  assert.equal(state.lastImageProject.steps, 1);
+  assert.equal(state.lastImageProject.guidance, 1);
+  assert.equal(state.lastImageProject.startingImageStrength, 1);
+  assert.ok(state.lastImageProject.startingImage?.data?.length > 0);
+  assert.equal(state.lastImageProject.seed, undefined);
+});
+
+test('RTX VSR upscale rejects a target that would downscale the source', () => {
+  const { exitCode, stderr } = runCli([
+    '--upscale', SCREENSHOT_FIXTURE,
+    '--target-longest-edge', '2048'
+  ]);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /output must be larger than the source image/i);
+});
+
+test('RTX VSR upscale rejects a target that would stretch an edge to the 512px minimum', () => {
+  const source = createPngDimensionFixture(200, 400);
+  const { exitCode, stderr, state } = runCli([
+    '--upscale', source,
+    '--upscale-scale', '2'
+  ]);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /preserve aspect ratio/i);
+  assert.match(stderr, /--target-longest-edge 1024/);
+  assert.equal(state?.lastImageProject, null);
 });
 
 test('Krea identity edit preserves explicitly supplied execution controls', () => {

@@ -1,3 +1,10 @@
+# [3.31.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.30.0...v3.31.0) (2026-08-14)
+
+
+### Features
+
+* **cli:** add RTX VSR upscale surface and route pro tier to live models ([d6ab96a](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d6ab96a957999f223b85efd07964d6143815b6ee))
+
 # [3.30.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.29.0...v3.30.0) (2026-08-14)
 
 

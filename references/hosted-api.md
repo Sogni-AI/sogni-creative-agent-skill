@@ -90,6 +90,11 @@ server-side, so do not rely on `--no-thinking` as a hard suppression switch).
   tools on raw API/SDK requests. In the CLI, combine with
   `--no-api-tool-execution` for text-only planning.
 
+For a pure resolution increase, call `upscale_image` with one source image and
+either `scale: 2|3|4` or `targetLongestEdge`. Use `7680` for 8K or `15360` for
+16K. The promptless NVIDIA RTX VSR path preserves the source aspect ratio,
+aligns both output edges to 8px, and returns JPG when the target exceeds 8K.
+
 ## --durable-chat (`POST /v1/chat/runs`)
 
 Long-running, LLM-in-the-loop turns persisted as chat-run records instead of a

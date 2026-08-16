@@ -781,10 +781,26 @@ test('RTX VSR upscale is promptless and sends the source as startingImage', () =
   assert.equal(state.lastImageProject.height, 2120);
   assert.equal(state.lastImageProject.numberOfMedia, 1);
   assert.equal(state.lastImageProject.steps, 1);
-  assert.equal(state.lastImageProject.guidance, 1);
+  assert.equal(state.lastImageProject.guidance, undefined);
+  assert.equal(state.lastImageProject.numberOfPreviews, 0);
+  assert.equal(state.lastImageProject.outputFormat, 'png');
   assert.equal(state.lastImageProject.startingImageStrength, 1);
   assert.ok(state.lastImageProject.startingImage?.data?.length > 0);
   assert.equal(state.lastImageProject.seed, undefined);
+});
+
+test('RTX VSR upscale supports a 16K target and uses JPG above 8K', () => {
+  const source = createPngDimensionFixture(1313, 1920);
+  const { exitCode, state, stderr } = runCli([
+    '--upscale', source,
+    '--target-longest-edge', '15360'
+  ]);
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastImageProject, 'createImageProject was called');
+  assert.equal(state.lastImageProject.width, 10504);
+  assert.equal(state.lastImageProject.height, 15360);
+  assert.equal(state.lastImageProject.outputFormat, 'jpg');
 });
 
 test('RTX VSR upscale rejects a target that would downscale the source', () => {

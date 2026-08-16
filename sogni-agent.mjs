@@ -1301,7 +1301,9 @@ function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
 const MAX_IMAGE_DIMENSION = 8192;
 const RTX_VSR_MODEL_ID = 'rtx_vsr_pro';
 const RTX_VSR_MIN_DIMENSION = 512;
+const RTX_VSR_MAX_DIMENSION = 15360;
 const RTX_VSR_DIMENSION_STEP = 8;
+const RTX_VSR_JPG_THRESHOLD_EDGE = 7680;
 
 function alignRtxVsrDimension(value) {
   return Math.floor(value / RTX_VSR_DIMENSION_STEP) * RTX_VSR_DIMENSION_STEP;
@@ -1315,10 +1317,10 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
   }
 
   const sourceLongestEdge = Math.max(sourceWidth, sourceHeight);
-  if (sourceLongestEdge >= MAX_IMAGE_DIMENSION) {
-    fatalCliError(`RTX VSR cannot enlarge an image whose longest edge is already ${MAX_IMAGE_DIMENSION}px or larger.`, {
+  if (sourceLongestEdge >= RTX_VSR_MAX_DIMENSION) {
+    fatalCliError(`RTX VSR cannot enlarge an image whose longest edge is already ${RTX_VSR_MAX_DIMENSION}px or larger.`, {
       code: 'INVALID_UPSCALE_SIZE',
-      details: { sourceWidth, sourceHeight, maxDimension: MAX_IMAGE_DIMENSION }
+      details: { sourceWidth, sourceHeight, maxDimension: RTX_VSR_MAX_DIMENSION }
     });
   }
 
@@ -1329,7 +1331,7 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
       details: { sourceWidth, sourceHeight, requestedLongestEdge }
     });
   }
-  const factor = Math.min(requestedLongestEdge / sourceLongestEdge, MAX_IMAGE_DIMENSION / sourceLongestEdge);
+  const factor = Math.min(requestedLongestEdge / sourceLongestEdge, RTX_VSR_MAX_DIMENSION / sourceLongestEdge);
   const width = alignRtxVsrDimension(sourceWidth * factor);
   const height = alignRtxVsrDimension(sourceHeight * factor);
   if (width < RTX_VSR_MIN_DIMENSION || height < RTX_VSR_MIN_DIMENSION) {
@@ -1337,9 +1339,9 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
     const minimumLongestEdge = Math.ceil(
       (sourceLongestEdge * RTX_VSR_MIN_DIMENSION / sourceShortestEdge) / RTX_VSR_DIMENSION_STEP
     ) * RTX_VSR_DIMENSION_STEP;
-    const message = minimumLongestEdge <= MAX_IMAGE_DIMENSION
+    const message = minimumLongestEdge <= RTX_VSR_MAX_DIMENSION
       ? `The requested RTX VSR output would be ${width}×${height}px. To preserve aspect ratio, choose --target-longest-edge ${minimumLongestEdge} or larger so every output edge is at least ${RTX_VSR_MIN_DIMENSION}px.`
-      : `The ${sourceWidth}×${sourceHeight}px source aspect ratio cannot fit RTX VSR's supported ${RTX_VSR_MIN_DIMENSION}–${MAX_IMAGE_DIMENSION}px output bounds without stretching.`;
+      : `The ${sourceWidth}×${sourceHeight}px source aspect ratio cannot fit RTX VSR's supported ${RTX_VSR_MIN_DIMENSION}–${RTX_VSR_MAX_DIMENSION}px output bounds without stretching.`;
     fatalCliError(message, {
       code: 'INVALID_UPSCALE_SIZE',
       details: {
@@ -1348,7 +1350,7 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
         requestedLongestEdge,
         minimumLongestEdge,
         minDimension: RTX_VSR_MIN_DIMENSION,
-        maxDimension: MAX_IMAGE_DIMENSION
+        maxDimension: RTX_VSR_MAX_DIMENSION
       }
     });
   }
@@ -2976,7 +2978,7 @@ for (let i = 0; i < args.length; i++) {
       raw,
       arg,
       RTX_VSR_MIN_DIMENSION,
-      MAX_IMAGE_DIMENSION
+      RTX_VSR_MAX_DIMENSION
     );
     cliSet.upscaleTargetLongestEdge = true;
   } else if (arg === '--photobooth') {
@@ -3572,9 +3574,9 @@ Image Options:
   --lora-strengths <n>  Comma-separated LoRA strengths
   -c, --context <path>  Context image for editing (can use multiple)
   --last-image          Use last generated image as context
-  --upscale <path|url>  Promptless NVIDIA RTX VSR upscale (one source image)
+  --upscale <path|url>  Promptless NVIDIA RTX VSR upscale, up to 16K (one source image)
   --upscale-scale <n>   Enlarge longest edge by 2, 3, or 4 (default: 2)
-  --target-longest-edge <px>  Explicit output longest edge, up to 8192 (overrides scale)
+  --target-longest-edge <px>  Explicit output longest edge, up to 15360 (overrides scale)
 
 Photobooth (Face Transfer):
   --photobooth            Face transfer mode (InstantID + SDXL Turbo)
@@ -11495,6 +11497,10 @@ async function main() {
       );
       options.width = targetDimensions.width;
       options.height = targetDimensions.height;
+      const upscaleOutputFormat = Math.max(options.width, options.height) > RTX_VSR_JPG_THRESHOLD_EDGE
+        ? 'jpg'
+        : 'png';
+      options.outputFormat = upscaleOutputFormat;
       log(
         `Source ${sourceDimensions.width}x${sourceDimensions.height}; ` +
         `target box ${options.width}x${options.height} (aspect ratio preserved).`
@@ -11512,8 +11518,8 @@ async function main() {
         width: options.width,
         height: options.height,
         steps: 1,
-        guidance: 1,
-        outputFormat: 'png',
+        numberOfPreviews: 0,
+        outputFormat: upscaleOutputFormat,
         disableNSFWFilter: true,
         startingImage: sourceBuffer,
         startingImageStrength: 1,

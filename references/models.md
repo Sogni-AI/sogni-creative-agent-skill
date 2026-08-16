@@ -62,15 +62,16 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
-| `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-8192 target box, 8px step |
+| `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-15360 target box, 8px step |
 
 RTX VSR is not a text-to-image or restoration model. Invoke it with
 `sogni-agent --upscale <path|url>` (optionally `--upscale-scale 2|3|4` or
 `--target-longest-edge <px>`), or use the hosted `upscale_image` tool. The
 source is sent through `startingImage`, the prompt stays empty, and the worker
 fits the result inside the requested box without cropping or stretching. Both
-8px-aligned output edges must be 512-8192px. If a scale leaves the short edge
-below 512px, use the minimum target longest edge reported by the CLI/tool.
+8px-aligned output edges must be 512-15360px. Use 7680 for 8K or 15360 for
+16K; targets above 7680px return JPG. If a scale leaves the short edge below
+512px, use the minimum target longest edge reported by the CLI/tool.
 
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID

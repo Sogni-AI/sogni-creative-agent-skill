@@ -1,3 +1,16 @@
+## Unreleased
+
+### Features
+
+* **upscale:** support NVIDIA RTX VSR output through a 15,360px longest edge (16K profile), with JPG output above 8K
+
+# [3.31.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.31.0...v3.31.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **deps:** align shared media releases ([e1a3bed](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/e1a3bed4ae688c7497c0690126e78102cd24d758))
+
 # [3.31.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.30.0...v3.31.0) (2026-08-14)
 
 

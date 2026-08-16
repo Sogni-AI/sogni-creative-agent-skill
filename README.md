@@ -595,7 +595,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
 | Highest-quality images | `qwen_image_2512_fp8` (or `-Q pro`) |
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
-| Deterministic image upscaling | `rtx_vsr_pro` via `--upscale` |
+| Deterministic image upscaling through 16K | `rtx_vsr_pro` via `--upscale` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |

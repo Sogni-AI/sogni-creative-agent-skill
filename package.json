@@ -12,6 +12,7 @@
   },
   "scripts": {
     "openclaw:sync": "node scripts/sync-openclaw-plugin.mjs",
+    "sync:hermes-skill": "node scripts/sync-hermes-skill.mjs",
     "sync:version": "node scripts/sync-version.mjs",
     "check:version-sync": "node scripts/check-version-sync.mjs",
     "sync:creative-agent-runtime": "node scripts/sync-creative-agent-runtime.mjs",
@@ -64,6 +65,7 @@
     "CHANGELOG.md",
     ".claude-plugin/",
     ".codex-plugin/",
+    ".agents/skills/sogni-creative-agent-skill/",
     "plugin-skills/",
     "SKILL.md",
     "references/",
@@ -73,6 +75,7 @@
     "skill-package.json",
     "host-launchers/",
     "scripts/sync-version.mjs",
+    "scripts/sync-hermes-skill.mjs",
     "scripts/check-version-sync.mjs",
     "scripts/check-creative-agent-runtime.mjs",
     "scripts/check-creative-agent-source.mjs",

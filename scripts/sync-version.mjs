@@ -1,6 +1,7 @@
 /**
  * Stamp the package.json version into every other manifest that carries it:
- *   version.mjs, SKILL.md frontmatter, .claude-plugin/plugin.json,
+ *   version.mjs, SKILL.md frontmatter, the Hermes Hub SKILL.md,
+ *   .claude-plugin/plugin.json,
  *   .codex-plugin/plugin.json, openclaw.plugin.json,
  *   desktop-extension/manifest.json.
  *
@@ -37,6 +38,15 @@ stamp('SKILL.md', (text) => {
   const updated = text.replace(/^(\s*version:\s*)"[^"]+"/m, `$1"${version}"`);
   if (!/^\s*version:\s*"/m.test(text)) {
     console.error('SKILL.md frontmatter has no version field to stamp.');
+    process.exit(1);
+  }
+  return updated;
+});
+
+stamp('.agents/skills/sogni-creative-agent-skill/SKILL.md', (text) => {
+  const updated = text.replace(/^(\s+version:\s*)"[^"]+"/m, `$1"${version}"`);
+  if (!/^\s+version:\s*"/m.test(text)) {
+    console.error('Hermes Hub SKILL.md frontmatter has no version field to stamp.');
     process.exit(1);
   }
   return updated;

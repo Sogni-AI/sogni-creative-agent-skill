@@ -184,15 +184,30 @@ Restart Codex (or start a new session) and ask it to "generate an image of a sun
 
 ### Hermes Agent
 
-[Hermes Agent](https://hermes-agent.nousresearch.com/) loads skills from `~/.hermes/skills/<category>/<name>/SKILL.md`. The `npx` installer places this skill at `~/.hermes/skills/media/sogni-creative-agent-skill/`:
+[Hermes Agent](https://hermes-agent.nousresearch.com/) can install the dedicated,
+security-scannable bundle directly from its Skills Hub (via skills.sh):
+
+```bash
+hermes skills install skills-sh/sogni-ai/sogni-creative-agent-skill/sogni-creative-agent-skill
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+sogni-agent-hermes doctor
+```
+
+Then `/reset` the Hermes session so it picks up the new skill. The Hub bundle
+lives at
+[`.agents/skills/sogni-creative-agent-skill/`](./.agents/skills/sogni-creative-agent-skill/)
+and contains only the agent instructions and the references they load, keeping
+the CLI runtime and development files outside Hermes' skill security scan.
+
+For a combined CLI + personal-skill setup, the `npx` installer still places the
+skill at `~/.hermes/skills/media/sogni-creative-agent-skill/`:
 
 ```bash
 npx setup-sogni-agent-skill --only=hermes
 ```
 
-Start Hermes once before running the installer so `~/.hermes/` exists. If the selected local runtime is not detected, setup exits before installing anything.
-
-Then `/reset` your Hermes session so it picks up the new skill. (You can also install manually: copy [`SKILL.md`](./SKILL.md) into `~/.hermes/skills/media/sogni-creative-agent-skill/SKILL.md`, or use `hermes skills install` if your build supports it.)
+Start Hermes once before running the installer so `~/.hermes/` exists. If the
+selected local runtime is not detected, setup exits before installing anything.
 
 ### OpenClaw plugin
 

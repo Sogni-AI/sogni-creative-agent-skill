@@ -44,6 +44,10 @@ export function checkVersionSync({ repoRoot = defaultRepoRoot } = {}) {
   const skill = read(repoRoot, 'SKILL.md').match(/^\s*version:\s*"([^"]+)"/m);
   expectVersion(problems, 'SKILL.md metadata.version', skill?.[1], version);
 
+  const hermesSkill = read(repoRoot, '.agents/skills/sogni-creative-agent-skill/SKILL.md')
+    .match(/^\s+version:\s*"([^"]+)"/m);
+  expectVersion(problems, 'Hermes Hub SKILL.md version', hermesSkill?.[1], version);
+
   for (const manifest of [
     '.claude-plugin/plugin.json',
     '.codex-plugin/plugin.json',

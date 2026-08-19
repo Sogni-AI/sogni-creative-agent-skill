@@ -230,6 +230,9 @@ const rootClientModule = process.env.SOGNI_AGENT_TEST_STATE_PATH
 const {
   SogniClientWrapper,
   ClientEvent,
+  // Re-exported from @sogni-ai/sogni-client. Used for public REST catalog reads
+  // (`projects.availableLoras`) that need neither a socket nor credentials.
+  SogniClient,
   getMaxContextImages: getWrapperMaxContextImages,
   parseCreativeWorkflowSseChunk,
   // Model-aware wrapper dimension rules (intelligence-client > 3.15.1). On
@@ -2521,6 +2524,10 @@ const options = {
   liveModelMedia: 'all', // image|video|audio|all
   liveModelNetwork: null, // fast|relaxed; defaults to configured network
   liveModelTags: [], // repeatable --model-tag filters (AND semantics)
+  loraCatalogAction: null, // list|search
+  loraCatalogQuery: null,
+  loraCatalogModel: null, // restrict to LoRAs compatible with this model id
+  loraCatalogCategory: null, // restrict to one catalog category
   apiReplayAction: null, // list|get|ingest
   apiReplayId: null,
   apiReplayInput: null,
@@ -3232,6 +3239,26 @@ for (let i = 0; i < args.length; i++) {
     const raw = requireFlagValue(args, i, arg);
     i++;
     options.liveModelTags.push(raw);
+  } else if (arg === '--list-loras' || arg === '--loras-catalog') {
+    options.loraCatalogAction = 'list';
+    const next = args[i + 1];
+    if (next && !next.startsWith('-')) {
+      i++;
+      options.loraCatalogQuery = next;
+    }
+  } else if (arg === '--search-loras' || arg === '--find-loras') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.loraCatalogAction = 'search';
+    options.loraCatalogQuery = raw;
+  } else if (arg === '--lora-catalog-model') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.loraCatalogModel = raw;
+  } else if (arg === '--lora-category') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.loraCatalogCategory = raw;
   // --- Hosted Sogni API paths ---
   } else if (arg === '--api-chat') {
     options.apiChat = true;
@@ -3718,6 +3745,10 @@ General:
   --model-media <type>  Filter model discovery: image|video|audio|all (default: all)
   --model-network <n>   Model discovery network: fast|relaxed (default: configured network)
   --model-tag <tag>     Filter by catalog tag, e.g. spicy or uncensored (repeatable, AND)
+  --list-loras [query]  List the live LoRA catalog with each LoRA's strength contract
+  --search-loras <q>    Search LoRAs by ID, name, category, or description
+  --lora-catalog-model <id>  Only LoRAs compatible with that model id
+  --lora-category <c>   Filter by catalog category, e.g. character or lighting
   --doctor              Health check: Node, credentials, ffmpeg, auth, plan, config, version
   --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
   --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
@@ -4738,6 +4769,7 @@ const apiWorkflowStartHasExternalInput = options.apiWorkflowAction === 'start' &
 const apiWorkflowTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
 const apiModelUtilityAction = Boolean(options.apiModelAction);
 const liveModelUtilityAction = Boolean(options.liveModelAction);
+const loraCatalogUtilityAction = Boolean(options.loraCatalogAction);
 const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
 const contractUtilityAction = Boolean(options.contractAction);
@@ -4746,6 +4778,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !apiWorkflowUtilityAction &&
   !apiModelUtilityAction &&
   !liveModelUtilityAction &&
+  !loraCatalogUtilityAction &&
   !apiReplayUtilityAction &&
   !contractUtilityAction &&
   !storyboardPlanUtilityAction &&
@@ -4776,12 +4809,17 @@ if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.live
     code: 'INVALID_ARGUMENT'
   });
 }
+if (!loraCatalogUtilityAction && (options.loraCatalogModel || options.loraCatalogCategory)) {
+  fatalCliError('--lora-catalog-model and --lora-category require --list-loras or --search-loras.', {
+    code: 'INVALID_ARGUMENT'
+  });
+}
 // Normalize a whitespace-only prompt to empty so the guard below treats it as
 // "no prompt" rather than silently sending blank text to the server.
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7214,6 +7252,183 @@ async function runLiveModels() {
   console.log('MEDIA\tWORKERS\tMODEL ID\tTAGS\tNAME');
   for (const model of models) {
     console.log(`${model.media}\t${model.workerCount}\t${model.id}\t${model.tags.join(',') || '-'}\t${model.name}`);
+  }
+}
+
+// LoRA discovery goes through the SDK's catalog surface
+// (`projects.availableLoras`), which reads the public artist-facing catalog and
+// applies the `modelId` filter server-side. That is the single source of truth
+// for which LoRAs a model accepts and for the strength contract of each one, so
+// the CLI (and any agent reading its output) stays correct when Sogni
+// publishes, retunes, or retires a LoRA without a skill release.
+//
+// This path is deliberately socket-free and credential-free: the catalog is
+// public, so `--list-loras` answers without connecting a worker session.
+async function fetchLoraCatalog(modelId) {
+  const fixtureJson = getEnv('SOGNI_AGENT_TEST_LORA_CATALOG_JSON');
+  if (fixtureJson) {
+    const payload = JSON.parse(fixtureJson);
+    const data = payload?.data || payload;
+    const loras = Array.isArray(data) ? data : data?.loras;
+    if (!Array.isArray(loras)) {
+      const error = new Error('Sogni LoRA catalog response contained no LoRA list.');
+      error.code = 'LORA_CATALOG_INVALID';
+      throw error;
+    }
+    return {
+      lastUpdated: data?.lastUpdated,
+      loras: modelId
+        ? loras.filter(lora => Array.isArray(lora?.modelIds) && lora.modelIds.includes(modelId))
+        : loras,
+      models: Array.isArray(data?.models) ? data.models : [],
+      constraints: data?.constraints || null
+    };
+  }
+
+  // Run the same host/protocol guard every other REST path in this CLI goes
+  // through before handing the base URL to the SDK. The SDK owns the route.
+  await buildSafeApiUrl('/');
+
+  let sdkClient;
+  try {
+    sdkClient = await SogniClient.createInstance({
+      appId: getOrCreateSogniAppId(),
+      appSource: SOGNI_APP_SOURCE,
+      restEndpoint: getApiBaseUrl(),
+      // The catalog is a plain REST read. Opening a socket would cost a worker
+      // session and would make a public listing require credentials.
+      disableSocket: true,
+      logLevel: 'error'
+    });
+    if (typeof sdkClient.projects.availableLoras !== 'function') {
+      const error = new Error('The installed Sogni SDK does not expose the LoRA catalog.');
+      error.code = 'LORA_CATALOG_UNSUPPORTED';
+      error.hint = 'Update @sogni-ai/sogni-intelligence-client to a release built on sogni-client >= 5.17.0.';
+      throw error;
+    }
+    const catalog = await sdkClient.projects.availableLoras(modelId ? { modelId } : {});
+    if (!Array.isArray(catalog?.loras)) {
+      const error = new Error('Sogni LoRA catalog response contained no LoRA list.');
+      error.code = 'LORA_CATALOG_INVALID';
+      throw error;
+    }
+    return catalog;
+  } catch (cause) {
+    if (cause?.code === 'LORA_CATALOG_INVALID' || cause?.code === 'LORA_CATALOG_UNSUPPORTED') throw cause;
+    const error = new Error(`Could not load the live Sogni LoRA catalog (${cause?.message || cause}).`);
+    error.code = cause?.code || 'LORA_CATALOG_UNAVAILABLE';
+    error.hint = 'Check Sogni platform status and retry.';
+    throw error;
+  } finally {
+    try {
+      sdkClient?.dispose?.();
+    } catch {
+      // Disposal is best-effort; a listing must not fail on teardown.
+    }
+  }
+}
+
+function loraCatalogEntryFromPayload(entry) {
+  const ui = entry?.ui || {};
+  return {
+    loraId: entry?.loraId || entry?.slug || '',
+    name: entry?.name || entry?.loraId || '',
+    description: typeof entry?.description === 'string' ? entry.description : '',
+    modelIds: Array.isArray(entry?.modelIds) ? entry.modelIds : [],
+    category: ui.category || null,
+    section: ui.section?.label || null,
+    min: Number.isFinite(ui.min) ? ui.min : null,
+    max: Number.isFinite(ui.max) ? ui.max : null,
+    default: Number.isFinite(ui.default) ? ui.default : null,
+    step: Number.isFinite(ui.step) ? ui.step : null,
+    recommendedMin: Number.isFinite(ui.recommendedMin) ? ui.recommendedMin : null,
+    recommendedMax: Number.isFinite(ui.recommendedMax) ? ui.recommendedMax : null,
+    rangeLabels: ui.rangeLabels || null,
+    bipolar: Number.isFinite(ui.min) && ui.min < 0,
+    nsfw: Boolean(ui.nsfw),
+    sexual: Boolean(ui.sexual),
+    creator: ui.creator || null,
+    sourceUrl: ui.sourceUrl || null,
+    license: ui.license || null
+  };
+}
+
+function formatLoraRange(entry) {
+  if (entry.min === null || entry.max === null) return '-';
+  const hard = `${entry.min}..${entry.max}`;
+  if (entry.recommendedMin === null || entry.recommendedMax === null) return hard;
+  return `${hard} (rec ${entry.recommendedMin}..${entry.recommendedMax})`;
+}
+
+async function runLoraCatalog() {
+  const query = options.loraCatalogQuery?.trim() || null;
+  const normalizedQuery = normalizeLiveModelSearch(query);
+  if (query && !normalizedQuery) {
+    const err = new Error('LoRA search query must contain at least one letter or number.');
+    err.code = 'INVALID_ARGUMENT';
+    throw err;
+  }
+  const modelFilter = options.loraCatalogModel?.trim() || null;
+  const categoryFilter = normalizeLiveModelTag(options.loraCatalogCategory) || null;
+
+  // The model filter is applied server-side by the catalog endpoint; category
+  // and free-text search are presentation-layer narrowing over what it returns.
+  const catalog = await fetchLoraCatalog(modelFilter || undefined);
+  let loras = catalog.loras.map(loraCatalogEntryFromPayload).filter(entry => entry.loraId);
+  if (categoryFilter) loras = loras.filter(entry => normalizeLiveModelTag(entry.category) === categoryFilter);
+  if (normalizedQuery) {
+    loras = loras.filter(entry =>
+      normalizeLiveModelSearch(`${entry.loraId} ${entry.name} ${entry.category || ''} ${entry.description}`)
+        .includes(normalizedQuery)
+    );
+  }
+
+  const result = {
+    success: true,
+    type: 'lora-catalog',
+    query,
+    model: modelFilter,
+    category: options.loraCatalogCategory || null,
+    count: loras.length,
+    // Catalog-level facts, unaffected by the filters above: which models take
+    // LoRAs at all, and how many may be stacked on one render.
+    loraCapableModels: Array.isArray(catalog.models) ? catalog.models : [],
+    constraints: catalog.constraints || null,
+    loras,
+    timestamp: new Date().toISOString()
+  };
+  if (options.json || JSON_ERROR_MODE) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+
+  const scope = [
+    modelFilter ? `model=${modelFilter}` : 'all models',
+    options.loraCatalogCategory ? `category=${options.loraCatalogCategory}` : null,
+    query ? `query=${JSON.stringify(query)}` : null
+  ].filter(Boolean).join(', ');
+  const maxPerRequest = catalog.constraints?.maxPerRequest;
+  const stacking = Number.isFinite(maxPerRequest) ? `; stack up to ${maxPerRequest} per render` : '';
+  console.log(`Sogni LoRA catalog (${loras.length}; ${scope}${stacking})`);
+  if (loras.length === 0) {
+    if (modelFilter && !result.loraCapableModels.includes(modelFilter)) {
+      console.log(`${modelFilter} does not accept LoRAs. Models that do: ${result.loraCapableModels.join(', ') || '(none reported)'}`);
+      return;
+    }
+    console.log('No matching LoRAs found.');
+    return;
+  }
+  console.log('LORA ID\tRANGE\tDEFAULT\tCATEGORY\tMATURE\tNAME');
+  for (const entry of loras) {
+    const mature = [entry.nsfw ? 'nsfw' : null, entry.sexual ? 'sexual' : null].filter(Boolean).join('+') || '-';
+    console.log([
+      entry.loraId,
+      formatLoraRange(entry),
+      entry.default ?? '-',
+      entry.category || '-',
+      mature,
+      entry.name
+    ].join('\t'));
   }
 }
 
@@ -10519,6 +10734,11 @@ async function main() {
 
     if (options.liveModelAction) {
       await runLiveModels();
+      return;
+    }
+
+    if (options.loraCatalogAction) {
+      await runLoraCatalog();
       return;
     }
 

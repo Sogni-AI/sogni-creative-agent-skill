@@ -3180,6 +3180,215 @@ test('live model filter flags require a model discovery action', () => {
   assert.match(stderr, /require --list-models or --search-models/);
 });
 
+const TEST_KREA_MODEL_IDS = [
+  'krea2_turbo_fp8_scaled',
+  'krea2_identity_edit_v1_2',
+  'dark_beast_krea2_fp8',
+  'dark_beast_krea2_identity_edit_v1_2',
+  'krea2_identity_edit_sogni_v0_3_alpha'
+];
+
+function testLoraCatalog(loras) {
+  const modelIds = new Set();
+  for (const lora of loras) {
+    for (const modelId of lora.modelIds || TEST_KREA_MODEL_IDS) modelIds.add(modelId);
+  }
+  return JSON.stringify({
+    status: 'success',
+    data: {
+      models: [...modelIds].sort(),
+      constraints: { maxPerRequest: 8, minStrength: -100, maxStrength: 100 },
+      loras: loras.map(lora => ({
+        loraId: lora.loraId,
+        slug: lora.loraId,
+        name: lora.name,
+        description: lora.description || '',
+        relatedLoraIds: [],
+        modelIds: lora.modelIds || TEST_KREA_MODEL_IDS,
+        ui: {
+          min: lora.min,
+          max: lora.max,
+          default: lora.default,
+          step: 0.1,
+          recommendedMin: lora.recommendedMin,
+          recommendedMax: lora.recommendedMax,
+          category: lora.category,
+          nsfw: Boolean(lora.nsfw),
+          sexual: Boolean(lora.sexual),
+          ...(lora.rangeLabels ? { rangeLabels: lora.rangeLabels } : {})
+        }
+      }))
+    }
+  });
+}
+
+const TEST_LORA_CATALOG = [
+  {
+    loraId: 'krea2-detail-enhancer',
+    name: 'Detail Enhancer',
+    description: 'Adds fine detail',
+    min: -5,
+    max: 5,
+    default: 1,
+    recommendedMin: -2,
+    recommendedMax: 5,
+    category: 'detail-composition',
+    rangeLabels: { min: 'Less Detailed', max: 'More Detailed' }
+  },
+  {
+    loraId: 'krea2-warm-light',
+    name: 'Warm Light',
+    description: 'Warmer golden grade',
+    min: -10,
+    max: 10,
+    default: 1,
+    recommendedMin: -3,
+    recommendedMax: 3,
+    category: 'lighting'
+  },
+  {
+    loraId: 'krea2-mystic-x',
+    name: 'Mystic X',
+    description: 'Uncensored all-round adult fine-tune',
+    min: 0,
+    max: 2,
+    default: 1,
+    recommendedMin: 0,
+    recommendedMax: 1,
+    category: 'popular-community-fine-tunes',
+    nsfw: true,
+    sexual: true
+  },
+  {
+    loraId: 'ltx-transition',
+    name: 'Transition',
+    description: 'Video transition LoRA',
+    min: 0,
+    max: 1,
+    default: 1,
+    recommendedMin: 0,
+    recommendedMax: 1,
+    category: 'video',
+    modelIds: ['ltx23-22b-fp8_i2v']
+  }
+];
+
+test('--list-loras returns the live LoRA catalog with each strength contract', () => {
+  const { exitCode, stdout, state } = runCli(['--json', '--list-loras'], {
+    SOGNI_API_KEY: '',
+    SOGNI_AGENT_TEST_LORA_CATALOG_JSON: testLoraCatalog(TEST_LORA_CATALOG)
+  });
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, true);
+  assert.equal(payload.type, 'lora-catalog');
+  assert.equal(payload.count, TEST_LORA_CATALOG.length);
+
+  const detail = payload.loras.find(lora => lora.loraId === 'krea2-detail-enhancer');
+  assert.equal(detail.min, -5);
+  assert.equal(detail.max, 5);
+  assert.equal(detail.recommendedMin, -2);
+  assert.equal(detail.recommendedMax, 5);
+  assert.equal(detail.default, 1);
+  assert.equal(detail.bipolar, true, 'a negative minimum marks a bipolar slider');
+  assert.deepEqual(detail.rangeLabels, { min: 'Less Detailed', max: 'More Detailed' });
+
+  const mystic = payload.loras.find(lora => lora.loraId === 'krea2-mystic-x');
+  assert.equal(mystic.bipolar, false);
+  assert.equal(mystic.nsfw, true);
+  assert.equal(mystic.sexual, true);
+
+  assert.equal(state?.clientConfigs, undefined, 'catalog discovery must not open a socket client');
+});
+
+test('--list-loras --lora-catalog-model returns every LoRA a Krea 2 model accepts', () => {
+  for (const modelId of TEST_KREA_MODEL_IDS) {
+    const { exitCode, stdout } = runCli(
+      ['--json', '--list-loras', '--lora-catalog-model', modelId],
+      {
+        SOGNI_API_KEY: '',
+        SOGNI_AGENT_TEST_LORA_CATALOG_JSON: testLoraCatalog(TEST_LORA_CATALOG)
+      }
+    );
+
+    assert.equal(exitCode, 0);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.model, modelId);
+    assert.deepEqual(
+      payload.loras.map(lora => lora.loraId),
+      ['krea2-detail-enhancer', 'krea2-warm-light', 'krea2-mystic-x'],
+      `${modelId} must expose every Krea 2 LoRA and no video-only LoRA`
+    );
+  }
+});
+
+test('--search-loras and --lora-category narrow the catalog', () => {
+  const env = {
+    SOGNI_API_KEY: '',
+    SOGNI_AGENT_TEST_LORA_CATALOG_JSON: testLoraCatalog(TEST_LORA_CATALOG)
+  };
+
+  const search = runCli(['--json', '--search-loras', 'golden'], env);
+  assert.equal(search.exitCode, 0);
+  assert.deepEqual(
+    JSON.parse(search.stdout).loras.map(lora => lora.loraId),
+    ['krea2-warm-light'],
+    'search matches the description as well as the ID'
+  );
+
+  const category = runCli(['--json', '--list-loras', '--lora-category', 'detail-composition'], env);
+  assert.equal(category.exitCode, 0);
+  assert.deepEqual(
+    JSON.parse(category.stdout).loras.map(lora => lora.loraId),
+    ['krea2-detail-enhancer']
+  );
+});
+
+test('--list-loras reports the stacking limit and the LoRA-capable model set', () => {
+  const { exitCode, stdout } = runCli(['--json', '--list-loras'], {
+    SOGNI_API_KEY: '',
+    SOGNI_AGENT_TEST_LORA_CATALOG_JSON: testLoraCatalog(TEST_LORA_CATALOG)
+  });
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  // An agent needs the cap before it can decide how many LoRAs to stack.
+  assert.equal(payload.constraints.maxPerRequest, 8);
+  assert.deepEqual(payload.constraints, { maxPerRequest: 8, minStrength: -100, maxStrength: 100 });
+  for (const modelId of TEST_KREA_MODEL_IDS) {
+    assert.ok(
+      payload.loraCapableModels.includes(modelId),
+      `${modelId} must be reported as LoRA-capable`
+    );
+  }
+});
+
+test('--list-loras keeps the capable-model set whole under a model filter', () => {
+  const { exitCode, stdout } = runCli(
+    ['--json', '--list-loras', '--lora-catalog-model', 'krea2_turbo_fp8_scaled'],
+    {
+      SOGNI_API_KEY: '',
+      SOGNI_AGENT_TEST_LORA_CATALOG_JSON: testLoraCatalog(TEST_LORA_CATALOG)
+    }
+  );
+
+  assert.equal(exitCode, 0);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.count, 3, 'rows narrow to the filtered model');
+  assert.ok(
+    payload.loraCapableModels.includes('ltx23-22b-fp8_i2v'),
+    'the capable-model set must still name models outside the filter'
+  );
+});
+
+test('LoRA catalog filter flags require a LoRA discovery action', () => {
+  const { exitCode, stderr } = runCli(['--lora-category', 'lighting']);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /require --list-loras or --search-loras/);
+});
+
 test('--api-chat rejects loopback api base without explicit unsafe opt-in before sending credentials', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([

@@ -474,6 +474,11 @@ sogni-agent --list-models
 sogni-agent --search-models spicy
 sogni-agent --list-models --model-media image --model-tag uncensored
 
+# Live LoRA catalog discovery (IDs, strength ranges, bipolar directions)
+sogni-agent --list-loras --lora-catalog-model krea2_turbo_fp8_scaled
+sogni-agent --search-loras lighting
+sogni-agent --json --list-loras --lora-category character
+
 # Durable hosted chat run with SSE progress events
 SOGNI_SKILL_USE_SDK_TRANSPORT=1 sogni-agent --durable-chat \
   "Create a product launch storyboard and render the first hero image"
@@ -556,6 +561,8 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--list-models [query]`, `--search-models <query>` | List or search currently available Supernet image, video, and audio models |
 | `--model-media <type>`, `--model-network <network>` | Filter live model discovery by media or Fast/Relaxed network |
 | `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching |
+| `--list-loras [query]`, `--search-loras <query>` | List or search the live LoRA catalog with each LoRA's hard range, recommended range, default, and slider direction |
+| `--lora-catalog-model <id>`, `--lora-category <category>` | Filter LoRA discovery to one model's compatible LoRAs or one catalog category |
 | `--list-replays [n]`, `--get-replay <id>`, `--ingest-replay <json\|@path>` | Manage Sogni Intelligence replay records (use `@path` to load JSON from a file) |
 | `--persona <name>` | Use a saved persona |
 | `--concat-videos <out> <clips...>` | Stitch clips locally with FFmpeg |

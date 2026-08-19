@@ -92,6 +92,19 @@ LoRAs are bipolar sliders, so negative values are valid and apply the inverse
 effect. Follow the range documented for each LoRA rather than assuming 0-2.
 The first render with an uncached LoRA can take longer while its asset downloads.
 
+All 25 published Krea 2 LoRAs apply to every Krea 2 based model —
+`krea2_turbo_fp8_scaled`, `krea2_identity_edit_v1_2`,
+`krea2_identity_edit_sogni_v0_3_alpha`, `dark_beast_krea2_fp8`, and
+`dark_beast_krea2_identity_edit_v1_2`. [`krea2-loras.md`](./krea2-loras.md) lists
+every ID with its range, recommended range, default, and slider direction. The
+catalog moves without a skill release, so read it live before relying on an
+exact range:
+
+```bash
+sogni-agent --list-loras --lora-catalog-model krea2_turbo_fp8_scaled
+sogni-agent --search-loras lighting
+```
+
 For an edit of a referenced person or character that must preserve likeness or
 character identity while changing clothing, hair or makeup, pose or position,
 face/head/body, background, lighting, or visual style, default to a context

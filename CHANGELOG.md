@@ -1,3 +1,19 @@
+# [3.32.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.31.0...v3.32.0) (2026-08-19)
+
+
+### Bug Fixes
+
+* **deps:** align shared media releases ([e1a3bed](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/e1a3bed4ae688c7497c0690126e78102cd24d758))
+* **deps:** bump intelligence-client to 3.19.0 to enable LoRA discovery ([25cd43e](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/25cd43ee298cbee00097f156b29a9a038125da07))
+* **hermes:** ship the LoRA reference in the Hub bundle ([d615a59](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d615a59063899d9d609947f044d44eba8d0ccf36))
+
+
+### Features
+
+* add Hermes Skills Hub distribution ([#30](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/30)) ([52329e8](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/52329e81f5f89660fe71bb88e5a8a13f24ef789a))
+* **loras:** add LoRA catalog discovery to the CLI ([8c50259](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/8c502597145ec9a261f2e1a8d03ea2688df35505))
+* **upscale:** support NVIDIA RTX VSR through 16K ([d6ae213](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d6ae2138833dccb88b5eac53a4878e7f1117e9eb))
+
 ## Unreleased
 
 ### Features

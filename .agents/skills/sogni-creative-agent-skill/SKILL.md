@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.31.0"
+  version: "3.31.1"
   author: Sogni AI
   hermes:
     category: creative
@@ -89,6 +89,8 @@ sogni-agent-hermes --help
 
 - Model choice, quality tiers, Krea identity edits, and video aliases: read
   [models.md](references/models.md).
+- Krea 2 LoRA ids, strength ranges, bipolar sliders, and stacking up to 8 in
+  one render: read [krea2-loras.md](references/krea2-loras.md).
 - Video prompts, reference roles, LTX, WAN, MiniMax, Seedance, and HappyHorse:
   read [video-prompting.md](references/video-prompting.md).
 - Local video cutting, stitching, overlays, subtitles, audio remixing, and

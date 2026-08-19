@@ -62,15 +62,16 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
-| `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-8192 target box, 8px step |
+| `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-15360 target box, 8px step |
 
 RTX VSR is not a text-to-image or restoration model. Invoke it with
 `sogni-agent --upscale <path|url>` (optionally `--upscale-scale 2|3|4` or
 `--target-longest-edge <px>`), or use the hosted `upscale_image` tool. The
 source is sent through `startingImage`, the prompt stays empty, and the worker
 fits the result inside the requested box without cropping or stretching. Both
-8px-aligned output edges must be 512-8192px. If a scale leaves the short edge
-below 512px, use the minimum target longest edge reported by the CLI/tool.
+8px-aligned output edges must be 512-15360px. Use 7680 for 8K or 15360 for
+16K; targets above 7680px return JPG. If a scale leaves the short edge below
+512px, use the minimum target longest edge reported by the CLI/tool.
 
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
@@ -90,6 +91,19 @@ the order can change the result. Omitted strengths default to 1. Many Krea 2
 LoRAs are bipolar sliders, so negative values are valid and apply the inverse
 effect. Follow the range documented for each LoRA rather than assuming 0-2.
 The first render with an uncached LoRA can take longer while its asset downloads.
+
+All 25 published Krea 2 LoRAs apply to every Krea 2 based model —
+`krea2_turbo_fp8_scaled`, `krea2_identity_edit_v1_2`,
+`krea2_identity_edit_sogni_v0_3_alpha`, `dark_beast_krea2_fp8`, and
+`dark_beast_krea2_identity_edit_v1_2`. [`krea2-loras.md`](./krea2-loras.md) lists
+every ID with its range, recommended range, default, and slider direction. The
+catalog moves without a skill release, so read it live before relying on an
+exact range:
+
+```bash
+sogni-agent --list-loras --lora-catalog-model krea2_turbo_fp8_scaled
+sogni-agent --search-loras lighting
+```
 
 For an edit of a referenced person or character that must preserve likeness or
 character identity while changing clothing, hair or makeup, pose or position,

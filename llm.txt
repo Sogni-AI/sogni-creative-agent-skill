@@ -33,6 +33,11 @@ npx setup-sogni-agent-skill --only=codex
 # Hermes session
 npx setup-sogni-agent-skill --only=hermes
 
+# Hermes Skills Hub (install the narrow skill bundle plus the global CLI), then
+# /reset the Hermes session
+hermes skills install skills-sh/sogni-ai/sogni-creative-agent-skill/sogni-creative-agent-skill
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+
 # OpenClaw plugin (the npm package is scoped — use the npm: source prefix)
 openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill
 

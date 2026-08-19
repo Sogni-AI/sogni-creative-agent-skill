@@ -8,6 +8,7 @@
 | `SKILL.md` | The agent behavior contract every skill host loads. Keep it lean — deep guides belong in `references/`. |
 | `references/*.md` | On-demand deep-dive guides SKILL.md points at. Shipped to npm, the Claude plugin, and the OpenClaw link surface. |
 | `skills/*.md` | Per-skill view of the **hosted** tool surface (mirrors `@sogni/creative-agent` manifests). |
+| `.agents/skills/sogni-creative-agent-skill/` | Self-contained Hermes Skills Hub bundle discovered through skills.sh. Run `npm run sync:hermes-skill` after editing its canonical deep-dive references. |
 | `plugin-skills/` | Shared lean plugin workflows used by Claude Code and the Codex adapters. |
 | `.claude-plugin/`, `.codex-plugin/` | Host-specific plugin manifests; Codex adapters live under `skills/*/SKILL.md`. |
 | `generated/creative-agent-runtime.mjs` | Generated from the private `sogni-creative-agent` repo and **committed** so public installs and tests never need private access. |
@@ -66,12 +67,16 @@ there is no local ffmpeg and no local filesystem. Therefore:
 
 - SKILL.md is loaded whole into agent context on every session — keep it lean. Routing rules that change agent behavior stay inline; elaboration goes to `references/` with a "read when" pointer in the Reference Index.
 - After any change run `npm test`: the docs-consistency suite verifies every `--flag` mentioned in docs exists in the CLI parser, version metadata is in sync, and quality-tier tables match the generated runtime; the openclaw-surface suite verifies the link surface stays regenerable.
+- After changing one of the references mirrored by the Hermes Hub bundle, run
+  `npm run sync:hermes-skill`; the Hermes skill test fails on byte drift.
 - Behavioral changes to SKILL.md should be scenario-tested: give a fresh agent the new file and confirm the key routings still hold (photobooth-vs-context-edit, LTX prompt rewrite, PWD output convention, insufficient-funds reply, `--list-media` instead of `ls`).
 
 ## Commits and versioning
 
 - Conventional commits are enforced by commitlint (husky `commit-msg` hook).
-- The package version fans out from `package.json` into five stamp files: `version.mjs`, `SKILL.md` frontmatter, `.claude-plugin/plugin.json`, `openclaw.plugin.json`, and `desktop-extension/manifest.json`. **Never hand-edit the stamp files** — run:
+- The package version fans out from `package.json` into the runtime module, the
+  root and Hermes Hub skill frontmatter, and the Claude, Codex, OpenClaw, and
+  desktop-extension manifests. **Never hand-edit the stamp files** — run:
 
 ```bash
 npm run sync:version

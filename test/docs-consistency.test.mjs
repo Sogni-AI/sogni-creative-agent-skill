@@ -29,6 +29,7 @@ const DOC_FILES = [
   'README.md',
   'llm.txt',
   'plugin-skills/sogni-creative-agent/SKILL.md',
+  '.agents/skills/sogni-creative-agent-skill/SKILL.md',
   ...readdirSync(join(repoRoot, 'references'))
     .filter((name) => name.endsWith('.md'))
     .map((name) => `references/${name}`),

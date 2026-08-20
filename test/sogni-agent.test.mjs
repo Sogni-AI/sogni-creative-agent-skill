@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -1695,6 +1695,72 @@ test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', 
   assert.equal(state.lastVideoProject.referenceAudios.length, 1);
   assert.equal(state.lastVideoProject.generateAudio, false);
   assert.equal(state.lastVideoProject.frames, 243);
+});
+
+test('MiniMax H3 r2v pretrims local reference-audio windows before upload', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-audio-window-'));
+  const audio = join(tempDir, 'voice.m4a');
+  const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  writeFileSync(audio, Buffer.from('full prepared reference audio'));
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('-version')) {
+  console.log('ffmpeg version test');
+  process.exit(0);
+}
+const startIndex = args.indexOf('-ss');
+const durationIndex = args.indexOf('-t');
+writeFileSync(args.at(-1), Buffer.from(JSON.stringify({
+  start: startIndex >= 0 ? args[startIndex + 1] : null,
+  duration: durationIndex >= 0 ? args[durationIndex + 1] : null,
+})));
+`);
+  chmodSync(fakeFfmpeg, 0o755);
+
+  const { exitCode, state } = runCli(
+    [
+      '--video',
+      '-m', 'minimax-h3-r2v',
+      '--ref', SCREENSHOT_FIXTURE,
+      '--ref-audio', audio,
+      '--audio-start', '15.28',
+      '--audio-duration', '4.96',
+      '--frames', '124',
+      '<Picture 1> controls identity. <Audio 1> controls the exact vocal performance.',
+    ],
+    { FFMPEG_PATH: fakeFfmpeg },
+  );
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v');
+  assert.equal(state.lastVideoProject.audioStart, undefined);
+  assert.equal(state.lastVideoProject.audioDuration, undefined);
+  assert.deepEqual(
+    JSON.parse(Buffer.from(state.lastVideoProject.referenceAudio.data).toString('utf8')),
+    { start: '15.28', duration: '4.96' },
+  );
+});
+
+test('non-H3 video workflows keep worker-side audio window fields', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-non-h3-audio-window-'));
+  const audio = join(tempDir, 'voice.m4a');
+  writeFileSync(audio, Buffer.from('reference audio'));
+
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'ltx25-ia2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-audio', audio,
+    '--audio-start', '2',
+    '--audio-duration', '3',
+    'A synchronized image-and-audio performance.',
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'ltx25-22b-int8_ia2v_distilled');
+  assert.equal(state.lastVideoProject.audioStart, 2);
+  assert.equal(state.lastVideoProject.audioDuration, 3);
 });
 
 test('MiniMax H3 r2v accepts video-only visual input, rejects audio-only input, and is never inferred', () => {

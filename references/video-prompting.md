@@ -418,6 +418,14 @@ sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref ./first.png --ref-end ./l
 sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"
 ```
 
+When local primary `--ref-audio` is combined with `--audio-start` and/or
+`--audio-duration` on MiniMax H3 R2V, the CLI prepares and physically trims the
+audio window before upload. The worker receives only that window, and the CLI
+does not forward redundant `audioStart` / `audioDuration` project fields. This
+avoids worker failures on long source files and makes the attached `<Audio 1>`
+the exact waveform-conditioned lip-sync input. Remote audio URLs and additional
+audio references keep their existing handling.
+
 ## High-Res Video Routing
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.

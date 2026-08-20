@@ -8302,6 +8302,43 @@ async function prepareReferenceAudioForVideoBuffer(buffer, sourceLabel) {
   return prepared;
 }
 
+async function trimPreparedReferenceAudioWindowBuffer(buffer, {
+  startSeconds = 0,
+  durationSeconds = null,
+} = {}) {
+  const ffmpegPath = await ensureFfmpegAvailable();
+  const tempDir = createTrackedTempDir('sogni-h3-audio-window-');
+  const inputPath = join(tempDir, 'reference-audio-input.m4a');
+  const outputPath = join(tempDir, 'reference-audio-window.m4a');
+  try {
+    writeFileSync(inputPath, buffer);
+    const args = ['-hide_banner', '-loglevel', 'error', '-y'];
+    if (Number.isFinite(startSeconds) && startSeconds > 0) {
+      args.push('-ss', String(startSeconds));
+    }
+    args.push('-i', inputPath);
+    if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+      args.push('-t', String(durationSeconds));
+    }
+    args.push('-vn', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', outputPath);
+    const result = await runCommand(ffmpegPath, args, { captureOutput: true });
+    if (result.error || result.status !== 0 || !isNonEmptyFile(outputPath)) {
+      const err = new Error('Failed to prepare the MiniMax H3 reference-audio window.');
+      err.code = 'FFMPEG_H3_AUDIO_WINDOW_FAILED';
+      err.details = { stderr: result.stderr || '', stdout: result.stdout || '', status: result.status };
+      throw err;
+    }
+    if (!options.quiet) {
+      console.error(`Prepared MiniMax H3 reference-audio window (${startSeconds}s start, ${durationSeconds ?? 'remaining'}s duration).`);
+    }
+    return readFileSync(outputPath);
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { if (existsSync(outputPath)) unlinkSync(outputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+}
+
 function mediaFilenameFromSource(sourceLabel, fallbackName) {
   const raw = String(sourceLabel || '');
   try {
@@ -11364,8 +11401,22 @@ async function main() {
       const additionalVideoBuffers = isMiniMaxH3R2v
         ? await Promise.all(options.refVideos.map((reference) => fetchMediaBuffer(reference)))
         : [];
+      let pretrimmedMiniMaxH3ReferenceAudio = false;
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
+        if (
+          isMiniMaxH3R2v
+          && (
+            (Number.isFinite(options.audioStart) && options.audioStart > 0)
+            || (Number.isFinite(options.audioDuration) && options.audioDuration > 0)
+          )
+        ) {
+          audioBuffer = await trimPreparedReferenceAudioWindowBuffer(audioBuffer, {
+            startSeconds: options.audioStart ?? 0,
+            durationSeconds: options.audioDuration,
+          });
+          pretrimmedMiniMaxH3ReferenceAudio = true;
+        }
       }
       if (additionalAudioBuffers.length > 0) {
         additionalAudioBuffers = await Promise.all(
@@ -11544,10 +11595,10 @@ async function main() {
       if (additionalAudioBuffers.length > 0) {
         projectConfig.referenceAudios = additionalAudioBuffers;
       }
-      if (options.audioStart !== null && !useRefAudioUrl) {
+      if (options.audioStart !== null && !useRefAudioUrl && !pretrimmedMiniMaxH3ReferenceAudio) {
         projectConfig.audioStart = options.audioStart;
       }
-      if (options.audioDuration !== null && !useRefAudioUrl) {
+      if (options.audioDuration !== null && !useRefAudioUrl && !pretrimmedMiniMaxH3ReferenceAudio) {
         projectConfig.audioDuration = options.audioDuration;
       }
       if (audioIdentityMedia) {

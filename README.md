@@ -33,13 +33,17 @@ With this skill, an agent can:
 - save personas, preferences, and last-render state across sessions
 - check balances, list models, and refine previous results
 
-> **Fastest install:** paste this repo's GitHub URL into your agent and ask it to "install this skill".
+> **Simplest install:** tell your agent **"Setup and install sogni.ai/skill"**. The short link
+> [sogni.ai/skill](https://sogni.ai/skill) resolves to this repository, and the agent follows
+> [the install steps below](#if-you-are-an-agent-install-steps).
+> **Fallback:** run `npx setup-sogni-agent-skill` in a terminal yourself.
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+  - [If you are an agent: install steps](#if-you-are-an-agent-install-steps)
 - [Requirements](#requirements)
 - [Installation](#installation)
   - [Node CLI (default)](#node-cli-default)
@@ -79,17 +83,26 @@ With this skill, an agent can:
 ## Quick Start
 
 1. Get a Sogni API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu) and save it — see [Setup](#setup-sogni-api-key).
-2. Install (one command):
+2. Install — tell your agent:
+
+   > **Setup and install sogni.ai/skill**
+
+   Any agent that can fetch a URL (Claude Code, Codex CLI, Hermes, OpenClaw, Manus,
+   and others) opens this repository via the short link and follows
+   [If you are an agent: install steps](#if-you-are-an-agent-install-steps).
+
+   **Fallback — no agent handy, or yours can't fetch URLs?** Run the one-command
+   installer yourself:
 
    ```bash
    npx setup-sogni-agent-skill
    ```
 
-   This auto-detects Claude Code, OpenAI Codex CLI, and Hermes Agent; installs the
-   CLI globally; registers the skill into each detected runtime; prompts for your
-   API key; and tells you how to request ChatGPT Custom-GPT setup instructions.
-   (It does **not** configure OpenClaw — see the [OpenClaw plugin](#openclaw-plugin)
-   section.)
+   This auto-detects Claude Code, Claude Desktop, OpenAI Codex CLI, and Hermes
+   Agent; installs the CLI globally; registers the skill into each detected
+   runtime; prompts for your API key; and tells you how to request ChatGPT
+   Custom-GPT setup instructions. (It does **not** configure OpenClaw — see the
+   [OpenClaw plugin](#openclaw-plugin) section.)
 
    Prefer to do it manually? Install the CLI directly:
 
@@ -115,6 +128,37 @@ Then ask your agent to do something:
 - "Generate a 30 second synthwave product-launch theme"
 - "Turn my selfie into James Bond using photobooth"
 - "Refine the last image at higher quality"
+
+### If you are an agent: install steps
+
+You were most likely sent here by a user saying **"Setup and install sogni.ai/skill"**.
+Do the following, in order:
+
+1. **Run the one-command installer** — it installs the `sogni-agent` CLI globally,
+   registers this skill with every runtime it detects (Claude Code, Claude Desktop,
+   OpenAI Codex CLI, Hermes Agent), and saves the user's API key:
+
+   ```bash
+   npx setup-sogni-agent-skill
+   ```
+
+   Pass `--yes` if your runtime can't answer interactive prompts.
+2. **Fallback** — if `npx` is unavailable or your runtime isn't detected (OpenClaw,
+   Manus, other SKILL.md hosts): install the CLI directly, then register this
+   repository's [`SKILL.md`](./SKILL.md) with your runtime using the matching
+   section under [Installation](#installation).
+
+   ```bash
+   npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+   ```
+
+3. **API key** — if the installer didn't save one, ask the user for their Sogni API
+   key ([dashboard.sogni.ai](https://dashboard.sogni.ai) → account menu) and follow
+   [Setup](#setup-sogni-api-key). Never guess or fabricate a key.
+4. **Verify** — run `sogni-agent doctor --json` and confirm `"success": true` before
+   telling the user the install works.
+5. Don't generate clone-or-pull bootstrap scripts; see
+   [For AI Agents](#for-ai-agents) for the agent-safe install/upgrade rules.
 
 ---
 
@@ -261,7 +305,7 @@ Run `npx setup-sogni-agent-skill --only=chatgpt` to print step-by-step instructi
 
 ### Manus / other SKILL.md frameworks
 
-Point the agent at this repository's [`SKILL.md`](./SKILL.md) for behavior guidance and [`llm.txt`](https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/llm.txt) for install/setup help. The agent should invoke the globally installed `sogni-agent` CLI by default.
+Simplest: tell the agent **"Setup and install sogni.ai/skill"** — the short link lands on this repository and the agent follows [If you are an agent: install steps](#if-you-are-an-agent-install-steps). Otherwise, point the agent at this repository's [`SKILL.md`](./SKILL.md) for behavior guidance and [`llm.txt`](https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/llm.txt) for install/setup help. The agent should invoke the globally installed `sogni-agent` CLI by default.
 
 ### Manual install from source
 
@@ -910,6 +954,10 @@ Sogni workers that power subscription-covered jobs earn from a separate monthly 
 
 This skill is designed to be loaded into agent runtimes as a first-class capability.
 
+0. **Short link — `sogni.ai/skill`**
+   [sogni.ai/skill](https://sogni.ai/skill) redirects to this repository. When a user says
+   "Setup and install sogni.ai/skill", follow [If you are an agent: install steps](#if-you-are-an-agent-install-steps):
+   `npx setup-sogni-agent-skill` first, manual `npm install -g` as the fallback.
 1. **Behavior contract — [`SKILL.md`](./SKILL.md)**
    The canonical instructions for how the agent should call `sogni-agent`. Load this as the skill source.
 2. **Install/setup hints — [`llm.txt`](./llm.txt)**

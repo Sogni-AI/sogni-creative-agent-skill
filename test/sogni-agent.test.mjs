@@ -1412,8 +1412,9 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
     assert.equal(state.lastVideoProject.modelId, model);
     assert.equal(state.lastVideoProject.frames, 124);
     assert.equal(state.lastVideoProject.fps, 24);
+    const usesFrameReference = model.includes('_i2v_') || model.includes('_flf2v_');
     assert.equal(state.lastVideoProject.width, model.includes('ref2va') ? 960 : 1344);
-    assert.equal(state.lastVideoProject.height, model.includes('ref2va') ? 544 : 768);
+    assert.equal(state.lastVideoProject.height, model.includes('ref2va') ? 544 : usesFrameReference ? 704 : 768);
     assert.equal(state.lastVideoProject.steps, undefined);
     assert.equal(state.lastVideoProject.guidance, undefined);
     assert.equal(state.lastVideoProject.sampler, undefined);
@@ -1659,6 +1660,54 @@ test('MiniMax H3 i2v alias uses one first-frame image', () => {
   assert.ok(state.lastVideoProject.referenceImage);
   assert.equal(state.lastVideoProject.referenceImageEnd, undefined);
   assert.equal(state.lastVideoProject.frames, 192);
+});
+
+test('MiniMax H3 pre-resizes the 1472x1024 regression reference within its grid and pixel budget', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-resize-'));
+  const refPath = join(tmp, 'ref-1472x1024.png');
+  await sharp({
+    create: { width: 1472, height: 1024, channels: 3, background: { r: 16, g: 32, b: 48 } }
+  }).png().toFile(refPath);
+
+  const assertValidProject = ({ exitCode, state, stderr }, label) => {
+    assert.equal(exitCode, 0, label);
+    const project = state?.lastVideoProject;
+    assert.ok(project, `${label}: createVideoProject was called`);
+    assert.equal(project.width % 32, 0, `${label}: width grid`);
+    assert.equal(project.height % 32, 0, `${label}: height grid`);
+    assert.ok(project.width <= 1344 && project.height <= 1344, `${label}: per-axis limit`);
+    assert.ok(project.width * project.height <= 1_032_192, `${label}: pixel budget`);
+    assert.equal(project.width, 1216, `${label}: fitted width`);
+    assert.equal(project.height, 832, `${label}: fitted height`);
+    assert.match(stderr, /Pre-resized reference image from 1472x1024/);
+  };
+
+  const local = runCli([
+    '--video',
+    '-m', 'minimax-h3-i2v',
+    '--ref', refPath,
+    '--width', '1344',
+    '--height', '768',
+    '--duration', '8',
+    'A detailed dialogue-ready scene with synchronized sound.'
+  ]);
+  assertValidProject(local, 'local reference');
+
+  const remote = runCli([
+    '--video',
+    '-m', 'minimax-h3-i2v',
+    '--ref', 'https://example.com/sogni-agent-test-reference.png',
+    '--width', '1344',
+    '--height', '768',
+    '--duration', '8',
+    'A detailed dialogue-ready scene with synchronized sound.'
+  ], {
+    SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH: refPath
+  });
+  assertValidProject(remote, 'HTTPS reference');
+  assert.equal(remote.state.lastVideoProject.width, local.state.lastVideoProject.width);
+  assert.equal(remote.state.lastVideoProject.height, local.state.lastVideoProject.height);
 });
 
 test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', () => {

@@ -1530,6 +1530,20 @@ function getImageDimensionsFromBuffer(buffer) {
   return getPngDimensions(buffer) || getJpegDimensions(buffer);
 }
 
+async function getVideoImageDimensionsFromBuffer(buffer) {
+  const parsed = getImageDimensionsFromBuffer(buffer);
+  if (parsed) return parsed;
+  try {
+    const metadata = await sharp(buffer).metadata();
+    if (metadata.width && metadata.height) {
+      return { width: metadata.width, height: metadata.height, type: metadata.format || 'image' };
+    }
+  } catch {
+    // The caller will preserve the wrapper's normal media-validation path.
+  }
+  return null;
+}
+
 const DEFAULT_VIDEO_DIMENSION_RULES = {
   minDimension: 480,
   maxDimension: 1536,
@@ -1554,6 +1568,7 @@ const VIDEO_DIMENSION_MULTIPLE = DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
 // the swap invisible — a 25:14 source becoming 16:9 drifts 0.44%, far under the limit.
 const VIDEO_REF_PRERESIZE_MIN_AREA_GAIN = 1.1;
 const VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT = 0.02;
+const MINIMAX_H3_MAX_VIDEO_PIXELS = 1_032_192;
 
 function isWanVideoModelId(modelId) {
   return typeof modelId === 'string' && modelId.startsWith('wan_');
@@ -1694,10 +1709,24 @@ function videoDurationLimitsLikeWrapper(modelId) {
 // still win (see the video preflight defaults block).
 function videoModelDimensionDefaultsLikeWrapper(modelId) {
   if (String(modelId || '').trim().toLowerCase() === MINIMAX_H3_R2V_TURBO_MODEL_ID) {
-    return { defaultWidth: 960, defaultHeight: 544, maxDimension: 1344, dimensionMultiple: 32 };
+    return {
+      defaultWidth: 960,
+      defaultHeight: 544,
+      minDimension: 32,
+      maxDimension: 1344,
+      dimensionMultiple: 32,
+      maxPixels: MINIMAX_H3_MAX_VIDEO_PIXELS
+    };
   }
   if (isMiniMaxH3Model(modelId)) {
-    return { defaultWidth: 1344, defaultHeight: 768, maxDimension: 1344, dimensionMultiple: 32 };
+    return {
+      defaultWidth: 1344,
+      defaultHeight: 768,
+      minDimension: 32,
+      maxDimension: 1344,
+      dimensionMultiple: 32,
+      maxPixels: MINIMAX_H3_MAX_VIDEO_PIXELS
+    };
   }
   if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
     return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
@@ -1730,15 +1759,19 @@ function wrapperRefVideoDimensionCeiling(modelId) {
 
 function videoDimensionRulesFromDefaults(modelDefaults, modelId) {
   const wrapperMax = wrapperMaxVideoDimension(modelId);
+  const wrapperRules = typeof getWrapperVideoDimensionRules === 'function'
+    ? getWrapperVideoDimensionRules(modelId)
+    : null;
   // Fall back to skill-local dimension rules for models the intel registry does
   // not carry (e.g. HappyHorse), so their model-specific maxDimension and
   // dimensionMultiple are applied instead of the generic 1536 / 16 defaults.
   const localFallback = videoModelDimensionDefaultsLikeWrapper(modelId);
   const configuredMax = modelDefaults?.maxDimension || localFallback?.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
   return {
-    minDimension: modelDefaults?.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension,
+    minDimension: modelDefaults?.minDimension || localFallback?.minDimension || wrapperRules?.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension,
     maxDimension: Math.min(configuredMax, wrapperMax),
-    dimensionMultiple: modelDefaults?.dimensionMultiple || localFallback?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
+    dimensionMultiple: modelDefaults?.dimensionMultiple || localFallback?.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple,
+    maxPixels: modelDefaults?.maxPixels || localFallback?.maxPixels || wrapperRules?.maxPixels || null
   };
 }
 
@@ -1771,7 +1804,15 @@ function predictVideoRefPreResizeDims(refWidth, refHeight, rules = DEFAULT_VIDEO
   const fitted = predictSharpInsideResizeDims(rw, rh, boxWidth, boxHeight);
   if (!fitted) return null;
 
-  return { width: clamp(fitted.width), height: clamp(fitted.height) };
+  let width = clamp(fitted.width);
+  let height = clamp(fitted.height);
+  if (Number.isFinite(rules.maxPixels) && rules.maxPixels > 0 && width * height > rules.maxPixels) {
+    const pixelScale = Math.sqrt(rules.maxPixels / (width * height));
+    width = Math.max(ceilMultiple, Math.floor((width * pixelScale) / multiple) * multiple);
+    height = Math.max(ceilMultiple, Math.floor((height * pixelScale) / multiple) * multiple);
+  }
+
+  return { width, height };
 }
 
 /**
@@ -1795,6 +1836,9 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
   const effectiveMin = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
   const effectiveMax = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
   const effectiveMultiple = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const effectiveMaxPixels = Number.isFinite(rules.maxPixels) && rules.maxPixels > 0
+    ? rules.maxPixels
+    : null;
 
   if (!Number.isFinite(targetWidth) || !Number.isFinite(targetHeight)) {
     return { width: targetWidth, height: targetHeight, adjusted: false };
@@ -1819,6 +1863,13 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
     }
   }
 
+  if (effectiveMaxPixels && targetWidth * targetHeight > effectiveMaxPixels) {
+    const scaleFactor = Math.sqrt(effectiveMaxPixels / (targetWidth * targetHeight));
+    targetWidth = Math.floor(targetWidth * scaleFactor);
+    targetHeight = Math.floor(targetHeight * scaleFactor);
+    adjusted = true;
+  }
+
   const roundedWidth = Math.floor(targetWidth / effectiveMultiple) * effectiveMultiple;
   const roundedHeight = Math.floor(targetHeight / effectiveMultiple) * effectiveMultiple;
   if (roundedWidth !== targetWidth || roundedHeight !== targetHeight) {
@@ -1837,6 +1888,20 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
   }
 
   return { width: targetWidth, height: targetHeight, adjusted };
+}
+
+function videoDimensionsAreIncompatible(dimensions, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
+  if (!dimensions || !Number.isFinite(dimensions.width) || !Number.isFinite(dimensions.height)) return false;
+  const multiple = rules.dimensionMultiple || DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple;
+  const minDimension = rules.minDimension || DEFAULT_VIDEO_DIMENSION_RULES.minDimension;
+  const maxDimension = rules.maxDimension || DEFAULT_VIDEO_DIMENSION_RULES.maxDimension;
+  return dimensions.width % multiple !== 0 ||
+    dimensions.height % multiple !== 0 ||
+    dimensions.width < minDimension ||
+    dimensions.height < minDimension ||
+    dimensions.width > maxDimension ||
+    dimensions.height > maxDimension ||
+    (Number.isFinite(rules.maxPixels) && rules.maxPixels > 0 && dimensions.width * dimensions.height > rules.maxPixels);
 }
 
 function predictSharpInsideResizeDims(refWidth, refHeight, targetWidth, targetHeight) {
@@ -5345,12 +5410,7 @@ if (options.video) {
     ];
     const localRefDims = new Map();
 
-    const isIncompatible = (predicted) => Boolean(predicted) && (
-      predicted.width % videoDimensionRules.dimensionMultiple !== 0 ||
-      predicted.height % videoDimensionRules.dimensionMultiple !== 0 ||
-      predicted.width < videoDimensionRules.minDimension ||
-      predicted.height < videoDimensionRules.minDimension
-    );
+    const isIncompatible = (predicted) => videoDimensionsAreIncompatible(predicted, videoDimensionRules);
 
     for (const ref of references) {
       if (!ref.path || isHttpUrl(ref.path) || !existsSync(ref.path)) continue;
@@ -11509,18 +11569,46 @@ async function main() {
       }
 
       // Pre-resize reference images to model-compatible dimensions if needed for i2v workflow.
-      if (options.videoWorkflow === 'i2v' && imageBuffer && options._needsRefResize) {
-        const dims = getImageDimensionsFromBuffer(imageBuffer);
+      // The earlier preflight can inspect local files, but HTTPS references are downloaded only
+      // here. Re-check the actual buffer so remote and local inputs follow the same grid rules.
+      if (options.videoWorkflow === 'i2v' && imageBuffer) {
+        const dims = await getVideoImageDimensionsFromBuffer(imageBuffer);
         if (dims?.width && dims?.height) {
-          const resizedBuffer = await resizeImageBufferForVideo(imageBuffer, dims.width, dims.height, videoDimensionRules);
-          const resizedDims = getImageDimensionsFromBuffer(resizedBuffer);
-          if (!options.quiet) {
-            console.error(
-              `Pre-resized reference image from ${dims.width}x${dims.height} to ${resizedDims.width}x${resizedDims.height} ` +
-              `(divisible by ${videoDimensionRules.dimensionMultiple}) to ensure i2v compatibility.`
-            );
+          const predicted = predictSharpInsideResizeDims(dims.width, dims.height, options.width, options.height);
+          if (options._needsRefResize || videoDimensionsAreIncompatible(predicted, videoDimensionRules)) {
+            const requested = { width: options.width, height: options.height };
+            const resizedBuffer = await resizeImageBufferForVideo(imageBuffer, dims.width, dims.height, videoDimensionRules);
+            const resizedDims = await getVideoImageDimensionsFromBuffer(resizedBuffer);
+            if (resizedDims?.width && resizedDims?.height) {
+              options.width = resizedDims.width;
+              options.height = resizedDims.height;
+              options._needsRefResize = true;
+              options._effectiveVideoDims = {
+                width: resizedDims.width,
+                height: resizedDims.height,
+                refWidth: dims.width,
+                refHeight: dims.height,
+                requestedWidth: requested.width,
+                requestedHeight: requested.height
+              };
+              if (!options._adjustedVideoDims) {
+                options._adjustedVideoDims = {
+                  reason: 'i2v-ref-pre-resize',
+                  referenceType: 'refImage',
+                  requested,
+                  resizedFrom: predicted,
+                  resizedTo: { width: resizedDims.width, height: resizedDims.height }
+                };
+              }
+            }
+            if (!options.quiet && resizedDims?.width && resizedDims?.height) {
+              console.error(
+                `Pre-resized reference image from ${dims.width}x${dims.height} to ${resizedDims.width}x${resizedDims.height} ` +
+                `(divisible by ${videoDimensionRules.dimensionMultiple}) to ensure i2v compatibility.`
+              );
+            }
+            imageBuffer = resizedBuffer;
           }
-          imageBuffer = resizedBuffer;
         }
       }
       if (options.videoWorkflow === 'i2v' && endImageBuffer && options._needsRefEndResize) {

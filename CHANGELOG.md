@@ -1,3 +1,18 @@
+# [3.33.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.32.0...v3.33.0) (2026-08-24)
+
+
+### Bug Fixes
+
+* **deps:** align model-native prompt runtime packages ([a013381](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/a013381c62e87158070d0a238d4908ceabc60f05))
+* **video:** keep H3 references on the valid grid ([cd5c0f1](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/cd5c0f187fd175291de8e2a2bee7559fdf35dd94))
+* **video:** pretrim H3 R2V audio windows ([#31](https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/31)) ([1447ef5](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/1447ef5f7314c5f11d9f2ae8648dddccfef3a90d))
+* **video:** quote H3 R2V reference images ([d9f20e9](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d9f20e958f1147fe3f58ca4093ad4c84aa9844c3))
+
+
+### Features
+
+* **prompts:** document model-native authoring ([9cab39c](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/9cab39cc05f62e1788f807e656fed99d75913977))
+
 # [3.32.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.31.0...v3.32.0) (2026-08-19)
 
 

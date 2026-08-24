@@ -10386,8 +10386,15 @@ async function runMultiAngleFlow(client, log) {
   }
 }
 
+function miniMaxH3R2vReferenceImageCount() {
+  if (!isMiniMaxH3R2vModel(options.model)) return undefined;
+  return (options.refImage ? 1 : 0)
+    + (Array.isArray(options.contextImages) ? options.contextImages.length : 0);
+}
+
 function buildVideoEstimateParams({ tokenType, steps }) {
   const isSeedanceVideo = isSeedanceModel(options.model);
+  const referenceImageCount = miniMaxH3R2vReferenceImageCount();
   const params = {
     modelId: options.model,
     width: options.width,
@@ -10396,7 +10403,8 @@ function buildVideoEstimateParams({ tokenType, steps }) {
     numberOfMedia: options.count,
     tokenType,
     ...(Number.isFinite(steps) && steps > 0 ? { steps } : {}),
-    ...(options.frames ? { frames: options.frames } : { duration: options.duration })
+    ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
+    ...(referenceImageCount !== undefined ? { referenceImageCount } : {})
   };
 
   if (isSeedanceVideo && options.refVideo) {

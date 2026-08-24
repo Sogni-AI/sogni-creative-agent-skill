@@ -4259,6 +4259,41 @@ test('seedance v2v cost estimation marks video input and omits steps', () => {
   assert.equal(state?.lastEstimateVideoCost?.steps, undefined);
 });
 
+test('MiniMax H3 r2v estimates carry actual image counts without changing other estimate shapes', () => {
+  const standard = runCli([
+    '--video',
+    '--estimate-video-cost',
+    '--json',
+    '-m', 'minimax-h3-r2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    ...Array.from({ length: 5 }, () => ['-c', SCREENSHOT_FIXTURE]).flat()
+  ]);
+  assert.equal(standard.exitCode, 0);
+  assert.equal(standard.state?.lastEstimateVideoCost?.modelId, 'minimax-h3-ref2va-fp8_r2v');
+  assert.equal(standard.state?.lastEstimateVideoCost?.referenceImageCount, 6);
+
+  const turbo = runCli([
+    '--video',
+    '--estimate-video-cost',
+    '--json',
+    '-m', 'minimax-h3-r2v-turbo',
+    ...Array.from({ length: 9 }, () => ['-c', SCREENSHOT_FIXTURE]).flat()
+  ]);
+  assert.equal(turbo.exitCode, 0);
+  assert.equal(turbo.state?.lastEstimateVideoCost?.modelId, 'minimax-h3-ref2va-fp8_r2v_turbo');
+  assert.equal(turbo.state?.lastEstimateVideoCost?.referenceImageCount, 9);
+
+  const textToVideo = runCli([
+    '--video',
+    '--estimate-video-cost',
+    '--json',
+    '-m', 'minimax-h3-t2v'
+  ]);
+  assert.equal(textToVideo.exitCode, 0);
+  assert.equal(textToVideo.state?.lastEstimateVideoCost?.modelId, 'minimax-h3-fl2va-fp8_t2v');
+  assert.equal(Object.hasOwn(textToVideo.state.lastEstimateVideoCost, 'referenceImageCount'), false);
+});
+
 test('LTX 2.3 video dimensions follow wrapper 2048px cap and 64-multiple rules', () => {
   const { exitCode, stdout } = runCli([
     '--json',

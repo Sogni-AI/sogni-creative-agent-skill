@@ -260,7 +260,8 @@ no negative prompt and no ControlNet.
   (`seedance2-5-ia2v`), and multimodal reference / video-to-video including
   video editing and extension (`seedance2-5-v2v`).
 - **Reference budget**: up to 30 image / 10 video / 10 standalone audio refs,
-  30 reference files total — much larger than the 2.0 family's 9 / 3 / 3 / 12.
+  50 reference files total across those per-modality caps — much larger than
+  the 2.0 family's 9 / 3 / 3 / 12.
   Per-model caps come from `@sogni-ai/sogni-protocol`'s
   `seedance-reference-limits` catalog.
 - **Prompting**: the same `@Image1` / `@Video1` / `@Audio1` loose-reference

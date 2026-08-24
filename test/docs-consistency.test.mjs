@@ -228,6 +228,58 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
   }
 });
 
+test('prompt-only video authoring requires a registered native contract', () => {
+  const skill = read('SKILL.md');
+  const prompting = read('references/video-prompting.md');
+
+  for (const text of [skill, prompting]) {
+    assert.match(text, /any image or video model\/workflow|every video model and workflow/i);
+    assert.match(text, /prompt text is the final deliverable|requested text is the final\s+deliverable/i);
+    assert.match(text, /does not authorize\s+media generation|Do not invoke the CLI/i);
+    assert.match(text, /no validated (?:native )?contract|has no validated (?:native )?contract/i);
+    assert.match(text, /never substitute a generic prompt or another model's (?:format|syntax)/i);
+    assert.match(text, /ordered-field (?:contract|document)/i);
+    assert.match(text, /Do not invoke the CLI|without invoking\s+the CLI or hosted API/i);
+    assert.match(text, /Markdown/);
+    assert.match(text, /follow-up\s+question/);
+  }
+});
+
+test('prompt-only image authoring keeps model families and operations distinct', () => {
+  const skill = read('SKILL.md');
+  const prompting = read('references/image-prompting.md');
+  const hermesPrompting = read('.agents/skills/sogni-creative-agent-skill/references/image-prompting.md');
+
+  assert.equal(prompting, hermesPrompting, 'Hermes image-prompting reference drifted from the canonical guide');
+  assert.match(skill, /image-prompting\.md/);
+  assert.match(skill, /exact target|named model\/version/i);
+  assert.match(skill, /never substitute a generic prompt or another model's format/i);
+  for (const family of ['SD 1.5', 'SDXL', 'FLUX', 'Krea 2', 'Qwen Image 2512', 'Z-Image', 'GPT Image 2']) {
+    assert.match(prompting, new RegExp(family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  }
+  assert.match(prompting, /positive_prompt:[\s\S]*negative_prompt:/i);
+  assert.match(prompting, /FLUX\.2 has no negative-prompt field/i);
+  assert.match(prompting, /Turbo: prompt text only/i);
+  assert.match(prompting, /generation-only selector[\s\S]*must not\s+silently accept an edit request/i);
+  assert.match(prompting, /typed model and operation metadata/i);
+});
+
+test('Seedance 2.5 docs keep the 2.0 grammar and publish only its capability overrides', () => {
+  const models = read('references/models.md');
+  const hosted = read('references/hosted-api.md');
+  const hermesModels = read('.agents/skills/sogni-creative-agent-skill/references/models.md');
+  const hermesHosted = read('.agents/skills/sogni-creative-agent-skill/references/hosted-api.md');
+
+  assert.equal(models, hermesModels, 'Hermes model reference drifted from the canonical guide');
+  assert.equal(hosted, hermesHosted, 'Hermes hosted reference drifted from the canonical guide');
+  for (const text of [models, hosted]) {
+    assert.match(text, /30 image\s*\/\s*10 video\s*\/\s*10 (?:standalone )?audio/i);
+    assert.match(text, /50 (?:total|reference files total)/i);
+  }
+  assert.match(models, /4-30 s per clip/i);
+  assert.match(models, /same `@Image1`[\s\S]*grammar[\s\S]*as Seedance 2\.0/i);
+});
+
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {
   const lineCount = read('SKILL.md').split('\n').length;
   assert.ok(lineCount <= 500,

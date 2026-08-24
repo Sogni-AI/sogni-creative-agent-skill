@@ -93,6 +93,9 @@ sogni-agent-hermes --help
   one render: read [krea2-loras.md](references/krea2-loras.md).
 - Video prompts, reference roles, LTX, WAN, MiniMax, Seedance, and HappyHorse:
   read [video-prompting.md](references/video-prompting.md).
+- Prompt-only image deliverables for SD/SDXL, FLUX/Chroma, Krea 2, Qwen,
+  Z-Image, GPT Image, and model-specific editing: read
+  [image-prompting.md](references/image-prompting.md).
 - Local video cutting, stitching, overlays, subtitles, audio remixing, and
   verification: read [video-editing.md](references/video-editing.md).
 - Saved identities, reusable assets, memory, and personality: read

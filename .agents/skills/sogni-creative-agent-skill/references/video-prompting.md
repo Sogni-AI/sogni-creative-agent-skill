@@ -12,6 +12,16 @@ tags, and mode-specific alignment preamble. Do not carry LTX's
 single-paragraph, positive-only, no-markup rule into an H3 prompt. Pick the
 section that matches the model you are about to invoke.
 
+If the creator asks only for a prompt, the requested text is the final
+deliverable: author it in the selected model's native shape without invoking
+the CLI or hosted API. A request to generate/write a prompt does not authorize
+media generation. A compound request that also asks to render or make the
+video now does authorize execution after the prompt is shaped. This applies to
+every video model and workflow, not only the families documented below. The
+target model and mode are required. If either is omitted, ask for it. If that
+exact model/mode has no validated native contract, say so and request the exact
+specification; never substitute a generic prompt or another model's syntax.
+
 ## LTX-2.x Prompt Rule
 
 Whenever the chosen video model is LTX-2.5 (or an LTX-2.3 rollback model), do
@@ -85,6 +95,12 @@ Write every H3 prompt using MiniMax's official structured rewrite contract. Do
 not substitute an unstructured prompt for the required fields. The field names,
 order, shot notation, alignment preamble, reference labels, and dialogue markup
 are part of the model contract.
+
+For prompt-only authoring, return only the applicable ordered-field document.
+Do not wrap it in Markdown, add a title or preamble, append generic prompting
+tips, explain the format, offer to generate the video, or ask a follow-up
+question after the contract. Those additions make the text invalid as direct
+H3 input.
 
 Applies to standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v`, and
 `minimax-h3-flf2v`; their 4-step `minimax-h3-turbo`,

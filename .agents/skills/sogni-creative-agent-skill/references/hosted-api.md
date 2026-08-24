@@ -178,7 +178,7 @@ When `--video -m seedance2`, `-m seedance2-mini`, `-m seedance2-fast`, or
   just to attach a local loose-reference image. The 2.0 family supports up to
   9 image refs, 3 video refs, 3 audio refs, and 12 total reference assets per
   request; `seedance2-5` raises the caps to 30 image / 10 video / 10 audio /
-  30 total (canonical per-model caps come from `SEEDANCE_REFERENCE_LIMITS` /
+  50 total (canonical per-model caps come from `SEEDANCE_REFERENCE_LIMITS` /
   `validateSeedanceReferenceCounts()` in
   `@sogni-ai/sogni-intelligence-client/tools`).
 

@@ -9,6 +9,7 @@ const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 
 const mirroredReferences = [
   'hosted-api.md',
+  'image-prompting.md',
   'krea2-loras.md',
   'loop-maker.md',
   'models.md',

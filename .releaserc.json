@@ -42,6 +42,7 @@
           "CHANGELOG.md",
           "version.mjs",
           "SKILL.md",
+          ".agents/skills/sogni-creative-agent-skill/SKILL.md",
           ".claude-plugin/plugin.json",
           ".codex-plugin/plugin.json",
           "openclaw.plugin.json",

@@ -2549,21 +2549,21 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "enhance_prompt_v1",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "toolName": "enhance_prompt",
-        "baseDescription": "enhance_prompt enhances or adapts a source prompt into a model-ready image, video, music, or\nedit prompt. Use for prompt expansion and model-specific prompt preparation when the caller\nhas a rough idea, a revision request, or a prompt that needs to be tuned for a specific\ndownstream model or generation tool.\n\nDo not use enhance_prompt for full creative-writing artifacts. Use compose_script for\nscripts, storyboards, ad concepts, trailers, and talking-head plans. Use compose_lyrics for\nsong lyrics and compose_instrumental for instrumental music structure. Do not use\nenhance_prompt to plan a multi-step workflow — use compose_workflow or\ncompose_workflow_template instead.\n\nenhance_prompt returns prompt text. The caller is responsible for handing the enhanced\nprompt to the chosen downstream generation tool (generate_image, edit_image,\ngenerate_video, animate_photo, sound_to_video, video_to_video, generate_music, etc.).",
+        "baseDescription": "enhance_prompt authors a directly runnable image, video, or image-edit prompt in the native\nformat of one exact active destination model. Use it when the requested text deliverable is\nexplicitly a prompt for a named media model, including a commercial prompt. The caller must\nprovide destination_model and target_output; unknown, sunset, and omitted models fail closed.\n\nDo not use enhance_prompt for model-neutral prompts, music composition, lyrics, screenplays,\nstoryboards, treatments, ad scripts, or multi-step workflow plans. Use compose_script for\ncreative-writing artifacts, compose_lyrics or compose_instrumental for music, and\ncompose_workflow or compose_workflow_template for workflows.\n\nenhance_prompt returns prompt text only. The caller is responsible for handing it to the\nmatching downstream generation tool.",
         "parameterDocs": {
             "prompt": "The source prompt, rough idea, or prompt revision request to enhance.",
-            "target_output": "The kind of prompt artifact to produce. One of image_prompt, video_prompt, music_prompt, edit_prompt, model_prompt, or general_prompt.",
-            "destination_model": "Optional destination model selector, such as seedance2, ltx25, ltx23, wan22, gpt-image-2, or sdxl.",
-            "destination_tool": "Optional downstream generation tool, such as generate_image, edit_image, generate_video, animate_photo, sound_to_video, video_to_video, or generate_music.",
-            "prompting_type": "Optional image-prompting family when producing an image prompt. One of flux, sdxl, sd15, pony, fast, sd3, editing, or video.",
-            "model_title": "Optional human-readable target model name for image prompt guidance.",
+            "target_output": "Required model-specific artifact kind: image_prompt, video_prompt, edit_prompt, or model_prompt. Use model_prompt only when destination_model identifies the modality.",
+            "destination_model": "Required exact active model selector. Unknown and sunset models fail closed.",
+            "destination_tool": "Optional matching downstream generation tool for the authored prompt.",
+            "prompting_type": "Deprecated compatibility metadata. It never selects or overrides the prompt grammar; destination_model is authoritative.",
+            "model_title": "Deprecated compatibility label. It never selects or overrides the prompt grammar; destination_model is authoritative.",
             "style_prompt": "Optional current style, brand, or prompt context to complement without repeating.",
             "prompt_mode": "Optional model prompt adaptation mode. One of auto, preserve, expand, compress, validate, or payload.",
-            "duration_seconds": "Requested runtime in seconds (1-300) when enhancing a video or music prompt.",
+            "duration_seconds": "Requested runtime in seconds (1-300) when authoring a video prompt.",
             "aspect_ratio": "Optional target aspect ratio, such as 16:9, 9:16, 1:1, 4:5, or 21:9.",
-            "assets": "Optional available assets (max 12) the enhanced prompt may reference. Each entry needs media_type (image/video/audio) and may include id, label, role, and url.",
+            "assets": "Optional available assets (schema max 50) the prompt may reference. The exact destination model applies smaller per-modality and total limits.",
             "constraints": "Optional production, brand, model, or user constraints to preserve."
         }
     },
@@ -2592,9 +2592,9 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "compose_script_v1",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "toolName": "compose_script",
-        "baseDescription": "compose_script composes scripts, storyboards, video prompts, ad concepts, trailers, social\nshorts, campaign beats, and talking-head plans. Use for creative writing artifacts where\nthe user wants prose, scenes, beats, or a script-shaped deliverable.\n\nDo not use compose_script for song lyrics — use compose_lyrics. Do not use it for simple\nprompt expansion — use enhance_prompt. Do not use it to plan a runnable multi-step\nworkflow — use compose_workflow or compose_workflow_template.\n\ncompose_script returns a creative-writing deliverable. When the script is meant to feed a\ndownstream video tool, pair it with destination_tool/destination_model so the output is\ntuned for that pipeline; the caller still has to invoke the generation tool itself.",
+        "baseDescription": "compose_script composes scripts, screenplays, storyboards, treatments, ad concepts, trailers,\nsocial shorts, campaign beats, and talking-head plans. Use it for prose, scenes, beats, or\nother script-shaped creative-writing deliverables.\n\nWhen the user explicitly asks for a directly runnable prompt for a named image or video\nmodel, use enhance_prompt instead, even when the subject is a commercial. Do not use\ncompose_script for song lyrics, instrumental composition, simple prompt authoring, or a\nrunnable multi-step workflow.\n\ncompose_script returns a creative-writing deliverable. When that deliverable will later feed\na video pipeline, destination_tool and destination_model may record the intended handoff;\nthey do not turn the result into the model's native prompt contract.",
         "parameterDocs": {
             "brief": "The creative writing brief, story idea, product concept, video idea, or revision request.",
             "script_type": "The kind of script or creative writing artifact to produce. One of video_prompt, screenplay, storyboard, ad_script, trailer, social_short, talking_head, campaign, or revision.",
@@ -2690,23 +2690,6 @@ export function createPublicSkillDefaultContractRuntime(input = {}) {
   });
 }
 
-import { resolveLtx25WorkflowModelForQuality as resolveUpstreamLtx25WorkflowModelForQuality, selectDefaultVideoModel as selectUpstreamDefaultVideoModel, } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
-function forceLtx25DistilledModel(modelId) {
-    return modelId?.startsWith('ltx25-') && modelId.endsWith('_dev')
-        ? `${modelId.slice(0, -'_dev'.length)}_distilled`
-        : modelId;
-}
-/**
- * Keep every public LTX 2.5 quality tier on the release-validated Distilled
- * workflows even while older intelligence-client installations still map Pro
- * to the unpublished Dev recipe.
- */
-export function resolveLtx25WorkflowModelForQuality(workflow, qualityTier) {
-    return forceLtx25DistilledModel(resolveUpstreamLtx25WorkflowModelForQuality(workflow, qualityTier));
-}
-export function selectDefaultVideoModel(workflow, opts = {}, config) {
-    return forceLtx25DistilledModel(selectUpstreamDefaultVideoModel(workflow, opts, config));
-}
 // Moved to @sogni-ai/sogni-intelligence-client/skill-runtime-source in Phase 8.4 follow-up.
 // This file is kept as a thin re-export so existing internal `testing/`
 // callers keep working. New code should import from the public mid-tier:

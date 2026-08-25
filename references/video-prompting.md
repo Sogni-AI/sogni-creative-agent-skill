@@ -266,6 +266,15 @@ The two children (S1,S2) shout together, <d>[English] Wait for us!</d>
   shot`, `remains audible across the transition`).
 - `<cutoff>` marks speech that is truncated by the end of the video.
 
+**Tokenizer tokens versus prompt markup.** The open-weights H3 tokenizer also
+reserves the learned tokens `<d>`, `</d>`, `<|cutoff|>`,
+`<|lyrics_start|>`, `<|lyrics_end|>`, `<|caption_start|>`, and
+`<|caption_end|>`. Inference integrations must register all seven exactly as
+released. Prompt authors should still follow MiniMax's public writing guide:
+emit `<d>…</d>`, `<scenetrans>`, and the plain `<cutoff>` spelling described
+above. The vertical-bar lyrics, caption, and cutoff tokens are tokenizer
+internals, not documented author-facing prompt markup.
+
 **Shot markers and the camera vocabulary.** In the IR format, `[Shot 1]` opens
 with the overall style and initial composition and takes no timestamp; every
 later shot opens with a strictly increasing cut time — `[Shot 2] At 00:03.500,

@@ -267,11 +267,23 @@ no negative prompt and no ControlNet.
 - **Prompting**: the same `@Image1` / `@Video1` / `@Audio1` loose-reference
   grammar and the same mutually exclusive dedicated-frame vs loose-reference
   modes as Seedance 2.0.
+- **Task contract**: Seedance 2.5 first/last-frame, edit, and extend requests
+  use adaptive output ratio. The CLI sends typed task metadata so
+  `seedance2-5-v2v` defaults to edit; pass `--seedance-task-type extend` for
+  continuation or `reference` when a video is only a loose creative reference.
+  Edit requires `--duration` equal to the source video's duration. Extend uses
+  the requested 4-30 second continuation duration. For edit/extend, select only
+  `--target-resolution 480|720`; the provider inherits `@Video1`'s aspect ratio.
+  Untyped automatic classification is rejected before billing because it can
+  fail asynchronously after inferring the task.
+- **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
+  its only loose reference.
 
-The pinned `@sogni-ai/sogni-intelligence-client` 3.15.1 runtime recognizes
-`seedance-2-5`, so the direct CLI applies Seedance's fixed 24 fps, 4-30 s
-duration window, larger reference caps, reference-mode exclusivity, and HTTPS
-reference forwarding before dispatch.
+The pinned `@sogni-ai/sogni-intelligence-client` 3.22.0 runtime recognizes
+`seedance-2-5`, and the package override pins `@sogni-ai/sogni-client` 5.19.0
+for typed task transport. The direct CLI applies Seedance's fixed 24 fps,
+4-30 s duration window, larger reference caps, reference-mode exclusivity, and
+HTTPS reference forwarding before dispatch.
 
 ## HappyHorse 1.1 models
 

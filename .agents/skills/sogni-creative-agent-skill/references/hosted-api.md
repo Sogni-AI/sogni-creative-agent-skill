@@ -190,8 +190,18 @@ uploaded to Sogni media storage automatically and forwarded as HTTPS URLs; only
 be HTTPS URLs (use `--api-chat` / `--durable-chat` when you need to attach
 several local audio or video files in one request). Seedance accepts public
 HTTPS image, video, and audio references that pass the CLI URL safety checks;
-localhost and private-network URLs are rejected before forwarding. Audio
-references must be paired with an image or video reference.
+localhost and private-network URLs are rejected before forwarding. Seedance 2.0
+audio references must be paired with an image or video reference; Seedance 2.5
+`reference` accepts audio by itself.
+
+For direct Seedance 2.5 loose-reference operations, use
+`--seedance-task-type reference|edit|extend`. Edit and extend require
+`--ref-video`, reject `--ref`/`--ref-end` frame anchors, and inherit the source
+video's aspect ratio. Edit requires `--duration` equal to the source duration;
+extend uses the selected 4-30 second continuation duration. On hosted semantic
+tool surfaces, express the same intent with `generate_video`, `video_to_video`,
+or `extend_video`; do not pass the direct SDK's `seedanceTaskType` routing field
+as a hosted tool argument.
 
 ## Models, replays, and contract debugging
 

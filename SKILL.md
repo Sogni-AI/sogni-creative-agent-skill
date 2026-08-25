@@ -184,15 +184,24 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
+# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p).
+# Edit inherits @Video1's ratio and uses its source duration; extend inherits
+# the ratio but uses the requested continuation duration.
+sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1; preserve its subject and timing"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
+
 # MiniMax H3 (fixed 24fps, native stereo audio + dialogue; use the official
 # ordered-field prompt contract — see references/video-prompting.md).
-# Standard H3 has four modes; 4-step H3 Turbo covers all four.
+# Standard and 4-step Turbo each cover T2VA, I2VA, L2VA, FL2VA, and Ref2VA.
 sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-i2v --ref-end last.png --duration 8 "<L2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a "<six-field Ref2VA prompt>"
 sogni-agent --video -m minimax-h3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-i2v-turbo --ref-end last.png --duration 8 "<L2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v-turbo -w 960 -h 544 --ref identity.png -c wardrobe.png --ref-audio voice.m4a "<six-field Ref2VA prompt>"
 
@@ -232,6 +241,7 @@ sogni-agent doctor --json
 | `--video`, `--music` | Generate video / music instead of image | - |
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v | - |
+| `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
 | `--generate-audio`, `--no-generate-audio` | Keep or strip MiniMax H3's jointly generated audio track | keep |
 | `--sampler <name>` | Image/music sampler; FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo: `euler` only | FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |
@@ -290,11 +300,11 @@ tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
-MiniMax H3 is an explicit model choice, not a universal default. All **eight current H3 modes** are available in the Creative Agent Skill and direct Sogni API: four standard workflows and four Turbo workflows. Use `-m minimax-h3` for text-to-video, `-m minimax-h3-i2v --ref A` for first-frame animation, `-m minimax-h3-flf2v --ref A --ref-end B` for a first/last-frame transition, or explicitly select `-m minimax-h3-r2v` for a loose reference set. Use `-m minimax-h3-turbo` for automatic Turbo t2v/i2v/flf2v routing and explicit `--workflow r2v`, or select `minimax-h3-t2v-turbo`, `minimax-h3-i2v-turbo`, `minimax-h3-flf2v-turbo`, or `minimax-h3-r2v-turbo` directly. Turbo is the fixed 4-step execution path; standard H3 uses 20 steps. Do not claim a quality or speed multiple without current production-parity measurements and manual output review.
+MiniMax H3 is an explicit model choice, not a universal default. Eight hosted selectors expose **ten prompt/input shapes**: T2VA, I2VA, L2VA, FL2VA, and Ref2VA in standard and Turbo form. L2VA deliberately reuses the I2V selector: `-m minimax-h3-i2v --ref-end B` (or `minimax-h3-i2v-turbo`) supplies only the closing frame; never invent an `minimax-h3-l2v` model key. Use `-m minimax-h3-i2v --ref A` for a first frame, `-m minimax-h3-flf2v --ref A --ref-end B` for both endpoints, and explicitly select `-m minimax-h3-r2v` for loose references. `-m minimax-h3` and `-m minimax-h3-turbo` infer the three endpoint shapes from `--ref`/`--ref-end`. Turbo is the fixed 4-step execution path; standard H3 uses 20 steps. Do not claim a quality or speed multiple without current production-parity measurements and manual output review.
 
 H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (repeat `--ref-video`), and **3 audio clips** (repeat `--ref-audio`), with **12 files total** and at least one visual reference (image or video); it is never inferred. A video can be the only visual input, while audio alone is invalid. Address references as `<Picture 1>`, `<Video 1>`, and `<Audio 1>` in per-type submission order, give every reference one job, and never use `--ref-end` for r2v. H3 generates picture and **native 32 kHz stereo audio jointly** at fixed 24 fps, so dialogue, foley, and score must be described in the prompt. `--no-generate-audio` strips that generated track from the delivered file; it does not skip audio generation. Frames snap to the `124 + n×17` grid (5.17-15.08 s). Standard and FL2VA Turbo default to `1344x768`; Ref2VA Turbo defaults to `960x544`, with other supported 32 px-grid shapes allowed. Send no steps, guidance, scheduler, or negative prompt. Standard H3 accepts no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed; direct FL2VA A/B tests may use `euler`, `er_sde`, or `sa_solver`. Ref2VA Turbo follows its exact upstream Euler/simple recipe and accepts only `--sampler euler`. It is the 768p-class open-weights release — do not claim 2K. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V is reserved for workers above 40 GB.
 
-**H3 requires MiniMax's official ordered-field prompt contract.** Base and Turbo T2V/I2V/FLF2V use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for I2V or FLF2V. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and exact dialogue as `<d>[Language] words</d>`; use `<scenetrans>` at both connecting points when one line crosses a cut and `<cutoff>` only when the video ending truncates speech. Do not substitute quoted prose, bracketed timecode lists, or tokenizer-internal `<|...|>` markers. Ref2VA uses its separate six-field contract. Negative direction belongs inside the structured prompt because there is no negative-prompt field. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
+**H3 requires MiniMax's official ordered-field prompt contract.** Base and Turbo T2V/I2V/L2V/FLF2V use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for endpoint-conditioned modes. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and dialogue as `<d>[Language] words</d>`. Preserve supplied dialogue exactly; author one concise line only when the user explicitly asks for speech/dialogue/lyrics without supplying words, and otherwise invent no speech. Use `<scenetrans>` at both connecting points when one line crosses a cut and `<cutoff>` only when the video ending truncates speech. Do not substitute quoted prose, bracketed timecode lists, or tokenizer-internal `<|...|>` markers. Ref2VA uses its separate six-field contract and exact task/retention vocabulary; loose video references do not promise editing or continuation. Negative direction belongs inside the structured prompt because there is no negative-prompt field. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
 
 For an H3 prompt-only request, the general prompt-authoring rule above requires returning only the applicable ordered-field contract. The fields themselves are the directly runnable deliverable; do not wrap them in commentary.
 

@@ -95,9 +95,9 @@ import {
 import {
   HAPPYHORSE_REFERENCE_LIMITS,
   HappyHorseReferenceLimitError,
-  SEEDANCE_REFERENCE_LIMITS,
   SeedanceReferenceLimitError,
   getHappyHorseReferenceLimits,
+  getSeedanceReferenceLimits,
   happyhorseTerminalGenerationFailurePayloadFromError,
   happyhorseTerminalPolicyPayloadFromError,
   seedanceTerminalGenerationFailurePayloadFromError,
@@ -1588,6 +1588,13 @@ function isGptImage2ModelSelection(modelId) {
   return ['gpt-image-2', 'gptimage2', 'gpt-image', 'gpt_image_2'].includes(normalized);
 }
 
+const SEEDANCE_TASK_TYPES = new Set(['reference', 'edit', 'extend']);
+
+function isSeedance25ModelSelectionLocal(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
+  return normalized.startsWith('seedance-2-5') || normalized.startsWith('seedance2-5');
+}
+
 function normalizeMusicModelId(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
@@ -1688,6 +1695,7 @@ function getMaxContextImages(modelId) {
 
 function videoDurationLimitsLikeWrapper(modelId) {
   if (isMiniMaxH3Model(modelId)) return { ...MINIMAX_H3_DURATION_LIMITS };
+  if (isSeedance25ModelSelectionLocal(modelId)) return { min: 4, max: 30 };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
   if (isLtxFamilyModel(modelId) || isWanAnimateVideoModelId(modelId)) return { min: 1, max: 20 };
@@ -2111,7 +2119,12 @@ const DR34ML4Y_SUPPORTED_MODEL_IDS = new Set([
   LTX23_10EROS_MODEL_ID
 ]);
 
-function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = false) {
+function resolveSkillVideoModelAlias(
+  modelId,
+  workflow = null,
+  hasStartFrame = false,
+  hasEndFrame = false,
+) {
   const normalized = String(modelId || '').trim().toLowerCase();
   if (normalized === 'ltx25' || normalized === 'ltx25-t2v') {
     const mode = ['i2v', 'a2v', 'ia2v', 'v2v'].includes(workflow) ? workflow : 't2v';
@@ -2124,7 +2137,9 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
   if (normalized === 'minimax-h3' && workflow) {
     if (workflow === 'r2v') return MINIMAX_H3_R2V_MODEL_ID;
     if (workflow === 'i2v') {
-      return hasEndFrame ? 'minimax-h3-fl2va-fp8_flf2v' : 'minimax-h3-fl2va-fp8_i2v';
+      return hasStartFrame && hasEndFrame
+        ? 'minimax-h3-fl2va-fp8_flf2v'
+        : 'minimax-h3-fl2va-fp8_i2v';
     }
     return 'minimax-h3-fl2va-fp8_t2v';
   }
@@ -2140,7 +2155,7 @@ function resolveSkillVideoModelAlias(modelId, workflow = null, hasEndFrame = fal
       return MINIMAX_H3_R2V_TURBO_MODEL_ID;
     }
     if (workflow === 'i2v') {
-      return hasEndFrame
+      return hasStartFrame && hasEndFrame
         ? 'minimax-h3-fl2va-fp8_flf2v_turbo'
         : 'minimax-h3-fl2va-fp8_i2v_turbo';
     }
@@ -2482,6 +2497,7 @@ const options = {
   musicShift: null,
   video: false,
   videoWorkflow: null,
+  seedanceTaskType: null,
   fps: 16,
   duration: 5,
   frames: null,
@@ -2661,6 +2677,7 @@ const cliSet = {
   musicShift: false,
   video: false,
   workflow: false,
+  seedanceTaskType: false,
   fps: false,
   duration: false,
   frames: false,
@@ -2944,6 +2961,11 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.videoWorkflow = raw;
     cliSet.workflow = true;
+  } else if (arg === '--seedance-task-type') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.seedanceTaskType = raw.trim().toLowerCase();
+    cliSet.seedanceTaskType = true;
   } else if (arg === '--fps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -3696,17 +3718,18 @@ Music Options:
 Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
+  --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
   --fps <num>           Frames per second (model default unless set)
-  --duration <sec>      Duration in seconds (default: 5)
+  --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480 or 720)
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
   --ref <path|url>      Reference image for video (start frame; Picture 1 on H3 r2v)
   --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
                          defaults to the LTX-2.5 i2v first/last-frame workflow
-                         (last frame on Seedance)
+                         (last frame on Seedance; L2VA endpoint on MiniMax H3 i2v)
   --ref-audio <path|url> Audio reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance; H3 r2v uploads local/remote files.
@@ -3928,14 +3951,14 @@ image-only R2V need 32GB-class workers; video-conditioned R2V needs above 40GB.
 Prompts use MiniMax's exact ordered-field contracts and [Shot N] notation; see
 references/video-prompting.md "MiniMax H3 Prompting". No negative prompt field:
 state negatives in the structured prompt.):
-  minimax-h3                        Text-to-video (also accepts minimax-h3-t2v); --ref/--ref-end pick i2v/flf2v
-  minimax-h3-i2v                    Image-to-video from a single first-frame image (--ref)
+  minimax-h3                        Text-to-video; --ref selects I2VA, --ref-end L2VA, and both FL2VA
+  minimax-h3-i2v                    I2VA from --ref, or L2VA from a closing frame supplied as --ref-end
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
   minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
                                      (9 images / 3 videos / 3 audios / 12 files total; requires an image or video)
-  minimax-h3-turbo                  4-step Turbo; --ref/--ref-end select i2v/flf2v
+  minimax-h3-turbo                  4-step Turbo; --ref selects I2VA, --ref-end L2VA, and both FL2VA
   minimax-h3-t2v-turbo              4-step Turbo text-to-video
-  minimax-h3-i2v-turbo              4-step Turbo image-to-video (--ref)
+  minimax-h3-i2v-turbo              4-step Turbo I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-turbo            4-step Turbo first-frame -> last-frame (--ref plus --ref-end)
   minimax-h3-r2v-turbo              4-step Ref2VA Turbo with loose image/video/audio references
                                      (upstream default: 960x544, Euler/simple)
@@ -4497,8 +4520,9 @@ if (options.video) {
     }
   }
 
-  // MiniMax H3 has four concrete modes. The FL2VA checkpoint covers t2v, i2v,
-  // and first/last-frame (represented by the CLI's i2v workflow); Ref2VA is a
+  // MiniMax H3 has four concrete worker selectors and five prompt shapes. The
+  // FL2VA checkpoint covers t2v, first-frame i2v, last-frame-only l2v, and
+  // first/last-frame (represented by the CLI's i2v workflow); Ref2VA is a
   // separate r2v checkpoint and is never inferred from loose references alone.
   // Selecting minimax-h3-r2v or explicitly passing --workflow r2v is required.
   if (isMiniMaxH3ModelSelectionLocal(options.model)) {
@@ -4518,6 +4542,7 @@ if (options.video) {
     options.model = resolveSkillVideoModelAlias(
       options.model,
       options.videoWorkflow,
+      Boolean(options.refImage),
       Boolean(options.refImageEnd)
     );
   }
@@ -4562,7 +4587,12 @@ if (options.video) {
   }
   if (options.model) {
     options.model = resolveVideoModelAlias(
-      resolveSkillVideoModelAlias(options.model, options.videoWorkflow, Boolean(options.refImageEnd)),
+      resolveSkillVideoModelAlias(
+        options.model,
+        options.videoWorkflow,
+        Boolean(options.refImage),
+        Boolean(options.refImageEnd),
+      ),
       options.videoWorkflow
     );
   }
@@ -4927,8 +4957,8 @@ if (!options.upscaleImage && (cliSet.upscaleScale || cliSet.upscaleTargetLongest
   });
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -4947,11 +4977,103 @@ if (options.photobooth) {
 
 if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
+  const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
   const isHappyHorseVideo = isHappyHorseModel(options.model);
   const isMiniMaxH3Video = isMiniMaxH3Model(options.model);
   const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
-  if (isSeedanceVideo && !['t2v', 'ia2v', 'v2v'].includes(options.videoWorkflow)) {
-    fatalCliError('Seedance models support only t2v, ia2v, or v2v workflows.', {
+  if (options.seedanceTaskType && !SEEDANCE_TASK_TYPES.has(options.seedanceTaskType)) {
+    fatalCliError('--seedance-task-type must be one of: reference, edit, extend.', {
+      code: 'INVALID_ARGUMENT',
+      details: { seedanceTaskType: options.seedanceTaskType }
+    });
+  }
+  if (options.seedanceTaskType && !isSeedance25Video) {
+    fatalCliError('--seedance-task-type is supported only by Seedance 2.5.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, seedanceTaskType: options.seedanceTaskType }
+    });
+  }
+  if (isSeedance25Video && !options.seedanceTaskType) {
+    if (options.videoWorkflow === 'v2v') {
+      options.seedanceTaskType = 'edit';
+    } else if (
+      options.videoWorkflow === 'ia2v' ||
+      options.contextImages.length > 0 ||
+      options.refAudio ||
+      options.refAudios.length > 0 ||
+      options.refVideo ||
+      options.refVideos.length > 0
+    ) {
+      options.seedanceTaskType = 'reference';
+    }
+  }
+  if (options.seedanceTaskType && (options.refImage || options.refImageEnd)) {
+    fatalCliError(
+      'Seedance 2.5 reference/edit/extend uses loose media only. Use -c/--context for images; omit --ref/--ref-end frame anchors.',
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { seedanceTaskType: options.seedanceTaskType }
+      }
+    );
+  }
+  if (
+    (options.seedanceTaskType === 'edit' || options.seedanceTaskType === 'extend') &&
+    !options.refVideo && options.refVideos.length === 0
+  ) {
+    fatalCliError(`Seedance 2.5 ${options.seedanceTaskType} requires --ref-video.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { seedanceTaskType: options.seedanceTaskType }
+    });
+  }
+  if (
+    options.seedanceTaskType === 'reference' &&
+    options.contextImages.length === 0 &&
+    !options.refAudio && options.refAudios.length === 0 &&
+    !options.refVideo && options.refVideos.length === 0
+  ) {
+    fatalCliError(`Seedance 2.5 ${options.seedanceTaskType} requires at least one loose reference.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { seedanceTaskType: options.seedanceTaskType }
+    });
+  }
+  if (options.seedanceTaskType === 'edit' && !cliSet.duration) {
+    fatalCliError(
+      'Seedance 2.5 edit requires --duration set to @Video1\'s source duration.',
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { seedanceTaskType: options.seedanceTaskType }
+      }
+    );
+  }
+  if (
+    (options.seedanceTaskType === 'edit' || options.seedanceTaskType === 'extend') &&
+    (cliSet.width || cliSet.height)
+  ) {
+    fatalCliError(
+      `Seedance 2.5 ${options.seedanceTaskType} inherits @Video1's aspect ratio; use --target-resolution 480 or 720 instead of --width/--height.`,
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { seedanceTaskType: options.seedanceTaskType }
+      }
+    );
+  }
+  if (
+    isSeedance25Video &&
+    cliSet.targetResolution &&
+    ![480, 720].includes(options.targetResolution)
+  ) {
+    fatalCliError('Seedance 2.5 --target-resolution must be 480 or 720.', {
+      code: 'INVALID_ARGUMENT',
+      details: { targetResolution: options.targetResolution }
+    });
+  }
+  const seedanceWorkflows = isSeedance25Video
+    ? ['t2v', 'ia2v', 'a2v', 'v2v']
+    : ['t2v', 'ia2v', 'v2v'];
+  if (isSeedanceVideo && !seedanceWorkflows.includes(options.videoWorkflow)) {
+    fatalCliError(isSeedance25Video
+      ? 'Seedance 2.5 supports only t2v, ia2v, a2v, or v2v workflows.'
+      : 'Seedance 2.0 models support only t2v, ia2v, or v2v workflows.', {
       code: 'INVALID_ARGUMENT',
       details: { workflow: options.videoWorkflow, model: options.model }
     });
@@ -5020,11 +5142,11 @@ if (options.video) {
           fatalCliError('MiniMax H3 flf2v requires both --ref and --ref-end.', { code: 'INVALID_ARGUMENT' });
         }
       } else {
-        if (!options.refImage) {
-          fatalCliError('MiniMax H3 i2v requires --ref (a single first-frame image).', { code: 'INVALID_ARGUMENT' });
+        if (!options.refImage && !options.refImageEnd) {
+          fatalCliError('MiniMax H3 i2v requires exactly one endpoint: --ref for I2VA or --ref-end for L2VA.', { code: 'INVALID_ARGUMENT' });
         }
-        if (options.refImageEnd) {
-          fatalCliError('MiniMax H3 i2v accepts one first-frame image; use -m minimax-h3-flf2v for --ref plus --ref-end.', { code: 'INVALID_ARGUMENT' });
+        if (options.refImage && options.refImageEnd) {
+          fatalCliError('MiniMax H3 i2v accepts one endpoint; use -m minimax-h3-flf2v for --ref plus --ref-end.', { code: 'INVALID_ARGUMENT' });
         }
       }
       if (options.contextImages.length > 0 || options.refAudio || options.refVideo || options.refAudios.length > 0 || options.refVideos.length > 0) {
@@ -5120,16 +5242,17 @@ if (options.video) {
   if (options.videoStart !== null && !options.refVideo) {
     fatalCliError('--video-start requires --ref-video.', { code: 'INVALID_ARGUMENT' });
   }
-  if (isSeedanceVideo && options.refAudio && !options.refImage && !options.refImageEnd && !options.refVideo
+  if (isSeedanceVideo && !isSeedance25Video && options.refAudio && !options.refImage && !options.refImageEnd && !options.refVideo
       && (!Array.isArray(options.contextImages) || options.contextImages.length === 0)) {
-    fatalCliError('Seedance audio references require --ref, --ref-video, or -c/--context image refs.', { code: 'INVALID_ARGUMENT' });
+    fatalCliError('Seedance 2.0 audio references require --ref, --ref-video, or -c/--context image refs.', { code: 'INVALID_ARGUMENT' });
   }
 
   // Seedance reference modes are mutually exclusive:
   //   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
   //     Up to 2 images; the platform pins them as parameter-mode firstFrame/lastFrame.
   //   - LOOSE REFERENCE MODE: -c/--context (repeatable image refs), --ref-audio extras,
-  //     --ref-video extras. Up to 9 images / 3 videos / 3 audios / 12 total.
+  //     --ref-video extras. Seedance 2.0 permits 9 images / 3 videos / 3 audios /
+  //     12 total; Seedance 2.5 permits 30 / 10 / 10 / 50 and audio-only input.
   //     Anchor frame intent in the prompt with @Image1 / @Video1 / @Audio1 etc.
   // Mixing dedicated frames with loose image refs is rejected at sogni-socket
   // (jobsController.js) so we catch it client-side with a clearer message.
@@ -5139,7 +5262,7 @@ if (options.video) {
     fatalCliError(
       'Seedance reference modes are mutually exclusive: --ref/--ref-end (dedicated first/last frame) cannot be combined with -c/--context (loose image references). '
       + 'Pick one: use --ref/--ref-end for first-class first-frame/last-frame anchoring (max 2 images), '
-      + 'or use -c/--context (plus optional @Image1/@Image2 prompt language) for up to 9 loose image references.',
+      + `or use -c/--context (plus optional @Image1/@Image2 prompt language) for up to ${isSeedance25Video ? 30 : 9} loose image references.`,
       { code: 'INVALID_ARGUMENT', details: {
           dedicatedFrames: [options.refImage, options.refImageEnd].filter(Boolean),
           looseImageRefs: options.contextImages,
@@ -8788,12 +8911,13 @@ function effectiveSeedanceReferenceCounts() {
 
 // Wraps the shared validateSeedanceReferenceCounts() so a thrown
 // SeedanceReferenceLimitError is re-raised as a CLI fatal error with the same
-// human message the hosted chat surfaces. Source of truth for the numeric caps
-// (9 / 3 / 3 / 12) is @sogni-ai/sogni-protocol's seedance-reference-limits
-// catalog, surfaced through @sogni-ai/sogni-intelligence-client/tools.
+// human message the hosted chat surfaces. Source of truth for the per-model
+// numeric caps (2.0: 9 / 3 / 3 / 12; 2.5: 30 / 10 / 10 / 50) is
+// @sogni-ai/sogni-protocol's seedance-reference-limits catalog, surfaced
+// through @sogni-ai/sogni-intelligence-client/tools.
 function enforceSeedanceReferenceCaps() {
   try {
-    validateSeedanceReferenceCounts(effectiveSeedanceReferenceCounts());
+    validateSeedanceReferenceCounts(effectiveSeedanceReferenceCounts(), options.model);
   } catch (err) {
     if (err instanceof SeedanceReferenceLimitError) {
       fatalCliError(err.message, {
@@ -8802,7 +8926,7 @@ function enforceSeedanceReferenceCaps() {
           limitKind: err.limitKind,
           requestedCount: err.requestedCount,
           maxCount: err.maxCount,
-          limits: SEEDANCE_REFERENCE_LIMITS,
+          limits: getSeedanceReferenceLimits(options.model),
         },
       });
     }
@@ -11326,6 +11450,7 @@ async function main() {
       }
 
       const isSeedanceVideo = isSeedanceModel(options.model);
+      const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
       const isHappyHorseVideo = isHappyHorseModel(options.model);
       const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
       // Vendor video models forward image references as HTTPS URL arrays (or
@@ -11348,8 +11473,13 @@ async function main() {
       const seedanceReferenceImageUrls = [];
       const seedanceReferenceVideoUrls = [];
       const seedanceReferenceAudioUrls = [];
-      const useRefImageUrl = isVendorReferenceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
-      const useRefImageEndUrl = isVendorReferenceVideo && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
+      // Seedance --ref/--ref-end are dedicated frame anchors even when they
+      // are HTTPS URLs, so fetch them into the SDK's frame fields. Loose
+      // Seedance images always come from -c/--context and use URL arrays.
+      // HappyHorse has no binary frame upload field and keeps URL forwarding.
+      const forwardFrameAsUrl = isHappyHorseVideo || (isSeedanceVideo && !isSeedance25Video);
+      const useRefImageUrl = forwardFrameAsUrl && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
+      const useRefImageEndUrl = forwardFrameAsUrl && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
       const refAudioFormatByPath = options.refAudio
         ? detectReferenceAudioFormat(
             new Uint8Array(),
@@ -11653,6 +11783,9 @@ async function main() {
         waitForCompletion: false,
         disableNSFWFilter: options.noFilter === true
       };
+      if (options.seedanceTaskType) {
+        projectConfig.seedanceTaskType = options.seedanceTaskType;
+      }
 
       if (options.outputFormat) {
         projectConfig.outputFormat = options.outputFormat;

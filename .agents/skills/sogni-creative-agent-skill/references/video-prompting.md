@@ -102,8 +102,8 @@ tips, explain the format, offer to generate the video, or ask a follow-up
 question after the contract. Those additions make the text invalid as direct
 H3 input.
 
-Applies to standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v`, and
-`minimax-h3-flf2v`; their 4-step `minimax-h3-turbo`,
+Applies to standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v` for both
+opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 4-step `minimax-h3-turbo`,
 `minimax-h3-i2v-turbo`, and `minimax-h3-flf2v-turbo` variants; and—with its own
 six-field contract—to standard `minimax-h3-r2v` and `minimax-h3-r2v-turbo`. The exact worker
 ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an optional `_turbo`
@@ -112,7 +112,7 @@ suffix, plus `minimax-h3-ref2va-fp8_r2v` and `minimax-h3-ref2va-fp8_r2v_turbo`. 
 before writing an r2v prompt.
 
 This guidance follows MiniMax's official H3 prompt-writing skill from
-[MiniMax-H3 commit 35491cd](https://github.com/MiniMax-AI/MiniMax-H3/tree/35491cdba2adfe62a510f725e8619f8e58783ea2/skills/h3-prompt-writing).
+[MiniMax-H3 commit d21241f](https://github.com/MiniMax-AI/MiniMax-H3/tree/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing).
 
 ### Fixed model facts
 
@@ -158,7 +158,7 @@ integer the user asked for:
 | 12 | 294 | 12.25 s |
 | 15 | 362 | 15.08 s |
 
-### Base and Turbo contract: T2V, I2V, and FLF2V
+### Base and Turbo contract: T2V, I2V, L2V, and FLF2V
 
 After the mode-specific preamble described below, write exactly these three
 fields in this order:
@@ -188,8 +188,11 @@ the language and exact words:
 The record-store owner with a warm, gravelly voice (S1) says: <d>[English] I kept this one behind the counter for you.</d>
 ```
 
-Do not translate, paraphrase, or clean up the user's dialogue. Use a compound
-ID such as `(S1,S2)` only when already-numbered speakers vocalize together.
+Do not translate, paraphrase, or clean up the user's dialogue. If the user
+explicitly requests speaking, dialogue, lyrics, or a vocal performance but
+supplies no words, author one concise line that realizes that request. If there
+is no vocal intent, do not invent speech. Use a compound ID such as `(S1,S2)`
+only when already-numbered speakers vocalize together.
 
 ### Worked example — text-to-video
 
@@ -248,9 +251,11 @@ The two children (S1,S2) shout together, <d>[English] Wait for us!</d>
   kept stable across every shot. A character who never vocalizes gets no ID. Two
   or more already-numbered speakers vocalizing together use a compound ID such
   as `(S1,S2)`.
-- Supported dialogue languages: Arabic, Chinese, English, French, German,
-  Italian, Japanese, Korean, Portuguese, Russian, Spanish. The tag is the
-  English language name in square brackets, e.g. `<d>[Japanese] …</d>`.
+- MiniMax documents stable dialogue support for Arabic, Chinese, English,
+  French, German, Italian, Japanese, Korean, Portuguese, Russian, and Spanish,
+  with varying support for additional languages. This list is advisory, not a
+  validation allowlist: preserve the user's actual language. Write its language
+  name in square brackets, e.g. `<d>[Japanese] …</d>`.
 - **Voiceover** uses the exact phrase `says in an off-screen voiceover`, and the
   `<d>` block is followed by a statement that the on-screen character's lips
   stay closed:
@@ -273,7 +278,15 @@ reserves the learned tokens `<d>`, `</d>`, `<|cutoff|>`,
 released. Prompt authors should still follow MiniMax's public writing guide:
 emit `<d>…</d>`, `<scenetrans>`, and the plain `<cutoff>` spelling described
 above. The vertical-bar lyrics, caption, and cutoff tokens are tokenizer
-internals, not documented author-facing prompt markup.
+internals, not documented author-facing prompt markup. Never "repair" them by
+globally deleting pipe characters. Rewrite the meaning: caption boundaries and
+their contents become exact visible text in English double quotes; lyrics
+boundaries become an ordinary `<d>[Language] exact words</d>` block with the
+singer and delivery outside it; and `<|cutoff|>` becomes plain `<cutoff>`.
+Plain `<caption_start>`, `<caption_end>`, `<lyrics_start>`, and `<lyrics_end>`
+are not valid substitutes. If a generated draft still leaks one of these forms,
+warn and make one bounded semantic repair attempt, then keep the best non-empty
+structured prompt rather than blocking generation.
 
 **Shot markers and the camera vocabulary.** In the IR format, `[Shot 1]` opens
 with the overall style and initial composition and takes no timestamp; every
@@ -306,7 +319,7 @@ dynamics. `N/A` is the schema's token for "nothing here" — used in
 `non_diegetic_music` for no score, and in `overall_soundscape` only for a
 deliberately silent video.
 
-**Alignment instruction lines (i2v / flf2v only).** These exact preambles pin
+**Alignment instruction lines (i2v / l2v / flf2v only).** These exact preambles pin
 reference images to the target timeline. They are mandatory for those modes and
 must be the first line, followed by one blank line. T2V has no preamble.
 
@@ -315,6 +328,17 @@ Image-to-video (`minimax-h3-i2v` or `minimax-h3-i2v-turbo`, one `--ref`):
 ```text
 For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
 ```
+
+Last-frame-only video (`minimax-h3-i2v` or `minimax-h3-i2v-turbo`, one
+`--ref-end`; there is deliberately no separate L2V selector):
+
+```text
+How the reference pictures align with the target video — <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.
+```
+
+`N` is the actual final shot. Infer a plausible earlier state and describe the
+continuous action, object state, camera, light, and composition converging on
+the supplied closing frame at the snapped `S.SS` endpoint.
 
 First frame → last frame (`minimax-h3-flf2v` or
 `minimax-h3-flf2v-turbo`, `--ref` plus `--ref-end`). Note the bare `Picture 1`
@@ -334,7 +358,9 @@ transition), and `S.SS` is the effective duration to exactly two decimal places
 `minimax-h3-r2v` conditions on a whole **reference set** rather than one or two
 locked frames: up to **9 reference images**,
 **3 reference videos** (24 fps, 2–15 s, each with an optional soundtrack) and
-**3 standalone audio clips**, **12 files maximum in total**. It runs a separate
+**3 standalone audio clips** (2–15 s each), **12 files maximum in total**.
+Reference-video duration totals may not exceed 15 seconds, and standalone
+reference-audio duration totals may not exceed 15 seconds. It runs a separate
 ref2va checkpoint, so it is never inferred — it must be chosen by name with
 direct CLI `-m minimax-h3-r2v` or the `generate_video` tool's
 `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). Direct CLI
@@ -364,8 +390,12 @@ non_diegetic_music:
 ```
 
 `subject_definitions` assigns stable labels and roles to every reused subject or
-asset. `summary` begins with the applicable bracketed task type, such as
-`[reference generation + audio reference]`. `retention_analysis` gives one line
+asset. `summary` begins with one or more exact task types: `keyframe completion`,
+`reference generation`, `video editing`, `video continuation`, `audio reuse`,
+or `audio reference`. Join multiple types with exactly ` + ` and never repeat
+one. Choose tasks from the reference's assigned job, not merely because a file
+is attached. A direct video-editing summary begins its body exactly `The target
+video is an edited version of <Video 1>.` `retention_analysis` gives one line
 per label using the official relationship values, such as `fully_preserved`,
 `partially_preserved`, `attribute_transfer`, or `weak_reference` for visual
 content and `fully_copy`, `partially_copy`, `reference`, or `weak_reference` for
@@ -422,6 +452,22 @@ N/A
 Trim definitions for references that were not attached; unresolved labels are
 invalid.
 
+Sogni's current agent-facing R2V attachments are loose references. A prompt may
+borrow a clip's motion, pacing, or temporal structure, but must not claim
+`video editing` or `video continuation` unless the caller actually supplies a
+typed transformation relationship. Use I2VA, L2VA, or FL2VA when an endpoint
+must be locked.
+
+For voice references, bind the voice to the speaking subject by reusing that
+subject's `(Sx)` in `subject_definitions`; do not put the speaker ID in
+`retention_analysis`. A timbre/rhythm/emotion/delivery reference must not import
+the source recording's words. If the user explicitly asks to reuse or reperform
+reference speech, preserve its words and language and mark unintelligible spans
+`[unclear]` rather than guessing. A verbal cue embedded in copied background
+music can cite `<Audio N>` without an invented speaker ID. Put copied ambience
+and effects in `overall_soundscape`, audience-only score in
+`non_diegetic_music`, and use both fields when the source contains both.
+
 ### Agent-ready H3 command shapes
 
 ```bash
@@ -431,12 +477,16 @@ sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4
 # Image-to-video from one first frame (portrait)
 sogni-agent -q --video -m minimax-h3-i2v --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 
+# Last-frame-only L2VA reuses the I2V selector
+sogni-agent -q --video -m minimax-h3-i2v --ref-end ./last.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<L2V preamble plus three-field H3 prompt>"
+
 # First frame -> last frame transition
 sogni-agent -q --video -m minimax-h3-flf2v --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 
-# Turbo uses the same T2V/I2V/FLF2V prompt contracts
+# Turbo uses the same T2V/I2V/L2V/FLF2V prompt contracts
 sogni-agent -q --video -m minimax-h3-turbo --duration 8 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-i2v-turbo --ref-end ./last.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<L2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 
 # Reference-to-video (reference order defines the prompt ordinals)
@@ -484,6 +534,12 @@ sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with na
 
 # Seedance 2.5 (4-30s single clips, 480p/720p only — the one Seedance that renders past 15s in one call)
 sogni-agent --video -m seedance2-5 --duration 24 "A continuous one-take product story with native ambient sound"
+
+# Seedance 2.5 edit (duration must match @Video1; aspect ratio is inherited)
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1 while preserving its subject and timing"
+
+# Seedance 2.5 extension (duration is the new continuation length)
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
 ```
 
 Prefer `.webm`, `.m4a`, or `.mp3` voice clips. Local `.wav` clips are normalized

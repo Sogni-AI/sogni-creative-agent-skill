@@ -1380,6 +1380,18 @@ test('non-H3 video models keep the plain duration clamp message', () => {
   assert.match(stderr, /Adjusted video duration from 30s to 15s \(supported range for seedance-2-0: 4-15s\)\./);
 });
 
+test('Seedance 2.5 retains its provider-supported 30 second duration', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '-m', 'seedance2-5',
+    '--duration', '30',
+    'A continuous locked cinematic take.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.duration, 30);
+  assert.doesNotMatch(stderr, /Adjusted video duration/);
+});
+
 test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', () => {
   const cases = [
     {
@@ -1662,6 +1674,42 @@ test('MiniMax H3 i2v alias uses one first-frame image', () => {
   assert.equal(state.lastVideoProject.frames, 192);
 });
 
+test('MiniMax H3 i2v selectors support last-frame-only L2VA without inventing a model id', () => {
+  for (const [model, expected] of [
+    ['minimax-h3-i2v', 'minimax-h3-fl2va-fp8_i2v'],
+    ['minimax-h3-i2v-turbo', 'minimax-h3-fl2va-fp8_i2v_turbo'],
+  ]) {
+    const { exitCode, state } = runCli([
+      '--video',
+      '-m', model,
+      '--ref-end', SCREENSHOT_FIXTURE,
+      'The continuous action converges precisely on the supplied final frame.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.referenceImage, undefined);
+    assert.ok(state.lastVideoProject.referenceImageEnd);
+  }
+});
+
+test('bare MiniMax H3 aliases route end-only input to the I2V worker for L2VA', () => {
+  for (const [model, expected] of [
+    ['minimax-h3', 'minimax-h3-fl2va-fp8_i2v'],
+    ['minimax-h3-turbo', 'minimax-h3-fl2va-fp8_i2v_turbo'],
+  ]) {
+    const { exitCode, state } = runCli([
+      '--video',
+      '-m', model,
+      '--ref-end', SCREENSHOT_FIXTURE,
+      'Resolve the scene into the supplied final frame.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.referenceImage, undefined);
+    assert.ok(state.lastVideoProject.referenceImageEnd);
+  }
+});
+
 test('MiniMax H3 pre-resizes the 1472x1024 regression reference within its grid and pixel budget', async () => {
   const { default: sharp } = await import('sharp');
   const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-resize-'));
@@ -1857,7 +1905,7 @@ test('MiniMax H3 r2v enforces per-kind and total reference caps', () => {
   );
 });
 
-test('MiniMax H3 rejects sampling overrides and i2v end-frame misuse', () => {
+test('MiniMax H3 rejects sampling overrides and two endpoints on the single-endpoint i2v selector', () => {
   expectCliError(
     ['--video', '-m', 'minimax-h3', '--steps', '20', 'A short clip.'],
     'omit --steps and --guidance'
@@ -1970,6 +2018,147 @@ test('seedance v2v alias does not require or send ControlNet', () => {
   assert.equal(state.lastVideoProject.controlNet, undefined);
 });
 
+test('seedance 2.5 v2v defaults to the explicit edit task contract', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'seedance2-5-v2v',
+    '--ref-video', 'https://example.com/source.mp4',
+    '--duration', '5',
+    'Replace the blue jacket with a red jacket.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'seedance-2-5');
+  assert.equal(state.lastVideoProject.seedanceTaskType, 'edit');
+});
+
+test('seedance 2.5 accepts an explicit extension task contract', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--workflow', 'v2v',
+    '-m', 'seedance2-5-v2v',
+    '--seedance-task-type', 'extend',
+    '--ref-video', 'https://example.com/source.mp4',
+    '--duration', '8',
+    'Continue @Video1 after its final frame.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.seedanceTaskType, 'extend');
+  assert.equal(state.lastVideoProject.duration, 8);
+});
+
+test('seedance 2.5 first-frame generation does not send an omni task type', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '-m', 'seedance2-5',
+    '--ref', SCREENSHOT_FIXTURE,
+    'The presenter turns to camera and speaks.'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.seedanceTaskType, undefined);
+});
+
+test('seedance 2.5 edit requires a source video', () => {
+  expectCliError(
+    ['--video', '-m', 'seedance2-5', '--seedance-task-type', 'edit', 'edit the clip'],
+    'Seedance 2.5 edit requires --ref-video'
+  );
+});
+
+test('seedance 2.5 edit requires the explicit source duration', () => {
+  expectCliError(
+    [
+      '--video', '-m', 'seedance2-5-v2v',
+      '--ref-video', 'https://example.com/source.mp4',
+      'Edit @Video1.'
+    ],
+    "Seedance 2.5 edit requires --duration set to @Video1's source duration"
+  );
+});
+
+test('seedance 2.5 task modes reject frame anchors and explicit aspect dimensions', () => {
+  expectCliError(
+    [
+      '--video', '-m', 'seedance2-5',
+      '--seedance-task-type', 'reference',
+      '--ref', SCREENSHOT_FIXTURE,
+      'Use the image as a loose reference.'
+    ],
+    'Seedance 2.5 reference/edit/extend uses loose media only'
+  );
+  expectCliError(
+    [
+      '--video', '-m', 'seedance2-5-v2v',
+      '--seedance-task-type', 'extend',
+      '--ref-video', 'https://example.com/source.mp4',
+      '--width', '1280', '--height', '720',
+      'Extend @Video1.'
+    ],
+    "inherits @Video1's aspect ratio"
+  );
+});
+
+test('seedance 2.5 accepts only its 480p and 720p target resolution tiers', () => {
+  expectCliError(
+    [
+      '--video', '-m', 'seedance2-5-v2v',
+      '--seedance-task-type', 'extend',
+      '--ref-video', 'https://example.com/source.mp4',
+      '--target-resolution', '1080',
+      'Extend @Video1.'
+    ],
+    'Seedance 2.5 --target-resolution must be 480 or 720'
+  );
+});
+
+test('seedance 2.5 rejects provider-auto task classification', () => {
+  expectCliError(
+    [
+      '--video', '-m', 'seedance2-5',
+      '--seedance-task-type', 'auto',
+      '--ref-video', 'https://example.com/source.mp4',
+      'Transform the source clip.'
+    ],
+    '--seedance-task-type must be one of: reference, edit, extend'
+  );
+});
+
+test('seedance 2.5 accepts an audio-only loose-reference task', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '-m', 'seedance2-5',
+    '--ref-audio', 'https://example.com/dialogue.mp3',
+    'Create a cinematic performance paced to @Audio1.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.seedanceTaskType, 'reference');
+  assert.deepEqual(state.lastVideoProject.referenceAudioUrls, [
+    'https://example.com/dialogue.mp3'
+  ]);
+});
+
+test('seedance 2.5 accepts its full 30/10/10/50 loose-reference budget', () => {
+  const args = [
+    '--video',
+    '-m', 'seedance2-5',
+    '--seedance-task-type', 'reference',
+  ];
+  for (let index = 1; index <= 30; index++) {
+    args.push('-c', `https://example.com/image-${index}.png`);
+  }
+  for (let index = 1; index <= 10; index++) {
+    args.push('--ref-video', `https://example.com/video-${index}.mp4`);
+    args.push('--ref-audio', `https://example.com/audio-${index}.mp3`);
+  }
+  args.push('Use every numbered reference for one cohesive scene.');
+
+  const { exitCode, state, stderr } = runCli(args);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.referenceImageUrls.length, 30);
+  assert.equal(state.lastVideoProject.referenceVideoUrls.length, 10);
+  assert.equal(state.lastVideoProject.referenceAudioUrls.length, 10);
+});
+
 test('seedance t2v forwards HTTPS multimodal references as URL arrays', () => {
   const { exitCode, state } = runCli([
     '--video',
@@ -2070,7 +2259,7 @@ test('explicit -m wan keeps WAN for first/last-frame pairs', () => {
 test('seedance rejects audio-only references before wrapper validation', () => {
   expectCliError(
     ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref-audio', 'https://cdn.example.com/music.mp3', 'music-led clip'],
-    'Seedance audio references require --ref, --ref-video, or -c/--context image refs.'
+    'Seedance 2.0 audio references require --ref, --ref-video, or -c/--context image refs.'
   );
 });
 

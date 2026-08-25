@@ -647,6 +647,14 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 
 Music generation uses `--music` and outputs `mp3` by default. `--audio` remains the video-reference alias for `--ref-audio`; use `--music` or `--generate-music` for direct audio-only generation.
 
+Seedance 2.5 loose-reference operations use an explicit task contract. `reference` accepts any loose image/video/audio set (including audio-only); `edit` and `extend` require `@Video1` through `--ref-video` and reject first/last-frame anchors. Edit inherits the source aspect ratio and requires its source duration, while extend inherits the ratio and uses the requested continuation duration:
+
+```bash
+sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1 while preserving its subject and timing"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
+```
+
 ---
 
 ## Video Sizing & Aspect Ratios
@@ -664,7 +672,7 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 - **Private mature-theme creativity:** optional uncensored LTX-2.3 video models are available for adults who explicitly want them. They remain opt-in and are not part of ordinary model recommendations; the agent loads their specialized guidance only for a relevant request.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 
-V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. LTX 2.5 `pose` requires both `--ref-video` for the motion/pose sequence and `--ref` for the subject appearance; explicit LTX 2.3 rollback keeps its existing optional-image behavior. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. Audio references must be paired with an image or video reference.
+V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. LTX 2.5 `pose` requires both `--ref-video` for the motion/pose sequence and `--ref` for the subject appearance; explicit LTX 2.3 rollback keeps its existing optional-image behavior. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. The 2.0 family requires audio references to be paired with an image or video; Seedance 2.5 reference mode permits audio-only input.
 
 The LTX-2.5 v2v selector `ltx25-v2v` supports two extra control modes: **`outpaint`** extends/expands the video canvas (e.g. make a vertical clip widescreen, or add space in a direction) — it is positional and mask-free, anchored with a position (`center|top|bottom|left|right`) and an optional target aspect ratio (`16:9|9:16|1:1|4:3|3:4|21:9`), and the canvas only grows, never crops; **`inpaint`** regenerates a masked region of the source video and **requires a mask image** (white pixels = region to regenerate) in direct CLI/SDK mode. The hosted `video_to_video` tool selects these with `controlMode` `outpaint`/`inpaint` and can derive an inpaint mask when the user did not upload one. The direct CLI and sogni-client SDK example expose them via `--control-type` / `control-type` (`canny|pose|depth|detailer|outpaint|inpaint`), with `--outpaint-position` for outpaint and `--mask` for inpaint. Pin `ltx23-v2v` only for rollback. See `references/video-editing.md` for details.
 

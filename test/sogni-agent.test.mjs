@@ -2648,6 +2648,55 @@ test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', (
   // supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1.
   assert.equal(state.lastVideoProject.width, 1920);
   assert.equal(state.lastVideoProject.height, 1080);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'negativePrompt'), false);
+});
+
+test('wan3 exposes smart duration, exact prompt, watermark, and document context', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3',
+    '--smart-duration',
+    '--no-expand-prompt',
+    '--watermark',
+    '--wan3-ratio', '9:16',
+    '--reference-file-url', 'https://example.com/brief.pdf',
+    'Create the launch clip from the supplied brief.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.smartDuration, true);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'duration'), false);
+  assert.equal(state.lastVideoProject.promptExtend, false);
+  assert.equal(state.lastVideoProject.watermark, true);
+  assert.equal(state.lastVideoProject.ratio, '9:16');
+  assert.equal(state.lastVideoProject.referenceFileUrl, 'https://example.com/brief.pdf');
+});
+
+test('wan3 keeps provider defaults explicit for direct generation', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3',
+    'A presenter walks through a detailed workshop.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.ratio, 'adaptive');
+  assert.equal(state.lastVideoProject.wan3TaskType, 'create');
+  assert.equal(state.lastVideoProject.generateAudio, true);
+  assert.equal(state.lastVideoProject.promptExtend, true);
+  assert.equal(state.lastVideoProject.watermark, false);
+});
+
+test('wan3 validates document/web exclusivity and extension ratio', () => {
+  expectCliError([
+    '--video', '-m', 'wan3',
+    '--reference-file-url', 'https://example.com/brief.pdf',
+    '--reference-link-url', 'https://example.com/page',
+    'Use both.'
+  ], 'either --reference-file-url or --reference-link-url');
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--wan3-task-type', 'extend', '--wan3-ratio', '16:9',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Continue Video 1.'
+  ], 'requires --wan3-ratio adaptive');
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {
@@ -2772,6 +2821,86 @@ test('happyhorse rejects reference audio (audio is rendered natively)', () => {
   expectCliError(
     ['--video', '-m', 'happyhorse', '--ref-audio', 'https://example.com/music.mp3', 'music-led clip'],
     'does not accept reference'
+  );
+});
+
+test('wan3 alias selects the unified Premium video model at fixed 30fps', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '--token-type', 'sogni',
+    '-m', 'wan3',
+    '--fps', '24',
+    '--duration', '30',
+    'A presenter walks through a detailed studio while speaking to camera.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'wan3.0-video');
+  assert.equal(state.lastVideoProject.tokenType, 'spark');
+  assert.equal(state.lastVideoProject.fps, 30);
+  assert.equal(state.lastVideoProject.duration, 30);
+  assert.equal(state.lastVideoProject.width, 1920);
+  assert.equal(state.lastVideoProject.height, 1080);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'guidance'), false);
+});
+
+test('wan3 promptless first/last-frame generation keeps dedicated anchors', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video',
+    '-m', 'wan3.0-video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'wan3.0-video');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.equal(state.lastVideoProject.referenceImageUrls, undefined);
+});
+
+test('wan3 validates frame/loose exclusivity and official reference caps', () => {
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    'Animate the first frame.'
+  ], 'first/last-frame anchors cannot be combined with loose');
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'r2v',
+    ...Array.from({ length: 11 }).flatMap((_, i) => ['-c', `https://example.com/${i}.png`]),
+    'Use every image as a loose reference.'
+  ], 'at most 10 reference images');
+});
+
+test('wan3 r2v forwards loose images with the unified model id', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3', '--workflow', 'r2v',
+    '-c', 'https://example.com/identity.png',
+    '-c', 'https://example.com/wardrobe.png',
+    'Use Image 1 for identity and Image 2 for wardrobe.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'wan3.0-video');
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, [
+    'https://example.com/identity.png',
+    'https://example.com/wardrobe.png',
+  ]);
+  assert.equal(state.lastVideoProject.referenceImage, undefined);
+});
+
+test('wan3 validates its resolution, sampling, and int31 seed contract', () => {
+  expectCliError(
+    ['--video', '-m', 'wan3', '--target-resolution', '2160', 'Too large.'],
+    'must be 480, 720, or 1080'
+  );
+  expectCliError(
+    ['--video', '-m', 'wan3', '--steps', '20', 'No sampling override.'],
+    'vendor-managed sampling settings'
+  );
+  expectCliError(
+    ['--video', '-m', 'wan3', '--seed', '2147483648', 'Seed out of range.'],
+    'must be an integer from 0 through 2147483647'
   );
 });
 

@@ -30,6 +30,7 @@ Do not run the default `npx setup-sogni-agent-skill` from an installed plugin un
 - Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"` (defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`)
 - Animate two images (first frame → last frame): `sogni-agent --video --ref <first> --ref-end <last> "smooth morph into the final frame"` (defaults to `ltx25-22b-int8_i2v_distilled` and the standard FLF template; no transition LoRA is attached)
 - MiniMax H3 reference-to-video: `sogni-agent --video -m minimax-h3-r2v --ref <identity> -c <wardrobe> --ref-video <motion> --ref-audio <voice> "<Picture 1> controls identity; <Picture 2> controls wardrobe; <Video 1> controls motion; <Audio 1> controls voice."`
+- Alibaba Wan 3 unified video: `sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 "a presenter says 'Welcome' in a detailed studio"`
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
 - One-click image-folder loop in Codex: `$sogni-creative-agent:loop-maker ./images`
 - Music: `sogni-agent --music "ambient drone, 30 seconds"`

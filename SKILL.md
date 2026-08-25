@@ -211,6 +211,16 @@ sogni-agent --video -m happyhorse --duration 8 "A glowing jellyfish drifts throu
 sogni-agent --video -m happyhorse --ref first-frame.png "Bring the scene to life"
 sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the references into one continuous shot"
 
+# Alibaba Wan 3 unified video (2-30s, fixed 30fps, native audio,
+# 480P/720P/1080P). --ref/--ref-end are frame anchors; r2v/a2v/ia2v/v2v
+# use loose Image 1 / Video 1 / Audio 1 references instead.
+sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 'A presenter says "Welcome." in a detailed studio'
+sogni-agent --video -m wan3 --ref first.png --ref-end last.png "Move smoothly between the supplied frames"
+sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dialogue.mp3 "Use Image 1 and Audio 1 for the performance"
+sogni-agent --video -m wan3 --workflow v2v --ref-video source.mp4 "Edit Video 1 into a rainy night scene"
+sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt --reference-file-url https://cdn.example.com/brief.pdf "Use the supplied brief exactly"
+sogni-agent --video -m wan3 --workflow v2v --wan3-task-type extend --wan3-ratio adaptive --ref-video source.mp4 "Continue Video 1 after its ending"
+
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
 sogni-agent --last --json
@@ -242,7 +252,10 @@ sogni-agent doctor --json
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v | - |
 | `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
-| `--generate-audio`, `--no-generate-audio` | Keep or strip MiniMax H3's jointly generated audio track | keep |
+| `--wan3-task-type create\|edit\|extend`, `--wan3-ratio`, `--smart-duration` | Wan 3 operation, adaptive/fixed ratio, and provider-selected 2–30s duration | create / adaptive / fixed |
+| `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
+| `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Wan 3 provider prompt expansion and watermark controls | expansion on / watermark off |
+| `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |
 | `--sampler <name>` | Image/music sampler; FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo: `euler` only | FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |
 | `--duration <sec>` | Video or music length | video 5, music 30 |
@@ -334,13 +347,13 @@ When the requested image is meant to **repeat edge to edge without visible joins
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / MiniMax H3 native audio and dialogue, WAN lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
 
 `ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 
 ### Insufficient funds
 
-Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, HappyHorse, GPT Image 2) require Premium Spark eligibility and never fall back to SOGNI. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
+Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, HappyHorse, Wan 3, GPT Image 2) require Premium Spark eligibility and never fall back to SOGNI. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
 
 "Insufficient funds. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
 
@@ -348,7 +361,7 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 ### Sogni Unlimited Subscription & Billing Errors
 
-On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Current plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. Plan pricing, included features and models, usage allowances, fair-use controls, and other limits are subject to change at Sogni AI's discretion, subject to applicable law; retrieve the current catalog before quoting them as current. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast / 2.5**, and **HappyHorse 1.1** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Current plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. Plan pricing, included features and models, usage allowances, fair-use controls, and other limits are subject to change at Sogni AI's discretion, subject to applicable law; retrieve the current catalog before quoting them as current. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast / 2.5**, **HappyHorse 1.1**, and **Wan 3** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
 
 **Do not infer a Spark charge from `tokenType: "spark"`.** `tokenType` is the quote/accounting denomination and may remain `spark` on a covered Unlimited job. Billing is decided separately by the server's `paymentModel`: `subscription` means the artist Spark/SOGNI debit was skipped; `paid_spark`, `free_spark`, or `sogni` means token billing. If a result does not expose `paymentModel`, treat the payment source as unknown rather than warning that Spark was spent. Check the structured subscription state or transaction history when available. A successful request made with `--billing-mode subscription` is covered: if the server cannot use Unlimited, it rejects the request with `4078` or `4080` instead of silently falling back to Spark.
 
@@ -356,7 +369,7 @@ Unlimited is fair-use, not unmetered. Describe only the concurrency and queue li
 
 When a generation cannot bill to the subscription, the CLI returns a structured error (`errorCategory: "subscription_billing"`). Respond by the `errorCode`, and **do not** collect payment details or simulate a purchase:
 
-- **`4078` — Unlimited billing unavailable for this generation.** Either a vendor model the subscription never covers (use Premium Spark for GPT Image 2 / Seedance / HappyHorse), or no verified entitlement right now (reconnect and retry). Offer the Premium Spark / `--token-type` path; do not claim the subscription will cover a vendor model.
+- **`4078` — Unlimited billing unavailable for this generation.** Either a vendor model the subscription never covers (use Premium Spark for GPT Image 2 / Seedance / HappyHorse / Wan 3), or no verified entitlement right now (reconnect and retry). Offer the Premium Spark / `--token-type` path; do not claim the subscription will cover a vendor model.
 - **`4079` — Maximum queued jobs reached.** Ask the user to wait for queued jobs to finish before submitting more; this resolves on its own.
 - **`4080` — Renewal payment is being retried; access is paused.** Tell the user Unlimited resumes automatically once the renewal succeeds and that they can render now with Spark or SOGNI (`--token-type spark` / `sogni`). **Never auto-retry the covered job in a loop** — it will keep failing until billing recovers.
 - **`4081` — Higher plan required.** Suggest upgrading to Unlimited Pro.
@@ -401,7 +414,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 
 ## Cost
 
-Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise renders use the selected Spark or SOGNI token path. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance, HappyHorse, and GPT Image 2 are vendor models requiring Premium Spark eligibility.
+Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise renders use the selected Spark or SOGNI token path. 512x512 images are most cost-efficient. `-n` is safety-capped at 16 outputs per call (`SOGNI_MAX_COUNT` raises it deliberately). Seedance, HappyHorse, Wan 3, and GPT Image 2 are vendor models requiring Premium Spark eligibility.
 
 ## Troubleshooting
 
@@ -410,7 +423,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 - **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai, account menu).
 - **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. An existing block may require waiting before retrying after upgrading.
 - **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.
-- **Video size errors:** sizes are model-specific (WAN ÷16 min 480 max 1536; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
+- **Video size errors:** sizes are model-specific (WAN 2.2 ÷16 min 480 max 1536; Wan 3 uses its exact 480P/720P/1080P ratio buckets; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
 - **Timeouts:** try a faster model or raise `-t`.
 - **No workers:** check https://sogni.ai for network status.
 

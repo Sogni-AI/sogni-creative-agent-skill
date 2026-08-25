@@ -1,3 +1,18 @@
+# [3.34.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.33.1...v3.34.0) (2026-08-25)
+
+
+### Bug Fixes
+
+* **deps:** align Sogni runtime dependencies ([64fb49d](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/64fb49d300dae84165698125e1439dc0f65b5bae))
+* **deps:** sync published intelligence runtime ([66ce6ab](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/66ce6abeb735405ea883072774b8830398660c6d))
+* **deps:** update intelligence client to 3.23.2 ([ee62730](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/ee62730fff940fde2c7f6dccc8669b02d3bb542a))
+
+
+### Features
+
+* **prompts:** add exact model authoring guidance ([701d5a8](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/701d5a81698558f90ab183ca3fd913bae6970fab))
+* **video:** add Seedance 2.5 R2V task modes ([ab094ef](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/ab094ef2c18f2364ac354cc4905061f21980873b))
+
 ## [3.33.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.33.0...v3.33.1) (2026-08-25)
 
 

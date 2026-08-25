@@ -1,3 +1,17 @@
+# [3.35.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.34.0...v3.35.0) (2026-08-25)
+
+
+### Bug Fixes
+
+* **deps:** consume Wan3 intelligence ([3aaa8d0](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/3aaa8d03354de24139fc0a07d923617ae1f8b88a))
+* **video:** complete Wan3 CLI surface ([7b27d0f](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/7b27d0f7f662cd63a65d451dda1b9eb0c747605a))
+
+
+### Features
+
+* **video:** expose Alibaba Wan 3 ([f337a91](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/f337a9163bbab728822982bf7df0459b7c677b0b))
+* **video:** merge Wan3 integration ([77f07a4](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/77f07a452a1afe535f3e8227e10d6815d6b7ec23))
+
 # [3.34.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.33.1...v3.34.0) (2026-08-25)
 
 

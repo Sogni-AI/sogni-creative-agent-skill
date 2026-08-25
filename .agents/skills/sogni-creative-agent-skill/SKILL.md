@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.34.0"
+  version: "3.35.0"
   author: Sogni AI
   hermes:
     category: creative

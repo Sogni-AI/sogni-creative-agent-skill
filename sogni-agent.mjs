@@ -1571,16 +1571,13 @@ const VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT = 0.02;
 const MINIMAX_H3_MAX_VIDEO_PIXELS = 1_032_192;
 
 function isWanVideoModelId(modelId) {
-  return typeof modelId === 'string' && modelId.startsWith('wan_');
+  return getSharedModelDefaults(modelId)?.family === 'wan22';
 }
 
 function isWanAnimateVideoModelId(modelId) {
-  return typeof modelId === 'string' && (
-    modelId.includes('_animate-move') ||
-    modelId.includes('_animate-replace') ||
-    modelId.includes('_animate_move') ||
-    modelId.includes('_animate_replace')
-  );
+  if (!isWanVideoModelId(modelId)) return false;
+  const workflow = inferVideoWorkflowFromModel(modelId);
+  return workflow === 'animate-move' || workflow === 'animate-replace';
 }
 
 function isGptImage2ModelSelection(modelId) {
@@ -1589,10 +1586,34 @@ function isGptImage2ModelSelection(modelId) {
 }
 
 const SEEDANCE_TASK_TYPES = new Set(['reference', 'edit', 'extend']);
+const QWEN_IMAGE_EDIT_2511_MODEL_IDS = new Set([
+  'qwen_image_edit_2511_fp8',
+  'qwen_image_edit_2511_fp8_lightning',
+]);
+const LIGHTNING_IMAGE_MODEL_IDS = new Set([
+  'qwen_image_edit_2511_fp8_lightning',
+  'qwen_image_2512_fp8_lightning',
+]);
+
+function isQwenImageEdit2511ModelSelection(modelId) {
+  return QWEN_IMAGE_EDIT_2511_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
+function isLightningImageModelSelection(modelId) {
+  return LIGHTNING_IMAGE_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
+const SEEDANCE_25_MODEL_SELECTIONS = new Set([
+  'seedance-2-5',
+  'seedance2-5',
+  'seedance2-5-t2v',
+  'seedance2-5-ia2v',
+  'seedance2-5-v2v',
+]);
 
 function isSeedance25ModelSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
-  return normalized.startsWith('seedance-2-5') || normalized.startsWith('seedance2-5');
+  return SEEDANCE_25_MODEL_SELECTIONS.has(normalized);
 }
 
 function normalizeMusicModelId(value) {
@@ -2278,19 +2299,19 @@ function parseOutpaintAspectRatio(value) {
 }
 
 function isLtxV2VModelId(modelId) {
-  return !!modelId && (modelId.includes('ltx23') || modelId.includes('ltx25')) && /_v2v(_|$)/.test(modelId);
+  return isLtxFamilyModel(modelId) && inferVideoWorkflowFromModel(modelId) === 'v2v';
 }
 
 function isLtx23ModelId(modelId) {
-  return String(modelId || '').trim().toLowerCase().startsWith('ltx23-');
+  return getSharedModelDefaults(modelId)?.family === 'ltx23';
 }
 
 function isLtx25ModelId(modelId) {
-  return String(modelId || '').trim().toLowerCase().startsWith('ltx25-');
+  return getSharedModelDefaults(modelId)?.family === 'ltx25';
 }
 
 function isLtxFamilyModel(modelId) {
-  return isLtx2Model(modelId) || isLtx25ModelId(modelId);
+  return isLtx2Model(modelId);
 }
 
 function ltx25WorkflowFromModelSelection(modelId) {
@@ -3745,14 +3766,17 @@ Video Options:
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
-    Best when you want canonical first/last frame anchoring; max 2 images.
+    Best when you want canonical first/last frame anchoring; do not attach loose
+    image, video, or audio references to the same request.
   - LOOSE REFERENCE MODE: -c/--context image refs plus optional --ref-audio /
     --ref-video extras. Anchor frame intent in the prompt with @Image1, @Image2,
     @Video1, @Audio1 etc. (e.g. "Use @Image1 as the opening shot reference").
     Up to 9 image / 3 video / 3 audio / 12 total references per video request
     on the 2.0 family; seedance2-5 raises the caps to 30 image / 10 video /
-    10 audio / 30 total.
-  Combining --ref/--ref-end with -c/--context on Seedance is rejected client-side.
+    10 audio / 50 total.
+  - Typed IA2V exception: with --workflow ia2v, --ref is a loose @Image
+    reference beside --ref-audio, not a first_frame anchor. --ref-end is invalid.
+  Combining native frame anchors with any loose reference is rejected client-side.
   All three modalities pull caps from the canonical
   @sogni-ai/sogni-protocol seedance-reference-limits catalog.
   --video-start <sec>   Start offset into --ref-video for segmented V2V/animate
@@ -4295,7 +4319,7 @@ if (options.multiAngle) {
   options.elevation = normalizeMultiAngleValue(options.elevation, MULTI_ANGLE_ELEVATION_ALIASES, elevationKeys, 'elevation');
   options.distance = normalizeMultiAngleValue(options.distance, MULTI_ANGLE_DISTANCE_ALIASES, distanceKeys, 'distance');
 
-  if (options.model && !options.model.includes('qwen_image_edit_2511')) {
+  if (options.model && !isQwenImageEdit2511ModelSelection(options.model)) {
     fatalCliError('--multi-angle requires a Qwen Image Edit 2511 model.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
@@ -4328,7 +4352,7 @@ if (options.multiAngle) {
     options.loraStrengths = [];
   }
   if (!cliSet.guidance && (options.guidance === null || options.guidance === undefined)) {
-    options.guidance = options.model.includes('lightning') ? 1.0 : 4.0;
+    options.guidance = isLightningImageModelSelection(options.model) ? 1.0 : 4.0;
   }
   if (options.angleStrength === null || options.angleStrength === undefined) {
     options.angleStrength = 0.9;
@@ -4513,7 +4537,7 @@ if (options.video) {
   if (!options.videoWorkflow && isSeedanceModelSelection(options.model)) {
     if (options.refVideo) {
       options.videoWorkflow = 'v2v';
-    } else if (options.refAudio && (options.refImage || options.refImageEnd)) {
+    } else if (options.refAudio && options.refImage) {
       options.videoWorkflow = 'ia2v';
     } else {
       options.videoWorkflow = 't2v';
@@ -5007,7 +5031,12 @@ if (options.video) {
       options.seedanceTaskType = 'reference';
     }
   }
-  if (options.seedanceTaskType && (options.refImage || options.refImageEnd)) {
+  const seedance25TypedIa2vImage =
+    options.videoWorkflow === 'ia2v' && options.refImage && !options.refImageEnd;
+  if (
+    options.seedanceTaskType &&
+    (options.refImageEnd || (options.refImage && !seedance25TypedIa2vImage))
+  ) {
     fatalCliError(
       'Seedance 2.5 reference/edit/extend uses loose media only. Use -c/--context for images; omit --ref/--ref-end frame anchors.',
       {
@@ -5191,8 +5220,11 @@ if (options.video) {
     }
   } else if (options.videoWorkflow === 'ia2v') {
     if (isSeedanceVideo) {
-      if (!options.refAudio || (!options.refImage && !options.refImageEnd && !options.refVideo)) {
+      if (!options.refAudio || (!options.refImage && !options.refVideo)) {
         fatalCliError('Seedance ia2v requires --ref-audio plus --ref or --ref-video.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refImageEnd) {
+        fatalCliError('Seedance ia2v treats --ref as a loose @Image reference and does not accept --ref-end. Use dedicated frame mode without audio for a native last-frame anchor.', { code: 'INVALID_ARGUMENT' });
       }
     } else if (!options.refImage || !options.refAudio) {
       fatalCliError('ia2v requires both --ref and --ref-audio.', { code: 'INVALID_ARGUMENT' });
@@ -5247,25 +5279,35 @@ if (options.video) {
     fatalCliError('Seedance 2.0 audio references require --ref, --ref-video, or -c/--context image refs.', { code: 'INVALID_ARGUMENT' });
   }
 
-  // Seedance reference modes are mutually exclusive:
-  //   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
-  //     Up to 2 images; the platform pins them as parameter-mode firstFrame/lastFrame.
+  // Seedance provider roles form two mutually exclusive request shapes:
+  //   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame)
+  //     outside the typed ia2v workflow. The platform pins them as
+  //     parameter-mode firstFrame/lastFrame.
   //   - LOOSE REFERENCE MODE: -c/--context (repeatable image refs), --ref-audio extras,
   //     --ref-video extras. Seedance 2.0 permits 9 images / 3 videos / 3 audios /
   //     12 total; Seedance 2.5 permits 30 / 10 / 10 / 50 and audio-only input.
   //     Anchor frame intent in the prompt with @Image1 / @Video1 / @Audio1 etc.
-  // Mixing dedicated frames with loose image refs is rejected at sogni-socket
-  // (jobsController.js) so we catch it client-side with a clearer message.
-  if (isSeedanceVideo
-      && (options.refImage || options.refImageEnd)
-      && Array.isArray(options.contextImages) && options.contextImages.length > 0) {
+  // In typed ia2v, --ref is intentionally a loose reference_image beside the
+  // audio, not a first_frame role. Every other frame-plus-loose combination is
+  // rejected by sogni-socket, so catch it before uploading or charging.
+  const seedanceFrameInputs = options.videoWorkflow === 'ia2v'
+    ? [options.refImageEnd].filter(Boolean)
+    : [options.refImage, options.refImageEnd].filter(Boolean);
+  const seedanceLooseInputs = [
+    ...(Array.isArray(options.contextImages) ? options.contextImages : []),
+    options.refAudio,
+    ...(Array.isArray(options.refAudios) ? options.refAudios : []),
+    options.refVideo,
+    ...(Array.isArray(options.refVideos) ? options.refVideos : []),
+  ].filter(Boolean);
+  if (isSeedanceVideo && seedanceFrameInputs.length > 0 && seedanceLooseInputs.length > 0) {
     fatalCliError(
-      'Seedance reference modes are mutually exclusive: --ref/--ref-end (dedicated first/last frame) cannot be combined with -c/--context (loose image references). '
-      + 'Pick one: use --ref/--ref-end for first-class first-frame/last-frame anchoring (max 2 images), '
-      + `or use -c/--context (plus optional @Image1/@Image2 prompt language) for up to ${isSeedance25Video ? 30 : 9} loose image references.`,
+      'Seedance reference modes are mutually exclusive: native --ref/--ref-end frame anchors cannot be combined with loose image, video, or audio references. '
+      + 'Pick one: use --ref/--ref-end alone for first-class frame anchoring, or use -c/--context with optional --ref-video/--ref-audio and @ImageN/@VideoN/@AudioN prompt language. '
+      + 'For image-plus-audio generation, select --workflow ia2v; there --ref is mapped to a loose @Image reference instead of first_frame.',
       { code: 'INVALID_ARGUMENT', details: {
-          dedicatedFrames: [options.refImage, options.refImageEnd].filter(Boolean),
-          looseImageRefs: options.contextImages,
+          dedicatedFrames: seedanceFrameInputs,
+          looseReferences: seedanceLooseInputs,
         } },
     );
   }
@@ -10172,8 +10214,8 @@ async function runMultiAngleFlow(client, log) {
     ? MULTI_ANGLE_AZIMUTHS.map((a) => a.key)
     : [options.azimuth];
   const modelDefaults = getModelDefaults(options.model, openclawConfig);
-  const steps = options.steps ?? modelDefaults?.steps ?? (options.model.includes('lightning') ? 4 : 20);
-  const guidance = options.guidance ?? modelDefaults?.guidance ?? (options.model.includes('lightning') ? 1.0 : 4.0);
+  const steps = options.steps ?? modelDefaults?.steps ?? (isLightningImageModelSelection(options.model) ? 4 : 20);
+  const guidance = options.guidance ?? modelDefaults?.guidance ?? (isLightningImageModelSelection(options.model) ? 1.0 : 4.0);
 
   let outputConfig = resolveMultiAngleOutputConfig(options.output, options.outputFormat);
   let tempOutputDir = null;
@@ -11450,7 +11492,6 @@ async function main() {
       }
 
       const isSeedanceVideo = isSeedanceModel(options.model);
-      const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
       const isHappyHorseVideo = isHappyHorseModel(options.model);
       const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
       // Vendor video models forward image references as HTTPS URL arrays (or
@@ -11473,13 +11514,40 @@ async function main() {
       const seedanceReferenceImageUrls = [];
       const seedanceReferenceVideoUrls = [];
       const seedanceReferenceAudioUrls = [];
-      // Seedance --ref/--ref-end are dedicated frame anchors even when they
-      // are HTTPS URLs, so fetch them into the SDK's frame fields. Loose
-      // Seedance images always come from -c/--context and use URL arrays.
-      // HappyHorse has no binary frame upload field and keeps URL forwarding.
-      const forwardFrameAsUrl = isHappyHorseVideo || (isSeedanceVideo && !isSeedance25Video);
-      const useRefImageUrl = forwardFrameAsUrl && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImage, 'Reference image');
-      const useRefImageEndUrl = forwardFrameAsUrl && await appendSafeSeedanceReferenceUrl(seedanceReferenceImageUrls, options.refImageEnd, 'End reference image');
+      // Argument roles, never file location, determine provider semantics.
+      // --ref/--ref-end are dedicated frame anchors even when they are HTTPS;
+      // -c/--context is loose reference media. IA2V is the one typed exception:
+      // its image travels beside audio as a loose @Image reference. HappyHorse
+      // has no binary frame upload field and keeps URL forwarding.
+      let useRefImageUrl = false;
+      let useRefImageEndUrl = false;
+      if (isHappyHorseVideo) {
+        useRefImageUrl = await appendSafeSeedanceReferenceUrl(
+          seedanceReferenceImageUrls,
+          options.refImage,
+          'Reference image',
+        );
+        useRefImageEndUrl = await appendSafeSeedanceReferenceUrl(
+          seedanceReferenceImageUrls,
+          options.refImageEnd,
+          'End reference image',
+        );
+      } else if (isSeedanceVideo && options.videoWorkflow === 'ia2v' && options.refImage) {
+        if (isHttpsUrl(options.refImage)) {
+          useRefImageUrl = await appendSafeSeedanceReferenceUrl(
+            seedanceReferenceImageUrls,
+            options.refImage,
+            'Reference image',
+          );
+        } else {
+          seedanceReferenceImageUrls.push(await uploadSeedanceReferenceImageUrl(
+            options.refImage,
+            creds.SOGNI_API_KEY,
+            0,
+          ));
+          useRefImageUrl = true;
+        }
+      }
       const refAudioFormatByPath = options.refAudio
         ? detectReferenceAudioFormat(
             new Uint8Array(),
@@ -12043,8 +12111,8 @@ async function main() {
         options.contextImages.map(img => fetchMediaBuffer(img))
       );
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
-      const steps = options.steps ?? modelDefaults?.steps ?? (options.model.includes('lightning') ? 4 : 20);
-      const guidance = options.guidance ?? modelDefaults?.guidance ?? (options.model.includes('lightning') ? 3.5 : 7.5);
+      const steps = options.steps ?? modelDefaults?.steps ?? (isLightningImageModelSelection(options.model) ? 4 : 20);
+      const guidance = options.guidance ?? modelDefaults?.guidance ?? (isLightningImageModelSelection(options.model) ? 3.5 : 7.5);
       const gptImageQuality = isGptImage2ModelSelection(options.model)
         ? options.quality === 'pro'
           ? 'high'

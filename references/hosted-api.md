@@ -182,8 +182,11 @@ When `--video -m seedance2`, `-m seedance2-mini`, `-m seedance2-fast`, or
   `validateSeedanceReferenceCounts()` in
   `@sogni-ai/sogni-intelligence-client/tools`).
 
-Combining `--ref` / `--ref-end` with `-c/--context` on Seedance is rejected
-client-side with an error pointing at the correct mode. In CLI direct-gen mode,
+Combining native `--ref` / `--ref-end` frame anchors with any loose image,
+video, or audio reference on Seedance is rejected client-side with an error
+pointing at the correct mode. The typed `--workflow ia2v` path is the explicit
+exception: there, `--ref` is sent as a loose `@Image` reference beside
+`--ref-audio`, not as `first_frame`; `--ref-end` remains invalid. In CLI direct-gen mode,
 local `-c/--context` images and the primary `--ref-audio` / `--ref-video` are
 uploaded to Sogni media storage automatically and forwarded as HTTPS URLs; only
 *additional* `--ref-audio` / `--ref-video` entries beyond the first must already

@@ -12,12 +12,13 @@ substitute a generic image prompt or another model's format.
 | --- | --- | --- |
 | SD 1.5 | Weighted or comma-separated tags; quality/medium, subject, environment, lighting/camera | `positive_prompt:` plus `negative_prompt:` |
 | SDXL | Hybrid natural language plus selective comma-separated style/quality terms; Pony variants start with their score tags | `positive_prompt:` plus `negative_prompt:` |
-| FLUX / Chroma | One coherent natural-language visual description; exact visible text in quotes; no SD score/tag soup | Prompt text only; FLUX.2 has no negative-prompt field |
+| FLUX.1 Schnell | One concise natural-language visual description centered on the subject, composition, light, and style; no SD score/tag soup | Prompt text only |
+| Chroma 1 / v.46 / Detail | One coherent natural-language visual description; exact visible text in quotes; no SD score/tag soup | Prompt text only |
 | Krea 2 / Krea 2 Turbo | Dense, fluent rich caption emphasizing observable composition, palette, light, texture, and atmosphere; no SD weighting syntax | Prompt text only |
 | Qwen Image 2512 | Detailed natural-language description with explicit spatial relationships and exact quoted typography | `positive_prompt:` plus `negative_prompt:` |
 | Z-Image | Compact instruction-aware natural-language caption | Foundation model: positive plus negative; Turbo: prompt text only |
 | GPT Image 2 | Direct natural-language creative direction with explicit layout, hierarchy, and exact quoted copy | Prompt text only |
-| Qwen / Krea / FLUX / GPT edits | A direct delta instruction: what changes, what remains fixed, and the ordered role of each reference | Prompt text only |
+| Qwen / Krea / GPT edits | A direct delta instruction: what changes, what remains fixed, and the ordered role of each reference | Prompt text only |
 
 The two-field envelope is exact: return two non-empty single lines in this
 order and nothing else:
@@ -35,10 +36,10 @@ Markdown fence, preamble, explanation, or render offer.
 - Treat a model selector as an exact capability declaration, not a name to
   fuzzy-match into a convenient family. Every selector exposed by
   `generate_image` and `edit_image` must resolve in the shared registry.
-- A family can have different operation profiles. `flux2` and
-  `gpt-image-2` support registered generation and edit contracts. A
-  generation-only selector such as `flux1-krea` or `krea-2-turbo` must not
-  silently accept an edit request.
+- A family can have different operation profiles. `gpt-image-2` supports
+  registered generation and edit contracts. A generation-only selector such
+  as `flux1-schnell-fp8` or `krea-2-turbo` must not silently accept an edit
+  request.
 - Use `qwen` / `qwen-lightning` as edit selectors and
   `qwen-2512` / `qwen-2512-lightning` as generation selectors.
 - Use `krea-identity-edit` or
@@ -58,4 +59,3 @@ Primary references: [FLUX prompting](https://docs.bfl.ai/guides/prompting_unifie
 [Qwen Image Edit 2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511),
 [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), and
 [Stability API](https://platform.stability.ai/docs/api-reference).
-

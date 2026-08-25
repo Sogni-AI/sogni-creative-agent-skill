@@ -75,8 +75,8 @@ sogni-agent -m krea2_identity_edit_v1_2 -c ./portrait.jpg \
 
 The hosted `generate_image` and `edit_image` tools take the same two arrays under
 `loras` and `loraStrengths`. On `edit_image` they apply only when the model is
-`krea-identity-edit` or `dark-beast-krea2-identity-edit`; Qwen, Flux.2, and GPT
-Image 2 load no LoRAs and the ids are dropped.
+`krea-identity-edit` or `dark-beast-krea2-identity-edit`; Qwen and GPT Image 2
+load no LoRAs and the ids are dropped.
 
 - Up to 8 LoRAs per render — read `constraints.maxPerRequest` rather than
   assuming; the render pipeline rejects anything over it at submit.

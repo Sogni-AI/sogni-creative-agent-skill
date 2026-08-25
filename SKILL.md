@@ -286,7 +286,7 @@ sogni-agent -c photo.jpg -m qwen_image_edit_2511_fp8 "turn this into anime style
 
 When the creator asks only to write, draft, return, or generate a prompt for **any image or video model/workflow**, the prompt text is the final deliverable. Require the named model/version and operation, apply its registered model-native contract, and return only the directly runnable prompt. Do not invoke the CLI, hosted API, or any media-generation tool; do not add a Markdown fence, preamble, generic tips, explanation, render offer, or follow-up question after a completed prompt. If the target is omitted, ask which model to tune for. If the model/version/operation has no validated contract, say so and ask for the exact target; never substitute a generic prompt or another model's format. If the same request also asks to render the media now, that execution request wins and the shaped prompt becomes the generation input.
 
-For image prompt-only requests, **read [`references/image-prompting.md`](./references/image-prompting.md)** before writing. SD 1.5, SDXL/Pony, FLUX/Chroma, Krea 2, Qwen Image, Z-Image, GPT Image, and their edit operations do not share one prompt syntax or output envelope.
+For image prompt-only requests, **read [`references/image-prompting.md`](./references/image-prompting.md)** before writing. SD 1.5, SDXL/Pony, FLUX.1 Schnell, Chroma, Krea 2, Qwen Image, Z-Image, GPT Image, and their edit operations do not share one prompt syntax or output envelope.
 
 ### LTX video prompts
 
@@ -418,7 +418,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 
 | Read this | When the task involves |
 |-----------|------------------------|
-| [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX/Chroma, Krea 2, Qwen, Z-Image, GPT Image, or model-specific edit operations |
+| [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX.1 Schnell, Chroma, Krea 2, Qwen, Z-Image, GPT Image, or model-specific edit operations |
 | [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, and dialogue tags; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |

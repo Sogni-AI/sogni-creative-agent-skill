@@ -27,7 +27,7 @@ Keep a session-level manifest of every uploaded or generated asset and translate
 | Model id | Image | Video | Audio |
 |---|---|---|---|
 | `seedance` (incl. `seedance2`, `seedance2-mini`, `seedance2-fast`) | `@Image1` | `@Video1` | `@Audio1` |
-| `gpt-image-2`, `flux*` | `Image 1` | `Video 1` | `Audio 1` |
+| `gpt-image-2` | `Image 1` | `Video 1` | `Audio 1` |
 | `ltx23`, `wan`, `qwen-image-edit` | `context_image_0` (0-indexed) | `context_video_0` | `context_audio_0` |
 
 ## Constraints

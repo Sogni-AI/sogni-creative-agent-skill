@@ -279,8 +279,8 @@ no negative prompt and no ControlNet.
 - **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
   its only loose reference.
 
-The pinned `@sogni-ai/sogni-intelligence-client` 3.22.0 runtime recognizes
-`seedance-2-5`, and the package override pins `@sogni-ai/sogni-client` 5.19.0
+The pinned `@sogni-ai/sogni-intelligence-client` 3.23.2 runtime recognizes
+`seedance-2-5`, and the package override pins `@sogni-ai/sogni-client` 5.19.2
 for typed task transport. The direct CLI applies Seedance's fixed 24 fps,
 4-30 s duration window, larger reference caps, reference-mode exclusivity, and
 HTTPS reference forwarding before dispatch.

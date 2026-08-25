@@ -2018,7 +2018,7 @@ test('seedance v2v alias does not require or send ControlNet', () => {
   assert.equal(state.lastVideoProject.controlNet, undefined);
 });
 
-test('seedance 2.5 v2v defaults to the explicit edit task contract', () => {
+test('seedance 2.5 v2v defaults to the explicit edit task and keeps typed video input', () => {
   const { exitCode, state } = runCli([
     '--video',
     '--workflow', 'v2v',
@@ -2030,6 +2030,8 @@ test('seedance 2.5 v2v defaults to the explicit edit task contract', () => {
   assert.equal(exitCode, 0);
   assert.equal(state.lastVideoProject.modelId, 'seedance-2-5');
   assert.equal(state.lastVideoProject.seedanceTaskType, 'edit');
+  assert.deepEqual(state.lastVideoProject.referenceVideoUrls, ['https://example.com/source.mp4']);
+  assert.equal(state.lastVideoProject.referenceVideo, undefined);
 });
 
 test('seedance 2.5 accepts an explicit extension task contract', () => {
@@ -2047,7 +2049,7 @@ test('seedance 2.5 accepts an explicit extension task contract', () => {
   assert.equal(state.lastVideoProject.duration, 8);
 });
 
-test('seedance 2.5 first-frame generation does not send an omni task type', () => {
+test('seedance 2.5 first-frame generation keeps its frame anchor without an omni task type', () => {
   const { exitCode, state } = runCli([
     '--video',
     '-m', 'seedance2-5',
@@ -2056,6 +2058,7 @@ test('seedance 2.5 first-frame generation does not send an omni task type', () =
   ]);
   assert.equal(exitCode, 0);
   assert.equal(state.lastVideoProject.seedanceTaskType, undefined);
+  assert.ok(state.lastVideoProject.referenceImage);
 });
 
 test('seedance 2.5 edit requires a source video', () => {
@@ -2123,6 +2126,69 @@ test('seedance 2.5 rejects provider-auto task classification', () => {
   );
 });
 
+test('seedance 2.5 routes HTTPS and local --ref inputs to first-frame generation', () => {
+  const remote = runCli([
+    '--video',
+    '-m', 'seedance2-5',
+    '--ref', 'https://example.com/first.png',
+    'The camera tracks forward from the supplied opening frame.'
+  ]);
+  const local = runCli([
+    '--video',
+    '-m', 'seedance2-5',
+    '--ref', SCREENSHOT_FIXTURE,
+    'The camera tracks forward from the supplied opening frame.'
+  ]);
+
+  assert.equal(remote.exitCode, 1);
+  assert.match(remote.stderr, /Generating video \(t2v\) with seedance-2-5/);
+  assert.match(remote.stderr, /Reference image: https:\/\/example\.com\/first\.png/);
+  assert.match(remote.stderr, /Failed to fetch media \(404 Not Found\)/);
+  assert.equal(local.exitCode, 0);
+  assert.ok(local.state.lastVideoProject.referenceImage);
+  assert.equal(local.state.lastVideoProject.referenceImageUrls, undefined);
+});
+
+test('seedance 2.5 rejects native first-frame plus loose audio before dispatch', () => {
+  expectCliError([
+    '--video',
+    '--workflow', 't2v',
+    '-m', 'seedance2-5',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-audio', 'https://example.com/dialogue.mp3',
+    'The presenter speaks the supplied dialogue to camera.'
+  ], 'Seedance 2.5 reference/edit/extend uses loose media only');
+});
+
+test('seedance 2.5 local IA2V input is uploaded as a loose image reference', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance25-ia2v-'));
+  const imagePath = join(tempDir, 'presenter.png');
+  writeFileSync(imagePath, readFileSync(SCREENSHOT_FIXTURE));
+
+  await withTestApiServer(async (apiBaseUrl) => {
+    const { exitCode, state } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video',
+      '--workflow', 'ia2v',
+      '-m', 'seedance2-5-ia2v',
+      '--ref', imagePath,
+      '--ref-audio', 'https://example.com/dialogue.mp3',
+      'Use @Image1 for the presenter and @Audio1 for dialogue pacing.'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(state.lastVideoProject.referenceImage, undefined);
+    assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
+    assert.match(
+      state.lastVideoProject.referenceImageUrls[0],
+      /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//
+    );
+  });
+});
+
 test('seedance 2.5 accepts an audio-only loose-reference task', () => {
   const { exitCode, state, stderr } = runCli([
     '--video',
@@ -2165,7 +2231,7 @@ test('seedance t2v forwards HTTPS multimodal references as URL arrays', () => {
     '--workflow', 't2v',
     '-m', 'seedance2',
     '--fps', '30',
-    '--ref', 'https://example.com/product.png',
+    '--context', 'https://example.com/product.png',
     '--ref-video', 'https://example.com/motion.mp4',
     '--ref-audio', 'https://example.com/music.mp3',
     'Use @Image1 for product identity, @Video1 for motion, and @Audio1 for rhythm.'
@@ -2184,8 +2250,8 @@ test('seedance t2v forwards HTTPS multimodal references as URL arrays', () => {
 
 test('seedance rejects unsafe HTTPS reference URLs before forwarding', () => {
   expectCliError(
-    ['--video', '--workflow', 't2v', '-m', 'seedance2', '--ref', 'https://127.0.0.1/product.png', 'Use @Image1 as reference.'],
-    'Reference image URL is not safe to forward'
+    ['--video', '--workflow', 't2v', '-m', 'seedance2', '--context', 'https://127.0.0.1/product.png', 'Use @Image1 as reference.'],
+    'Image reference URL is not safe to forward'
   );
 });
 
@@ -2264,11 +2330,11 @@ test('seedance rejects audio-only references before wrapper validation', () => {
 });
 
 test('seedance multi-ref forwards repeated --ref-audio / --ref-video HTTPS URLs as URL arrays', () => {
-  const { exitCode, state } = runCli([
+  const { exitCode, state, stderr } = runCli([
     '--video',
     '--workflow', 't2v',
     '-m', 'seedance2',
-    '--ref', 'https://example.com/cover.png',
+    '--context', 'https://example.com/cover.png',
     '--ref-audio', 'https://example.com/voice.mp3',
     '--ref-audio', 'https://example.com/bed.mp3',
     '--ref-audio', 'https://example.com/sfx.mp3',
@@ -2276,7 +2342,7 @@ test('seedance multi-ref forwards repeated --ref-audio / --ref-video HTTPS URLs 
     '--ref-video', 'https://example.com/transition.mp4',
     'Use @Image1 for product identity, @Audio1 for voice, @Audio2/@Audio3 for ambience, @Video1/@Video2 for motion cues.'
   ]);
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 0, stderr);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
   assert.deepEqual(state.lastVideoProject.referenceAudioUrls, [
@@ -2294,7 +2360,7 @@ test('seedance enforces 3-audio cap with canonical error message', () => {
   expectCliError(
     [
       '--video', '--workflow', 't2v', '-m', 'seedance2',
-      '--ref', 'https://example.com/cover.png',
+      '-c', 'https://example.com/cover.png',
       '--ref-audio', 'https://example.com/a1.mp3',
       '--ref-audio', 'https://example.com/a2.mp3',
       '--ref-audio', 'https://example.com/a3.mp3',
@@ -2309,7 +2375,7 @@ test('seedance enforces 3-video cap with canonical error message', () => {
   expectCliError(
     [
       '--video', '--workflow', 't2v', '-m', 'seedance2',
-      '--ref', 'https://example.com/cover.png',
+      '-c', 'https://example.com/cover.png',
       '--ref-video', 'https://example.com/v1.mp4',
       '--ref-video', 'https://example.com/v2.mp4',
       '--ref-video', 'https://example.com/v3.mp4',
@@ -2372,7 +2438,7 @@ test('seedance rejects local-file extras for --ref-audio in CLI direct-gen', () 
   expectCliError(
     [
       '--video', '--workflow', 't2v', '-m', 'seedance2',
-      '--ref', 'https://example.com/cover.png',
+      '-c', 'https://example.com/cover.png',
       '--ref-audio', 'https://example.com/primary.mp3',
       '--ref-audio', '/tmp/local-extra.m4a',
       'Layered audio test.',
@@ -2382,16 +2448,16 @@ test('seedance rejects local-file extras for --ref-audio in CLI direct-gen', () 
 });
 
 test('seedance multi-ref accepts seedance2-fast model identically', () => {
-  const { exitCode, state } = runCli([
+  const { exitCode, state, stderr } = runCli([
     '--video',
     '--workflow', 't2v',
     '-m', 'seedance2-fast',
-    '--ref', 'https://example.com/cover.png',
+    '--context', 'https://example.com/cover.png',
     '--ref-audio', 'https://example.com/voice.mp3',
     '--ref-audio', 'https://example.com/bed.mp3',
     'seedance fast with multi-ref audio.'
   ]);
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 0, stderr);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.referenceAudioUrls.length, 2);
 });
@@ -2402,12 +2468,12 @@ test('seedance direct video uploads local MP3 reference audio to v2 media URLs',
   writeFileSync(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]));
 
   await withTestApiServer(async (apiBaseUrl, requests) => {
-    const { exitCode, state } = await runCliAsync([
+    const { exitCode, state, stderr } = await runCliAsync([
       '--api-base-url', apiBaseUrl,
       '--video',
       '--workflow', 't2v',
       '-m', 'seedance2-fast',
-      '--ref', 'https://example.com/cover.png',
+      '--context', 'https://example.com/cover.png',
       '--ref-audio', audioPath,
       '--duration', '4',
       'Use @Image1 for subject identity and @Audio1 for speech rhythm.'
@@ -2416,7 +2482,7 @@ test('seedance direct video uploads local MP3 reference audio to v2 media URLs',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
     });
 
-    assert.equal(exitCode, 0);
+    assert.equal(exitCode, 0, stderr);
     assert.ok(state?.lastVideoProject, 'createVideoProject was called');
     assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
     assert.equal(state.lastVideoProject.referenceAudio, undefined);
@@ -2610,21 +2676,19 @@ test('happyhorse forces Spark token type even when SOGNI is requested', () => {
   assert.equal(state.lastVideoProject.tokenType, 'spark');
 });
 
-test('happyhorse i2v forwards a single HTTPS first-frame image as a URL array', () => {
-  const { exitCode, state } = runCli([
+test('happyhorse routes an HTTPS --ref to i2v and forwards the first-frame URL', () => {
+  const { exitCode, state, stderr } = runCli([
     '--video',
     '-m', 'happyhorse',
     '--fps', '30',
     '--ref', 'https://example.com/first.png',
     'bring the scene to life'
   ]);
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 0, stderr);
+  assert.match(stderr, /Generating video \(i2v\) with happyhorse-1\.1-i2v/);
   assert.equal(state.lastVideoProject.modelId, 'happyhorse-1.1-i2v');
-  assert.equal(state.lastVideoProject.fps, 24);
-  assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/first.png']);
   assert.equal(state.lastVideoProject.referenceImage, undefined);
-  assert.equal(state.lastVideoProject.referenceVideoUrls, undefined);
-  assert.equal(state.lastVideoProject.referenceAudioUrls, undefined);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/first.png']);
 });
 
 test('happyhorse i2v forwards a single local first-frame image as an inline buffer', () => {

@@ -1,6 +1,6 @@
 ---
 name: image_generation
-description: Text-to-image synthesis with Z-Image, Krea 2, Dark Beast Krea 2, Flux, Qwen, and GPT Image 2 models.
+description: Text-to-image synthesis with Z-Image, Krea 2, Dark Beast Krea 2, FLUX.1 Schnell, Chroma, Qwen, and GPT Image 2 models.
 always_loaded: false
 tool_names:
   - generate_image
@@ -8,7 +8,7 @@ tool_names:
 
 # Image generation
 
-Text-to-image synthesis with the current Sogni image stack (Z-Image, Krea 2, Dark Beast Krea 2, Flux, Qwen, and GPT Image 2). Use when the user wants a new image generated from a prompt with no source asset.
+Text-to-image synthesis with the current Sogni image stack (Z-Image, Krea 2, Dark Beast Krea 2, FLUX.1 Schnell, Chroma, Qwen, and GPT Image 2). Use when the user wants a new image generated from a prompt with no source asset.
 
 ## Tools
 
@@ -16,7 +16,7 @@ Text-to-image synthesis with the current Sogni image stack (Z-Image, Krea 2, Dar
 
 ## Prompting
 
-- Use natural-language descriptions (subject, setting, composition, lighting, style) for the next-gen models (Krea 2, Z-Image, Flux, Qwen) rather than keyword lists.
+- Use natural-language descriptions (subject, setting, composition, lighting, style) for Krea 2, Z-Image, FLUX.1 Schnell, Chroma, and Qwen rather than keyword lists.
 - Krea 2 favors long, detailed prompts but also handles short ones; to render text in the image, wrap the exact words in quotes (e.g. a sign reading "OPEN").
 - Use `-m dark_beast_krea2_fp8` when the user explicitly requests Dark Beast Krea 2 or the uncensored community Krea 2 fine-tune.
 - The app applies model-specific prompt-enhancement automatically — pass the user's intent faithfully and avoid empty quality-booster spam.

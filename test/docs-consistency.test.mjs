@@ -254,14 +254,17 @@ test('prompt-only image authoring keeps model families and operations distinct',
   assert.match(skill, /image-prompting\.md/);
   assert.match(skill, /exact target|named model\/version/i);
   assert.match(skill, /never substitute a generic prompt or another model's format/i);
-  for (const family of ['SD 1.5', 'SDXL', 'FLUX', 'Krea 2', 'Qwen Image 2512', 'Z-Image', 'GPT Image 2']) {
+  for (const family of ['SD 1.5', 'SDXL', 'FLUX.1 Schnell', 'Chroma', 'Krea 2', 'Qwen Image 2512', 'Z-Image', 'GPT Image 2']) {
     assert.match(prompting, new RegExp(family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }
   assert.match(prompting, /positive_prompt:[\s\S]*negative_prompt:/i);
-  assert.match(prompting, /FLUX\.2 has no negative-prompt field/i);
   assert.match(prompting, /Turbo: prompt text only/i);
-  assert.match(prompting, /generation-only selector[\s\S]*must not\s+silently accept an edit request/i);
+  assert.match(prompting, /generation-only selector[\s\S]*must not\s+silently accept an edit\s+request/i);
   assert.match(prompting, /typed model and operation metadata/i);
+  for (const retired of ['flux1-dev-kontext', 'flux2', 'flux1-krea']) {
+    assert.doesNotMatch(skill, new RegExp(retired, 'i'));
+    assert.doesNotMatch(prompting, new RegExp(retired, 'i'));
+  }
 });
 
 test('Seedance 2.5 docs keep the 2.0 grammar and publish only its capability overrides', () => {

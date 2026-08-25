@@ -1611,6 +1611,33 @@ const SEEDANCE_25_MODEL_SELECTIONS = new Set([
   'seedance2-5-v2v',
 ]);
 
+const WAN3_MODEL_ID = 'wan3.0-video';
+const WAN3_MODEL_SELECTIONS = new Set([
+  WAN3_MODEL_ID,
+  'wan3',
+  'wan3.0',
+  'wan3-video',
+  'wan-3',
+  'wan-3.0',
+]);
+const WAN3_REFERENCE_LIMITS = Object.freeze({
+  images: 10,
+  videos: 5,
+  audios: 5,
+  assets: 20,
+});
+const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v', 'v2v']);
+const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
+const WAN3_MAX_SEED = 0x7fffffff;
+
+function isWan3ModelSelectionLocal(modelId) {
+  return WAN3_MODEL_SELECTIONS.has(String(modelId || '').trim().toLowerCase().replace(/_/g, '-'));
+}
+
+function isWan3ModelLocal(modelId) {
+  return String(modelId || '').trim().toLowerCase() === WAN3_MODEL_ID;
+}
+
 function isSeedance25ModelSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
   return SEEDANCE_25_MODEL_SELECTIONS.has(normalized);
@@ -1635,7 +1662,10 @@ function normalizeMusicTimeSignature(value) {
 }
 
 function requiresSparkOnlyToken(modelId) {
-  return isGptImage2ModelSelection(modelId) || isSeedanceModel(modelId) || isHappyHorseModel(modelId);
+  return isGptImage2ModelSelection(modelId)
+    || isSeedanceModel(modelId)
+    || isHappyHorseModel(modelId)
+    || isWan3ModelSelectionLocal(modelId);
 }
 
 // Attach the user's explicit --billing-mode to a project config. Omitted by
@@ -1716,6 +1746,7 @@ function getMaxContextImages(modelId) {
 
 function videoDurationLimitsLikeWrapper(modelId) {
   if (isMiniMaxH3Model(modelId)) return { ...MINIMAX_H3_DURATION_LIMITS };
+  if (isWan3ModelSelectionLocal(modelId)) return { min: 2, max: 30 };
   if (isSeedance25ModelSelectionLocal(modelId)) return { min: 4, max: 30 };
   if (isSeedanceModel(modelId)) return { min: 4, max: 15 };
   if (isHappyHorseModel(modelId)) return { min: 3, max: 15 };
@@ -1759,6 +1790,15 @@ function videoModelDimensionDefaultsLikeWrapper(modelId) {
   }
   if (isHappyHorseModel(modelId) || isHappyHorseModelSelectionLocal(modelId)) {
     return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
+  }
+  if (isWan3ModelSelectionLocal(modelId)) {
+    return {
+      defaultWidth: 1920,
+      defaultHeight: 1080,
+      minDimension: 480,
+      maxDimension: 1920,
+      dimensionMultiple: 1,
+    };
   }
   return null;
 }
@@ -2147,6 +2187,7 @@ function resolveSkillVideoModelAlias(
   hasEndFrame = false,
 ) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
   if (normalized === 'ltx25' || normalized === 'ltx25-t2v') {
     const mode = ['i2v', 'a2v', 'ia2v', 'v2v'].includes(workflow) ? workflow : 't2v';
     return LTX25_DISTILLED_WORKFLOW_MODELS[mode];
@@ -4510,13 +4551,17 @@ if (options.video) {
       options.videoWorkflow = normalized;
     } else if (
       options.videoWorkflow === 'r2v'
-      && (isHappyHorseModelSelectionLocal(options.model) || isMiniMaxH3ModelSelectionLocal(options.model))
+      && (
+        isHappyHorseModelSelectionLocal(options.model)
+        || isMiniMaxH3ModelSelectionLocal(options.model)
+        || isWan3ModelSelectionLocal(options.model)
+      )
     ) {
-      // HappyHorse and MiniMax H3 add reference-to-video (r2v) modes that the
-      // shared SkillVideoWorkflow enum does not carry yet.
+      // These unified/reference models accept loose reference-to-video input
+      // even when the pinned shared SkillVideoWorkflow enum predates r2v.
       options.videoWorkflow = 'r2v';
     } else {
-      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace (r2v on HappyHorse or MiniMax H3).`, {
+      fatalCliError(`Unknown workflow "${options.videoWorkflow}". Use t2v|i2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace (r2v on HappyHorse, MiniMax H3, or Wan 3).`, {
         code: 'INVALID_ARGUMENT',
         details: { workflow: options.videoWorkflow }
       });
@@ -4542,6 +4587,32 @@ if (options.video) {
     } else {
       options.videoWorkflow = 't2v';
     }
+  }
+
+  // Wan 3 is one unified Alibaba model. The selected media shape chooses the
+  // operation; unlike HappyHorse, no workflow suffix is appended to the model.
+  // In audio/video workflows --ref is a loose reference image. In i2v it is a
+  // dedicated first-frame anchor and may be paired with --ref-end.
+  if (isWan3ModelSelectionLocal(options.model)) {
+    if (!options.videoWorkflow) {
+      const hasLooseImages = Array.isArray(options.contextImages) && options.contextImages.length > 0;
+      const hasAudio = Boolean(options.refAudio || options.refAudios.length > 0);
+      const hasVideo = Boolean(options.refVideo || options.refVideos.length > 0);
+      if (hasVideo) {
+        options.videoWorkflow = 'v2v';
+      } else if (hasAudio && (options.refImage || hasLooseImages)) {
+        options.videoWorkflow = 'ia2v';
+      } else if (hasAudio) {
+        options.videoWorkflow = 'a2v';
+      } else if (hasLooseImages) {
+        options.videoWorkflow = 'r2v';
+      } else if (options.refImage || options.refImageEnd) {
+        options.videoWorkflow = 'i2v';
+      } else {
+        options.videoWorkflow = 't2v';
+      }
+    }
+    options.model = WAN3_MODEL_ID;
   }
 
   // MiniMax H3 has four concrete worker selectors and five prompt shapes. The
@@ -4938,7 +5009,16 @@ if (!loraCatalogUtilityAction && (options.loraCatalogModel || options.loraCatalo
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
-if (!options.prompt && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
+  options.refImage
+  || options.refImageEnd
+  || options.refAudio
+  || options.refVideo
+  || options.contextImages.length > 0
+  || options.refAudios.length > 0
+  || options.refVideos.length > 0
+);
+if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -5003,6 +5083,7 @@ if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
   const isHappyHorseVideo = isHappyHorseModel(options.model);
+  const isWan3Video = isWan3ModelLocal(options.model);
   const isMiniMaxH3Video = isMiniMaxH3Model(options.model);
   const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
   if (options.seedanceTaskType && !SEEDANCE_TASK_TYPES.has(options.seedanceTaskType)) {
@@ -5096,6 +5177,12 @@ if (options.video) {
       details: { targetResolution: options.targetResolution }
     });
   }
+  if (isWan3Video && cliSet.targetResolution && !WAN3_SUPPORTED_RESOLUTIONS.has(options.targetResolution)) {
+    fatalCliError('Wan 3 --target-resolution must be 480, 720, or 1080.', {
+      code: 'INVALID_ARGUMENT',
+      details: { targetResolution: options.targetResolution }
+    });
+  }
   const seedanceWorkflows = isSeedance25Video
     ? ['t2v', 'ia2v', 'a2v', 'v2v']
     : ['t2v', 'ia2v', 'v2v'];
@@ -5113,6 +5200,12 @@ if (options.video) {
       details: { workflow: options.videoWorkflow, model: options.model }
     });
   }
+  if (isWan3Video && !WAN3_SUPPORTED_WORKFLOWS.has(options.videoWorkflow)) {
+    fatalCliError('Wan 3 supports t2v, i2v/flf, r2v, a2v, ia2v, and v2v workflows.', {
+      code: 'INVALID_ARGUMENT',
+      details: { workflow: options.videoWorkflow, model: options.model }
+    });
+  }
   if (isMiniMaxH3Video && !['t2v', 'i2v', 'r2v'].includes(options.videoWorkflow)) {
     fatalCliError('MiniMax H3 models support only t2v, i2v/flf2v, or r2v workflows.', {
       code: 'INVALID_ARGUMENT',
@@ -5123,6 +5216,12 @@ if (options.video) {
     fatalCliError('HappyHorse video models do not support ControlNet.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, controlNetName: options.videoControlNetName }
+    });
+  }
+  if (isWan3Video && (options.videoControlNetName || options.refMask || options.referenceAudioIdentity)) {
+    fatalCliError('Wan 3 does not support ControlNet, masks, or LTX voice-identity references.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
     });
   }
   if (isMiniMaxH3Video && (options.videoControlNetName || options.refMask || options.referenceAudioIdentity)) {
@@ -5137,6 +5236,24 @@ if (options.video) {
       details: { model: options.model, steps: options.steps, guidance: options.guidance }
     });
   }
+  if (isWan3Video && (cliSet.steps || cliSet.guidance)) {
+    fatalCliError('Wan 3 uses vendor-managed sampling settings; omit --steps and --guidance.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, steps: options.steps, guidance: options.guidance }
+    });
+  }
+  if (isWan3Video && typeof options.prompt === 'string' && options.prompt.length > 20000) {
+    fatalCliError('Wan 3 prompts must be 20,000 characters or fewer.', {
+      code: 'INVALID_ARGUMENT',
+      details: { promptLength: options.prompt.length, maximum: 20000 }
+    });
+  }
+  if (isWan3Video && cliSet.seed && (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > WAN3_MAX_SEED)) {
+    fatalCliError(`Wan 3 --seed must be an integer from 0 through ${WAN3_MAX_SEED}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { seed: options.seed }
+    });
+  }
   if (isHappyHorseVideo && options.apiGenerateAudio !== null) {
     fatalCliError('HappyHorse native audio is always on; omit --generate-audio/--no-generate-audio.', {
       code: 'INVALID_ARGUMENT',
@@ -5144,7 +5261,62 @@ if (options.video) {
     });
   }
 
-  if (options.videoWorkflow === 't2v') {
+  if (isWan3Video) {
+    const looseImages = (options.refImage && options.videoWorkflow !== 'i2v' ? 1 : 0)
+      + options.contextImages.length;
+    const looseVideos = (options.refVideo ? 1 : 0) + options.refVideos.length;
+    const looseAudios = (options.refAudio ? 1 : 0) + options.refAudios.length;
+    const looseTotal = looseImages + looseVideos + looseAudios;
+    const hasFrameInputs = options.videoWorkflow === 'i2v' && Boolean(options.refImage || options.refImageEnd);
+
+    if (options.refImageEnd && !options.refImage) {
+      fatalCliError('Wan 3 last-frame generation requires --ref as the first-frame image.', { code: 'INVALID_ARGUMENT' });
+    }
+    if (options.videoWorkflow === 't2v' && (hasFrameInputs || looseTotal > 0 || options.refImageEnd)) {
+      fatalCliError('Wan 3 t2v does not accept reference media; choose i2v, r2v, a2v, ia2v, or v2v.', { code: 'INVALID_ARGUMENT' });
+    }
+    if (options.videoWorkflow === 'i2v') {
+      if (!options.refImage) {
+        fatalCliError('Wan 3 i2v requires --ref as its first-frame image.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.contextImages.length > 0 || looseVideos > 0 || looseAudios > 0) {
+        fatalCliError('Wan 3 first/last-frame anchors cannot be combined with loose image, video, or audio references.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+    if (options.videoWorkflow === 'r2v') {
+      if (options.refImageEnd) {
+        fatalCliError('Wan 3 r2v uses loose references and does not accept --ref-end.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (looseTotal === 0) {
+        fatalCliError('Wan 3 r2v requires at least one image, video, or audio reference.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+    if (options.videoWorkflow === 'ia2v') {
+      if (options.refImageEnd) {
+        fatalCliError('Wan 3 ia2v maps --ref to a loose image and does not accept --ref-end.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (looseAudios === 0 || looseImages + looseVideos === 0) {
+        fatalCliError('Wan 3 ia2v requires audio plus at least one image or video reference.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+    if (options.videoWorkflow === 'a2v') {
+      if (looseAudios === 0) {
+        fatalCliError('Wan 3 a2v requires --ref-audio.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (looseImages > 0 || looseVideos > 0 || options.refImageEnd) {
+        fatalCliError('Wan 3 a2v accepts audio references only; use ia2v or r2v for multimodal input.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+    if (options.videoWorkflow === 'v2v') {
+      if (looseVideos === 0) {
+        fatalCliError('Wan 3 v2v requires --ref-video.', { code: 'INVALID_ARGUMENT' });
+      }
+      if (options.refImageEnd) {
+        fatalCliError('Wan 3 v2v uses loose references and does not accept --ref-end.', { code: 'INVALID_ARGUMENT' });
+      }
+    }
+    enforceWan3ReferenceCaps({ images: looseImages, videos: looseVideos, audios: looseAudios });
+  } else if (options.videoWorkflow === 't2v') {
     if (!isSeedanceVideo && (
       options.refImage || options.refImageEnd || options.refAudio || options.refVideo
       || options.contextImages.length > 0 || options.refAudios.length > 0 || options.refVideos.length > 0
@@ -5313,7 +5485,7 @@ if (options.video) {
   }
   // Non-Seedance video models do not understand multi-ref audio/video extras —
   // they only support a single primary --ref-audio / --ref-video each.
-  if (!isSeedanceVideo && !isMiniMaxH3R2v) {
+  if (!isSeedanceVideo && !isMiniMaxH3R2v && !isWan3Video) {
     if (Array.isArray(options.refAudios) && options.refAudios.length > 0) {
       fatalCliError('Multiple --ref-audio entries are supported only for Seedance loose references and MiniMax H3 r2v.', {
         code: 'INVALID_ARGUMENT',
@@ -5426,7 +5598,13 @@ if (options.video) {
 
 applyVideoPromptGuardrails();
 
-if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(options.model)) && options.fps !== 24) {
+if (options.video && isWan3ModelLocal(options.model) && options.fps !== 30) {
+  const originalFps = options.fps;
+  options.fps = 30;
+  if (!options.quiet) {
+    console.error(`Adjusted Wan 3 fps from ${originalFps} to 30 (Wan 3 uses fixed 30fps video generation).`);
+  }
+} else if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(options.model)) && options.fps !== 24) {
   const originalFps = options.fps;
   const vendorLabel = isHappyHorseModel(options.model) ? 'HappyHorse' : 'Seedance';
   options.fps = 24;
@@ -5438,7 +5616,14 @@ if (options.video && (isSeedanceModel(options.model) || isHappyHorseModel(option
 if (options.video && !options.frames) {
   const durationLimits = videoDurationLimitsLikeWrapper(options.model);
   const requestedDuration = options.duration;
-  const clampedDuration = Math.max(durationLimits.min, Math.min(durationLimits.max, options.duration));
+  let clampedDuration = Math.max(durationLimits.min, Math.min(durationLimits.max, options.duration));
+  if (isWan3ModelLocal(options.model)) {
+    clampedDuration = Math.round(clampedDuration);
+    const videoReferenceCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
+    if (videoReferenceCount > 0) {
+      clampedDuration = Math.min(30 - videoReferenceCount, clampedDuration);
+    }
+  }
   if (clampedDuration !== options.duration) {
     // H3 reports its own adjustment below, after the frame grid decides the
     // duration actually delivered; announcing the clamp here would name a
@@ -5465,6 +5650,21 @@ if (options.video && !options.frames) {
       );
     }
   }
+} else if (options.video && isWan3ModelLocal(options.model)) {
+  const videoReferenceCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
+  const maximumFrames = (30 - videoReferenceCount) * 30 + 1;
+  if (
+    !Number.isInteger(options.frames)
+    || options.frames < 61
+    || options.frames > maximumFrames
+    || (options.frames - 1) % 30 !== 0
+  ) {
+    fatalCliError(`Wan 3 frames must be 61 + n×30 through ${maximumFrames} at fixed 30fps.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { frames: options.frames, minimum: 61, maximum: maximumFrames, step: 30 }
+    });
+  }
+  options.fps = 30;
 } else if (options.video && isMiniMaxH3Model(options.model)) {
   const { min: minFrames, max: maxFrames, step: frameStep, fps: h3Fps } = MINIMAX_H3_FRAME_GRID;
   if (options.frames < minFrames || options.frames > maxFrames || (options.frames - minFrames) % frameStep !== 0) {
@@ -5764,6 +5964,10 @@ if (commandUsesGenerationSeed && (options.seed === null || options.seed === unde
     ? generateRandomSeed()
     : computePromptHashSeed(options);
   if (!options.quiet) console.error(`Using ${normalized} seed: ${options.seed}`);
+}
+if (commandUsesGenerationSeed && isWan3ModelLocal(options.model) && options.seed > WAN3_MAX_SEED) {
+  options.seed %= WAN3_MAX_SEED + 1;
+  if (!options.quiet) console.error(`Adjusted Wan 3 seed into its 0-${WAN3_MAX_SEED} range: ${options.seed}`);
 }
 
 // Load credentials
@@ -8793,6 +8997,46 @@ async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
   return uploaded.url;
 }
 
+async function uploadWan3ReferenceAudioUrl(pathOrUrl, apiKey, index, maxDurationSeconds) {
+  const ref = { flag: '--ref-audio', value: pathOrUrl, kind: 'audio' };
+  const buffer = await fetchMediaBuffer(pathOrUrl);
+  const filename = mediaFilenameFromSource(pathOrUrl, 'wan3-reference-audio');
+  const prepared = await trimSeedanceReferenceAudioToMp3({
+    data: buffer,
+    filename,
+    start: index === 0 ? options.audioStart ?? 0 : 0,
+    duration: maxDurationSeconds,
+  });
+  const data = Buffer.from(prepared.data);
+  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
+    buffer: data,
+    filename: withMediaExtension(filename, 'mp3'),
+    byteLength: data.length,
+    mimeType: 'audio/mpeg',
+  });
+  return uploaded.url;
+}
+
+async function uploadWan3ReferenceVideoUrl(pathOrUrl, apiKey, index, maxDurationSeconds) {
+  const ref = { flag: '--ref-video', value: pathOrUrl, kind: 'video' };
+  const buffer = await fetchMediaBuffer(pathOrUrl);
+  const filename = mediaFilenameFromSource(pathOrUrl, 'wan3-reference-video.mp4');
+  const prepared = await trimSeedanceV2VSourceVideo({
+    data: buffer,
+    filename,
+    start: index === 0 ? options.videoStart ?? 0 : 0,
+    duration: maxDurationSeconds,
+  });
+  const data = Buffer.from(prepared.data);
+  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
+    buffer: data,
+    filename: withMediaExtension(filename, 'mp4'),
+    byteLength: data.length,
+    mimeType: 'video/mp4',
+  });
+  return uploaded.url;
+}
+
 // Content types the Sogni media pipeline accepts for image references, mirroring
 // the `allowedContentTypes` the /v2/image/uploadUrl presigned-POST endpoint
 // returns. Kept as a constant so the skill validates exactly what the backend
@@ -8949,6 +9193,24 @@ function effectiveSeedanceReferenceCounts() {
     (options.refVideo ? 1 : 0)
     + (Array.isArray(options.refVideos) ? options.refVideos.length : 0);
   return { images, audios, videos };
+}
+
+function enforceWan3ReferenceCaps({ images, videos, audios }) {
+  const total = images + videos + audios;
+  const checks = [
+    ['images', images, WAN3_REFERENCE_LIMITS.images],
+    ['videos', videos, WAN3_REFERENCE_LIMITS.videos],
+    ['audios', audios, WAN3_REFERENCE_LIMITS.audios],
+    ['assets', total, WAN3_REFERENCE_LIMITS.assets],
+  ];
+  for (const [kind, count, maximum] of checks) {
+    if (count <= maximum) continue;
+    const label = kind === 'assets' ? 'reference files in total' : `reference ${kind}`;
+    fatalCliError(`Wan 3 supports at most ${maximum} ${label} (got ${count}).`, {
+      code: 'WAN3_REFERENCE_LIMIT_EXCEEDED',
+      details: { kind, count, maximum, limits: WAN3_REFERENCE_LIMITS },
+    });
+  }
 }
 
 // Wraps the shared validateSeedanceReferenceCounts() so a thrown
@@ -10560,6 +10822,7 @@ function miniMaxH3R2vReferenceImageCount() {
 
 function buildVideoEstimateParams({ tokenType, steps }) {
   const isSeedanceVideo = isSeedanceModel(options.model);
+  const isWan3Video = isWan3ModelLocal(options.model);
   const referenceImageCount = miniMaxH3R2vReferenceImageCount();
   const params = {
     modelId: options.model,
@@ -10573,7 +10836,7 @@ function buildVideoEstimateParams({ tokenType, steps }) {
     ...(referenceImageCount !== undefined ? { referenceImageCount } : {})
   };
 
-  if (isSeedanceVideo && options.refVideo) {
+  if ((isSeedanceVideo || isWan3Video) && options.refVideo) {
     params.hasVideoInput = true;
     if (isHttpsUrl(options.refVideo)) {
       params.referenceVideoUrls = [options.refVideo];
@@ -10639,7 +10902,10 @@ async function ensureSufficientVideoBalance(client, log) {
   const modelDefaults = getModelDefaults(options.model, openclawConfig);
   const steps = resolveVideoSteps(options.model, modelDefaults, options.steps);
   const isSeedanceVideo = isSeedanceModel(options.model);
-  if (!isSeedanceVideo && (!Number.isFinite(steps) || steps <= 0)) return;
+  const isStepFreeVendorVideo = isSeedanceVideo
+    || isHappyHorseModel(options.model)
+    || isWan3ModelLocal(options.model);
+  if (!isStepFreeVendorVideo && (!Number.isFinite(steps) || steps <= 0)) return;
 
   let estimate;
   try {
@@ -11361,7 +11627,10 @@ async function main() {
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const steps = resolveVideoSteps(options.model, modelDefaults, options.steps);
       const isSeedanceVideo = isSeedanceModel(options.model);
-      if (!isSeedanceVideo && (!Number.isFinite(steps) || steps <= 0)) {
+      const isStepFreeVendorVideo = isSeedanceVideo
+        || isHappyHorseModel(options.model)
+        || isWan3ModelLocal(options.model);
+      if (!isStepFreeVendorVideo && (!Number.isFinite(steps) || steps <= 0)) {
         const err = new Error('--estimate-video-cost requires --steps (or modelDefaults for this model).');
         err.code = 'MISSING_STEPS';
         err.hint = 'Pass --steps explicitly (e.g. --steps 4 for lightx2v models).';
@@ -11493,11 +11762,12 @@ async function main() {
 
       const isSeedanceVideo = isSeedanceModel(options.model);
       const isHappyHorseVideo = isHappyHorseModel(options.model);
+      const isWan3Video = isWan3ModelLocal(options.model);
       const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
       // Vendor video models forward image references as HTTPS URL arrays (or
       // Sogni-hosted uploads) instead of inline buffers; HappyHorse takes
       // image-only references (i2v first_frame, r2v reference_image).
-      const isVendorReferenceVideo = isSeedanceVideo || isHappyHorseVideo;
+      const isVendorReferenceVideo = isSeedanceVideo || isHappyHorseVideo || isWan3Video;
       if (isSeedanceVideo) {
         // Source of truth: @sogni-ai/sogni-protocol catalogs/seedance-reference-limits.json
         // surfaced through @sogni-ai/sogni-intelligence-client/tools.
@@ -11507,6 +11777,15 @@ async function main() {
         // Source of truth: @sogni-ai/sogni-intelligence-client/tools
         // HAPPYHORSE_REFERENCE_LIMITS (per-mode image-only caps).
         enforceHappyHorseReferenceCaps();
+      }
+      if (isWan3Video) {
+        const looseImageCount = (options.refImage && options.videoWorkflow !== 'i2v' ? 1 : 0)
+          + options.contextImages.length;
+        enforceWan3ReferenceCaps({
+          images: looseImageCount,
+          videos: (options.refVideo ? 1 : 0) + options.refVideos.length,
+          audios: (options.refAudio ? 1 : 0) + options.refAudios.length,
+        });
       }
       if (isMiniMaxH3R2v) {
         enforceMiniMaxH3ReferenceCaps();
@@ -11532,7 +11811,10 @@ async function main() {
           options.refImageEnd,
           'End reference image',
         );
-      } else if (isSeedanceVideo && options.videoWorkflow === 'ia2v' && options.refImage) {
+      } else if (
+        (isSeedanceVideo && options.videoWorkflow === 'ia2v' && options.refImage)
+        || (isWan3Video && options.videoWorkflow !== 'i2v' && options.refImage)
+      ) {
         if (isHttpsUrl(options.refImage)) {
           useRefImageUrl = await appendSafeSeedanceReferenceUrl(
             seedanceReferenceImageUrls,
@@ -11557,7 +11839,16 @@ async function main() {
         : 'unknown';
       let projectVideoStart = options.videoStart;
       let useRefAudioUrl = false;
-      if (isSeedanceVideo && options.refAudio) {
+      if (isWan3Video && options.refAudio) {
+        const audioCount = 1 + options.refAudios.length;
+        seedanceReferenceAudioUrls.push(await uploadWan3ReferenceAudioUrl(
+          options.refAudio,
+          creds.SOGNI_API_KEY,
+          0,
+          15 / audioCount,
+        ));
+        useRefAudioUrl = true;
+      } else if (isSeedanceVideo && options.refAudio) {
         const shouldUploadAudio =
           !isHttpsUrl(options.refAudio) ||
           refAudioFormatByPath !== 'mp3' ||
@@ -11576,7 +11867,19 @@ async function main() {
         }
       }
       let useRefVideoUrl = false;
-      if (isSeedanceVideo && options.refVideo) {
+      if (isWan3Video && options.refVideo) {
+        const videoCount = 1 + options.refVideos.length;
+        const wan3OutputDuration = options.frames ? (options.frames - 1) / 30 : options.duration;
+        const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
+        seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
+          options.refVideo,
+          creds.SOGNI_API_KEY,
+          0,
+          videoDurationBudget,
+        ));
+        useRefVideoUrl = true;
+        projectVideoStart = null;
+      } else if (isSeedanceVideo && options.refVideo) {
         if (isHttpsUrl(options.refVideo) && options.videoStart === null) {
           useRefVideoUrl = await appendSafeSeedanceReferenceUrl(seedanceReferenceVideoUrls, options.refVideo, 'Reference video');
         } else {
@@ -11614,10 +11917,21 @@ async function main() {
           }
         }
       }
-      // Seedance-only loose extras: repeated --ref-audio / --ref-video entries
-      // past the first. HappyHorse takes no reference audio or video.
-      if (isSeedanceVideo) {
+      // Loose extras: Seedance forwards compatible HTTPS assets; Wan 3 uploads
+      // and bounds every asset so total vendor duration caps are respected.
+      // HappyHorse takes no reference audio or video.
+      if (isSeedanceVideo || isWan3Video) {
         for (const [extraAudioIndex, extraAudio] of options.refAudios.entries()) {
+          if (isWan3Video) {
+            const audioCount = (options.refAudio ? 1 : 0) + options.refAudios.length;
+            seedanceReferenceAudioUrls.push(await uploadWan3ReferenceAudioUrl(
+              extraAudio,
+              creds.SOGNI_API_KEY,
+              extraAudioIndex + (options.refAudio ? 1 : 0),
+              15 / audioCount,
+            ));
+            continue;
+          }
           if (!isHttpsUrl(extraAudio)) {
             fatalCliError(
               `Additional --ref-audio "${extraAudio}" must be an HTTPS URL. ` +
@@ -11641,7 +11955,19 @@ async function main() {
             await appendSafeSeedanceReferenceUrl(seedanceReferenceAudioUrls, extraAudio, 'Seedance audio reference');
           }
         }
-        for (const extraVideo of options.refVideos) {
+        for (const [extraVideoIndex, extraVideo] of options.refVideos.entries()) {
+          if (isWan3Video) {
+            const videoCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
+            const wan3OutputDuration = options.frames ? (options.frames - 1) / 30 : options.duration;
+            const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
+            seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
+              extraVideo,
+              creds.SOGNI_API_KEY,
+              extraVideoIndex + (options.refVideo ? 1 : 0),
+              videoDurationBudget,
+            ));
+            continue;
+          }
           if (!isHttpsUrl(extraVideo)) {
             fatalCliError(
               `Additional --ref-video "${extraVideo}" must be an HTTPS URL. ` +
@@ -11922,27 +12248,27 @@ async function main() {
       if (options.seed !== null && options.seed !== undefined) {
         projectConfig.seed = options.seed;
       }
-      if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+      if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3Video)) {
         projectConfig.generateAudio = options.apiGenerateAudio;
       }
-      if (Number.isFinite(steps) && !isHappyHorseVideo && !isMiniMaxH3Model(options.model)) {
+      if (Number.isFinite(steps) && !isHappyHorseVideo && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         // HappyHorse routes through the vendor-job path and ignores `steps`,
         // mirroring Seedance (whose model defaults already omit them). H3 has
         // fixed sampling parameters and should receive no overrides.
         projectConfig.steps = steps;
       }
-      if (guidance !== null && guidance !== undefined && !isMiniMaxH3Model(options.model)) {
+      if (guidance !== null && guidance !== undefined && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         projectConfig.guidance = guidance;
       }
       if (cliSet.sampler && isMiniMaxH3TurboModel(options.model)) {
         projectConfig.sampler = options.sampler;
-      } else if (modelDefaults?.sampler && !isMiniMaxH3Model(options.model)) {
+      } else if (modelDefaults?.sampler && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         projectConfig.sampler = modelDefaults.sampler;
       }
-      if (modelDefaults?.scheduler && !isMiniMaxH3Model(options.model)) {
+      if (modelDefaults?.scheduler && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         projectConfig.scheduler = modelDefaults.scheduler;
       }
-      if (modelDefaults?.shift !== null && modelDefaults?.shift !== undefined && !isMiniMaxH3Model(options.model)) {
+      if (modelDefaults?.shift !== null && modelDefaults?.shift !== undefined && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         projectConfig.shift = modelDefaults.shift;
       }
       if (options.videoControlNetName && !isSeedanceModel(options.model)) {
@@ -12378,7 +12704,7 @@ async function main() {
           if (options.videoStart !== null) renderInfo.videoStart = options.videoStart;
         }
         if (options.refVideos.length > 0) renderInfo.refVideos = options.refVideos;
-        if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+        if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model))) {
           renderInfo.generateAudio = options.apiGenerateAudio;
         }
         if (options.videoControlNetName && !isSeedanceModel(options.model)) {
@@ -12610,7 +12936,7 @@ async function main() {
             if (options.videoStart !== null) output.videoStart = options.videoStart;
           }
           if (options.refVideos.length > 0) output.refVideos = options.refVideos;
-          if (options.apiGenerateAudio !== null && isMiniMaxH3Model(options.model)) {
+          if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model))) {
             output.generateAudio = options.apiGenerateAudio;
           }
           if (options.videoControlNetName && !isSeedanceModel(options.model)) {

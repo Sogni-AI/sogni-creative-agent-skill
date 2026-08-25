@@ -75,6 +75,7 @@ sogni-agent-hermes --upscale ./source.png -o ./upscaled.png
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
 sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "slow camera push-in"
 sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "smooth transformation"
+sogni-agent-hermes --video -m wan3 --target-resolution 1080 --duration 8 -o ./wan3.mp4 'a presenter says "Welcome" in a detailed studio'
 
 # Generate music
 sogni-agent-hermes --music -o ./soundtrack.mp3 "30-second ambient synth theme"
@@ -91,7 +92,7 @@ sogni-agent-hermes --help
   [models.md](references/models.md).
 - Krea 2 LoRA ids, strength ranges, bipolar sliders, and stacking up to 8 in
   one render: read [krea2-loras.md](references/krea2-loras.md).
-- Video prompts, reference roles, LTX, WAN, MiniMax, Seedance, and HappyHorse:
+- Video prompts, reference roles, LTX, WAN 2.2, Wan 3, MiniMax, Seedance, and HappyHorse:
   read [video-prompting.md](references/video-prompting.md).
 - Prompt-only image deliverables for SD/SDXL, FLUX.1 Schnell, Chroma, Krea 2, Qwen,
   Z-Image, GPT Image, and model-specific editing: read

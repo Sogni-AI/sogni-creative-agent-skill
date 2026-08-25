@@ -437,6 +437,16 @@ sogni-agent --video -m seedance2 --workflow t2v \
   --ref-audio https://cdn.example.com/music.m4a \
   "Use @Image1 for product identity, @Video1 for camera movement, and @Audio1 for music rhythm"
 
+# Alibaba Wan 3 unified video (2-30s, fixed 30fps, native audio, 480P/720P/1080P)
+sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 \
+  'A presenter walks through a detailed studio and says "Welcome."'
+sogni-agent --video -m wan3 --ref first.png --ref-end last.png \
+  "Move smoothly between the supplied endpoint frames"
+sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dialogue.mp3 \
+  "Use Image 1 for the presenter and Audio 1 for the performance"
+sogni-agent --video -m wan3 --workflow v2v --ref-video source.mp4 \
+  "Edit Video 1 into a rainy night scene while preserving its action"
+
 # MiniMax H3 standard and 4-step Turbo video (native 32 kHz stereo audio)
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
@@ -641,6 +651,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-mini` for the lower-cost 720p path; `seedance2-fast` for the legacy 720p fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p only) | `seedance2-5` (`seedance2-5-ia2v` / `seedance2-5-v2v` for image+audio and v2v/editing) |
+| Wan 3 unified text, frame, reference, audio, or video generation | `wan3` / `wan3.0-video` |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 `gpt-image-2` supports flexible OpenAI image sizes up to 3840 px on either edge, max 3:1 aspect ratio, and total pixels from 655,360 to 8,294,400; the API snaps dimensions to valid multiples of 16. For image editing with `gpt-image-2`, you can pass up to 16 context images. For likeness-preserving edits of a referenced person or character, agents default to Krea 2 Identity Edit (`krea2_identity_edit_v1_2`) unless you explicitly choose another model. It and Dark Beast Krea 2 Identity Edit (`dark_beast_krea2_identity_edit_v1_2`) use `-c/--context`, accept 1-2 references at 512-2048 px, and leave execution defaults to the current model tier.
@@ -659,7 +670,8 @@ sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video s
 
 ## Video Sizing & Aspect Ratios
 
-- **WAN models** use dimensions divisible by 16, min 480 px, max 1536 px.
+- **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
+- **Wan 3** (`wan3.0-video`) is a Premium Spark Alibaba model with fixed 30 fps, 2–30 s output, native audio, 480P/720P/1080P tiers, and `16:9`, `4:3`, `1:1`, `3:4`, or `9:16` output. It accepts one first frame plus an optional last frame, or a mutually exclusive loose-reference set of up to 10 images, 5 videos, 5 audio clips, and 20 files total. Each video/audio reference is 1–15 s; aggregate input video is at most 15 s and input-video duration plus output duration is at most 30 s. Send no negative prompt, steps, guidance, sampler, scheduler, ControlNet, or mask.
 - **MiniMax H3 and H3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap. Standard and FL2VA Turbo normally default to 1344×768 or 768×1344; Ref2VA Turbo defaults to 960×544 but supports other valid shapes. `--duration` snaps to the frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds. Standard H3 uses 20 steps; Turbo uses 4 steps. FL2VA H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed; FL2VA A/B tests may select `euler`, `er_sde`, or `sa_solver`. Ref2VA Turbo follows its exact upstream Euler/simple recipe and accepts only `--sampler euler`. Guidance 1 is fixed and there is no negative-prompt input. Base and Turbo t2v/i2v/flf2v prompts use the exact ordered three fields; standard and Turbo Ref2VA use exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`. Both Ref2VA selectors accept up to 9 images, 3 videos, and 3 audios, capped at 12 files; at least one visual reference is required, audio-only input is invalid, and r2v is never inferred. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact contracts.
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips but caps at 480p/720p (no 1080p or 4K). Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
@@ -831,7 +843,7 @@ Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPAR
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, and HappyHorse require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
+Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, HappyHorse, and Wan 3 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
 On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the plan instead of spending tokens — see the next section.
 
@@ -855,7 +867,7 @@ Plan pricing, included features and models, usage allowances, fair-use controls,
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast / Seedance 2.5** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`, `seedance-2-5`), and **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
+- **Not covered (Premium Spark only):** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast / Seedance 2.5** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`, `seedance-2-5`), **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`), and **Wan 3** (`wan3.0-video`). These always require Premium Spark eligibility even with an active subscription; they never bill to the subscription and never fall back to SOGNI.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 By default the CLI sends no `billingMode`/coverage hint; the server decides coverage from the account's verified entitlement and the resolved model, and a subscription claim is never honored without a server-verified entitlement. `--billing-mode` makes the choice explicit when you need it: `subscription` requires Unlimited coverage (the job fails instead of spending tokens), `tokens` opts out of coverage and bills Spark/SOGNI, and `auto` states the default server behavior explicitly.
@@ -891,7 +903,7 @@ When a generation cannot bill to the subscription, the CLI surfaces a structured
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
-| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance / HappyHorse), or reconnect and retry for a transient entitlement read. |
+| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance / HappyHorse / Wan 3), or reconnect and retry for a transient entitlement read. |
 | `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
 | `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
 | `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |

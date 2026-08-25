@@ -347,8 +347,11 @@ and short in-scene text.
 vendor model `wan3.0-video`.
 Media shape selects the operation; there are no separate t2v/i2v/v2v model
 IDs. It renders 2–30 second clips at fixed 30 fps with native audio (enabled by
-default) at 480P, 720P, or 1080P. Supported ratios are `16:9`, `4:3`, `1:1`,
-`3:4`, and `9:16`.
+default, disable with `--no-generate-audio`) at 480P, 720P, or 1080P.
+Supported ratios are `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`.
+Use `--smart-duration` for provider-selected timing or `--duration 2..30` for
+an exact request. Provider prompt expansion defaults on; use
+`--no-expand-prompt` only when the submitted wording must remain exact.
 
 - **Frame mode:** `--ref` is the first frame; optional `--ref-end` is the last
   frame. A last frame requires a first frame.
@@ -357,14 +360,25 @@ default) at 480P, 720P, or 1080P. Supported ratios are `16:9`, `4:3`, `1:1`,
   repeatable loose `Video N` / `Audio N` inputs. Give every reference one
   explicit job in the prompt.
 - **Mutual exclusion:** first/last-frame anchors cannot be mixed with loose
-  image, video, or audio references.
-- **Caps:** 10 images, 5 videos, 5 audio clips, and 20 reference files total.
+  image, video, or audio references, document context, or webpage context.
+- **Document/web context:** `--reference-file-url` accepts one public HTTPS
+  PDF, Office, text, Markdown, Keynote, Pages, or Numbers file up to 100 MB
+  (PDF/DOCX/DOC/PPTX/PPT/Keynote/Pages: up to 50 pages);
+  `--reference-link-url` accepts one public HTTPS webpage. File and link are
+  mutually exclusive. They may accompany loose-reference generation but not
+  dedicated first/last-frame anchors.
+- **Caps:** 10 images, 5 videos, and 5 audio clips. There is no additional
+  aggregate media-count cap in the upstream contract.
   Each video/audio input is 1–15 seconds; total video input is at most 15
   seconds, and video-input duration plus requested output duration is at most
   30 seconds.
 - **Inputs:** a prompt or at least one media input is required; prompts allow up
   to 20,000 characters. Send no negative prompt, steps, guidance, sampler,
   scheduler, ControlNet, or mask. Seeds are integers from 0 through 2147483647.
+- **Edit/extend:** `--wan3-task-type edit` and `extend` require a source video.
+  Extension also requires `--wan3-ratio adaptive` and a prompt that clearly
+  asks to continue the supplied video. Input video plus output is at most 30
+  seconds.
 - **Cost (as of 2026-08):** platform artist pricing is $0.065/s at 480P,
   $0.13/s at 720P, and $0.26/s at 1080P; native audio does not change the rate.
 
@@ -667,7 +681,7 @@ model recommendations.
 ## Video sizing & aspect ratios
 
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
-- **Wan 3** uses fixed 30 fps, 2–30 s output, and exact 480P/720P/1080P ratio buckets for `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
+- **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
 - **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard/FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard H3 uses 20 steps; Turbo uses 4. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.

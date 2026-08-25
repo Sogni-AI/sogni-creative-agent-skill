@@ -1624,10 +1624,13 @@ const WAN3_REFERENCE_LIMITS = Object.freeze({
   images: 10,
   videos: 5,
   audios: 5,
-  assets: 20,
+  files: 1,
+  links: 1,
 });
 const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v', 'v2v']);
 const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
+const WAN3_SUPPORTED_RATIOS = new Set(['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16']);
+const WAN3_TASK_TYPES = new Set(['create', 'edit', 'extend']);
 const WAN3_MAX_SEED = 0x7fffffff;
 
 function isWan3ModelSelectionLocal(modelId) {
@@ -2560,6 +2563,12 @@ const options = {
   video: false,
   videoWorkflow: null,
   seedanceTaskType: null,
+  wan3TaskType: null,
+  wan3Ratio: 'adaptive',
+  wan3SmartDuration: false,
+  wan3ReferenceFileUrl: null,
+  wan3ReferenceLinkUrl: null,
+  wan3Watermark: false,
   fps: 16,
   duration: 5,
   frames: null,
@@ -2740,6 +2749,12 @@ const cliSet = {
   video: false,
   workflow: false,
   seedanceTaskType: false,
+  wan3TaskType: false,
+  wan3Ratio: false,
+  wan3SmartDuration: false,
+  wan3ReferenceFileUrl: false,
+  wan3ReferenceLinkUrl: false,
+  wan3Watermark: false,
   fps: false,
   duration: false,
   frames: false,
@@ -3028,6 +3043,36 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.seedanceTaskType = raw.trim().toLowerCase();
     cliSet.seedanceTaskType = true;
+  } else if (arg === '--wan3-task-type') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.wan3TaskType = raw.trim().toLowerCase();
+    cliSet.wan3TaskType = true;
+  } else if (arg === '--wan3-ratio' || arg === '--video-ratio') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.wan3Ratio = raw.trim().toLowerCase();
+    cliSet.wan3Ratio = true;
+  } else if (arg === '--smart-duration') {
+    options.wan3SmartDuration = true;
+    cliSet.wan3SmartDuration = true;
+  } else if (arg === '--no-smart-duration') {
+    options.wan3SmartDuration = false;
+    cliSet.wan3SmartDuration = true;
+  } else if (arg === '--reference-file-url' || arg === '--ref-file-url') {
+    options.wan3ReferenceFileUrl = requireFlagValue(args, i, arg).trim();
+    i++;
+    cliSet.wan3ReferenceFileUrl = true;
+  } else if (arg === '--reference-link-url' || arg === '--ref-link-url') {
+    options.wan3ReferenceLinkUrl = requireFlagValue(args, i, arg).trim();
+    i++;
+    cliSet.wan3ReferenceLinkUrl = true;
+  } else if (arg === '--watermark') {
+    options.wan3Watermark = true;
+    cliSet.wan3Watermark = true;
+  } else if (arg === '--no-watermark') {
+    options.wan3Watermark = false;
+    cliSet.wan3Watermark = true;
   } else if (arg === '--fps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -3781,6 +3826,12 @@ Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
   --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
+  --wan3-task-type <type> Wan 3 operation: create|edit|extend (v2v defaults to edit)
+  --wan3-ratio <ratio>  Wan 3 ratio: adaptive|16:9|4:3|1:1|3:4|9:16
+  --smart-duration, --no-smart-duration  Let Wan 3 choose 2-30s, or use --duration
+  --reference-file-url <url> Wan 3 public HTTPS document context (one, up to 100 MB; supported paged formats up to 50 pages)
+  --reference-link-url <url> Wan 3 public HTTPS webpage context (one; mutually exclusive with file)
+  --watermark, --no-watermark  Toggle Wan 3's provider watermark (default: off)
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
@@ -3803,7 +3854,7 @@ Video Options:
   --ref-video <path|url> Video reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
-  --generate-audio, --no-generate-audio  Keep or strip MiniMax H3's generated audio track
+  --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 native audio
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
@@ -3875,7 +3926,7 @@ Hosted API Modes:
   --video-prompt <text> Motion prompt for the generated-keyframe durable workflow
   --negative-prompt <text> Negative prompt for generated workflow steps
   --generate-audio, --no-generate-audio  Toggle audio generation for generated video steps
-  --expand-prompt, --no-expand-prompt    Toggle prompt expansion for generated video steps
+  --expand-prompt, --no-expand-prompt    Toggle prompt expansion for Wan 3 direct video and generated video steps
   --watch-workflow      Stream workflow events after starting
   --list-workflows      List recent durable creative workflows
   --get-workflow <id>   Fetch a workflow snapshot
@@ -5061,8 +5112,8 @@ if (!options.upscaleImage && (cliSet.upscaleScale || cliSet.upscaleTargetLongest
   });
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--seedance-task-type/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3TaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -5096,6 +5147,29 @@ if (options.video) {
     fatalCliError('--seedance-task-type is supported only by Seedance 2.5.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, seedanceTaskType: options.seedanceTaskType }
+    });
+  }
+  if (options.wan3TaskType && !WAN3_TASK_TYPES.has(options.wan3TaskType)) {
+    fatalCliError('--wan3-task-type must be one of: create, edit, extend.', {
+      code: 'INVALID_ARGUMENT',
+      details: { wan3TaskType: options.wan3TaskType }
+    });
+  }
+  if ((options.wan3TaskType || cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
+    fatalCliError('Wan 3 controls are supported only by wan3 / wan3.0-video.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
+  }
+  if (isWan3Video && !WAN3_SUPPORTED_RATIOS.has(options.wan3Ratio)) {
+    fatalCliError('--wan3-ratio must be one of: adaptive, 16:9, 4:3, 1:1, 3:4, 9:16.', {
+      code: 'INVALID_ARGUMENT',
+      details: { ratio: options.wan3Ratio }
+    });
+  }
+  if (isWan3Video && options.wan3SmartDuration && (cliSet.duration || cliSet.frames)) {
+    fatalCliError('--smart-duration cannot be combined with --duration or --frames.', {
+      code: 'INVALID_ARGUMENT'
     });
   }
   if (isSeedance25Video && !options.seedanceTaskType) {
@@ -5262,12 +5336,44 @@ if (options.video) {
   }
 
   if (isWan3Video) {
+    options.wan3TaskType ??= options.videoWorkflow === 'v2v' ? 'edit' : 'create';
     const looseImages = (options.refImage && options.videoWorkflow !== 'i2v' ? 1 : 0)
       + options.contextImages.length;
     const looseVideos = (options.refVideo ? 1 : 0) + options.refVideos.length;
     const looseAudios = (options.refAudio ? 1 : 0) + options.refAudios.length;
     const looseTotal = looseImages + looseVideos + looseAudios;
     const hasFrameInputs = options.videoWorkflow === 'i2v' && Boolean(options.refImage || options.refImageEnd);
+    const hasReferenceFile = Boolean(options.wan3ReferenceFileUrl);
+    const hasReferenceLink = Boolean(options.wan3ReferenceLinkUrl);
+
+    if (hasReferenceFile && hasReferenceLink) {
+      fatalCliError('Wan 3 accepts either --reference-file-url or --reference-link-url, not both.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    if (
+      (hasReferenceFile && !isHttpsUrl(options.wan3ReferenceFileUrl)) ||
+      (hasReferenceLink && !isHttpsUrl(options.wan3ReferenceLinkUrl))
+    ) {
+      fatalCliError('Wan 3 document and webpage context must use public HTTPS URLs.', {
+        code: 'INVALID_URL'
+      });
+    }
+    if ((hasReferenceFile || hasReferenceLink) && hasFrameInputs) {
+      fatalCliError('Wan 3 document/webpage context cannot be combined with first/last-frame anchors.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    if ((options.wan3TaskType === 'edit' || options.wan3TaskType === 'extend') && looseVideos === 0) {
+      fatalCliError(`Wan 3 ${options.wan3TaskType} requires --ref-video.`, {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
+    if (options.wan3TaskType === 'extend' && options.wan3Ratio !== 'adaptive') {
+      fatalCliError('Wan 3 extension requires --wan3-ratio adaptive.', {
+        code: 'INVALID_ARGUMENT'
+      });
+    }
 
     if (options.refImageEnd && !options.refImage) {
       fatalCliError('Wan 3 last-frame generation requires --ref as the first-frame image.', { code: 'INVALID_ARGUMENT' });
@@ -5287,8 +5393,8 @@ if (options.video) {
       if (options.refImageEnd) {
         fatalCliError('Wan 3 r2v uses loose references and does not accept --ref-end.', { code: 'INVALID_ARGUMENT' });
       }
-      if (looseTotal === 0) {
-        fatalCliError('Wan 3 r2v requires at least one image, video, or audio reference.', { code: 'INVALID_ARGUMENT' });
+      if (looseTotal === 0 && !hasReferenceFile && !hasReferenceLink) {
+        fatalCliError('Wan 3 r2v requires image/video/audio media, a reference document, or a webpage.', { code: 'INVALID_ARGUMENT' });
       }
     }
     if (options.videoWorkflow === 'ia2v') {
@@ -5613,16 +5719,18 @@ if (options.video && isWan3ModelLocal(options.model) && options.fps !== 30) {
   }
 }
 
+if (options.video && isWan3ModelLocal(options.model) && options.wan3SmartDuration) {
+  // Reserve the maximum output for preflight pricing; transport sends
+  // smartDuration instead of a fixed duration.
+  options.duration = 30;
+}
+
 if (options.video && !options.frames) {
   const durationLimits = videoDurationLimitsLikeWrapper(options.model);
   const requestedDuration = options.duration;
   let clampedDuration = Math.max(durationLimits.min, Math.min(durationLimits.max, options.duration));
   if (isWan3ModelLocal(options.model)) {
     clampedDuration = Math.round(clampedDuration);
-    const videoReferenceCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
-    if (videoReferenceCount > 0) {
-      clampedDuration = Math.min(30 - videoReferenceCount, clampedDuration);
-    }
   }
   if (clampedDuration !== options.duration) {
     // H3 reports its own adjustment below, after the frame grid decides the
@@ -5651,8 +5759,7 @@ if (options.video && !options.frames) {
     }
   }
 } else if (options.video && isWan3ModelLocal(options.model)) {
-  const videoReferenceCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
-  const maximumFrames = (30 - videoReferenceCount) * 30 + 1;
+  const maximumFrames = 901;
   if (
     !Number.isInteger(options.frames)
     || options.frames < 61
@@ -9196,16 +9303,14 @@ function effectiveSeedanceReferenceCounts() {
 }
 
 function enforceWan3ReferenceCaps({ images, videos, audios }) {
-  const total = images + videos + audios;
   const checks = [
     ['images', images, WAN3_REFERENCE_LIMITS.images],
     ['videos', videos, WAN3_REFERENCE_LIMITS.videos],
     ['audios', audios, WAN3_REFERENCE_LIMITS.audios],
-    ['assets', total, WAN3_REFERENCE_LIMITS.assets],
   ];
   for (const [kind, count, maximum] of checks) {
     if (count <= maximum) continue;
-    const label = kind === 'assets' ? 'reference files in total' : `reference ${kind}`;
+    const label = `reference ${kind}`;
     fatalCliError(`Wan 3 supports at most ${maximum} ${label} (got ${count}).`, {
       code: 'WAN3_REFERENCE_LIMIT_EXCEEDED',
       details: { kind, count, maximum, limits: WAN3_REFERENCE_LIMITS },
@@ -11869,7 +11974,9 @@ async function main() {
       let useRefVideoUrl = false;
       if (isWan3Video && options.refVideo) {
         const videoCount = 1 + options.refVideos.length;
-        const wan3OutputDuration = options.frames ? (options.frames - 1) / 30 : options.duration;
+        const wan3OutputDuration = options.wan3SmartDuration
+          ? 15
+          : options.frames ? (options.frames - 1) / 30 : options.duration;
         const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
         seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
           options.refVideo,
@@ -11958,7 +12065,9 @@ async function main() {
         for (const [extraVideoIndex, extraVideo] of options.refVideos.entries()) {
           if (isWan3Video) {
             const videoCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
-            const wan3OutputDuration = options.frames ? (options.frames - 1) / 30 : options.duration;
+            const wan3OutputDuration = options.wan3SmartDuration
+              ? 15
+              : options.frames ? (options.frames - 1) / 30 : options.duration;
             const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
             seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
               extraVideo,
@@ -12162,11 +12271,17 @@ async function main() {
 
       const steps = resolveVideoSteps(options.model, modelDefaults, options.steps);
       const guidance = options.guidance ?? modelDefaults?.guidance;
+
+      if (isWan3Video && options.wan3ReferenceFileUrl) {
+        await assertSafeUrl(options.wan3ReferenceFileUrl, { allowedProtocols: ['https:'] });
+      }
+      if (isWan3Video && options.wan3ReferenceLinkUrl) {
+        await assertSafeUrl(options.wan3ReferenceLinkUrl, { allowedProtocols: ['https:'] });
+      }
       
       const projectConfig = {
         modelId: options.model,
         positivePrompt: options.prompt,
-        negativePrompt: '',
         stylePrompt: '',
         numberOfMedia: options.count,
         referenceImage: imageBuffer,
@@ -12177,8 +12292,21 @@ async function main() {
         waitForCompletion: false,
         disableNSFWFilter: options.noFilter === true
       };
+      if (!isWan3Video && !isHappyHorseVideo && !isSeedanceVideo) {
+        projectConfig.negativePrompt = '';
+      }
       if (options.seedanceTaskType) {
         projectConfig.seedanceTaskType = options.seedanceTaskType;
+      }
+      if (isWan3Video) {
+        projectConfig.ratio = options.wan3TaskType === 'extend' ? 'adaptive' : options.wan3Ratio;
+        projectConfig.wan3TaskType = options.wan3TaskType;
+        projectConfig.generateAudio = options.apiGenerateAudio ?? true;
+        projectConfig.promptExtend = options.apiExpandPrompt ?? true;
+        projectConfig.watermark = options.wan3Watermark;
+        if (options.wan3SmartDuration) projectConfig.smartDuration = true;
+        if (options.wan3ReferenceFileUrl) projectConfig.referenceFileUrl = options.wan3ReferenceFileUrl;
+        if (options.wan3ReferenceLinkUrl) projectConfig.referenceLinkUrl = options.wan3ReferenceLinkUrl;
       }
 
       if (options.outputFormat) {
@@ -12195,7 +12323,7 @@ async function main() {
 
       if (options.frames) {
         projectConfig.frames = options.frames;
-      } else {
+      } else if (!options.wan3SmartDuration) {
         projectConfig.duration = options.duration;
       }
       

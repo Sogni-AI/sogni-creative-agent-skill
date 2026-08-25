@@ -2648,6 +2648,55 @@ test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', (
   // supplies 1920x1080 with maxDimension=1920 and dimensionMultiple=1.
   assert.equal(state.lastVideoProject.width, 1920);
   assert.equal(state.lastVideoProject.height, 1080);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'negativePrompt'), false);
+});
+
+test('wan3 exposes smart duration, exact prompt, watermark, and document context', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3',
+    '--smart-duration',
+    '--no-expand-prompt',
+    '--watermark',
+    '--wan3-ratio', '9:16',
+    '--reference-file-url', 'https://example.com/brief.pdf',
+    'Create the launch clip from the supplied brief.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.smartDuration, true);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'duration'), false);
+  assert.equal(state.lastVideoProject.promptExtend, false);
+  assert.equal(state.lastVideoProject.watermark, true);
+  assert.equal(state.lastVideoProject.ratio, '9:16');
+  assert.equal(state.lastVideoProject.referenceFileUrl, 'https://example.com/brief.pdf');
+});
+
+test('wan3 keeps provider defaults explicit for direct generation', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3',
+    'A presenter walks through a detailed workshop.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.ratio, 'adaptive');
+  assert.equal(state.lastVideoProject.wan3TaskType, 'create');
+  assert.equal(state.lastVideoProject.generateAudio, true);
+  assert.equal(state.lastVideoProject.promptExtend, true);
+  assert.equal(state.lastVideoProject.watermark, false);
+});
+
+test('wan3 validates document/web exclusivity and extension ratio', () => {
+  expectCliError([
+    '--video', '-m', 'wan3',
+    '--reference-file-url', 'https://example.com/brief.pdf',
+    '--reference-link-url', 'https://example.com/page',
+    'Use both.'
+  ], 'either --reference-file-url or --reference-link-url');
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--wan3-task-type', 'extend', '--wan3-ratio', '16:9',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Continue Video 1.'
+  ], 'requires --wan3-ratio adaptive');
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {

@@ -1,3 +1,10 @@
+## [3.33.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.33.0...v3.33.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **video:** distinguish H3 tokenizer prompt markup ([f931855](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/f93185556e06307a353a8d0acb8bb985b4f0a560))
+
 # [3.33.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.32.0...v3.33.0) (2026-08-24)
 
 

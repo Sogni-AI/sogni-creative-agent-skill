@@ -444,8 +444,8 @@ sogni-agent --video -m wan3 --ref first.png --ref-end last.png \
   "Move smoothly between the supplied endpoint frames"
 sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dialogue.mp3 \
   "Use Image 1 for the presenter and Audio 1 for the performance"
-sogni-agent --video -m wan3 --workflow r2v --ref-video source.mp4 \
-  "Use Video 1 for motion and atmosphere in a new rainy-night shot"
+sogni-agent --video -m wan3 --workflow r2v --ref-video motion.mp4 \
+  "Use Video 1 as loose motion and pacing guidance for a new rainy-night scene"
 sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt \
   --reference-file-url https://cdn.example.com/brief.pdf \
   "Use the supplied brief exactly"

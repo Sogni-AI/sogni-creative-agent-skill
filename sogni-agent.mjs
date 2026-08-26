@@ -976,6 +976,10 @@ function applyVideoPromptGuardrails() {
 
 function applyCreativeBrainPreflight() {
   if (!options.video || !options.prompt) return;
+  if (options.apiExpandPrompt === false) {
+    options._literalPrompt = true;
+    return;
+  }
 
   const plan = planCliVideoBrain({
     video: options.video,
@@ -3922,7 +3926,7 @@ Hosted API Modes:
   --video-prompt <text> Motion prompt for the generated-keyframe durable workflow
   --negative-prompt <text> Negative prompt for generated workflow steps
   --generate-audio, --no-generate-audio  Toggle audio generation for generated video steps
-  --expand-prompt, --no-expand-prompt    Toggle prompt expansion for Wan 3 direct video and generated video steps
+  --expand-prompt, --no-expand-prompt    Toggle local video prompt rewriting; --no-expand-prompt preserves literal wording
   --watch-workflow      Stream workflow events after starting
   --list-workflows      List recent durable creative workflows
   --get-workflow <id>   Fetch a workflow snapshot
@@ -4646,7 +4650,7 @@ if (options.video) {
       const hasAudio = Boolean(options.refAudio || options.refAudios.length > 0);
       const hasVideo = Boolean(options.refVideo || options.refVideos.length > 0);
       if (hasVideo) {
-        options.videoWorkflow = 'v2v';
+        options.videoWorkflow = 'r2v';
       } else if (hasAudio && (options.refImage || hasLooseImages)) {
         options.videoWorkflow = 'ia2v';
       } else if (hasAudio) {
@@ -5056,6 +5060,8 @@ if (!loraCatalogUtilityAction && (options.loraCatalogModel || options.loraCatalo
 if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
   options.prompt = '';
 }
+const wan3ReferenceMediaCache = new Map();
+const wan3ReferencePreparationPlan = new Map();
 const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   options.refImage
   || options.refImageEnd
@@ -5064,6 +5070,8 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.contextImages.length > 0
   || options.refAudios.length > 0
   || options.refVideos.length > 0
+  || options.wan3ReferenceFileUrl
+  || options.wan3ReferenceLinkUrl
 );
 if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
@@ -5275,7 +5283,7 @@ if (options.video) {
     });
   }
   if (isWan3Video && !WAN3_SUPPORTED_WORKFLOWS.has(options.videoWorkflow)) {
-    fatalCliError('Wan 3 supports t2v, i2v/flf, r2v, a2v, and ia2v workflows. Video references are loose conditioning in r2v, not video-to-video editing.', {
+    fatalCliError('Wan 3 supports t2v, i2v/flf, r2v, a2v, and ia2v workflows. Video inputs are loose r2v references, not source-video edit or extend tasks.', {
       code: 'INVALID_ARGUMENT',
       details: { workflow: options.videoWorkflow, model: options.model }
     });
@@ -5685,6 +5693,12 @@ if (options.video) {
 applyVideoPromptGuardrails();
 
 if (options.video && isWan3ModelLocal(options.model) && options.fps !== 30) {
+  if (cliSet.fps) {
+    fatalCliError('Wan 3 output is fixed at 30 fps; omit --fps or pass --fps 30.', {
+      code: 'INVALID_ARGUMENT',
+      details: { fps: options.fps }
+    });
+  }
   const originalFps = options.fps;
   options.fps = 30;
   if (!options.quiet) {
@@ -5708,6 +5722,15 @@ if (options.video && isWan3ModelLocal(options.model) && options.wan3SmartDuratio
 if (options.video && !options.frames) {
   const durationLimits = videoDurationLimitsLikeWrapper(options.model);
   const requestedDuration = options.duration;
+  if (
+    isWan3ModelLocal(options.model) &&
+    (!Number.isInteger(options.duration) || options.duration < 2 || options.duration > 30)
+  ) {
+    fatalCliError('Wan 3 duration must be a whole number from 2 through 30 seconds.', {
+      code: 'INVALID_ARGUMENT',
+      details: { duration: options.duration }
+    });
+  }
   let clampedDuration = Math.max(durationLimits.min, Math.min(durationLimits.max, options.duration));
   if (isWan3ModelLocal(options.model)) {
     clampedDuration = Math.round(clampedDuration);
@@ -8892,6 +8915,114 @@ async function probeLocalMediaDurationSeconds(pathOrUrl) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+async function probeMediaBufferDurationSeconds(buffer, filename) {
+  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
+  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const tempDir = createTrackedTempDir('sogni-wan3-probe-');
+  const inputPath = mediaTempInputPath(tempDir, filename, '.media');
+  try {
+    writeFileSync(inputPath, Buffer.from(buffer));
+    const result = await runCommand(ffprobePath, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      inputPath,
+    ], { captureOutput: true });
+    if (result.error || result.status !== 0) return undefined;
+    const parsed = Number(String(result.stdout || '').trim());
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+}
+
+function wan3ReferenceMediaKey(kind, source) {
+  return `${kind}:${source}`;
+}
+
+async function inspectWan3ReferenceMedia(source, kind) {
+  const key = wan3ReferenceMediaKey(kind, source);
+  const cached = wan3ReferenceMediaCache.get(key);
+  if (cached) return cached;
+  const buffer = await fetchMediaBuffer(source);
+  const filename = mediaFilenameFromSource(source, `wan3-reference-${kind}`);
+  const duration = await probeLocalMediaDurationSeconds(source)
+    ?? await probeMediaBufferDurationSeconds(buffer, filename);
+  if (!Number.isFinite(duration)) {
+    const error = new Error(`Unable to read the duration of Wan 3 ${kind} reference "${source}".`);
+    error.code = 'WAN3_REFERENCE_DURATION_UNAVAILABLE';
+    error.hint = 'Install ffprobe and provide a playable local file or reachable URL; Wan 3 reference duration limits cannot be enforced safely without probing.';
+    throw error;
+  }
+  const inspected = { buffer, filename, duration };
+  wan3ReferenceMediaCache.set(key, inspected);
+  return inspected;
+}
+
+async function prepareWan3ReferenceMediaPlan() {
+  const audioSources = [options.refAudio, ...options.refAudios].filter(Boolean);
+  const videoSources = [options.refVideo, ...options.refVideos].filter(Boolean);
+  const audioMedia = await Promise.all(audioSources.map(source => inspectWan3ReferenceMedia(source, 'audio')));
+  const videoMedia = await Promise.all(videoSources.map(source => inspectWan3ReferenceMedia(source, 'video')));
+  const audioDurations = audioMedia.map(media => media.duration);
+  const videoDurations = videoMedia.map(media => media.duration);
+  const fixedOutputDuration = options.frames ? (options.frames - 1) / 30 : options.duration;
+
+  if (audioMedia.length > 0 && (options.audioStart !== null || options.audioDuration !== null)) {
+    const start = options.audioStart ?? 0;
+    const available = audioMedia[0].duration - start;
+    const duration = options.audioDuration ?? Math.min(15, available);
+    if (start < 0 || available < 1 || duration < 1 || duration > 15 || duration > available + 0.05) {
+      fatalCliError('Wan 3 selected audio window must be 1-15 seconds and fit inside the first reference clip.', {
+        code: 'INVALID_ARGUMENT',
+        details: { start, duration, sourceDuration: audioMedia[0].duration }
+      });
+    }
+    audioDurations[0] = duration;
+    wan3ReferencePreparationPlan.set(wan3ReferenceMediaKey('audio', audioSources[0]), { start, duration });
+  }
+
+  const otherVideoDuration = videoDurations.slice(1).reduce((sum, duration) => sum + duration, 0);
+  if (videoMedia.length > 0 && options.videoStart !== null) {
+    const start = options.videoStart;
+    const available = videoMedia[0].duration - start;
+    const outputBudget = options.wan3SmartDuration ? 15 : 30 - fixedOutputDuration;
+    const duration = Math.min(available, 15 - otherVideoDuration, outputBudget - otherVideoDuration);
+    if (start < 0 || available < 1 || duration < 1) {
+      fatalCliError('Wan 3 could not form a valid 1-15 second source window at --video-start within the reference and output-duration limits.', {
+        code: 'INVALID_ARGUMENT',
+        details: { start, sourceDuration: videoMedia[0].duration, outputDuration: options.wan3SmartDuration ? 'smart' : fixedOutputDuration }
+      });
+    }
+    videoDurations[0] = duration;
+    wan3ReferencePreparationPlan.set(wan3ReferenceMediaKey('video', videoSources[0]), { start, duration });
+  }
+
+  const invalidAudio = audioDurations.find(duration => duration < 1 || duration > 15.05);
+  const invalidVideo = videoDurations.find(duration => duration < 1 || duration > 15.05);
+  const totalAudioDuration = audioDurations.reduce((sum, duration) => sum + duration, 0);
+  const totalVideoDuration = videoDurations.reduce((sum, duration) => sum + duration, 0);
+  if (invalidAudio !== undefined || totalAudioDuration > 15.05) {
+    fatalCliError('Wan 3 audio references must each be 1-15 seconds and total no more than 15 seconds. No audio was trimmed automatically.', {
+      code: 'INVALID_ARGUMENT',
+      details: { durations: audioDurations, totalDuration: totalAudioDuration }
+    });
+  }
+  if (invalidVideo !== undefined || totalVideoDuration > 15.05) {
+    fatalCliError('Wan 3 video references must each be 1-15 seconds and total no more than 15 seconds. Use --video-start to select an explicit source window; no video was trimmed automatically.', {
+      code: 'INVALID_ARGUMENT',
+      details: { durations: videoDurations, totalDuration: totalVideoDuration }
+    });
+  }
+  if (!options.wan3SmartDuration && totalVideoDuration + fixedOutputDuration > 30.05) {
+    fatalCliError('Wan 3 reference-video duration plus output duration must not exceed 30 seconds. Use --video-start to select a source window or request a shorter output.', {
+      code: 'INVALID_ARGUMENT',
+      details: { referenceVideoDuration: totalVideoDuration, outputDuration: fixedOutputDuration }
+    });
+  }
+}
+
 async function transcodeSeedanceReferenceAudioToMp3(request) {
   const ffmpegPath = await ensureFfmpegAvailable();
   const tempDir = createTrackedTempDir('sogni-seedance-audio-');
@@ -9084,42 +9215,62 @@ async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
   return uploaded.url;
 }
 
-async function uploadWan3ReferenceAudioUrl(pathOrUrl, apiKey, index, maxDurationSeconds) {
+async function uploadWan3ReferenceAudioUrl(pathOrUrl, apiKey, index) {
   const ref = { flag: '--ref-audio', value: pathOrUrl, kind: 'audio' };
-  const buffer = await fetchMediaBuffer(pathOrUrl);
-  const filename = mediaFilenameFromSource(pathOrUrl, 'wan3-reference-audio');
-  const prepared = await trimSeedanceReferenceAudioToMp3({
-    data: buffer,
-    filename,
-    start: index === 0 ? options.audioStart ?? 0 : 0,
-    duration: maxDurationSeconds,
-  });
+  const inspected = await inspectWan3ReferenceMedia(pathOrUrl, 'audio');
+  const rawMimeType = mimeTypeForPath(pathOrUrl, 'application/octet-stream');
+  const mimeType = normalizeReferenceAudioMimeType(rawMimeType) || rawMimeType;
+  const sourceFormat = detectReferenceAudioFormat(inspected.buffer, mimeType);
+  const plan = wan3ReferencePreparationPlan.get(wan3ReferenceMediaKey('audio', pathOrUrl));
+  const prepared = plan
+    ? await trimSeedanceReferenceAudioToMp3({
+        data: inspected.buffer,
+        filename: inspected.filename,
+        inputMimeType: mimeType,
+        sourceFormat,
+        start: plan.start,
+        duration: plan.duration,
+      })
+    : sourceFormat === 'mp3'
+      ? { data: inspected.buffer, mimeType: 'audio/mpeg' }
+      : await transcodeSeedanceReferenceAudioToMp3({
+          data: inspected.buffer,
+          filename: inspected.filename,
+          inputMimeType: mimeType,
+          sourceFormat,
+        });
   const data = Buffer.from(prepared.data);
   const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
     buffer: data,
-    filename: withMediaExtension(filename, 'mp3'),
+    filename: withMediaExtension(inspected.filename, 'mp3'),
     byteLength: data.length,
     mimeType: 'audio/mpeg',
   });
   return uploaded.url;
 }
 
-async function uploadWan3ReferenceVideoUrl(pathOrUrl, apiKey, index, maxDurationSeconds) {
+async function uploadWan3ReferenceVideoUrl(pathOrUrl, apiKey, index) {
   const ref = { flag: '--ref-video', value: pathOrUrl, kind: 'video' };
-  const buffer = await fetchMediaBuffer(pathOrUrl);
-  const filename = mediaFilenameFromSource(pathOrUrl, 'wan3-reference-video.mp4');
-  const prepared = await trimSeedanceV2VSourceVideo({
-    data: buffer,
-    filename,
-    start: index === 0 ? options.videoStart ?? 0 : 0,
-    duration: maxDurationSeconds,
-  });
+  const inspected = await inspectWan3ReferenceMedia(pathOrUrl, 'video');
+  const plan = wan3ReferencePreparationPlan.get(wan3ReferenceMediaKey('video', pathOrUrl));
+  const prepared = plan
+    ? await trimSeedanceV2VSourceVideo({
+        data: inspected.buffer,
+        filename: inspected.filename,
+        start: plan.start,
+        duration: plan.duration,
+      })
+    : { data: inspected.buffer, mimeType: mimeTypeForPath(pathOrUrl, 'video/mp4') };
   const data = Buffer.from(prepared.data);
+  const outputMimeType = prepared.mimeType || 'video/mp4';
   const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
     buffer: data,
-    filename: withMediaExtension(filename, 'mp4'),
+    filename: withMediaExtension(
+      inspected.filename,
+      plan ? 'mp4' : extensionForApiMediaReference(outputMimeType, 'video'),
+    ),
     byteLength: data.length,
-    mimeType: 'video/mp4',
+    mimeType: outputMimeType,
   });
   return uploaded.url;
 }
@@ -11191,6 +11342,10 @@ async function main() {
   let client = null;
 
   try {
+    if (options.video && isWan3ModelLocal(options.model)) {
+      await prepareWan3ReferenceMediaPlan();
+    }
+
     if (options.showVersion) {
       if (options.json) {
         console.log(JSON.stringify({
@@ -11925,12 +12080,10 @@ async function main() {
       let projectVideoStart = options.videoStart;
       let useRefAudioUrl = false;
       if (isWan3Video && options.refAudio) {
-        const audioCount = 1 + options.refAudios.length;
         seedanceReferenceAudioUrls.push(await uploadWan3ReferenceAudioUrl(
           options.refAudio,
           creds.SOGNI_API_KEY,
           0,
-          15 / audioCount,
         ));
         useRefAudioUrl = true;
       } else if (isSeedanceVideo && options.refAudio) {
@@ -11953,16 +12106,10 @@ async function main() {
       }
       let useRefVideoUrl = false;
       if (isWan3Video && options.refVideo) {
-        const videoCount = 1 + options.refVideos.length;
-        const wan3OutputDuration = options.wan3SmartDuration
-          ? 15
-          : options.frames ? (options.frames - 1) / 30 : options.duration;
-        const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
         seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
           options.refVideo,
           creds.SOGNI_API_KEY,
           0,
-          videoDurationBudget,
         ));
         useRefVideoUrl = true;
         projectVideoStart = null;
@@ -12005,17 +12152,15 @@ async function main() {
         }
       }
       // Loose extras: Seedance forwards compatible HTTPS assets; Wan 3 uploads
-      // and bounds every asset so total vendor duration caps are respected.
+      // the already-probed assets without silently dividing or trimming them.
       // HappyHorse takes no reference audio or video.
       if (isSeedanceVideo || isWan3Video) {
         for (const [extraAudioIndex, extraAudio] of options.refAudios.entries()) {
           if (isWan3Video) {
-            const audioCount = (options.refAudio ? 1 : 0) + options.refAudios.length;
             seedanceReferenceAudioUrls.push(await uploadWan3ReferenceAudioUrl(
               extraAudio,
               creds.SOGNI_API_KEY,
               extraAudioIndex + (options.refAudio ? 1 : 0),
-              15 / audioCount,
             ));
             continue;
           }
@@ -12044,16 +12189,10 @@ async function main() {
         }
         for (const [extraVideoIndex, extraVideo] of options.refVideos.entries()) {
           if (isWan3Video) {
-            const videoCount = (options.refVideo ? 1 : 0) + options.refVideos.length;
-            const wan3OutputDuration = options.wan3SmartDuration
-              ? 15
-              : options.frames ? (options.frames - 1) / 30 : options.duration;
-            const videoDurationBudget = Math.min(15, 30 - wan3OutputDuration) / videoCount;
             seedanceReferenceVideoUrls.push(await uploadWan3ReferenceVideoUrl(
               extraVideo,
               creds.SOGNI_API_KEY,
               extraVideoIndex + (options.refVideo ? 1 : 0),
-              videoDurationBudget,
             ));
             continue;
           }

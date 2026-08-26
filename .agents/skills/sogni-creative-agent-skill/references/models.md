@@ -350,8 +350,11 @@ IDs. It renders 2–30 second clips at fixed 30 fps with native audio (enabled b
 default, disable with `--no-generate-audio`) at 480P, 720P, or 1080P.
 Supported ratios are `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`.
 Use `--smart-duration` for provider-selected timing or `--duration 2..30` for
-an exact request. Provider prompt expansion defaults on; use
-`--no-expand-prompt` only when the submitted wording must remain exact.
+an exact request. `--no-expand-prompt` bypasses local prompt guardrails and
+sends literal wording; hosted agent paths run Sogni's exact-model shaper. The
+configured Alibaba Model Studio WAN3 endpoint accepts no provider-side
+`prompt_extend` behavior is coordinated with Sogni's own model-specific shaping
+so a prompt is not rewritten twice.
 
 - **Frame mode:** `--ref` is the first frame; optional `--ref-end` is the last
   frame. A last frame requires a first frame.

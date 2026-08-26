@@ -4,7 +4,7 @@ Use this guide only when the creator asks for prompt text as the deliverable. A
 prompt-only request does not authorize a render. Require both the exact target
 model/version and the operation (`generate` or `edit`). If either is missing,
 ask for it. If the exact pair is not registered, report that limitation; never
-substitute a generic image prompt or another model's format.
+substitute another destination model's prompt contract.
 
 ## Output contracts by family
 

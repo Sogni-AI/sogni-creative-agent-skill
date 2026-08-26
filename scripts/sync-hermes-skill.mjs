@@ -17,6 +17,7 @@ const destination = join(
 
 const referenceFiles = [
   'hosted-api.md',
+  'image-prompting.md',
   'krea2-loras.md',
   'loop-maker.md',
   'models.md',

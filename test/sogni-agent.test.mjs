@@ -2653,7 +2653,7 @@ test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', (
   assert.equal(Object.hasOwn(state.lastVideoProject, 'negativePrompt'), false);
 });
 
-test('wan3 exposes smart duration, exact prompt, watermark, and document context', () => {
+test('wan3 exposes smart duration, exact prompt handling, watermark, and document context', () => {
   const { exitCode, state, stderr } = runCli([
     '--video', '-m', 'wan3',
     '--smart-duration',
@@ -2700,11 +2700,6 @@ test('wan3 validates document/web exclusivity and rejects the removed task flag'
     'Continue Video 1.'
   ], '--wan3-task-type has been removed');
 
-  expectCliError([
-    '--video', '-m', 'wan3', '--workflow', 'v2v',
-    '--ref-video', 'https://example.com/source.mp4',
-    'Use Video 1 as loose conditioning.'
-  ], 'not video-to-video editing');
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {
@@ -2838,7 +2833,6 @@ test('wan3 alias selects the unified Premium video model at fixed 30fps', () => 
     '--video',
     '--token-type', 'sogni',
     '-m', 'wan3',
-    '--fps', '24',
     '--duration', '30',
     'A presenter walks through a detailed studio while speaking to camera.'
   ]);
@@ -2851,6 +2845,13 @@ test('wan3 alias selects the unified Premium video model at fixed 30fps', () => 
   assert.equal(state.lastVideoProject.height, 1080);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'guidance'), false);
+});
+
+test('wan3 rejects an explicit non-30fps request instead of silently changing it', () => {
+  expectCliError([
+    '--video', '-m', 'wan3', '--fps', '24',
+    'A presenter walks through a detailed studio while speaking to camera.'
+  ], 'fixed at 30 fps');
 });
 
 test('wan3 promptless first/last-frame generation keeps dedicated anchors', () => {
@@ -2880,6 +2881,45 @@ test('wan3 validates frame/loose exclusivity and official reference caps', () =>
     ...Array.from({ length: 11 }).flatMap((_, i) => ['-c', `https://example.com/${i}.png`]),
     'Use every image as a loose reference.'
   ], 'at most 10 reference images');
+});
+
+test('wan3 routes video inputs as loose references and rejects invented v2v', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-wan3-video-reference-'));
+  const videoFixture = join(tempDir, 'reference.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(videoFixture, Buffer.from('test video reference'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log('5');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const referenceUrl = 'https://example.com/sogni-agent-test-reference.mp4';
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const looseReference = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video', '-m', 'wan3',
+      '--ref-video', referenceUrl,
+      'Use Video 1 as loose motion guidance for a new shot.'
+    ], {
+      FFPROBE_PATH: fakeFfprobe,
+      SOGNI_AGENT_TEST_VIDEO_FIXTURE_PATH: videoFixture,
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(looseReference.exitCode, 0, looseReference.stderr);
+    assert.equal(looseReference.state.lastVideoProject.referenceVideoUrls.length, 1);
+    assert.match(
+      looseReference.state.lastVideoProject.referenceVideoUrls[0],
+      /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceVideo\//,
+    );
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
+    assert.equal(Object.hasOwn(looseReference.state.lastVideoProject, 'wan3TaskType'), false);
+  });
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Edit the source video.'
+  ], 'Video inputs are loose r2v references');
 });
 
 test('wan3 r2v forwards loose images with the unified model id', () => {

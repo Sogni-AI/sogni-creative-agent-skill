@@ -218,7 +218,7 @@ sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the ref
 sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 'A presenter says "Welcome." in a detailed studio'
 sogni-agent --video -m wan3 --ref first.png --ref-end last.png "Move smoothly between the supplied frames"
 sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dialogue.mp3 "Use Image 1 and Audio 1 for the performance"
-sogni-agent --video -m wan3 --workflow r2v --ref-video source.mp4 "Use Video 1 for motion and atmosphere in a new rainy-night shot"
+sogni-agent --video -m wan3 --workflow r2v --ref-video motion.mp4 "Use Video 1 as loose motion and pacing guidance for a new rainy-night scene"
 sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt --reference-file-url https://cdn.example.com/brief.pdf "Use the supplied brief exactly"
 
 # Balances / last render / inbound media / health (no prompt required)
@@ -254,7 +254,7 @@ sogni-agent doctor --json
 | `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
-| `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Wan 3 provider prompt expansion and watermark controls | expansion on / watermark off |
+| `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt rewriting and Wan 3 watermark control | rewrite on / watermark off |
 | `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |
 | `--sampler <name>` | Image/music sampler; FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo: `euler` only | FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |

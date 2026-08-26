@@ -2679,13 +2679,13 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   ]);
   assert.equal(exitCode, 0, stderr);
   assert.equal(state.lastVideoProject.ratio, 'adaptive');
-  assert.equal(state.lastVideoProject.wan3TaskType, 'create');
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'wan3TaskType'), false);
   assert.equal(state.lastVideoProject.generateAudio, true);
   assert.equal(state.lastVideoProject.promptExtend, true);
   assert.equal(state.lastVideoProject.watermark, false);
 });
 
-test('wan3 validates document/web exclusivity and extension ratio', () => {
+test('wan3 validates document/web exclusivity and rejects the removed task flag', () => {
   expectCliError([
     '--video', '-m', 'wan3',
     '--reference-file-url', 'https://example.com/brief.pdf',
@@ -2694,11 +2694,17 @@ test('wan3 validates document/web exclusivity and extension ratio', () => {
   ], 'either --reference-file-url or --reference-link-url');
 
   expectCliError([
-    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--video', '-m', 'wan3', '--workflow', 'r2v',
     '--wan3-task-type', 'extend', '--wan3-ratio', '16:9',
     '--ref-video', 'https://example.com/source.mp4',
     'Continue Video 1.'
-  ], 'requires --wan3-ratio adaptive');
+  ], '--wan3-task-type has been removed');
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Use Video 1 as loose conditioning.'
+  ], 'not video-to-video editing');
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {

@@ -355,7 +355,7 @@ an exact request. Provider prompt expansion defaults on; use
 
 - **Frame mode:** `--ref` is the first frame; optional `--ref-end` is the last
   frame. A last frame requires a first frame.
-- **Loose-reference mode:** select `r2v`, `a2v`, `ia2v`, or `v2v`. In these
+- **Loose-reference mode:** select `r2v`, `a2v`, or `ia2v`. In these
   modes `--ref` is a loose `Image 1`; `--ref-video` and `--ref-audio` are
   repeatable loose `Video N` / `Audio N` inputs. Give every reference one
   explicit job in the prompt.
@@ -370,15 +370,13 @@ an exact request. Provider prompt expansion defaults on; use
 - **Caps:** 10 images, 5 videos, and 5 audio clips. There is no additional
   aggregate media-count cap in the upstream contract.
   Each video/audio input is 1–15 seconds; total video input is at most 15
-  seconds, and video-input duration plus requested output duration is at most
-  30 seconds.
+  seconds.
 - **Inputs:** a prompt or at least one media input is required; prompts allow up
   to 20,000 characters. Send no negative prompt, steps, guidance, sampler,
   scheduler, ControlNet, or mask. Seeds are integers from 0 through 2147483647.
-- **Edit/extend:** `--wan3-task-type edit` and `extend` require a source video.
-  Extension also requires `--wan3-ratio adaptive` and a prompt that clearly
-  asks to continue the supplied video. Input video plus output is at most 30
-  seconds.
+- **No edit/extend task:** video references are loose conditioning for a new
+  generation. Alibaba exposes no edit/extend task mode or task-type field; use
+  a dedicated video-to-video model when source-preserving editing is required.
 - **Cost (as of 2026-08):** platform artist pricing is $0.065/s at 480P,
   $0.13/s at 720P, and $0.26/s at 1080P; native audio does not change the rate.
 

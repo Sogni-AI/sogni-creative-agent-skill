@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const require = createRequire(import.meta.url);
+const skillPackage = require('../package.json');
 const clientPackage = require('@sogni-ai/sogni-client/package.json');
 const createJobRequestMessage = require(
   '../node_modules/@sogni-ai/sogni-client/dist/Projects/createJobRequestMessage.js'
@@ -41,7 +42,11 @@ function request(overrides) {
 }
 
 test('pinned SDK transports every Seedance 2.5 R2V task and the 50-file budget', () => {
-  assert.equal(clientPackage.version, '5.21.0');
+  assert.equal(
+    clientPackage.version,
+    skillPackage.overrides['@sogni-ai/sogni-client'],
+    'the installed client must match the package-level transport pin',
+  );
 
   for (const seedanceTaskType of ['reference', 'edit', 'extend']) {
     const message = request({

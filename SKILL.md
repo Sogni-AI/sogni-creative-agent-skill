@@ -212,14 +212,14 @@ sogni-agent --video -m happyhorse --ref first-frame.png "Bring the scene to life
 sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the references into one continuous shot"
 
 # Alibaba Wan 3 unified video (2-30s, fixed 30fps, native audio,
-# 480P/720P/1080P). --ref/--ref-end are frame anchors; r2v/a2v/ia2v/v2v
-# use loose Image 1 / Video 1 / Audio 1 references instead.
+# 480P/720P/1080P). --ref/--ref-end are frame anchors; r2v/a2v/ia2v
+# use loose Image 1 / Video 1 / Audio 1 references instead. A video reference
+# conditions a new generation; it is not an edit/extend task.
 sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 'A presenter says "Welcome." in a detailed studio'
 sogni-agent --video -m wan3 --ref first.png --ref-end last.png "Move smoothly between the supplied frames"
 sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dialogue.mp3 "Use Image 1 and Audio 1 for the performance"
-sogni-agent --video -m wan3 --workflow v2v --ref-video source.mp4 "Edit Video 1 into a rainy night scene"
+sogni-agent --video -m wan3 --workflow r2v --ref-video source.mp4 "Use Video 1 for motion and atmosphere in a new rainy-night shot"
 sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt --reference-file-url https://cdn.example.com/brief.pdf "Use the supplied brief exactly"
-sogni-agent --video -m wan3 --workflow v2v --wan3-task-type extend --wan3-ratio adaptive --ref-video source.mp4 "Continue Video 1 after its ending"
 
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
@@ -252,7 +252,7 @@ sogni-agent doctor --json
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v | - |
 | `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
-| `--wan3-task-type create\|edit\|extend`, `--wan3-ratio`, `--smart-duration` | Wan 3 operation, adaptive/fixed ratio, and provider-selected 2–30s duration | create / adaptive / fixed |
+| `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
 | `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Wan 3 provider prompt expansion and watermark controls | expansion on / watermark off |
 | `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |

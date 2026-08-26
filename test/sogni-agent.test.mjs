@@ -2653,7 +2653,7 @@ test('happyhorse video defaults to 1080P (1920x1080), not the 512x512 square', (
   assert.equal(Object.hasOwn(state.lastVideoProject, 'negativePrompt'), false);
 });
 
-test('wan3 exposes smart duration, exact prompt, watermark, and document context', () => {
+test('wan3 exposes smart duration, exact prompt handling, watermark, and document context', () => {
   const { exitCode, state, stderr } = runCli([
     '--video', '-m', 'wan3',
     '--smart-duration',
@@ -2666,7 +2666,7 @@ test('wan3 exposes smart duration, exact prompt, watermark, and document context
   assert.equal(exitCode, 0, stderr);
   assert.equal(state.lastVideoProject.smartDuration, true);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'duration'), false);
-  assert.equal(state.lastVideoProject.promptExtend, false);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'promptExtend'), false);
   assert.equal(state.lastVideoProject.watermark, true);
   assert.equal(state.lastVideoProject.ratio, '9:16');
   assert.equal(state.lastVideoProject.referenceFileUrl, 'https://example.com/brief.pdf');
@@ -2681,24 +2681,17 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   assert.equal(state.lastVideoProject.ratio, 'adaptive');
   assert.equal(state.lastVideoProject.wan3TaskType, 'create');
   assert.equal(state.lastVideoProject.generateAudio, true);
-  assert.equal(state.lastVideoProject.promptExtend, true);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'promptExtend'), false);
   assert.equal(state.lastVideoProject.watermark, false);
 });
 
-test('wan3 validates document/web exclusivity and extension ratio', () => {
+test('wan3 validates document/web exclusivity', () => {
   expectCliError([
     '--video', '-m', 'wan3',
     '--reference-file-url', 'https://example.com/brief.pdf',
     '--reference-link-url', 'https://example.com/page',
     'Use both.'
   ], 'either --reference-file-url or --reference-link-url');
-
-  expectCliError([
-    '--video', '-m', 'wan3', '--workflow', 'v2v',
-    '--wan3-task-type', 'extend', '--wan3-ratio', '16:9',
-    '--ref-video', 'https://example.com/source.mp4',
-    'Continue Video 1.'
-  ], 'requires --wan3-ratio adaptive');
 });
 
 test('happyhorse video honors explicit -w/-h over the new default', () => {
@@ -2832,7 +2825,6 @@ test('wan3 alias selects the unified Premium video model at fixed 30fps', () => 
     '--video',
     '--token-type', 'sogni',
     '-m', 'wan3',
-    '--fps', '24',
     '--duration', '30',
     'A presenter walks through a detailed studio while speaking to camera.'
   ]);
@@ -2845,6 +2837,13 @@ test('wan3 alias selects the unified Premium video model at fixed 30fps', () => 
   assert.equal(state.lastVideoProject.height, 1080);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'guidance'), false);
+});
+
+test('wan3 rejects an explicit non-30fps request instead of silently changing it', () => {
+  expectCliError([
+    '--video', '-m', 'wan3', '--fps', '24',
+    'A presenter walks through a detailed studio while speaking to camera.'
+  ], 'fixed at 30 fps');
 });
 
 test('wan3 promptless first/last-frame generation keeps dedicated anchors', () => {
@@ -2874,6 +2873,20 @@ test('wan3 validates frame/loose exclusivity and official reference caps', () =>
     ...Array.from({ length: 11 }).flatMap((_, i) => ['-c', `https://example.com/${i}.png`]),
     'Use every image as a loose reference.'
   ], 'at most 10 reference images');
+});
+
+test('wan3 rejects workflow and provider task combinations that disagree', () => {
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'v2v', '--wan3-task-type', 'create',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Edit the source video.'
+  ], 'v2v requires --wan3-task-type edit or extend');
+
+  expectCliError([
+    '--video', '-m', 'wan3', '--workflow', 'r2v', '--wan3-task-type', 'extend',
+    '--ref-video', 'https://example.com/reference.mp4',
+    'Use the video as a motion reference.'
+  ], 'edit and extend task types require --workflow v2v');
 });
 
 test('wan3 r2v forwards loose images with the unified model id', () => {

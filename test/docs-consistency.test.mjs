@@ -231,6 +231,7 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
 test('prompt-only video authoring requires a registered native contract', () => {
   const skill = read('SKILL.md');
   const prompting = read('references/video-prompting.md');
+  const generatedRuntime = read('generated/creative-agent-runtime.mjs');
 
   for (const text of [skill, prompting]) {
     assert.match(text, /any image or video model\/workflow|every video model and workflow/i);
@@ -243,6 +244,8 @@ test('prompt-only video authoring requires a registered native contract', () => 
     assert.match(text, /Markdown/);
     assert.match(text, /follow-up\s+question/);
   }
+  assert.doesNotMatch(generatedRuntime, /model[- ]neutral prompts?/i);
+  assert.match(generatedRuntime, /exact active destination model is absent/i);
 });
 
 test('prompt-only image authoring keeps model families and operations distinct', () => {
@@ -254,6 +257,7 @@ test('prompt-only image authoring keeps model families and operations distinct',
   assert.match(skill, /image-prompting\.md/);
   assert.match(skill, /exact target|named model\/version/i);
   assert.match(skill, /never substitute a generic prompt or another model's format/i);
+  assert.match(prompting, /never\s+substitute another destination model's prompt contract/i);
   for (const family of ['SD 1.5', 'SDXL', 'FLUX.1 Schnell', 'Chroma', 'Krea 2', 'Qwen Image 2512', 'Z-Image', 'GPT Image 2']) {
     assert.match(prompting, new RegExp(family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }

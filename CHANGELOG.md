@@ -1,3 +1,13 @@
+## [3.35.2](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.1...v3.35.2) (2026-08-26)
+
+
+### Bug Fixes
+
+* **video:** align exact-model skill contracts ([ba3a071](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/ba3a071406d2000ad65ee4c1a5d1ce1b71eeff53))
+* **video:** align public model-native contracts ([9d44147](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/9d44147dd9aef334c60690e3ad9eda26f40e2ed7))
+* **video:** correct Wan 3 provider semantics ([a54fb89](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/a54fb891b2606e096215058e2ce98674c7b2cb37))
+* **video:** merge exact-model public contracts ([c8381b3](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/c8381b3c99d91912412ef0d2e6fd017822b4d403))
+
 ## [3.35.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.0...v3.35.1) (2026-08-26)
 
 

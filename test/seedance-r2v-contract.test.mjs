@@ -41,7 +41,7 @@ function request(overrides) {
 }
 
 test('pinned SDK transports every Seedance 2.5 R2V task and the 50-file budget', () => {
-  assert.equal(clientPackage.version, '5.19.2');
+  assert.equal(clientPackage.version, '5.20.0');
 
   for (const seedanceTaskType of ['reference', 'edit', 'extend']) {
     const message = request({

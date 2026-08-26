@@ -1,3 +1,10 @@
+## [3.35.4](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.3...v3.35.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **deps:** consume storyboard compiler correction ([ed60ec8](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/ed60ec85fdfa11e8c2a10dd7bbd283ae9a1087cf))
+
 ## [3.35.3](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.2...v3.35.3) (2026-08-26)
 
 

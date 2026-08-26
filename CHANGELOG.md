@@ -1,3 +1,12 @@
+## [3.35.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.0...v3.35.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **deps:** consume corrected Wan 3 video quotes ([d805281](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d805281fb85183696c26abfecb6ef87f49a4674c))
+* **deps:** consume R2V canvas runtime ([82b4436](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/82b4436e36318614aaeeb295f0a8026ddf6f0a37))
+* **video:** protect loose references from canvas resizing ([b996acc](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/b996accfeddb88a03c2d2b644bc7add751e852c5))
+
 # [3.35.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.34.0...v3.35.0) (2026-08-25)
 
 

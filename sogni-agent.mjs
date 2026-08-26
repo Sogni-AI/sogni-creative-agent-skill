@@ -12312,10 +12312,16 @@ async function main() {
       if (options.outputFormat) {
         projectConfig.outputFormat = options.outputFormat;
       }
-      // Skip the wrapper's generic resize only for the proven no-op case: an
-      // implicit LTX canvas already equals the compatible local reference.
-      // Explicit canvases and incompatible references retain wrapper handling.
-      if (options.autoResizeVideoAssets !== null) {
+      // Loose R2V references describe identity, style, motion, or other context;
+      // they are never frame anchors and must not redefine the output canvas.
+      // Older wrapper releases only misclassify the binary referenceImage path;
+      // URL-array references are already ignored and must retain normal dimension
+      // validation, so keep this compatibility guard as narrow as possible.
+      const hasLooseBinaryReference = Boolean(projectConfig.referenceImage)
+        && (options.videoWorkflow === 'r2v' || options.seedanceTaskType === 'reference');
+      if (hasLooseBinaryReference) {
+        projectConfig.autoResizeVideoAssets = false;
+      } else if (options.autoResizeVideoAssets !== null) {
         projectConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;
       } else if (options._ltxReferencePassthrough) {
         projectConfig.autoResizeVideoAssets = false;

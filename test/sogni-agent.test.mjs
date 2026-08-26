@@ -1792,6 +1792,7 @@ test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', 
   assert.equal(state.lastVideoProject.referenceAudios.length, 1);
   assert.equal(state.lastVideoProject.generateAudio, false);
   assert.equal(state.lastVideoProject.frames, 243);
+  assert.equal(state.lastVideoProject.autoResizeVideoAssets, false);
 });
 
 test('MiniMax H3 r2v pretrims local reference-audio windows before upload', () => {
@@ -2201,6 +2202,7 @@ test('seedance 2.5 accepts an audio-only loose-reference task', () => {
   assert.deepEqual(state.lastVideoProject.referenceAudioUrls, [
     'https://example.com/dialogue.mp3'
   ]);
+  assert.equal(state.lastVideoProject.autoResizeVideoAssets, undefined);
 });
 
 test('seedance 2.5 accepts its full 30/10/10/50 loose-reference budget', () => {
@@ -2770,6 +2772,7 @@ test('happyhorse r2v forwards 1-9 HTTPS reference images as a URL array', () => 
     'https://example.com/b.png',
     'https://example.com/c.png',
   ]);
+  assert.equal(state.lastVideoProject.autoResizeVideoAssets, undefined);
 });
 
 test('happyhorse r2v enforces the 9 image-reference cap with a canonical message', () => {
@@ -2887,6 +2890,7 @@ test('wan3 r2v forwards loose images with the unified model id', () => {
     'https://example.com/wardrobe.png',
   ]);
   assert.equal(state.lastVideoProject.referenceImage, undefined);
+  assert.equal(state.lastVideoProject.autoResizeVideoAssets, undefined);
 });
 
 test('wan3 validates its resolution, sampling, and int31 seed contract', () => {

@@ -1631,10 +1631,9 @@ const WAN3_REFERENCE_LIMITS = Object.freeze({
   files: 1,
   links: 1,
 });
-const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v', 'v2v']);
+const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v']);
 const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
 const WAN3_SUPPORTED_RATIOS = new Set(['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16']);
-const WAN3_TASK_TYPES = new Set(['create', 'edit', 'extend']);
 const WAN3_MAX_SEED = 0x7fffffff;
 
 function isWan3ModelSelectionLocal(modelId) {
@@ -2567,7 +2566,6 @@ const options = {
   video: false,
   videoWorkflow: null,
   seedanceTaskType: null,
-  wan3TaskType: null,
   wan3Ratio: 'adaptive',
   wan3SmartDuration: false,
   wan3ReferenceFileUrl: null,
@@ -2753,7 +2751,6 @@ const cliSet = {
   video: false,
   workflow: false,
   seedanceTaskType: false,
-  wan3TaskType: false,
   wan3Ratio: false,
   wan3SmartDuration: false,
   wan3ReferenceFileUrl: false,
@@ -3047,11 +3044,6 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.seedanceTaskType = raw.trim().toLowerCase();
     cliSet.seedanceTaskType = true;
-  } else if (arg === '--wan3-task-type') {
-    const raw = requireFlagValue(args, i, arg);
-    i++;
-    options.wan3TaskType = raw.trim().toLowerCase();
-    cliSet.wan3TaskType = true;
   } else if (arg === '--wan3-ratio' || arg === '--video-ratio') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -3830,7 +3822,6 @@ Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
   --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
-  --wan3-task-type <type> Wan 3 operation: create|edit|extend (v2v defaults to edit)
   --wan3-ratio <ratio>  Wan 3 ratio: adaptive|16:9|4:3|1:1|3:4|9:16
   --smart-duration, --no-smart-duration  Let Wan 3 choose 2-30s, or use --duration
   --reference-file-url <url> Wan 3 public HTTPS document context (one, up to 100 MB; supported paged formats up to 50 pages)
@@ -4649,28 +4640,12 @@ if (options.video) {
   // In audio/video workflows --ref is a loose reference image. In i2v it is a
   // dedicated first-frame anchor and may be paired with --ref-end.
   if (isWan3ModelSelectionLocal(options.model)) {
-    const hasVideoReference = Boolean(options.refVideo || options.refVideos.length > 0);
-    if (hasVideoReference && !cliSet.workflow && !cliSet.wan3TaskType) {
-      fatalCliError(
-        'Wan 3 video references are ambiguous without an operation. Use --workflow r2v for loose guidance references or --workflow v2v with --wan3-task-type edit|extend for a source-video operation.',
-        { code: 'INVALID_ARGUMENT' },
-      );
-    }
     if (!options.videoWorkflow) {
       const hasLooseImages = Array.isArray(options.contextImages) && options.contextImages.length > 0;
       const hasAudio = Boolean(options.refAudio || options.refAudios.length > 0);
       const hasVideo = Boolean(options.refVideo || options.refVideos.length > 0);
       if (hasVideo) {
-        if (options.wan3TaskType === 'edit' || options.wan3TaskType === 'extend') {
-          options.videoWorkflow = 'v2v';
-        } else if (options.wan3TaskType === 'create') {
-          options.videoWorkflow = 'r2v';
-        } else {
-          fatalCliError(
-            'Wan 3 video references are ambiguous without an operation. Use --workflow r2v for loose guidance references or --workflow v2v with --wan3-task-type edit|extend for a source-video operation.',
-            { code: 'INVALID_ARGUMENT' },
-          );
-        }
+        options.videoWorkflow = 'r2v';
       } else if (hasAudio && (options.refImage || hasLooseImages)) {
         options.videoWorkflow = 'ia2v';
       } else if (hasAudio) {
@@ -5136,8 +5111,8 @@ if (!options.upscaleImage && (cliSet.upscaleScale || cliSet.upscaleTargetLongest
   });
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3TaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -5173,13 +5148,7 @@ if (options.video) {
       details: { model: options.model, seedanceTaskType: options.seedanceTaskType }
     });
   }
-  if (options.wan3TaskType && !WAN3_TASK_TYPES.has(options.wan3TaskType)) {
-    fatalCliError('--wan3-task-type must be one of: create, edit, extend.', {
-      code: 'INVALID_ARGUMENT',
-      details: { wan3TaskType: options.wan3TaskType }
-    });
-  }
-  if ((options.wan3TaskType || cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
+  if ((cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
     fatalCliError('Wan 3 controls are supported only by wan3 / wan3.0-video.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
@@ -5299,7 +5268,7 @@ if (options.video) {
     });
   }
   if (isWan3Video && !WAN3_SUPPORTED_WORKFLOWS.has(options.videoWorkflow)) {
-    fatalCliError('Wan 3 supports t2v, i2v/flf, r2v, a2v, ia2v, and v2v workflows.', {
+    fatalCliError('Wan 3 supports t2v, i2v/flf, r2v, a2v, and ia2v workflows. Video inputs are loose r2v references, not source-video edit or extend tasks.', {
       code: 'INVALID_ARGUMENT',
       details: { workflow: options.videoWorkflow, model: options.model }
     });
@@ -5360,20 +5329,6 @@ if (options.video) {
   }
 
   if (isWan3Video) {
-    options.wan3TaskType ??= options.videoWorkflow === 'v2v' ? 'edit' : 'create';
-    const isSourceVideoTask = options.wan3TaskType === 'edit' || options.wan3TaskType === 'extend';
-    if (options.videoWorkflow === 'v2v' && !isSourceVideoTask) {
-      fatalCliError('Wan 3 v2v requires --wan3-task-type edit or extend.', {
-        code: 'INVALID_ARGUMENT',
-        details: { workflow: options.videoWorkflow, wan3TaskType: options.wan3TaskType }
-      });
-    }
-    if (options.videoWorkflow !== 'v2v' && options.wan3TaskType !== 'create') {
-      fatalCliError('Wan 3 edit and extend task types require --workflow v2v.', {
-        code: 'INVALID_ARGUMENT',
-        details: { workflow: options.videoWorkflow, wan3TaskType: options.wan3TaskType }
-      });
-    }
     const looseImages = (options.refImage && options.videoWorkflow !== 'i2v' ? 1 : 0)
       + options.contextImages.length;
     const looseVideos = (options.refVideo ? 1 : 0) + options.refVideos.length;
@@ -5401,17 +5356,11 @@ if (options.video) {
         code: 'INVALID_ARGUMENT'
       });
     }
-    if ((options.wan3TaskType === 'edit' || options.wan3TaskType === 'extend') && looseVideos === 0) {
-      fatalCliError(`Wan 3 ${options.wan3TaskType} requires --ref-video.`, {
-        code: 'INVALID_ARGUMENT'
-      });
-    }
-
     if (options.refImageEnd && !options.refImage) {
       fatalCliError('Wan 3 last-frame generation requires --ref as the first-frame image.', { code: 'INVALID_ARGUMENT' });
     }
     if (options.videoWorkflow === 't2v' && (hasFrameInputs || looseTotal > 0 || options.refImageEnd)) {
-      fatalCliError('Wan 3 t2v does not accept reference media; choose i2v, r2v, a2v, ia2v, or v2v.', { code: 'INVALID_ARGUMENT' });
+      fatalCliError('Wan 3 t2v does not accept reference media; choose i2v, r2v, a2v, or ia2v.', { code: 'INVALID_ARGUMENT' });
     }
     if (options.videoWorkflow === 'i2v') {
       if (!options.refImage) {
@@ -5443,14 +5392,6 @@ if (options.video) {
       }
       if (looseImages > 0 || looseVideos > 0 || options.refImageEnd) {
         fatalCliError('Wan 3 a2v accepts audio references only; use ia2v or r2v for multimodal input.', { code: 'INVALID_ARGUMENT' });
-      }
-    }
-    if (options.videoWorkflow === 'v2v') {
-      if (looseVideos === 0) {
-        fatalCliError('Wan 3 v2v requires --ref-video.', { code: 'INVALID_ARGUMENT' });
-      }
-      if (options.refImageEnd) {
-        fatalCliError('Wan 3 v2v uses loose references and does not accept --ref-end.', { code: 'INVALID_ARGUMENT' });
       }
     }
     enforceWan3ReferenceCaps({ images: looseImages, videos: looseVideos, audios: looseAudios });
@@ -5828,10 +5769,6 @@ if (options.video && !options.frames) {
     });
   }
   options.fps = h3Fps;
-}
-
-if (options.video && isWan3ModelLocal(options.model)) {
-  await prepareWan3ReferenceMediaPlan();
 }
 
 // Video dimensions:
@@ -11390,6 +11327,10 @@ async function main() {
   let client = null;
 
   try {
+    if (options.video && isWan3ModelLocal(options.model)) {
+      await prepareWan3ReferenceMediaPlan();
+    }
+
     if (options.showVersion) {
       if (options.json) {
         console.log(JSON.stringify({
@@ -12463,7 +12404,6 @@ async function main() {
       }
       if (isWan3Video) {
         projectConfig.ratio = options.wan3Ratio;
-        projectConfig.wan3TaskType = options.wan3TaskType;
         projectConfig.generateAudio = options.apiGenerateAudio ?? true;
         projectConfig.watermark = options.wan3Watermark;
         if (options.wan3SmartDuration) projectConfig.smartDuration = true;

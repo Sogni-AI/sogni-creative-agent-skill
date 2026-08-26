@@ -2679,7 +2679,7 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   ]);
   assert.equal(exitCode, 0, stderr);
   assert.equal(state.lastVideoProject.ratio, 'adaptive');
-  assert.equal(state.lastVideoProject.wan3TaskType, 'create');
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'wan3TaskType'), false);
   assert.equal(state.lastVideoProject.generateAudio, true);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'promptExtend'), false);
   assert.equal(state.lastVideoProject.watermark, false);
@@ -2875,18 +2875,43 @@ test('wan3 validates frame/loose exclusivity and official reference caps', () =>
   ], 'at most 10 reference images');
 });
 
-test('wan3 rejects workflow and provider task combinations that disagree', () => {
-  expectCliError([
-    '--video', '-m', 'wan3', '--workflow', 'v2v', '--wan3-task-type', 'create',
-    '--ref-video', 'https://example.com/source.mp4',
-    'Edit the source video.'
-  ], 'v2v requires --wan3-task-type edit or extend');
+test('wan3 routes video inputs as loose references and rejects invented v2v', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-wan3-video-reference-'));
+  const videoFixture = join(tempDir, 'reference.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(videoFixture, Buffer.from('test video reference'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log('5');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const referenceUrl = 'https://example.com/sogni-agent-test-reference.mp4';
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const looseReference = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video', '-m', 'wan3',
+      '--ref-video', referenceUrl,
+      'Use Video 1 as loose motion guidance for a new shot.'
+    ], {
+      FFPROBE_PATH: fakeFfprobe,
+      SOGNI_AGENT_TEST_VIDEO_FIXTURE_PATH: videoFixture,
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(looseReference.exitCode, 0, looseReference.stderr);
+    assert.equal(looseReference.state.lastVideoProject.referenceVideoUrls.length, 1);
+    assert.match(
+      looseReference.state.lastVideoProject.referenceVideoUrls[0],
+      /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceVideo\//,
+    );
+    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
+    assert.equal(Object.hasOwn(looseReference.state.lastVideoProject, 'wan3TaskType'), false);
+  });
 
   expectCliError([
-    '--video', '-m', 'wan3', '--workflow', 'r2v', '--wan3-task-type', 'extend',
-    '--ref-video', 'https://example.com/reference.mp4',
-    'Use the video as a motion reference.'
-  ], 'edit and extend task types require --workflow v2v');
+    '--video', '-m', 'wan3', '--workflow', 'v2v',
+    '--ref-video', 'https://example.com/source.mp4',
+    'Edit the source video.'
+  ], 'Video inputs are loose r2v references');
 });
 
 test('wan3 r2v forwards loose images with the unified model id', () => {

@@ -353,11 +353,12 @@ Use `--smart-duration` for provider-selected timing or `--duration 2..30` for
 an exact request. `--no-expand-prompt` bypasses local prompt guardrails and
 sends literal wording; hosted agent paths run Sogni's exact-model shaper. The
 configured Alibaba Model Studio WAN3 endpoint accepts no provider-side
-`prompt_extend` field.
+`prompt_extend` behavior is coordinated with Sogni's own model-specific shaping
+so a prompt is not rewritten twice.
 
 - **Frame mode:** `--ref` is the first frame; optional `--ref-end` is the last
   frame. A last frame requires a first frame.
-- **Loose-reference mode:** select `r2v`, `a2v`, `ia2v`, or `v2v`. In these
+- **Loose-reference mode:** select `r2v`, `a2v`, or `ia2v`. In these
   modes `--ref` is a loose `Image 1`; `--ref-video` and `--ref-audio` are
   repeatable loose `Video N` / `Audio N` inputs. Give every reference one
   explicit job in the prompt.
@@ -377,10 +378,10 @@ configured Alibaba Model Studio WAN3 endpoint accepts no provider-side
 - **Inputs:** a prompt or at least one media input is required; prompts allow up
   to 20,000 characters. Send no negative prompt, steps, guidance, sampler,
   scheduler, ControlNet, or mask. Seeds are integers from 0 through 2147483647.
-- **Edit/extend:** `--wan3-task-type edit` and `extend` require a source video.
-  Extension also requires `--wan3-ratio adaptive` and a prompt that clearly
-  asks to continue the supplied video. Input video plus output is at most 30
-  seconds.
+- **Video references:** Wan 3 video inputs are loose conditioning for a new
+  generation. The provider contract does not expose source-video edit or extend
+  tasks. Use a model with a real V2V workflow when the source must be edited or
+  continued.
 - **Cost (as of 2026-08):** platform artist pricing is $0.065/s at 480P,
   $0.13/s at 720P, and $0.26/s at 1080P; native audio does not change the rate.
 

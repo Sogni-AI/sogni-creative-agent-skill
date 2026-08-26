@@ -1,3 +1,10 @@
+## [3.35.3](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.2...v3.35.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **deps:** consume final Wan 3 SDK releases ([389a4be](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/389a4be4640e61cd8374acb3d0ccb715df2ced53))
+
 ## [3.35.2](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.1...v3.35.2) (2026-08-26)
 
 

@@ -3045,8 +3045,14 @@ test('photobooth cannot be combined with video', () => {
   expectCliError(['--photobooth', '--video', '--ref', 'screenshot.jpg', 'portrait'], '--photobooth cannot be combined with --video.');
 });
 
-test('video rejects unsupported lora options', () => {
-  expectCliError(['--video', '--lora', 'foo', 'a cat'], 'Video LoRA "foo" is not supported.');
+test('video rejects a lora the catalog does not publish for the model', () => {
+  const { exitCode, stderr } = runCli(
+    ['--video', '--ref', SCREENSHOT_FIXTURE, '-m', 'minimax-h3-i2v', '--lora', 'foo', 'a cat'],
+    { SOGNI_AGENT_TEST_LORA_CATALOG_JSON: JSON.stringify({ data: { loras: [] } }) }
+  );
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /Video LoRA "foo" is not published for model/);
 });
 
 test('image rejects more than eight ordered LoRAs', () => {
@@ -3089,6 +3095,89 @@ test('DR34ML4Y supports regular LTX-2.3 I2V with the filter off', () => {
   assert.equal(state.lastVideoProject.modelId, 'ltx23-22b-fp8_i2v');
   assert.deepEqual(state.lastVideoProject.loras, ['dr34ml4y-v3']);
   assert.deepEqual(state.lastVideoProject.loraStrengths, [1]);
+});
+
+// The catalog is the CLI's source of truth for every publicly listed video
+// LoRA, so these drive it through the same fixture hook `--list-loras` uses.
+const H3_LORA_CATALOG_FIXTURE = JSON.stringify({
+  data: {
+    loras: [
+      {
+        loraId: 'h3-realism-people',
+        name: 'Realism People',
+        modelIds: ['minimax-h3-fl2va-fp8_i2v'],
+        ui: { min: 0, max: 2, default: 0.8, nsfw: false, sexual: false }
+      },
+      {
+        loraId: 'h3-mystic-xxx-v4',
+        name: 'Mystic X v4',
+        modelIds: ['minimax-h3-fl2va-fp8_i2v'],
+        ui: { min: 0, max: 1, default: 1, nsfw: true, sexual: true }
+      }
+    ],
+    constraints: { maxPerRequest: 8 }
+  }
+});
+
+const H3_LORA_ENV = { SOGNI_AGENT_TEST_LORA_CATALOG_JSON: H3_LORA_CATALOG_FIXTURE };
+
+test('MiniMax H3 video LoRAs render at their catalog default strength', () => {
+  const { exitCode, state } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'minimax-h3-i2v',
+    '--lora', 'h3-realism-people',
+    'r34l1sm, a slow push-in'
+  ], H3_LORA_ENV);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_i2v');
+  assert.deepEqual(state.lastVideoProject.loras, ['h3-realism-people']);
+  // 0.8 from the catalog, not the worker's 1.0 fallback, which for this
+  // adapter is already the top of its usable band.
+  assert.deepEqual(state.lastVideoProject.loraStrengths, [0.8]);
+});
+
+test('an unpublished video LoRA id is rejected with the ids that do exist', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'minimax-h3-i2v',
+    '--lora', 'h3-realism-ppl',
+    'a slow push-in'
+  ], H3_LORA_ENV);
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /is not published for model/);
+  assert.match(stderr, /h3-realism-people/);
+});
+
+test('a mature video LoRA requires the sensitive-content filter off', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'minimax-h3-i2v',
+    '--lora', 'h3-mystic-xxx-v4',
+    'a scene'
+  ], H3_LORA_ENV);
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /opt-in mature-theme LoRA and requires --no-filter/);
+});
+
+test('DR34ML4Y cannot be stacked with a catalogued video LoRA', () => {
+  const { exitCode, stderr } = runCli([
+    '--video',
+    '--ref', SCREENSHOT_FIXTURE,
+    '-m', 'ltx23-22b-fp8_i2v',
+    '--lora', 'dr34ml4y-v3',
+    '--lora', 'h3-realism-people',
+    '--no-filter',
+    'a scene'
+  ], H3_LORA_ENV);
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /different model families/);
 });
 
 test('the installed LTX DR34ML4Y artifact is rejected on WAN models', () => {

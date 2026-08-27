@@ -16,6 +16,7 @@ const destination = join(
 );
 
 const referenceFiles = [
+  'h3-video-loras.md',
   'hosted-api.md',
   'image-prompting.md',
   'krea2-loras.md',

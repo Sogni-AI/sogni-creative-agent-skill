@@ -76,7 +76,7 @@ pruneOldArtifactLogs();
 const TESTS = [
   { key: 't2i', name: 'Text-to-image 512x512' },
   { key: 't2v', name: 'Text-to-video 640x640' },
-  { key: 'i2v', name: 'Image-to-video 512x512' },
+  { key: 'i2v', name: 'Image-to-video from 512x512 input' },
   { key: 'ltx23-i2v-audio-id', name: 'LTX 2.3 first-frame + Audio ID' }
 ];
 
@@ -598,18 +598,18 @@ if (!shouldRun) {
 
       const i2vBudget = await checkVideoBudget({
         workflow: 'i2v',
-        label: 'Image-to-video 512x512',
-        width: 512,
-        height: 512,
+        label: 'Image-to-video from 512x512 input',
+        width: 640,
+        height: 640,
         count: 1
       });
       if (!i2vBudget.ok) {
         const reason = i2vBudget.reason || 'Insufficient balance for video render';
         status.setSkip('i2v');
-        await t.test('Image-to-video 512x512', { skip: reason }, () => {});
+        await t.test('Image-to-video from 512x512 input', { skip: reason }, () => {});
       } else {
-        await runSubtest(t, status, 'i2v', 'Image-to-video 512x512', async () => {
-          console.log(`Running test 3/${total}: Image-to-video 512x512`);
+        await runSubtest(t, status, 'i2v', 'Image-to-video from 512x512 input', async () => {
+          console.log(`Running test 3/${total}: Image-to-video from 512x512 input`);
           const json = await runCli([
             '--json',
             '--video',
@@ -619,16 +619,19 @@ if (!shouldRun) {
             '--height', '512',
             '--timeout', String(VIDEO_TIMEOUT_SEC),
             'gentle camera pan'
-          ], 'Image-to-video 512x512');
+          ], 'Image-to-video from 512x512 input');
 
           assert.equal(json.success, true);
           assert.equal(json.type, 'video');
           assert.equal(json.workflow, 'i2v');
-          assert.equal(json.width, 512);
-          assert.equal(json.height, 512);
+          assert.equal(json.width, 640);
+          assert.equal(json.height, 640);
+          assert.equal(json.effectiveWidth, 640);
+          assert.equal(json.effectiveHeight, 640);
+          assert.deepEqual(json.effectiveFromReference, { width: 512, height: 512 });
           assert.equal(json.refImage, imagePath);
           assert.ok(Array.isArray(json.urls) && json.urls.length > 0, 'video url missing');
-          logGeneratedArtifacts('Image-to-video 512x512', json);
+          logGeneratedArtifacts('Image-to-video from 512x512 input', json);
         });
       }
 

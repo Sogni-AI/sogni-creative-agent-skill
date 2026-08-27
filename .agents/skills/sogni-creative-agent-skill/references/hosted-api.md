@@ -124,6 +124,18 @@ submit inline `input.steps`; `--workflow-input <json|@path>` supplies the
   `replacementEndSeconds` when interleaving existing video slices. Workflow
   JSON can bind request media into step arguments with
   `sourceStepId: "$input_media"`.
+- LoRA steps: `generate_image`, `edit_image`, `generate_video`, and
+  `animate_photo` take an ordered `loras` array plus a positionally aligned
+  `loraStrengths` (order matters, adapters do not commute). Step arguments are
+  schema-validated before dispatch, so 1-8 entries with matching lengths or the
+  step fails with a `400` — omit `loraStrengths` entirely to apply every adapter
+  at `1.0`. LoRAs are also model-gated, and there the mismatch is silent: ids
+  the chosen model cannot load are dropped without an error, so set the
+  model in the same step — `model: krea-2-turbo` or `dark-beast-krea2` for
+  `generate_image`, `model: krea-identity-edit` or
+  `dark-beast-krea2-identity-edit` for `edit_image`, and a `minimax-h3-*`
+  `videoModel` for `generate_video` / `animate_photo`. Published ids and ranges
+  come from `GET /v1/loras/comfy?modelId=<canonical-model-id>`.
 - `--api-workflow storyboard-video` generates a storyline, creates one GPT
   Image 2 storyboard sheet, then feeds that artifact into Seedance as the
   video reference. `-Q fast|hq|pro` maps to GPT Image 2 low|medium|high

@@ -1,3 +1,22 @@
+# [3.36.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.4...v3.36.0) (2026-08-27)
+
+
+### Bug Fixes
+
+* **deps:** consume intelligence client 3.25.0 ([b495645](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/b4956451ec39cc44406d7115f91dc8156fe1a850))
+* forward H3 video durations ([986f373](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/986f373d085400add22aceda2d4d2fb5cde48ea6))
+
+
+### Features
+
+* **video:** harden local reference workflows ([eb3c19c](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/eb3c19c66f215a8322a864e0d7175939851f8bda))
+
+
+### Documentation
+
+* **hosted-api:** document workflow LoRA steps ([5bdf28f](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/5bdf28f3ae7a5d788b3f0fb95379c2b3c73ffb5c))
+* **loras:** document the MiniMax H3 video adapters ([92d2524](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/92d2524f52346bebde33fc288421a490109d49a1))
+
 ## [3.35.4](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.3...v3.35.4) (2026-08-26)
 
 

@@ -1764,30 +1764,40 @@ test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', 
   const video2 = join(tempDir, 'motion-2.mp4');
   const audio1 = join(tempDir, 'voice-1.m4a');
   const audio2 = join(tempDir, 'voice-2.m4a');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(video1, Buffer.from('reference video one'));
   writeFileSync(video2, Buffer.from('reference video two'));
   writeFileSync(audio1, Buffer.from('reference audio one'));
   writeFileSync(audio2, Buffer.from('reference audio two'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+console.log(args.includes('format=duration') ? '8' : '24/1');
+`);
+  chmodSync(fakeFfprobe, 0o755);
 
-  const { exitCode, state } = runCli([
-    '--video',
-    '-m', 'minimax-h3-r2v',
-    '--ref', SCREENSHOT_FIXTURE,
-    '-c', SCREENSHOT_FIXTURE,
-    '--ref-video', video1,
-    '--ref-video', video2,
-    '--ref-audio', audio1,
-    '--ref-audio', audio2,
-    '--no-generate-audio',
-    '--duration', '10',
-    '<Picture 1> controls identity. <Picture 2> controls wardrobe. <Video 1> controls motion. <Video 2> controls camera timing. <Audio 1> controls voice. <Audio 2> controls rhythm.'
-  ]);
+  const { exitCode, state } = runCli(
+    [
+      '--video',
+      '-m', 'minimax-h3-r2v',
+      '--ref', SCREENSHOT_FIXTURE,
+      '-c', SCREENSHOT_FIXTURE,
+      '--ref-video', video1,
+      '--ref-video', video2,
+      '--ref-audio', audio1,
+      '--ref-audio', audio2,
+      '--no-generate-audio',
+      '--duration', '10',
+      '<Picture 1> controls identity. <Picture 2> controls wardrobe. <Video 1> controls motion. <Video 2> controls camera timing. <Audio 1> controls voice. <Audio 2> controls rhythm.'
+    ],
+    { FFPROBE_PATH: fakeFfprobe },
+  );
   assert.equal(exitCode, 0);
   assert.equal(state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v');
   assert.ok(state.lastVideoProject.referenceImage);
   assert.equal(state.lastVideoProject.contextImages.length, 1);
   assert.ok(state.lastVideoProject.referenceVideo);
   assert.equal(state.lastVideoProject.referenceVideos.length, 1);
+  assert.deepEqual(state.lastVideoProject.referenceVideoDurations, [8, 8]);
   assert.ok(state.lastVideoProject.referenceAudio);
   assert.equal(state.lastVideoProject.referenceAudios.length, 1);
   assert.equal(state.lastVideoProject.generateAudio, false);
@@ -1864,16 +1874,26 @@ test('non-H3 video workflows keep worker-side audio window fields', () => {
 test('MiniMax H3 r2v accepts video-only visual input, rejects audio-only input, and is never inferred', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-video-only-r2v-'));
   const video = join(tempDir, 'motion.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(video, Buffer.from('reference video'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+console.log(args.includes('format=duration') ? '8' : '24/1');
+`);
+  chmodSync(fakeFfprobe, 0o755);
 
-  const videoOnly = runCli([
-    '--video', '-m', 'minimax-h3-r2v', '--ref-video', video,
-    'Use <Video 1> as the complete motion and composition reference.'
-  ]);
+  const videoOnly = runCli(
+    [
+      '--video', '-m', 'minimax-h3-r2v', '--ref-video', video,
+      'Use <Video 1> as the complete motion and composition reference.'
+    ],
+    { FFPROBE_PATH: fakeFfprobe },
+  );
   assert.equal(videoOnly.exitCode, 0);
   assert.equal(videoOnly.state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v');
   assert.equal(videoOnly.state.lastVideoProject.referenceImage, undefined);
   assert.ok(videoOnly.state.lastVideoProject.referenceVideo);
+  assert.deepEqual(videoOnly.state.lastVideoProject.referenceVideoDurations, [8]);
 
   expectCliError(
     ['--video', '-m', 'minimax-h3-r2v', '--ref-audio', 'voice.m4a', 'Use <Audio 1> for the voice.'],

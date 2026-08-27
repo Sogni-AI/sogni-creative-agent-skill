@@ -12221,6 +12221,33 @@ async function main() {
       const additionalVideoBuffers = isMiniMaxH3R2v
         ? await Promise.all(options.refVideos.map((reference) => fetchMediaBuffer(reference)))
         : [];
+      const miniMaxH3ReferenceVideoDurations = isMiniMaxH3R2v
+        ? await Promise.all(
+            [
+              ...(videoBuffer ? [{ buffer: videoBuffer, source: options.refVideo }] : []),
+              ...additionalVideoBuffers.map((buffer, index) => ({
+                buffer,
+                source: options.refVideos[index]
+              }))
+            ].map(async ({ buffer, source }, index) => {
+              const duration = await probeLocalMediaDurationSeconds(source)
+                ?? await probeMediaBufferDurationSeconds(
+                  buffer,
+                  mediaFilenameFromSource(source, `h3-reference-video-${index + 1}.mp4`)
+                );
+              if (!Number.isFinite(duration) || duration < 2 || duration > 15) {
+                fatalCliError(
+                  `MiniMax H3 reference video ${index + 1} must be between 2 and 15 seconds.`,
+                  {
+                    code: 'INVALID_ARGUMENT',
+                    details: { source, duration: duration ?? null }
+                  }
+                );
+              }
+              return duration;
+            })
+          )
+        : [];
       let pretrimmedMiniMaxH3ReferenceAudio = false;
       if (audioBuffer) {
         audioBuffer = await prepareReferenceAudioForVideoBuffer(audioBuffer, options.refAudio);
@@ -12484,6 +12511,9 @@ async function main() {
       }
       if (additionalVideoBuffers.length > 0) {
         projectConfig.referenceVideos = additionalVideoBuffers;
+      }
+      if (miniMaxH3ReferenceVideoDurations.length > 0) {
+        projectConfig.referenceVideoDurations = miniMaxH3ReferenceVideoDurations;
       }
       if (seedanceReferenceImageUrls.length > 0) {
         projectConfig.referenceImageUrls = seedanceReferenceImageUrls;

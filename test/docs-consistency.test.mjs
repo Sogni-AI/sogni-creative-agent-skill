@@ -135,6 +135,11 @@ test('plugin and marketplace manifests are valid JSON with the expected shape', 
   assert.ok(openclaw.configSchema || openclaw.config || openclaw.version, 'openclaw manifest parsed');
 });
 
+test('release config keeps semantic version tags explicit', () => {
+  const releaseConfig = JSON.parse(read('.releaserc.json'));
+  assert.equal(releaseConfig.tagFormat, 'v${version}');
+});
+
 test('SKILL.md reference pointers resolve to real files', () => {
   const text = read('SKILL.md');
   for (const match of text.matchAll(/\]\(\.\/((?:references|skills)\/[\w./-]+)\)/g)) {
@@ -226,6 +231,25 @@ test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () 
     assert.match(text, /at least one visual reference/i);
     assert.match(text, /audio(?:-only| alone)\s+(?:input\s+)?is invalid/i);
   }
+});
+
+test('music-locked video guidance forbids source-song substitution', () => {
+  for (const docFile of ['SKILL.md', 'references/video-prompting.md', 'references/video-editing.md']) {
+    const text = read(docFile);
+    assert.match(text, /specific[\s\S]{0,100}trending/i, `${docFile}: missing specific/trending song rule`);
+    assert.match(text, /audio reuse/, `${docFile}: missing H3 audio reuse task`);
+    assert.match(text, /fully_copy/, `${docFile}: missing exact audio retention relationship`);
+    assert.match(text, /stream-copy\/remux/, `${docFile}: missing exact final soundtrack operation`);
+    assert.match(text, /never[\s\S]{0,100}(?:replace|substitut|recompos)/i,
+      `${docFile}: missing prohibition on generated replacement music`);
+    assert.match(text, /pose\/edit-controlled|pose\/edit controlled/i,
+      `${docFile}: missing exact-choreography workflow boundary`);
+  }
+  assert.match(
+    read('references/video-prompting.md'),
+    /reference files themselves[\s\S]{0,180}normalize[\s\S]{0,180}time-distort/i,
+  );
+  assert.match(read('SKILL.md'), /Reference videos must themselves be exactly 24 fps/i);
 });
 
 test('prompt-only video authoring requires a registered native contract', () => {

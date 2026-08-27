@@ -1905,6 +1905,48 @@ console.log(args.includes('format=duration') ? '8' : '24/1');
   );
 });
 
+test('MiniMax H3 r2v rejects a local reference video that is not 24fps', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-reference-fps-'));
+  const video = join(tempDir, 'motion.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('reference video'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log('30/1');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const result = runCli(
+    [
+      '--video', '-m', 'minimax-h3-r2v', '--ref-video', video,
+      'Use <Video 1> as the complete motion and composition reference.',
+    ],
+    { FFPROBE_PATH: fakeFfprobe },
+  );
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /must be exactly 24fps.*30\.000fps/is);
+  assert.equal(result.state?.lastVideoProject, undefined);
+});
+
+test('MiniMax H3 r2v rejects a local reference video whose frame rate cannot be verified', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-reference-unreadable-fps-'));
+  const video = join(tempDir, 'motion.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('unreadable reference video'));
+  writeFileSync(fakeFfprobe, '#!/usr/bin/env node\n');
+  chmodSync(fakeFfprobe, 0o755);
+
+  const result = runCli(
+    [
+      '--video', '-m', 'minimax-h3-r2v', '--ref-video', video,
+      'Use <Video 1> as the complete motion and composition reference.',
+    ],
+    { FFPROBE_PATH: fakeFfprobe },
+  );
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /could not verify.*frame rate.*install ffprobe/is);
+  assert.equal(result.state?.lastVideoProject, undefined);
+});
+
 test('MiniMax H3 r2v enforces per-kind and total reference caps', () => {
   expectCliError(
     [
@@ -5722,6 +5764,143 @@ test('--extract-frame-at with non-existent video file returns an error', () => {
   assert.ok(stderr.includes('not found') || stderr.includes('FILE_NOT_FOUND'), `Expected file-not-found error, got: ${stderr}`);
 });
 
+test('--trim-video validates its complete argument contract', () => {
+  expectCliError(
+    ['--trim-video', '/tmp/video.mp4', '1'],
+    '--trim-video (duration seconds) requires a value.'
+  );
+  expectCliError(
+    ['--trim-video', '/tmp/video.mp4', '-1', '3', '/tmp/out.mp4'],
+    '--trim-video (start seconds) must be >= 0.'
+  );
+  expectCliError(
+    ['--trim-video', '/tmp/video.mp4', '1', '0', '/tmp/out.mp4'],
+    '--trim-video duration must be greater than zero.'
+  );
+});
+
+test('--trim-video re-encodes a frame-accurate clip and verifies the result', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-trim-video-'));
+  const input = join(tempDir, 'input.mp4');
+  const output = join(tempDir, 'output.mp4');
+  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
+  const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(input, Buffer.from('source video'));
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+import { appendFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('-version')) {
+  console.log('ffmpeg version test');
+  process.exit(0);
+}
+appendFileSync(process.env.FFMPEG_TEST_LOG, JSON.stringify(args) + '\\n');
+if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('trimmed video'));
+`);
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log(JSON.stringify({
+  streams: [
+    { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
+    { codec_type: 'audio', codec_name: 'aac' }
+  ],
+  format: { duration: '3' }
+}));
+`);
+  chmodSync(fakeFfmpeg, 0o755);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const { exitCode, stdout, stderr } = runCli(
+    ['--json', '--trim-video', input, '1.25', '3', output],
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe, FFMPEG_TEST_LOG: commandLog },
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(JSON.parse(stdout.trim()).decodable, true);
+  const commands = readFileSync(commandLog, 'utf8').trim().split('\n').map(JSON.parse);
+  const trim = commands.find((args) => args.includes('-t'));
+  assert.ok(trim, 'expected an ffmpeg trim command');
+  assert.equal(trim[trim.indexOf('-ss') + 1], '1.25');
+  assert.equal(trim[trim.indexOf('-t') + 1], '3');
+  assert.equal(trim[trim.indexOf('-c:v') + 1], 'libx264');
+  assert.equal(trim.at(-1), output);
+  assert.ok(commands.some((args) => args.at(-1) === '-'), 'expected a full-decode verification command');
+});
+
+test('--concat-videos omits clip audio filters when an external soundtrack replaces them', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-concat-soundtrack-'));
+  const clips = [join(tempDir, 'a.mp4'), join(tempDir, 'b.mp4')];
+  const soundtrack = join(tempDir, 'song.mp3');
+  const output = join(tempDir, 'output.mp4');
+  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
+  const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  for (const file of [...clips, soundtrack]) writeFileSync(file, Buffer.from('media'));
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+import { appendFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('-version')) {
+  console.log('ffmpeg version test');
+  process.exit(0);
+}
+appendFileSync(process.env.FFMPEG_TEST_LOG, JSON.stringify(args) + '\\n');
+if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('concatenated video'));
+`);
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log(JSON.stringify({
+  streams: [
+    { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
+    { codec_type: 'audio', codec_name: 'aac' }
+  ],
+  format: { duration: '2' }
+}));
+`);
+  chmodSync(fakeFfmpeg, 0o755);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const { exitCode, stderr } = runCli(
+    ['--concat-videos', output, ...clips, '--concat-audio', soundtrack],
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe, FFMPEG_TEST_LOG: commandLog },
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  const commands = readFileSync(commandLog, 'utf8').trim().split('\n').map(JSON.parse);
+  const concat = commands.find((args) => args.includes('-filter_complex'));
+  assert.ok(concat, 'expected an ffmpeg concat command');
+  const filter = concat[concat.indexOf('-filter_complex') + 1];
+  assert.match(filter, /concat=n=2:v=1:a=0\[cv\]/);
+  assert.doesNotMatch(filter, /\[[01]:a\]|anullsrc/);
+  assert.match(filter, /\[2:a\].*\[xa\]/);
+  assert.deepEqual(concat.slice(concat.indexOf('-map'), concat.indexOf('-map') + 4), ['-map', '[cv]', '-map', '[xa]']);
+});
+
+test('--concat-videos fails closed when soundtrack replacement cannot determine clip duration', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-concat-no-duration-'));
+  const clips = [join(tempDir, 'a.mp4'), join(tempDir, 'b.mp4')];
+  const soundtrack = join(tempDir, 'song.mp3');
+  const output = join(tempDir, 'output.mp4');
+  const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  for (const file of [...clips, soundtrack]) writeFileSync(file, Buffer.from('media'));
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+if (process.argv.includes('-version')) console.log('ffmpeg version test');
+`);
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log(JSON.stringify({
+  streams: [{ codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' }],
+  format: {}
+}));
+`);
+  chmodSync(fakeFfmpeg, 0o755);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const { exitCode, stderr } = runCli(
+    ['--concat-videos', output, ...clips, '--concat-audio', soundtrack],
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe },
+  );
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /without readable clip durations/i);
+});
+
 test('--verify-video with non-existent video file returns an error', () => {
   const { exitCode, stderr } = runCli(['--verify-video', '/tmp/nonexistent_verify_video_98765.mp4']);
   assert.equal(exitCode, 1);
@@ -5800,6 +5979,7 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--concat-videos'), 'Help should include --concat-videos');
   assert.ok(stdout.includes('--extract-first-frame'), 'Help should include --extract-first-frame');
   assert.ok(stdout.includes('--extract-frame-at'), 'Help should include --extract-frame-at');
+  assert.ok(stdout.includes('--trim-video'), 'Help should include --trim-video');
   assert.ok(stdout.includes('--verify-video'), 'Help should include --verify-video');
   assert.ok(stdout.includes('--remix-audio'), 'Help should include --remix-audio');
   assert.ok(stdout.includes('--list-media'), 'Help should include --list-media');

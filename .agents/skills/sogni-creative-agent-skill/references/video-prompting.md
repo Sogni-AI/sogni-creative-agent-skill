@@ -359,6 +359,9 @@ transition), and `S.SS` is the effective duration to exactly two decimal places
 locked frames: up to **9 reference images**,
 **3 reference videos** (24 fps, 2–15 s, each with an optional soundtrack) and
 **3 standalone audio clips** (2–15 s each), **12 files maximum in total**.
+The 24 fps requirement applies to the reference files themselves: normalize any
+other frame rate without changing duration before submission, or H3 will
+time-distort the visual reference relative to its soundtrack.
 Reference-video duration totals may not exceed 15 seconds, and standalone
 reference-audio duration totals may not exceed 15 seconds. It runs a separate
 ref2va checkpoint, so it is never inferred — it must be chosen by name with
@@ -402,6 +405,21 @@ content and `fully_copy`, `partially_copy`, `reference`, or `weak_reference` for
 audio. `detailed_description` is the shot-by-shot target-video timeline and
 uses the same `[Shot N]`, `(Sx)`, and `<d>[Language] ...</d>` rules as Base H3.
 
+**Immutable soundtrack rule.** If the user asks for the same, specific,
+original, or trending song/soundtrack—or choreography tied to that audio—the
+source signal and timeline are locked. Never generate a substitute, loose
+imitation, remix, recomposition, or copyright-avoidance melody/lyric change.
+Use `audio reuse` in `summary`, assign every locked `<Audio N>` `fully_copy` in
+`retention_analysis`, name it directly in `non_diegetic_music`, and put the
+source action onset/beat times in `detailed_description`. `audio reference`
+means H3 may generate a new signal and is valid only when the user explicitly
+wants style, timbre, rhythm, or delivery guidance rather than the original
+track. A generative request cannot guarantee waveform identity, so the final
+exact-song deliverable must stream-copy/remux the original audio after render.
+Soundtrack identity and choreography timing are separate: Ref2VA is loose
+conditioning, not an edit-level timing guarantee. If exact movement timing is
+mandatory, use a pose/edit-controlled workflow or stop before paid generation.
+
 **Reference grammar.** Reference assets are numbered from 1 independently per
 type. Use the exact angle-bracket labels:
 
@@ -413,9 +431,10 @@ Visible people, objects, scenes, or effects reused from an image or video become
 `<Subject N>` entries whose definitions cite their source asset. Reserve
 `<Picture N>` for a concrete frame or storyboard relationship, `<Video N>` for
 a whole-video edit, continuation, camera, cut, rhythm, or temporal relationship,
-and `<Audio N>` for a standalone audio asset or an explicitly enabled audio
-track. A video file does not automatically create an `<Audio N>` label merely
-because it contains sound.
+and `<Audio N>` for a standalone audio asset or a reference-video soundtrack.
+Every soundtracked reference video contributes an `<Audio N>` ordinal before
+standalone audio clips; probe the files and use the runtime's reported order so
+the soundtrack cannot bind to the wrong label.
 
 Rewrite aliases such as "image 2", `@Image2`, or `[Image 2]` to the correct H3
 label. Seedance's `@Image1` / `@Video1` / `@Audio1` grammar must not leak into an

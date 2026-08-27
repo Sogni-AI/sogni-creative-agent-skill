@@ -66,6 +66,17 @@ This ensures visual continuity — the new clip picks up exactly where the previ
 
 When the final stitched output needs a single external soundtrack, add `--concat-audio /path/to/audio.mp3` and optional `--concat-audio-start <sec>` to the same `--concat-videos` command. This is the local-agent advantage over browser-only workflows: generate clips with Sogni, then stitch and mux audio locally.
 
+## Preserve a Specific Song or Trending Soundtrack
+
+Treat a user-specified original/specific/trending song and its timeline as
+immutable. Never ask a generative video model to imitate, recompose, remix, or
+replace it, including for copyright-avoidance. For MiniMax H3 Ref2VA, author
+`audio reuse` plus `<Audio N>: fully_copy` and explicit choreography times, then
+stream-copy/remux the original soundtrack into the final video. `audio
+reference` explicitly permits a newly generated signal and is not equivalent.
+If exact dance timing is mandatory, loose R2V conditioning is insufficient;
+use a pose/edit-controlled workflow or stop before rendering.
+
 ## Transition Between Two Videos (Bridge Clip)
 
 This recipe transitions between two **finished videos**. To morph between two

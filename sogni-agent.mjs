@@ -10,6 +10,7 @@
 import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
+import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
@@ -2622,6 +2623,10 @@ const options = {
   extractFrameAt: null, // --extract-frame-at <video> <seconds> <image>
   extractFrameAtSeconds: null,
   extractFrameAtOutput: null,
+  trimVideo: null, // --trim-video <video> <start> <duration> <output>
+  trimVideoStart: null,
+  trimVideoDuration: null,
+  trimVideoOutput: null,
   verifyVideo: null, // --verify-video <video>: probe streams and decode the full file
   sourceReelDir: null, // --source-reel <image-folder>: animate folder images into a stitched video
   sourceReelImageSeconds: 3,
@@ -3302,6 +3307,25 @@ for (let i = 0; i < args.length; i++) {
     options.extractFrameAt = videoArg;
     options.extractFrameAtSeconds = parseNonNegativeNumberValue(secondsRaw, arg + ' (seconds)');
     options.extractFrameAtOutput = imageArg;
+  } else if (arg === '--trim-video') {
+    const videoArg = requireFlagValue(args, i, arg);
+    i++;
+    const startRaw = requireFlagValue(args, i, arg + ' (start seconds)');
+    i++;
+    const durationRaw = requireFlagValue(args, i, arg + ' (duration seconds)');
+    i++;
+    const outputArg = requireFlagValue(args, i, arg + ' (output video)');
+    i++;
+    options.trimVideo = videoArg;
+    options.trimVideoStart = parseNonNegativeNumberValue(startRaw, arg + ' (start seconds)');
+    options.trimVideoDuration = parseNumberValue(durationRaw, arg + ' (duration seconds)');
+    if (options.trimVideoDuration <= 0) {
+      fatalCliError('--trim-video duration must be greater than zero.', {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--trim-video', duration: options.trimVideoDuration }
+      });
+    }
+    options.trimVideoOutput = outputArg;
   } else if (arg === '--verify-video') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -3962,6 +3986,7 @@ General:
   --extract-last-frame <video> <image>  Extract last frame from a video (safe ffmpeg wrapper)
   --extract-first-frame <video> <image> Extract first frame from a video (safe ffmpeg wrapper)
   --extract-frame-at <video> <sec> <image> Extract a timestamped frame (safe ffmpeg wrapper)
+  --trim-video <video> <start> <duration> <output> Create a frame-accurate H.264/AAC clip
   --verify-video <video> Verify streams and fully decode a video (safe ffmpeg/ffprobe wrapper)
   --concat-videos <out> <clips...>      Concatenate video clips (safe ffmpeg wrapper, min 2 clips).
                         Normalizes fps/size and fills silent audio so mismatched clips stitch cleanly.
@@ -4528,30 +4553,97 @@ if (options.music && options.loras.length > 0) {
 }
 
 if (options.video && options.loras.length > 0) {
-  const unsupportedVideoLoras = options.loras.filter(loraId => loraId !== DR34ML4Y_LORA_ID);
-  if (unsupportedVideoLoras.length > 0) {
-    fatalCliError(
-      `Video LoRA "${unsupportedVideoLoras[0]}" is not supported. ` +
-      `The supported video LoRA is "${DR34ML4Y_LORA_ID}".`,
-      { code: 'INVALID_ARGUMENT' }
-    );
+  if (options.loras.length > 8) {
+    fatalCliError('Video generation supports at most 8 LoRAs per render.', {
+      code: 'INVALID_ARGUMENT',
+      details: { loras: options.loras.length, maximum: 8 }
+    });
   }
-  if (!DR34ML4Y_SUPPORTED_MODEL_IDS.has(options.model)) {
-    fatalCliError(
-      `"${DR34ML4Y_LORA_ID}" requires a supported LTX-2.3 I2V model: ` +
-      'ltx23-22b-fp8_i2v, ltx23-22b-fp8_i2v_dev, or 10eros. ' +
-      'The separately trained WAN DR34ML4Y artifact is not installed on Sogni.',
-      { code: 'INVALID_ARGUMENT' }
+
+  if (options.loras.includes(DR34ML4Y_LORA_ID)) {
+    // dr34ml4y is worker-internal: it ships no public catalog row, so it cannot
+    // be checked against the catalog and keeps the hardcoded gate it has always
+    // had. Mixing it with a catalogued adapter is a model conflict either way.
+    const foreignLoras = options.loras.filter(loraId => loraId !== DR34ML4Y_LORA_ID);
+    if (foreignLoras.length > 0) {
+      fatalCliError(
+        `"${DR34ML4Y_LORA_ID}" cannot be stacked with "${foreignLoras[0]}"; ` +
+        'they belong to different model families.',
+        { code: 'INVALID_ARGUMENT' }
+      );
+    }
+    if (!DR34ML4Y_SUPPORTED_MODEL_IDS.has(options.model)) {
+      fatalCliError(
+        `"${DR34ML4Y_LORA_ID}" requires a supported LTX-2.3 I2V model: ` +
+        'ltx23-22b-fp8_i2v, ltx23-22b-fp8_i2v_dev, or 10eros. ' +
+        'The separately trained WAN DR34ML4Y artifact is not installed on Sogni.',
+        { code: 'INVALID_ARGUMENT' }
+      );
+    }
+    if (!options.noFilter) {
+      fatalCliError(
+        `"${DR34ML4Y_LORA_ID}" is an opt-in mature-theme LoRA and requires --no-filter.`,
+        { code: 'INVALID_ARGUMENT' }
+      );
+    }
+    if (options.loraStrengths.length === 0) {
+      options.loraStrengths = options.loras.map(() => DR34ML4Y_DEFAULT_STRENGTH);
+    }
+  } else {
+    // Every publicly catalogued video LoRA — the MiniMax H3 adapters today — is
+    // checked against the live catalog for the RESOLVED model id. Keying on the
+    // catalog rather than a hardcoded list means an adapter published later
+    // works without a CLI release, and a wrong id fails here instead of being
+    // dropped server-side and rendering as if no LoRA had been asked for.
+    let videoLoraCatalog;
+    try {
+      videoLoraCatalog = await fetchLoraCatalog(options.model);
+    } catch (cause) {
+      fatalCliError(
+        `Could not read the LoRA catalog for "${options.model}": ${cause?.message || cause}`,
+        { code: cause?.code || 'LORA_CATALOG_UNAVAILABLE' }
+      );
+    }
+    const videoLoraEntries = new Map(
+      (videoLoraCatalog?.loras || [])
+        .map(loraCatalogEntryFromPayload)
+        .filter(entry => entry.loraId)
+        .map(entry => [entry.loraId, entry])
     );
-  }
-  if (!options.noFilter) {
-    fatalCliError(
-      `"${DR34ML4Y_LORA_ID}" is an opt-in mature-theme LoRA and requires --no-filter.`,
-      { code: 'INVALID_ARGUMENT' }
-    );
-  }
-  if (options.loraStrengths.length === 0) {
-    options.loraStrengths = options.loras.map(() => DR34ML4Y_DEFAULT_STRENGTH);
+    const unknownVideoLoras = options.loras.filter(loraId => !videoLoraEntries.has(loraId));
+    if (unknownVideoLoras.length > 0) {
+      const availableIds = [...videoLoraEntries.keys()];
+      const isUnresolvedH3Alias = /^minimax-h3(-turbo)?$/.test(String(options.model || ''));
+      fatalCliError(
+        `Video LoRA "${unknownVideoLoras[0]}" is not published for model "${options.model}". ` +
+        (availableIds.length > 0
+          ? `Available for this model: ${availableIds.join(', ')}.`
+          : isUnresolvedH3Alias
+            ? 'Name an explicit H3 mode (for example -m minimax-h3-i2v); LoRA availability differs per mode.'
+            : 'That model loads no LoRAs.') +
+        ' Run --list-loras --lora-model <id> for the live catalog.',
+        { code: 'INVALID_ARGUMENT' }
+      );
+    }
+    const matureVideoLoras = options.loras.filter(loraId => {
+      const entry = videoLoraEntries.get(loraId);
+      return Boolean(entry?.nsfw || entry?.sexual);
+    });
+    if (matureVideoLoras.length > 0 && !options.noFilter) {
+      fatalCliError(
+        `"${matureVideoLoras[0]}" is an opt-in mature-theme LoRA and requires --no-filter.`,
+        { code: 'INVALID_ARGUMENT' }
+      );
+    }
+    if (options.loraStrengths.length === 0) {
+      // The catalog default, not 1.0: the worker falls back to 1.0 for any LoRA
+      // sent without a strength, which for h3-realism-people is already the top
+      // of its usable band.
+      options.loraStrengths = options.loras.map(loraId => {
+        const entry = videoLoraEntries.get(loraId);
+        return Number.isFinite(entry?.default) ? entry.default : 1;
+      });
+    }
   }
 }
 
@@ -5032,6 +5124,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.extractFrameAt &&
   !options.verifyVideo &&
   !options.concatVideos &&
+  !options.trimVideo &&
   !options.sourceReelDir &&
   !options.remixAudio &&
   !options.upscaleImage &&
@@ -5073,7 +5166,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -5464,6 +5557,25 @@ if (options.video) {
       }
       if (options.refImageEnd) {
         fatalCliError('MiniMax H3 r2v has no end-frame anchor; use -c/--context for another loose image or minimax-h3-flf2v for first/last frames.', { code: 'INVALID_ARGUMENT' });
+      }
+      const localVideoReferences = [options.refVideo, ...options.refVideos]
+        .filter((reference) => reference && !isHttpUrl(reference) && existsSync(reference));
+      for (const reference of localVideoReferences) {
+        const frameRate = probeLocalVideoFrameRate(reference);
+        if (!frameRate) {
+          fatalCliError(
+            `MiniMax H3 r2v could not verify the reference-video frame rate for "${reference}". ` +
+            'Install ffprobe or provide a readable 24fps file before generation.',
+            { code: 'INVALID_ARGUMENT', details: { reference, fps: null } },
+          );
+        }
+        if (Math.abs(frameRate - 24) > 0.001) {
+          fatalCliError(
+            `MiniMax H3 r2v reference video must be exactly 24fps; "${reference}" is ${frameRate.toFixed(3)}fps. ` +
+            'Normalize it to 24fps without changing duration before generation, or choreography and soundtrack timing will drift.',
+            { code: 'INVALID_ARGUMENT', details: { reference, fps: frameRate } },
+          );
+        }
       }
     } else {
       // HappyHorse reference-to-video: 1-9 loose image references via -c/--context.
@@ -9812,6 +9924,29 @@ function parseFrameRate(raw) {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
+function probeLocalVideoFrameRate(filePath) {
+  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
+  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  try {
+    const stdout = execFileSync(
+      ffprobePath,
+      [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=avg_frame_rate,r_frame_rate',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        filePath,
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    for (const candidate of String(stdout || '').trim().split(/\s+/)) {
+      const frameRate = parseFrameRate(candidate);
+      if (frameRate) return frameRate;
+    }
+  } catch {}
+  return null;
+}
+
 // Probe a media file's primary video stream + whether it has any audio.
 // Fields are null when the probe fails (e.g. ffprobe missing); callers fall
 // back to safe defaults unless they explicitly require verification.
@@ -9890,6 +10025,45 @@ async function verifyVideoFile(videoPath) {
   return { ...info, decodable: true };
 }
 
+async function trimVideoClip(inputPath, startSeconds, durationSeconds, outputPath) {
+  sanitizePath(inputPath, 'trim input video');
+  sanitizePath(outputPath, 'trim output video');
+  const ffmpegPath = await ensureFfmpegAvailable();
+  const result = await runCommand(ffmpegPath, [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-y',
+    '-i', inputPath,
+    '-ss', String(startSeconds),
+    '-t', String(durationSeconds),
+    '-map', '0:v:0',
+    '-map', '0:a?',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '16',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-movflags', '+faststart',
+    outputPath
+  ], { captureOutput: true });
+  if (result.error || result.status !== 0 || !isNonEmptyFile(outputPath)) {
+    const err = new Error('Failed to trim video clip.');
+    err.code = 'FFMPEG_TRIM_VIDEO_FAILED';
+    err.details = {
+      inputPath,
+      outputPath,
+      startSeconds,
+      durationSeconds,
+      stderr: result.stderr || '',
+      stdout: result.stdout || '',
+      status: result.status
+    };
+    throw err;
+  }
+  return verifyVideoFile(outputPath);
+}
+
 // Concatenate clips using the concat *filter* (not the concat demuxer). The
 // demuxer corrupts timestamps when clips differ in fps/timebase and desyncs
 // audio when a clip has no audio track. Here we probe each clip, normalize every
@@ -9915,6 +10089,13 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
     : (fpsList.length ? Math.max(...fpsList) : 24);
   fps = Math.max(1, Math.round(fps));
   const totalDuration = infos.reduce((sum, x) => sum + (x.duration || 0), 0);
+  if (audioPath && !(totalDuration > 0)) {
+    const err = new Error('Cannot replace concatenated audio without readable clip durations.');
+    err.code = 'FFPROBE_VERIFY_FAILED';
+    err.hint = 'Install ffprobe, confirm every clip is playable, and retry.';
+    err.details = { clips, audioPath };
+    throw err;
+  }
 
   const filterParts = [];
   const concatInputs = [];
@@ -9923,15 +10104,21 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
       `[${idx}:v]fps=${fps},scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,` +
       `pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v${idx}]`
     );
-    if (info.hasAudio) {
-      filterParts.push(`[${idx}:a]aresample=async=1:first_pts=0,aformat=sample_rates=44100:channel_layouts=stereo[a${idx}]`);
-    } else {
-      const dur = info.duration && info.duration > 0 ? info.duration : (1 / fps);
-      filterParts.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=duration=${dur.toFixed(6)},asetpts=PTS-STARTPTS[a${idx}]`);
+    if (!audioPath) {
+      if (info.hasAudio) {
+        filterParts.push(`[${idx}:a]aresample=async=1:first_pts=0,aformat=sample_rates=44100:channel_layouts=stereo[a${idx}]`);
+      } else {
+        const dur = info.duration && info.duration > 0 ? info.duration : (1 / fps);
+        filterParts.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=duration=${dur.toFixed(6)},asetpts=PTS-STARTPTS[a${idx}]`);
+      }
     }
-    concatInputs.push(`[v${idx}][a${idx}]`);
+    concatInputs.push(audioPath ? `[v${idx}]` : `[v${idx}][a${idx}]`);
   });
-  filterParts.push(`${concatInputs.join('')}concat=n=${infos.length}:v=1:a=1[cv][ca]`);
+  filterParts.push(
+    audioPath
+      ? `${concatInputs.join('')}concat=n=${infos.length}:v=1:a=0[cv]`
+      : `${concatInputs.join('')}concat=n=${infos.length}:v=1:a=1[cv][ca]`
+  );
 
   const args = ['-y'];
   clips.forEach((clip) => { args.push('-i', clip); });
@@ -11607,6 +11794,39 @@ async function main() {
         }));
       } else {
         console.log(`Extracted frame at ${options.extractFrameAtSeconds}s to: ${outputPath}`);
+      }
+      return;
+    }
+
+    if (options.trimVideo) {
+      const inputPath = sanitizePath(options.trimVideo, '--trim-video input');
+      const outputPath = sanitizePath(options.trimVideoOutput, '--trim-video output');
+      if (!existsSync(inputPath)) {
+        const err = new Error(`Video file not found: ${inputPath}`);
+        err.code = 'FILE_NOT_FOUND';
+        throw err;
+      }
+      const verification = await trimVideoClip(
+        inputPath,
+        options.trimVideoStart,
+        options.trimVideoDuration,
+        outputPath
+      );
+      if (options.json || JSON_ERROR_MODE) {
+        console.log(JSON.stringify({
+          success: true,
+          type: 'trim-video',
+          inputPath,
+          outputPath,
+          start: options.trimVideoStart,
+          duration: options.trimVideoDuration,
+          ...verification,
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        console.log(
+          `Trimmed ${options.trimVideoDuration}s from ${options.trimVideoStart}s to: ${outputPath}`
+        );
       }
       return;
     }

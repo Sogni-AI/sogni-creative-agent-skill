@@ -36,7 +36,8 @@ const integrationFlag = process.env.SOGNI_INTEGRATION;
 const shouldRun = integrationFlag === undefined
   ? false
   : ['1', 'true', 'yes'].includes(integrationFlag.toLowerCase());
-const credentialsPath = join(homedir(), '.config', 'sogni', 'credentials');
+const credentialsPath = process.env.SOGNI_CREDENTIALS_PATH ||
+  join(homedir(), '.config', 'sogni', 'credentials');
 const openclawConfigPath = process.env.OPENCLAW_CONFIG_PATH || join(homedir(), '.openclaw', 'openclaw.json');
 const hasCreds = Boolean(loadCredentials());
 

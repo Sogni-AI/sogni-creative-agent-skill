@@ -2126,7 +2126,11 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_t2v_turbo', 't2v'],
   ['minimax-h3-fl2va-fp8_i2v_turbo', 'i2v'],
   ['minimax-h3-fl2va-fp8_flf2v_turbo', 'flf2v'],
-  ['minimax-h3-ref2va-fp8_r2v_turbo', 'r2v']
+  ['minimax-h3-ref2va-fp8_r2v_turbo', 'r2v'],
+  ['minimax-h3-fl2va-fp8_t2v_balanced', 't2v'],
+  ['minimax-h3-fl2va-fp8_i2v_balanced', 'i2v'],
+  ['minimax-h3-fl2va-fp8_flf2v_balanced', 'flf2v'],
+  ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
 const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
@@ -2139,6 +2143,7 @@ const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']
 const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
 const MINIMAX_H3_R2V_TURBO_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_turbo';
+const MINIMAX_H3_R2V_BALANCED_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
   videos: 3,
@@ -2239,6 +2244,29 @@ function resolveSkillVideoModelAlias(
   if (normalized === 'minimax-h3-flf2v-turbo') {
     return 'minimax-h3-fl2va-fp8_flf2v_turbo';
   }
+  if (normalized === 'minimax-h3-balanced' && workflow) {
+    if (workflow === 'r2v') {
+      return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
+    }
+    if (workflow === 'i2v') {
+      return hasStartFrame && hasEndFrame
+        ? 'minimax-h3-fl2va-fp8_flf2v_balanced'
+        : 'minimax-h3-fl2va-fp8_i2v_balanced';
+    }
+    return 'minimax-h3-fl2va-fp8_t2v_balanced';
+  }
+  if (normalized === 'minimax-h3-t2v-balanced') {
+    return 'minimax-h3-fl2va-fp8_t2v_balanced';
+  }
+  if (normalized === 'minimax-h3-i2v-balanced') {
+    return 'minimax-h3-fl2va-fp8_i2v_balanced';
+  }
+  if (normalized === 'minimax-h3-flf2v-balanced') {
+    return 'minimax-h3-fl2va-fp8_flf2v_balanced';
+  }
+  if (normalized === 'minimax-h3-r2v-balanced') {
+    return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
+  }
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
@@ -2254,7 +2282,9 @@ function isMiniMaxH3TurboModel(modelId) {
 
 function isMiniMaxH3R2vModel(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
-  return normalized === MINIMAX_H3_R2V_MODEL_ID || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID;
+  return normalized === MINIMAX_H3_R2V_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID;
 }
 
 function isMiniMaxH3R2vTurboSelectionLocal(modelId, workflow = null) {
@@ -2276,6 +2306,11 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-i2v-turbo'
     || normalized === 'minimax-h3-flf2v-turbo'
     || normalized === 'minimax-h3-r2v-turbo'
+    || normalized === 'minimax-h3-balanced'
+    || normalized === 'minimax-h3-t2v-balanced'
+    || normalized === 'minimax-h3-i2v-balanced'
+    || normalized === 'minimax-h3-flf2v-balanced'
+    || normalized === 'minimax-h3-r2v-balanced'
     || isMiniMaxH3Model(normalized);
 }
 
@@ -2299,6 +2334,10 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-i2v-turbo') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-turbo') return 'flf2v';
   if (normalized === 'minimax-h3-r2v-turbo') return 'r2v';
+  if (normalized === 'minimax-h3-t2v-balanced') return 't2v';
+  if (normalized === 'minimax-h3-i2v-balanced') return 'i2v';
+  if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
+  if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
   return MINIMAX_H3_MODEL_MODES.get(normalized) || null;
 }
 
@@ -4087,7 +4126,7 @@ HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/108
   happyhorse-1.1-r2v                Reference-to-video from 1-9 reference images (-c/--context)
 
 MiniMax H3 Video Model Selectors (fixed 24fps, native 32kHz stereo audio + dialogue,
-frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px. FL2VA/Turbo and
+frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px. FL2VA/Balanced/Turbo and
 image-only R2V need 32GB-class workers; video-conditioned R2V needs above 40GB.
 Prompts use MiniMax's exact ordered-field contracts and [Shot N] notation; see
 references/video-prompting.md "MiniMax H3 Prompting". No negative prompt field:
@@ -4097,6 +4136,11 @@ state negatives in the structured prompt.):
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
   minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
                                      (9 images / 3 videos / 3 audios / 12 files total; requires an image or video)
+  minimax-h3-balanced               Fixed 8-step Euler/simple PDD tier; infers T2VA/I2VA/L2VA/FL2VA
+  minimax-h3-t2v-balanced           Balanced text-to-video
+  minimax-h3-i2v-balanced           Balanced I2VA (--ref) or L2VA (--ref-end)
+  minimax-h3-flf2v-balanced         Balanced first-frame -> last-frame (--ref plus --ref-end)
+  minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references
   minimax-h3-turbo                  4-step Turbo; --ref selects I2VA, --ref-end L2VA, and both FL2VA
   minimax-h3-t2v-turbo              4-step Turbo text-to-video
   minimax-h3-i2v-turbo              4-step Turbo I2VA (--ref) or L2VA (--ref-end)
@@ -4758,11 +4802,12 @@ if (options.video) {
     options.model = WAN3_MODEL_ID;
   }
 
-  // MiniMax H3 has four concrete worker selectors and five prompt shapes. The
-  // FL2VA checkpoint covers t2v, first-frame i2v, last-frame-only l2v, and
-  // first/last-frame (represented by the CLI's i2v workflow); Ref2VA is a
-  // separate r2v checkpoint and is never inferred from loose references alone.
-  // Selecting minimax-h3-r2v or explicitly passing --workflow r2v is required.
+  // Each MiniMax H3 tier has four concrete worker selectors and five prompt
+  // shapes. The FL2VA checkpoint covers t2v, first-frame i2v, last-frame-only
+  // l2v, and first/last-frame (represented by the CLI's i2v workflow); Ref2VA
+  // is a separate r2v checkpoint and is never inferred from loose references.
+  // Selecting the tier's minimax-h3-r2v* alias or explicitly passing
+  // --workflow r2v with its bare tier selector is required.
   if (isMiniMaxH3ModelSelectionLocal(options.model)) {
     const pinnedMode = miniMaxH3ModeFromModelId(options.model);
     const pinnedWorkflow = pinnedMode === 'flf2v' ? 'i2v' : pinnedMode;

@@ -1434,6 +1434,47 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
   }
 });
 
+test('MiniMax H3 Balanced backend tiers retain H3 workflow, frame, fps, and fixed sampling rules', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-fl2va-fp8_t2v_balanced',
+      args: []
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_i2v_balanced',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-fl2va-fp8_flf2v_balanced',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-ref2va-fp8_r2v_balanced',
+      args: ['-c', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video',
+      '-m', model,
+      '--duration', '5',
+      ...args,
+      'A single continuous cinematic shot with synchronized ambient audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, model);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+    assert.equal(state.lastVideoProject.width, 1344);
+    assert.equal(state.lastVideoProject.height, model.includes('_i2v_') || model.includes('_flf2v_') ? 704 : 768);
+    assert.equal(state.lastVideoProject.steps, undefined);
+    assert.equal(state.lastVideoProject.guidance, undefined);
+    assert.equal(state.lastVideoProject.sampler, undefined);
+    assert.equal(state.lastVideoProject.scheduler, undefined);
+  }
+});
+
 test('MiniMax H3 Turbo accepts its workflow-specific sampler overrides', () => {
   const cases = [
     {
@@ -1561,6 +1602,42 @@ test('MiniMax H3 Turbo friendly selectors resolve all four supported modes', () 
   }
 });
 
+test('MiniMax H3 Balanced friendly selectors resolve all four supported modes', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-t2v-balanced',
+      expected: 'minimax-h3-fl2va-fp8_t2v_balanced',
+      args: []
+    },
+    {
+      model: 'minimax-h3-i2v-balanced',
+      expected: 'minimax-h3-fl2va-fp8_i2v_balanced',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-flf2v-balanced',
+      expected: 'minimax-h3-fl2va-fp8_flf2v_balanced',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-r2v-balanced',
+      expected: 'minimax-h3-ref2va-fp8_r2v_balanced',
+      args: ['-c', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, expected, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video', '-m', model, '--duration', '5', ...args,
+      'A detailed continuous shot with synchronized native audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+  }
+});
+
 test('bare MiniMax H3 Turbo selector infers frame modes and accepts explicit r2v', () => {
   const t2v = runCli(['--video', '-m', 'minimax-h3-turbo', 'A record store conversation.']);
   assert.equal(t2v.exitCode, 0);
@@ -1589,6 +1666,34 @@ test('bare MiniMax H3 Turbo selector infers frame modes and accepts explicit r2v
   assert.equal(r2v.state.lastVideoProject.height, 544);
 });
 
+test('bare MiniMax H3 Balanced selector infers frame modes and accepts explicit r2v', () => {
+  const t2v = runCli(['--video', '-m', 'minimax-h3-balanced', 'A record store conversation.']);
+  assert.equal(t2v.exitCode, 0);
+  assert.equal(t2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_t2v_balanced');
+
+  const i2v = runCli([
+    '--video', '-m', 'minimax-h3-balanced', '--ref', SCREENSHOT_FIXTURE,
+    'The clerk lifts a record sleeve and speaks.'
+  ]);
+  assert.equal(i2v.exitCode, 0);
+  assert.equal(i2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_i2v_balanced');
+
+  const flf2v = runCli([
+    '--video', '-m', 'minimax-h3-balanced', '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE, 'Move continuously between the anchors.'
+  ]);
+  assert.equal(flf2v.exitCode, 0);
+  assert.equal(flf2v.state.lastVideoProject.modelId, 'minimax-h3-fl2va-fp8_flf2v_balanced');
+
+  const r2v = runCli(
+    ['--video', '-m', 'minimax-h3-balanced', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+  );
+  assert.equal(r2v.exitCode, 0);
+  assert.equal(r2v.state.lastVideoProject.modelId, 'minimax-h3-ref2va-fp8_r2v_balanced');
+  assert.equal(r2v.state.lastVideoProject.width, 1344);
+  assert.equal(r2v.state.lastVideoProject.height, 768);
+});
+
 test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
   expectCliError(
     [
@@ -1598,6 +1703,26 @@ test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () 
       'A short clip.'
     ],
     'MiniMax H3 frames must be 124 + n×17'
+  );
+});
+
+test('MiniMax H3 Balanced backend tiers reject off-grid frames and sampling overrides', () => {
+  expectCliError(
+    [
+      '--video',
+      '-m', 'minimax-h3-fl2va-fp8_t2v_balanced',
+      '--frames', '125',
+      'A short clip.'
+    ],
+    'MiniMax H3 frames must be 124 + n×17'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-balanced', '--sampler', 'euler', 'A record store conversation.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-balanced', '--steps', '8', 'A record store conversation.'],
+    'MiniMax H3 uses fixed sampling settings; omit --steps and --guidance'
   );
 });
 
@@ -6081,6 +6206,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('--api-workflow'), 'Help should include --api-workflow');
   assert.ok(stdout.includes('--generate-audio'), 'Help should include --generate-audio');
   assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
+  assert.ok(stdout.includes('minimax-h3-t2v-balanced'), 'Help should include the MiniMax H3 Balanced selectors');
+  assert.ok(stdout.includes('minimax-h3-r2v-balanced'), 'Help should include the MiniMax H3 Ref2VA Balanced selector');
   assert.ok(stdout.includes('minimax-h3-t2v-turbo'), 'Help should include the MiniMax H3 Turbo selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-turbo'), 'Help should include the MiniMax H3 Ref2VA Turbo selector');
   assert.ok(stdout.includes('9 images / 3 videos / 3 audios / 12 files total'), 'Help should include MiniMax H3 r2v limits');

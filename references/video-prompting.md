@@ -102,12 +102,13 @@ tips, explain the format, offer to generate the video, or ask a follow-up
 question after the contract. Those additions make the text invalid as direct
 H3 input.
 
-Applies to standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v` for both
-opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 4-step `minimax-h3-turbo`,
-`minimax-h3-i2v-turbo`, and `minimax-h3-flf2v-turbo` variants; and—with its own
-six-field contract—to standard `minimax-h3-r2v` and `minimax-h3-r2v-turbo`. The exact worker
-ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an optional `_turbo`
-suffix, plus `minimax-h3-ref2va-fp8_r2v` and `minimax-h3-ref2va-fp8_r2v_turbo`. See
+Applies to Standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v` for both
+opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 8-step
+Balanced `*-balanced` and 4-step Turbo `*-turbo` variants; and—with its own
+six-field contract—to `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, and
+`minimax-h3-r2v-turbo`. The exact FL2VA worker ids are
+`minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an optional `_balanced` or `_turbo`
+suffix; Ref2VA uses `minimax-h3-ref2va-fp8_r2v` with the same tier suffixes. See
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v) below
 before writing an r2v prompt.
 
@@ -122,9 +123,10 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
-- **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1.** Do not
-  send steps, guidance, scheduler, or a **negative prompt**. Standard H3 and
-  R2V accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and
+- **20 steps for Standard; 8 for Balanced; 4 for Turbo; guidance/CFG 1.** Do not
+  send steps, guidance, scheduler, or a **negative prompt**. Standard and
+  Balanced accept no sampler override; Balanced is fixed to Euler/simple.
+  FL2VA H3 Turbo defaults to `er_sde` on Socket, and
   the CLI omits the sampler unless `--sampler` is passed. Direct FL2VA CLI A/B tests
   may pass exactly `--sampler euler`, `--sampler er_sde`, or
   `--sampler sa_solver`. Ref2VA Turbo uses the exact upstream Euler/simple recipe,
@@ -132,8 +134,9 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   guidance locked at 1, so there is no negative branch at all: a
   `negativePrompt` parameter is ignored wherever it is accepted. Negative
   direction goes in the prompt text instead.
-- **Turbo uses the same prompt contract as standard H3.** Its execution path is
-  fixed at 4 steps with the `simple` scheduler; only the sampler has the three
+- **Balanced and Turbo use the same prompt contract as Standard H3.** Balanced
+  is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
+  `simple` scheduler; only Turbo's sampler has the three
   explicit variants above.
 - **Native 32 kHz stereo audio is generated jointly with the picture.** Every
   sound — dialogue, foley, ambience, score — exists only because the prompt
@@ -143,7 +146,7 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   2K; MiniMax's 2K stage is hosted-only and is not part of the open release.
 - The Sogni CLI does not truncate H3 prompts. If another surface has a shorter
   cap, flag it explicitly instead of silently removing required fields.
-- FL2VA/Turbo and image-only R2V are routed to 32 GB-class workers;
+- FL2VA/Balanced/Turbo and image-only R2V are routed to 32 GB-class workers;
   video-conditioned R2V requires a worker above 40 GB.
 
 Because `--duration` snaps to the frame grid, the delivered length is rarely the
@@ -158,7 +161,7 @@ integer the user asked for:
 | 12 | 294 | 12.25 s |
 | 15 | 362 | 15.08 s |
 
-### Base and Turbo contract: T2V, I2V, L2V, and FLF2V
+### Standard, Balanced, and Turbo contract: T2V, I2V, L2V, and FLF2V
 
 After the mode-specific preamble described below, write exactly these three
 fields in this order:
@@ -364,9 +367,10 @@ other frame rate without changing duration before submission, or H3 will
 time-distort the visual reference relative to its soundtrack.
 Reference-video duration totals may not exceed 15 seconds, and standalone
 reference-audio duration totals may not exceed 15 seconds. It runs a separate
-ref2va checkpoint, so it is never inferred — it must be chosen by name with
-direct CLI `-m minimax-h3-r2v` or the `generate_video` tool's
-`videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). Direct CLI
+ref2va checkpoint, so it is never inferred — the Standard, Balanced, or Turbo
+selector must be chosen by name with direct CLI `-m minimax-h3-r2v*` or the
+`generate_video` tool's matching `videoModel` (including callers such as Sogni
+Chat). Direct CLI
 uses `--ref` then repeatable `-c` for images, plus repeatable `--ref-video` and
 `--ref-audio` for those modalities. At least one visual reference (image or
 video) is required. A reference video can be the only visual input; audio alone
@@ -375,7 +379,7 @@ has no frame anchors at all—for
 a locked opening frame use `minimax-h3-i2v`, and for a first-to-last-frame
 transition use `minimax-h3-flf2v`.
 
-Ref2VA does not use the three-field Base contract. Write exactly these six
+Ref2VA does not use the three-field Standard contract. Write exactly these six
 fields, in this order:
 
 ```text
@@ -502,7 +506,10 @@ sogni-agent -q --video -m minimax-h3-i2v --ref-end ./last.png --duration 8 -w 76
 # First frame -> last frame transition
 sogni-agent -q --video -m minimax-h3-flf2v --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 
-# Turbo uses the same T2V/I2V/L2V/FLF2V prompt contracts
+# Balanced and Turbo use the same T2V/I2V/L2V/FLF2V prompt contracts
+sogni-agent -q --video -m minimax-h3-balanced --duration 8 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-i2v-balanced --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-flf2v-balanced --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-turbo --duration 8 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref-end ./last.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<L2V preamble plus three-field H3 prompt>"
@@ -510,6 +517,7 @@ sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref ./first.png --ref-end ./l
 
 # Reference-to-video (reference order defines the prompt ordinals)
 sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"
+sogni-agent -q --video -m minimax-h3-r2v-balanced --ref ./identity.png -c ./wardrobe.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"
 ```
 
 When local primary `--ref-audio` is combined with `--audio-start` and/or

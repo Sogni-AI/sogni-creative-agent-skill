@@ -192,11 +192,17 @@ test('every runtime video model alias is documented in references/models.md', ()
     `references/models.md never mentions these CLI video selectors the runtime resolves:\n${missing.join('\n')}`);
 });
 
-test('MiniMax H3 docs expose all standard and Turbo workflows consistently', () => {
+test('MiniMax H3 docs expose all Standard, Balanced, and Turbo workflows consistently', () => {
   const checkedFiles = ['SKILL.md', 'README.md', 'references/models.md', 'references/video-prompting.md'];
   for (const docFile of checkedFiles) {
     const text = read(docFile);
     assert.match(text, /minimax-h3-r2v/, `${docFile}: missing H3 r2v selector`);
+    assert.match(text, /minimax-h3-balanced/, `${docFile}: missing generic H3 Balanced selector`);
+    assert.match(text, /minimax-h3-i2v-balanced/, `${docFile}: missing H3 Balanced i2v selector`);
+    assert.match(text, /minimax-h3-flf2v-balanced/, `${docFile}: missing H3 Balanced flf2v selector`);
+    assert.match(text, /minimax-h3-r2v-balanced/, `${docFile}: missing H3 Balanced r2v selector`);
+    assert.match(text, /8-step|8 steps|8 for Balanced/, `${docFile}: missing H3 Balanced step count`);
+    assert.match(text, /Balanced[\s\S]{0,160}(?:Euler|euler)\/simple/, `${docFile}: missing H3 Balanced Euler\/simple recipe`);
     assert.match(text, /minimax-h3-turbo/, `${docFile}: missing generic H3 Turbo selector`);
     assert.match(text, /minimax-h3-i2v-turbo/, `${docFile}: missing H3 Turbo i2v selector`);
     assert.match(text, /minimax-h3-flf2v-turbo/, `${docFile}: missing H3 Turbo flf2v selector`);

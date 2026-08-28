@@ -181,9 +181,14 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
 | `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v` | Standard | MiniMax H3 reference-to-video from a whole reference set (up to 9 images / 3 videos / 3 audio, 12 files total) |
+| `minimax-h3-balanced` / `minimax-h3-t2v-balanced` | 8-step | H3 Balanced text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
+| `minimax-h3-i2v-balanced` | 8-step | H3 Balanced first-frame image-to-video |
+| `minimax-h3-flf2v-balanced` | 8-step | H3 Balanced first-frame → last-frame video; pass both `--ref` and `--ref-end` |
+| `minimax-h3-r2v-balanced` | 8-step | H3 Balanced reference-to-video from a whole reference set |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
 | `minimax-h3-i2v-turbo` | 4-step | H3 Turbo first-frame image-to-video |
 | `minimax-h3-flf2v-turbo` | 4-step | H3 Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
+| `minimax-h3-r2v-turbo` | 4-step | H3 Turbo reference-to-video from a whole reference set; 960×544 default |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -390,16 +395,18 @@ observable and concise.
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family with **eight current modes**: four
-standard workflows plus four 4-step H3 Turbo workflows. Every mode
+MiniMax H3 is a Sogni-hosted video family with **twelve current modes**: four
+Standard workflows, four 8-step Balanced PDD workflows, and four 4-step H3
+Turbo workflows. Every mode
 generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
-universal default. The bare `minimax-h3` selector resolves to the mode inferred
-from your references; `minimax-h3-turbo` does the same for Turbo t2v/i2v/flf2v
-and accepts an explicit `--workflow r2v`.
+universal default. The bare `minimax-h3`, `minimax-h3-balanced`, and
+`minimax-h3-turbo` selectors resolve to the matching tier and mode inferred
+from your references; each accepts an explicit `--workflow r2v`.
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
-be asked for by name. Its Turbo counterpart is `minimax-h3-r2v-turbo`.
+be asked for by name. Its Balanced and Turbo counterparts are
+`minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -407,6 +414,10 @@ be asked for by name. Its Turbo counterpart is `minimax-h3-r2v-turbo`.
 | `minimax-h3-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
 | `minimax-h3-flf2v` | First → last frame | Interpolate between `--ref` and `--ref-end` |
 | `minimax-h3-r2v` | Reference-to-video | Compose from a labelled reference SET: up to 9 images, 3 videos, 3 audio clips, 12 files total |
+| `minimax-h3-balanced` / `minimax-h3-t2v-balanced` | Balanced text-to-video | Fixed 8-step Euler/simple PDD prompt-only path; generic `minimax-h3-balanced` infers the frame workflow |
+| `minimax-h3-i2v-balanced` | Balanced image-to-video | Fixed 8-step animation from one first frame |
+| `minimax-h3-flf2v-balanced` | Balanced first → last frame | Fixed 8-step interpolation between `--ref` and `--ref-end` |
+| `minimax-h3-r2v-balanced` | Balanced reference-to-video | Fixed 8-step Euler/simple Ref2VA from a labelled reference set |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | Turbo text-to-video | 4-step prompt-only path; generic `minimax-h3-turbo` infers the frame workflow |
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
@@ -418,18 +429,22 @@ The three standard frame modes share the FL2VA checkpoint: worker ids
 picking i2v vs flf2v from whether `--ref-end` is present. Turbo applies
 LightX2V's 4-step distillation LoRA to those same workflows through worker ids
 `minimax-h3-fl2va-fp8_t2v_turbo`, `minimax-h3-fl2va-fp8_i2v_turbo`, and
-`minimax-h3-fl2va-fp8_flf2v_turbo`. Reference-to-video is a
+`minimax-h3-fl2va-fp8_flf2v_turbo`. Balanced applies the fixed 8-step PDD path
+through `minimax-h3-fl2va-fp8_t2v_balanced`,
+`minimax-h3-fl2va-fp8_i2v_balanced`, and
+`minimax-h3-fl2va-fp8_flf2v_balanced`. Reference-to-video is a
 SEPARATE checkpoint — worker id `minimax-h3-ref2va-fp8_r2v` — selected directly
 with `-m minimax-h3-r2v`, or through the creative-agent `generate_video` tool
 with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). The
 dedicated LightX2V LoRA exposes it as `minimax-h3-ref2va-fp8_r2v_turbo` through
-the public `minimax-h3-r2v-turbo` selector.
+the public `minimax-h3-r2v-turbo` selector; the Balanced PDD version is
+`minimax-h3-ref2va-fp8_r2v_balanced`, exposed as `minimax-h3-r2v-balanced`.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
 **r2v is the one H3 mode that does**: see
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v).
-FL2VA/Turbo and image-only R2V are routed to 32 GB-class workers;
+FL2VA/Balanced/Turbo and image-only R2V are routed to 32 GB-class workers;
 video-conditioned R2V requires a worker above 40 GB.
 
 **Fixed parameters (do not override):**
@@ -438,11 +453,13 @@ video-conditioned R2V requires a worker above 40 GB.
 - **Frames on the `124 + n×17` grid**, `124` through `362` — **5.17 s to
   15.08 s**. `--duration` snaps onto that grid; an off-grid explicit `--frames`
   is a hard error.
-- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Standard and
-  FL2VA Turbo default to `1344×768`; Ref2VA Turbo defaults to `960×544`.
-- **20 steps for standard H3; 4 steps for H3 Turbo; guidance/CFG 1** — send no
-  steps, guidance, scheduler, or **negative prompt**. Standard H3 accepts no
-  sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and the CLI
+- **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Standard,
+  Balanced, and FL2VA Turbo default to `1344×768`; Ref2VA Turbo defaults to
+  `960×544`.
+- **20 steps for Standard; 8 for Balanced; 4 for Turbo; guidance/CFG 1** — send
+  no steps, guidance, scheduler, or **negative prompt**. Standard and Balanced
+  accept no sampler override; Balanced is fixed to Euler/simple. FL2VA H3 Turbo
+  defaults to `er_sde` on Socket, and the CLI
   omits the sampler unless `--sampler` is passed. Direct FL2VA CLI A/B tests may pass
   exactly `--sampler euler`, `--sampler er_sde`, or `--sampler sa_solver`.
   Ref2VA Turbo uses the exact upstream Euler/simple recipe and accepts only
@@ -450,8 +467,9 @@ video-conditioned R2V requires a worker above 40 GB.
   guidance locked at 1, so there is no negative branch and a `negativePrompt`
   parameter is ignored wherever it is accepted. Put negative direction in the
   prompt text instead.
-- **Turbo uses the same prompt contract as standard H3.** Its execution path is
-  fixed at 4 steps with the `simple` scheduler; only the sampler has the three
+- **Balanced and Turbo use the same prompt contract as Standard H3.** Balanced
+  is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
+  `simple` scheduler; only Turbo's sampler has the three
   explicit variants above.
 - **768p-class open-weights release.** Do not offer or claim 2K; MiniMax's 2K
   stage is hosted-only and not part of the open release.
@@ -461,6 +479,10 @@ sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"
+sogni-agent -q --video -m minimax-h3-balanced --duration 8 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-i2v-balanced --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-flf2v-balanced --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-r2v-balanced --ref identity.png -c wardrobe.png --duration 8 -o ./video.mp4 "<six-field Ref2VA prompt>"
 sogni-agent -q --video -m minimax-h3-turbo --duration 8 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
@@ -468,7 +490,7 @@ sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.
 
 ### MiniMax H3 prompting
 
-Base and Turbo T2V, I2V, and FLF2V use MiniMax's exact three-field rewrite
+Standard, Balanced, and Turbo T2V, I2V, and FLF2V use MiniMax's exact three-field rewrite
 contract, in this order:
 
 ```text
@@ -481,8 +503,8 @@ non_diegetic_music: ...
 
 I2V prepends the exact first-frame alignment line; FLF2V prepends the exact
 first-and-last-frame alignment line. The preamble must be the first line,
-followed by one blank line before the fields. T2V has no preamble. Turbo uses
-the same structure as its corresponding standard mode.
+followed by one blank line before the fields. T2V has no preamble. Balanced and
+Turbo use the same structure as their corresponding Standard mode.
 
 Vocal sources receive stable `(S1)`, `(S2)`, ... IDs across all shots. Put only
 the language tag and exact spoken words inside `<d>`, for example
@@ -493,10 +515,11 @@ and complete Ref2VA contract.
 
 ### MiniMax H3 reference-to-video (r2v)
 
-`minimax-h3-r2v` (worker id `minimax-h3-ref2va-fp8_r2v`) is the one H3 mode that
-conditions on a whole **reference set** instead of one or two locked frames. It
-runs its own ref2va checkpoint, so it is **never inferred** from stray uploads
-the way HappyHorse r2v is — the user or the plan must name it. Direct CLI uses
+The `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, and
+`minimax-h3-r2v-turbo` selectors are the H3 modes that condition on a whole
+**reference set** instead of one or two locked frames. Ref2VA runs its own
+checkpoint, so it is **never inferred** from stray uploads the way HappyHorse
+r2v is — the user or the plan must name a tier. Direct CLI uses
 `-m minimax-h3-r2v`: `--ref` supplies loose image 1, repeatable `-c` supplies
 additional images, and repeatable `--ref-video` / `--ref-audio` supply those
 modalities. At least one visual reference must be supplied: an image or a
@@ -506,8 +529,9 @@ creative-agent `generate_video` tool uses
 
 Everything in [MiniMax H3 models](#minimax-h3-models) above still applies: 24 fps,
 the `124 + n×17` frame grid (5.17–15.08 s), dimensions divisible by 32 inside the
-1,032,192-pixel budget, 20 steps, guidance 1, no negative prompt, jointly
-generated stereo audio.
+1,032,192-pixel budget, tier-fixed sampling (20/8/4 steps for
+Standard/Balanced/Turbo), guidance 1, no negative prompt, and jointly generated
+stereo audio.
 
 **Reference ceilings** (from the `MiniMaxH3ReferenceToVideo` node, enforced by
 Sogni Socket before the job is priced):
@@ -540,7 +564,7 @@ overall_soundscape:
 non_diegetic_music:
 ```
 
-This is a different prompt contract from FL2VA H3. Standard and Turbo Ref2VA
+This is a different prompt contract from FL2VA H3. Standard, Balanced, and Turbo Ref2VA
 share it.
 
 #### Ordinals and the prompt tag form
@@ -673,6 +697,10 @@ model recommendations.
 | MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
 | MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
 | MiniMax H3 from a set of loose references (identity + wardrobe + location, a motion clip, a voice clip) | `minimax-h3-r2v` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
+| MiniMax H3 Balanced text-to-video | `minimax-h3-balanced` or `minimax-h3-t2v-balanced` |
+| MiniMax H3 Balanced image-to-video from one first frame | `minimax-h3-i2v-balanced` with `--ref` |
+| MiniMax H3 Balanced first frame → last frame transition | `minimax-h3-flf2v-balanced` with `--ref A --ref-end B` |
+| MiniMax H3 Balanced from loose references | `minimax-h3-r2v-balanced` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
 | MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
 | MiniMax H3 Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
 | MiniMax H3 Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
@@ -683,7 +711,7 @@ model recommendations.
 
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
-- **MiniMax H3 and H3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard/FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard H3 uses 20 steps; Turbo uses 4. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 Standard, Balanced, and Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, and FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD sampling, and Turbo uses 4 steps. Standard and Balanced accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Balanced/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

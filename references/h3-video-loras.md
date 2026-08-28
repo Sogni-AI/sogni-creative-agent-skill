@@ -25,6 +25,9 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 
 Bare `-m minimax-h3` is not enough to validate a LoRA request: it resolves by
 frame arguments, and availability differs per mode. Name the explicit mode.
+The Balanced PDD selectors do not currently publish user-selectable adapters
+(as of 2026-08); their built-in PDD acceleration dependency is not a custom
+LoRA slot. The live catalog remains authoritative if that changes.
 
 ## Published adapters
 

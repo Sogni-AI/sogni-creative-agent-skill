@@ -1,8 +1,12 @@
-## Unreleased
+# [3.37.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.36.0...v3.37.0) (2026-08-27)
+
+### Bug Fixes
+
+* **deps:** align the Sogni runtime on intelligence client 3.25.1 and Sogni client 5.22.0 ([5729a10](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/5729a107070c992b63186c542d6cd10e7bf2afc1))
 
 ### Features
 
-* **video:** add MiniMax H3 Balanced, a fast, high-quality tier powered by PDD (Parallel Decoding Distillation) for efficient text-to-video, image-to-video, first/last-frame, and reference-to-video generation
+* **video:** add MiniMax H3 Balanced, a fast, high-quality tier powered by PDD (Parallel Decoding Distillation) for efficient text-to-video, image-to-video, first/last-frame, and reference-to-video generation ([bf2cfaa](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/bf2cfaa4cac80a9687adb28af331c2cfbdd85c20))
 
 # [3.36.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.4...v3.36.0) (2026-08-27)
 

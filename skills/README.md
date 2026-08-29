@@ -2,7 +2,7 @@
 
 The legacy `SKILL.md` at the repo root is the public entry point ingested by skill-loading hosts (Claude Code, OpenClaw, Hermes Agent, Manus AI, etc.) that load a skill as one artifact. This `skills/` directory is the **per-skill** view used by hosts that want to load a focused subset of capability rather than the whole monolith.
 
-Each file is the canonical SKILL.md for one skill, kept in sync with the matching manifest exported from [`@sogni/creative-agent`](../../sogni-creative-agent/src/public-skill-runtime/index.ts). Frontmatter declares `name`, `description`, `always_loaded`, and `tool_names`; the body documents the LLM-callable tools and any constraints the host should respect.
+Each file is the canonical SKILL.md for one skill, kept in sync with the matching manifest exported from [`@sogni/creative-agent`](https://github.com/Sogni-AI/sogni-creative-agent/tree/main/src/public-skill-runtime). Frontmatter declares `name`, `description`, `always_loaded`, and `tool_names`; the body documents the LLM-callable tools and any constraints the host should respect.
 
 ## Always-loaded skills
 

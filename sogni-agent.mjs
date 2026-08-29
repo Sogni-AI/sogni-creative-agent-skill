@@ -1643,7 +1643,6 @@ const WAN3_REFERENCE_LIMITS = Object.freeze({
 const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v']);
 const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
 const WAN3_SUPPORTED_RATIOS = new Set(['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16']);
-const WAN3_ENHANCED_SUPPORTED_RATIOS = new Set(['16:9', '4:3', '1:1', '3:4', '9:16']);
 const WAN3_MAX_SEED = 0x7fffffff;
 
 function isWan3ModelSelectionLocal(modelId) {
@@ -4585,17 +4584,6 @@ if (options.outputFormat) {
   }
 }
 
-if (
-  cliSet.seed &&
-  options.seed === -1 &&
-  !(options.video && isWan3EnhancedModelSelectionLocal(options.model))
-) {
-  fatalCliError('--seed -1 is supported only by Wan 3.0 Enhanced video.', {
-    code: 'INVALID_ARGUMENT',
-    details: { model: options.model, seed: options.seed }
-  });
-}
-
 if (options.video) {
   options.model = resolveSkillVideoModelAlias(options.model);
   if (options.model === LTX23_10EROS_MODEL_ID && !options.noFilter) {
@@ -4834,9 +4822,6 @@ if (options.video) {
       }
     }
     options.model = isEnhancedSelection ? WAN3_ENHANCED_MODEL_ID : WAN3_MODEL_ID;
-    if (isEnhancedSelection && !cliSet.wan3Ratio) {
-      options.wan3Ratio = '16:9';
-    }
   }
 
   // Each MiniMax H3 tier has four concrete worker selectors and five prompt
@@ -5347,24 +5332,17 @@ if (options.video) {
   }
   if (
     isWan3EnhancedVideo &&
-    (options.wan3SmartDuration ||
-      options.wan3ReferenceFileUrl ||
+    (options.wan3ReferenceFileUrl ||
       options.wan3ReferenceLinkUrl ||
-      options.wan3Watermark ||
-      cliSet.apiExpandPrompt)
+      options.wan3Watermark)
   ) {
-    fatalCliError('Wan 3.0 Enhanced does not support smart duration, document/web context, watermark, or provider prompt expansion.', {
+    fatalCliError('Wan 3.0 Enhanced does not support document/web context or watermark.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
     });
   }
-  const supportedWan3Ratios = isWan3EnhancedVideo
-    ? WAN3_ENHANCED_SUPPORTED_RATIOS
-    : WAN3_SUPPORTED_RATIOS;
-  if (isWan3Video && !supportedWan3Ratios.has(options.wan3Ratio)) {
-    fatalCliError(isWan3EnhancedVideo
-      ? '--wan3-ratio for Wan 3.0 Enhanced must be one of: 16:9, 4:3, 1:1, 3:4, 9:16.'
-      : '--wan3-ratio must be one of: adaptive, 16:9, 4:3, 1:1, 3:4, 9:16.', {
+  if (isWan3Video && !WAN3_SUPPORTED_RATIOS.has(options.wan3Ratio)) {
+    fatalCliError('--wan3-ratio must be one of: adaptive, 16:9, 4:3, 1:1, 3:4, 9:16.', {
       code: 'INVALID_ARGUMENT',
       details: { ratio: options.wan3Ratio }
     });
@@ -5524,8 +5502,8 @@ if (options.video) {
       details: { promptLength: options.prompt.length, maximum: 20000 }
     });
   }
-  const minimumWan3Seed = isWan3EnhancedVideo ? -1 : 0;
-  if (cliSet.seed && options.seed === -1 && !isWan3EnhancedVideo) {
+  const minimumWan3Seed = 0;
+  if (cliSet.seed && options.seed === -1) {
     fatalCliError('--seed must be between 0 and 4294967295.', {
       code: 'INVALID_ARGUMENT',
       details: { seed: options.seed }
@@ -5572,17 +5550,17 @@ if (options.video) {
         code: 'INVALID_ARGUMENT'
       });
     }
-    if (options.refImageEnd && !options.refImage) {
+    if (!isWan3EnhancedVideo && options.refImageEnd && !options.refImage) {
       fatalCliError('Wan 3 last-frame generation requires --ref as the first-frame image.', { code: 'INVALID_ARGUMENT' });
     }
     if (options.videoWorkflow === 't2v' && (hasFrameInputs || looseTotal > 0 || options.refImageEnd)) {
       fatalCliError('Wan 3 t2v does not accept reference media; choose i2v, r2v, a2v, or ia2v.', { code: 'INVALID_ARGUMENT' });
     }
     if (options.videoWorkflow === 'i2v') {
-      if (!options.refImage) {
-        fatalCliError('Wan 3 i2v requires --ref as its first-frame image.', { code: 'INVALID_ARGUMENT' });
+      if (!options.refImage && !(isWan3EnhancedVideo && options.refImageEnd)) {
+        fatalCliError('Wan 3 i2v requires --ref as its first-frame image, or Enhanced may use --ref-end alone.', { code: 'INVALID_ARGUMENT' });
       }
-      if (!isWan3EnhancedVideo && (options.contextImages.length > 0 || looseVideos > 0 || looseAudios > 0)) {
+      if (options.contextImages.length > 0 || looseVideos > 0 || looseAudios > 0) {
         fatalCliError('Wan 3 first/last-frame anchors cannot be combined with loose image, video, or audio references.', { code: 'INVALID_ARGUMENT' });
       }
     }
@@ -12780,10 +12758,10 @@ async function main() {
       if (isWan3Video) {
         projectConfig.ratio = options.wan3Ratio;
         projectConfig.generateAudio = options.apiGenerateAudio ?? true;
+        projectConfig.promptExtend = options.apiExpandPrompt ?? true;
+        if (options.wan3SmartDuration) projectConfig.smartDuration = true;
         if (!isWan3EnhancedVideo) {
-          projectConfig.promptExtend = options.apiExpandPrompt ?? true;
           projectConfig.watermark = options.wan3Watermark;
-          if (options.wan3SmartDuration) projectConfig.smartDuration = true;
           if (options.wan3ReferenceFileUrl) projectConfig.referenceFileUrl = options.wan3ReferenceFileUrl;
           if (options.wan3ReferenceLinkUrl) projectConfig.referenceLinkUrl = options.wan3ReferenceLinkUrl;
         }

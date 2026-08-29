@@ -226,10 +226,11 @@ sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dial
 sogni-agent --video -m wan3 --workflow r2v --ref-video motion.mp4 "Use Video 1 as loose motion and pacing guidance for a new rainy-night scene"
 sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt --reference-file-url https://cdn.example.com/brief.pdf "Use the supplied brief exactly"
 
-# Wan 3.0 Enhanced through Mulerouter: fixed 2-30s, 30fps, native audio,
-# 480P/720P/1080P, fixed ratios, and mixed frame anchors + loose media refs.
-sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 'A presenter says "Welcome." in a detailed studio'
-sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png -c wardrobe.png "Keep the supplied endpoints and use Image 1 for wardrobe detail"
+# Wan 3.0 Enhanced through MuleRouter: fixed/smart 2-30s, 30fps, native audio,
+# 480P/720P/1080P, adaptive/fixed ratios, and either frame anchors or loose refs.
+sogni-agent --video -m wan3-enhanced --target-resolution 1080 --smart-duration --wan3-ratio adaptive 'A presenter says "Welcome." in a detailed studio'
+sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png "Keep the supplied endpoints"
+sogni-agent --video -m wan3-enhanced --workflow r2v -c wardrobe.png --ref-video motion.mp4 "Image 1 controls wardrobe; Video 1 controls motion"
 
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance

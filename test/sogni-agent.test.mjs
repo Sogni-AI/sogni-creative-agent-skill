@@ -2872,55 +2872,43 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   assert.equal(state.lastVideoProject.watermark, false);
 });
 
-test('wan3 enhanced aliases select the exact Mulerouter model and omit unsupported controls', () => {
+test('wan3 enhanced aliases select the exact MuleRouter model and verified controls', () => {
   const { exitCode, state, stderr } = runCli([
     '--video', '-m', 'wan3-enhanced',
-    '--duration', '30',
-    '--seed', '-1',
+    '--smart-duration',
+    '--no-expand-prompt',
     'A presenter walks through a detailed workshop.'
   ]);
   assert.equal(exitCode, 0, stderr);
   assert.equal(state.lastVideoProject.modelId, 'wan3.0-spicy-video');
-  assert.equal(state.lastVideoProject.ratio, '16:9');
-  assert.equal(state.lastVideoProject.duration, 30);
+  assert.equal(state.lastVideoProject.ratio, 'adaptive');
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'duration'), false);
   assert.equal(state.lastVideoProject.fps, 30);
-  assert.equal(state.lastVideoProject.seed, -1);
   assert.equal(state.lastVideoProject.generateAudio, true);
-  assert.equal(Object.hasOwn(state.lastVideoProject, 'promptExtend'), false);
+  assert.equal(state.lastVideoProject.promptExtend, false);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'watermark'), false);
-  assert.equal(Object.hasOwn(state.lastVideoProject, 'smartDuration'), false);
+  assert.equal(state.lastVideoProject.smartDuration, true);
 });
 
-test('wan3 enhanced rejects regular-only controls and adaptive ratio', () => {
+test('wan3 enhanced rejects only controls absent from its provider contract', () => {
   expectCliError(
-    ['--video', '-m', 'wan3-spicy', '--smart-duration', 'Animate this scene.'],
-    'does not support smart duration'
+    ['--video', '-m', 'wan3-spicy', '--reference-file-url', 'https://example.com/a.pdf', 'Animate this scene.'],
+    'does not support document/web context'
   );
   expectCliError(
-    ['--video', '-m', 'wan3-spicy', '--expand-prompt', 'Animate this scene.'],
-    'provider prompt expansion'
-  );
-  expectCliError(
-    ['--video', '-m', 'wan3-spicy', '--wan3-ratio', 'adaptive', 'Animate this scene.'],
-    'must be one of: 16:9'
+    ['--video', '-m', 'wan3-spicy', '--watermark', 'Animate this scene.'],
+    'does not support document/web context'
   );
 });
 
-test('wan3 enhanced permits frame anchors with loose image references', () => {
-  const { exitCode, state, stderr } = runCli([
+test('wan3 enhanced rejects frame anchors mixed with loose references', () => {
+  expectCliError([
     '--video', '-m', 'wan3.0-enhanced', '--workflow', 'i2v',
     '--ref', SCREENSHOT_FIXTURE,
     '--ref-end', SCREENSHOT_FIXTURE,
     '-c', 'https://example.com/wardrobe.png',
     'Keep the frame anchors and use Image 1 for wardrobe detail.'
-  ]);
-  assert.equal(exitCode, 0, stderr);
-  assert.equal(state.lastVideoProject.modelId, 'wan3.0-spicy-video');
-  assert.ok(state.lastVideoProject.referenceImage);
-  assert.ok(state.lastVideoProject.referenceImageEnd);
-  assert.deepEqual(state.lastVideoProject.referenceImageUrls, [
-    'https://example.com/wardrobe.png',
-  ]);
+  ], 'cannot be combined with loose image');
 });
 
 test('wan3 validates document/web exclusivity and rejects the removed task flag', () => {

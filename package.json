@@ -95,7 +95,7 @@
     "sogni-agent.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "3.25.1",
+    "@sogni-ai/sogni-intelligence-client": "3.25.2",
     "execa": "^9.6.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"

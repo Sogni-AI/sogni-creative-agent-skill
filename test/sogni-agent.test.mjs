@@ -2872,6 +2872,57 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   assert.equal(state.lastVideoProject.watermark, false);
 });
 
+test('wan3 enhanced aliases select the exact Mulerouter model and omit unsupported controls', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3-enhanced',
+    '--duration', '30',
+    '--seed', '-1',
+    'A presenter walks through a detailed workshop.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'wan3.0-spicy-video');
+  assert.equal(state.lastVideoProject.ratio, '16:9');
+  assert.equal(state.lastVideoProject.duration, 30);
+  assert.equal(state.lastVideoProject.fps, 30);
+  assert.equal(state.lastVideoProject.seed, -1);
+  assert.equal(state.lastVideoProject.generateAudio, true);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'promptExtend'), false);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'watermark'), false);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'smartDuration'), false);
+});
+
+test('wan3 enhanced rejects regular-only controls and adaptive ratio', () => {
+  expectCliError(
+    ['--video', '-m', 'wan3-spicy', '--smart-duration', 'Animate this scene.'],
+    'does not support smart duration'
+  );
+  expectCliError(
+    ['--video', '-m', 'wan3-spicy', '--expand-prompt', 'Animate this scene.'],
+    'provider prompt expansion'
+  );
+  expectCliError(
+    ['--video', '-m', 'wan3-spicy', '--wan3-ratio', 'adaptive', 'Animate this scene.'],
+    'must be one of: 16:9'
+  );
+});
+
+test('wan3 enhanced permits frame anchors with loose image references', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'wan3.0-enhanced', '--workflow', 'i2v',
+    '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE,
+    '-c', 'https://example.com/wardrobe.png',
+    'Keep the frame anchors and use Image 1 for wardrobe detail.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'wan3.0-spicy-video');
+  assert.ok(state.lastVideoProject.referenceImage);
+  assert.ok(state.lastVideoProject.referenceImageEnd);
+  assert.deepEqual(state.lastVideoProject.referenceImageUrls, [
+    'https://example.com/wardrobe.png',
+  ]);
+});
+
 test('wan3 validates document/web exclusivity and rejects the removed task flag', () => {
   expectCliError([
     '--video', '-m', 'wan3',

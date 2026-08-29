@@ -226,6 +226,11 @@ sogni-agent --video -m wan3 --workflow ia2v --ref presenter.png --ref-audio dial
 sogni-agent --video -m wan3 --workflow r2v --ref-video motion.mp4 "Use Video 1 as loose motion and pacing guidance for a new rainy-night scene"
 sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-prompt --reference-file-url https://cdn.example.com/brief.pdf "Use the supplied brief exactly"
 
+# Wan 3.0 Enhanced through Mulerouter: fixed 2-30s, 30fps, native audio,
+# 480P/720P/1080P, fixed ratios, and mixed frame anchors + loose media refs.
+sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 'A presenter says "Welcome." in a detailed studio'
+sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png -c wardrobe.png "Keep the supplied endpoints and use Image 1 for wardrobe detail"
+
 # Balances / last render / inbound media / health (no prompt required)
 sogni-agent --json --balance
 sogni-agent --last --json
@@ -356,13 +361,13 @@ When the requested image is meant to **repeat edge to edge without visible joins
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / Wan 3.0 Enhanced / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
 
 `ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 
 ### Insufficient funds
 
-Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, HappyHorse, Wan 3, GPT Image 2) require Premium Spark eligibility and never fall back to SOGNI. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
+Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPARK is insufficient. Vendor models (Seedance, HappyHorse, Wan 3, Wan 3.0 Enhanced, GPT Image 2) never fall back to SOGNI. Wan 3.0 Enhanced may consume a server-side launch credit before PAYG; the CLI deliberately lets the server evaluate that ledger. When you see **"Debit Error: Insufficient funds"** even with auto-fallback, reply exactly:
 
 "Insufficient funds. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
 
@@ -370,7 +375,7 @@ Do not collect payment details, quote a custom price, or simulate a purchase in 
 
 ### Sogni Unlimited Subscription & Billing Errors
 
-On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Current plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. Plan pricing, included features and models, usage allowances, fair-use controls, and other limits are subject to change at Sogni AI's discretion, subject to applicable law; retrieve the current catalog before quoting them as current. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast / 2.5**, **HappyHorse 1.1**, and **Wan 3** — are never covered and always require Premium Spark, even on an active subscription. Selecting SOGNI opts a job out of coverage. The server decides coverage from the verified entitlement and resolved model; never tell the user a vendor model is "free on Unlimited."
+On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and music generation is covered by the plan under a fair-use policy instead of spending Spark or SOGNI. Current plans: Unlimited ($20/mo, $199/yr) and Unlimited Pro ($50/mo, $498/yr), with a one-per-account 3-day free trial. Plan pricing, included features and models, usage allowances, fair-use controls, and other limits are subject to change at Sogni AI's discretion, subject to applicable law; retrieve the current catalog before quoting them as current. External-vendor models — **GPT Image 2**, **Seedance 2.0 / Mini / Fast / 2.5**, **HappyHorse 1.1**, **Wan 3**, and **Wan 3.0 Enhanced** — are not subscription-covered and never fall back to SOGNI. Existing paid subscribers may have a separate one-time Wan 3.0 Enhanced launch credit ($10 Unlimited / $20 Unlimited Pro) through September 1, 2026 00:00 UTC (August 31 at 5:00 PM PT); after the credit or cutoff, standard PAYG applies. Selecting SOGNI opts a job out of coverage. The server decides coverage and launch-credit use; never describe the launch credit as Unlimited model coverage.
 
 **Do not infer a Spark charge from `tokenType: "spark"`.** `tokenType` is the quote/accounting denomination and may remain `spark` on a covered Unlimited job. Billing is decided separately by the server's `paymentModel`: `subscription` means the artist Spark/SOGNI debit was skipped; `paid_spark`, `free_spark`, or `sogni` means token billing. If a result does not expose `paymentModel`, treat the payment source as unknown rather than warning that Spark was spent. Check the structured subscription state or transaction history when available. A successful request made with `--billing-mode subscription` is covered: if the server cannot use Unlimited, it rejects the request with `4078` or `4080` instead of silently falling back to Spark.
 

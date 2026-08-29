@@ -177,6 +177,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
 | `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
 | `wan3` / `wan3.0-video` | Variable | Alibaba Wan 3 unified text/frame/reference/audio/video generation, 2-30s, native audio, 480P/720P/1080P |
+| `wan3-enhanced` / `wan3.0-spicy-video` | Variable | Mulerouter-powered Wan 3.0 Enhanced text/frame/reference/audio/video generation, 2-30s, native audio, 480P/720P/1080P |
 | `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
 | `minimax-h3-i2v` | Standard | MiniMax H3 first-frame image-to-video with native stereo audio |
 | `minimax-h3-flf2v` | Standard | MiniMax H3 first-frame → last-frame video; pass both `--ref` and `--ref-end` |
@@ -392,6 +393,28 @@ Prompt in plain natural language. Name references exactly as `Image 1`,
 `Video 1`, and `Audio 1` in per-modality submission order. For dialogue, quote
 the words and identify the speaker; keep the visual action and camera direction
 observable and concise.
+
+## Wan 3.0 Enhanced
+
+`wan3-enhanced`, `wan3.0-enhanced`, `wan3-spicy`, and `wan3.0-spicy` resolve to
+the Mulerouter-powered model `wan3.0-spicy-video`. Public surfaces call it
+**Wan 3.0 Enhanced**. It renders fixed 2–30 second clips at 30 fps with native
+audio and 480P, 720P, or 1080P output. Supported ratios are `16:9`, `9:16`,
+`1:1`, `4:3`, and `3:4`; there is no adaptive ratio.
+
+- Use t2v for prompt-only video, i2v for first/optional last frame, r2v for
+  loose media references, and a2v/ia2v when audio drives the result.
+- Frame anchors may be combined with loose references. Limits are 10 images,
+  5 videos, and 5 audio clips; every input must be supplied through the context
+  image/media workflow because a prompt name alone cannot preserve identity.
+- There is no smart duration, document/web context, provider prompt expansion,
+  watermark control, negative prompt, sampling override, source-video edit, or
+  extend mode. Seeds are integers from `-1` through `2147483647`.
+- Standard artist PAYG rates are $0.0845/s at 480P, $0.169/s at 720P, and
+  $0.338/s at 1080P (as of 2026-08). Existing paid subscribers receive a
+  one-time model credit of $10 on Unlimited or $20 on Unlimited Pro through
+  September 1, 2026 00:00 UTC (August 31 at 5:00 PM PT). That credit is not
+  subscription coverage; once used or expired, normal PAYG applies.
 
 ## MiniMax H3 models
 
@@ -693,6 +716,7 @@ model recommendations.
 | HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
 | HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
 | Wan 3 unified text/frame/reference/audio/video generation | `wan3` / `wan3.0-video` |
+| Wan 3.0 Enhanced text/frame/reference/audio/video generation | `wan3-enhanced` / `wan3.0-spicy-video` |
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` (or `minimax-h3-t2v`) |
 | MiniMax H3 image-to-video from one first frame | `minimax-h3-i2v` with `--ref` |
 | MiniMax H3 first frame → last frame transition | `minimax-h3-flf2v` with `--ref A --ref-end B` |
@@ -711,6 +735,7 @@ model recommendations.
 
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
+- **Wan 3.0 Enhanced** uses fixed 30 fps, fixed 2–30 s output, 480P/720P/1080P buckets, and `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
 - **MiniMax H3 Standard, Balanced, and Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, and FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD sampling, and Turbo uses 4 steps. Standard and Balanced accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Balanced/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.

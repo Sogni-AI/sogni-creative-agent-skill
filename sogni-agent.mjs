@@ -1379,7 +1379,7 @@ const MAX_COUNT = (() => {
 
 function parseSeedValue(raw, flagName) {
   const num = parseIntegerValue(raw, flagName);
-  if (num < 0 || num > 0xFFFFFFFF) {
+  if (num < -1 || num > 0xFFFFFFFF) {
     fatalCliError(`${flagName} must be between 0 and 4294967295.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: flagName, value: raw }
@@ -1617,13 +1617,21 @@ const SEEDANCE_25_MODEL_SELECTIONS = new Set([
 ]);
 
 const WAN3_MODEL_ID = 'wan3.0-video';
-const WAN3_MODEL_SELECTIONS = new Set([
+const WAN3_REGULAR_MODEL_SELECTIONS = new Set([
   WAN3_MODEL_ID,
   'wan3',
   'wan3.0',
   'wan3-video',
   'wan-3',
   'wan-3.0',
+]);
+const WAN3_ENHANCED_MODEL_ID = 'wan3.0-spicy-video';
+const WAN3_ENHANCED_MODEL_SELECTIONS = new Set([
+  WAN3_ENHANCED_MODEL_ID,
+  'wan3-enhanced',
+  'wan3.0-enhanced',
+  'wan3-spicy',
+  'wan3.0-spicy',
 ]);
 const WAN3_REFERENCE_LIMITS = Object.freeze({
   images: 10,
@@ -1635,14 +1643,27 @@ const WAN3_REFERENCE_LIMITS = Object.freeze({
 const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v']);
 const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
 const WAN3_SUPPORTED_RATIOS = new Set(['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16']);
+const WAN3_ENHANCED_SUPPORTED_RATIOS = new Set(['16:9', '4:3', '1:1', '3:4', '9:16']);
 const WAN3_MAX_SEED = 0x7fffffff;
 
 function isWan3ModelSelectionLocal(modelId) {
-  return WAN3_MODEL_SELECTIONS.has(String(modelId || '').trim().toLowerCase().replace(/_/g, '-'));
+  const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
+  return WAN3_REGULAR_MODEL_SELECTIONS.has(normalized) || WAN3_ENHANCED_MODEL_SELECTIONS.has(normalized);
+}
+
+function isWan3EnhancedModelSelectionLocal(modelId) {
+  return WAN3_ENHANCED_MODEL_SELECTIONS.has(
+    String(modelId || '').trim().toLowerCase().replace(/_/g, '-'),
+  );
 }
 
 function isWan3ModelLocal(modelId) {
-  return String(modelId || '').trim().toLowerCase() === WAN3_MODEL_ID;
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === WAN3_MODEL_ID || normalized === WAN3_ENHANCED_MODEL_ID;
+}
+
+function isWan3EnhancedModelLocal(modelId) {
+  return String(modelId || '').trim().toLowerCase() === WAN3_ENHANCED_MODEL_ID;
 }
 
 function isSeedance25ModelSelectionLocal(modelId) {
@@ -2199,6 +2220,7 @@ function resolveSkillVideoModelAlias(
   hasEndFrame = false,
 ) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  if (isWan3EnhancedModelSelectionLocal(normalized)) return WAN3_ENHANCED_MODEL_ID;
   if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
   if (normalized === 'ltx25' || normalized === 'ltx25-t2v') {
     const mode = ['i2v', 'a2v', 'ia2v', 'v2v'].includes(workflow) ? workflow : 't2v';
@@ -4563,6 +4585,17 @@ if (options.outputFormat) {
   }
 }
 
+if (
+  cliSet.seed &&
+  options.seed === -1 &&
+  !(options.video && isWan3EnhancedModelSelectionLocal(options.model))
+) {
+  fatalCliError('--seed -1 is supported only by Wan 3.0 Enhanced video.', {
+    code: 'INVALID_ARGUMENT',
+    details: { model: options.model, seed: options.seed }
+  });
+}
+
 if (options.video) {
   options.model = resolveSkillVideoModelAlias(options.model);
   if (options.model === LTX23_10EROS_MODEL_ID && !options.noFilter) {
@@ -4781,6 +4814,7 @@ if (options.video) {
   // In audio/video workflows --ref is a loose reference image. In i2v it is a
   // dedicated first-frame anchor and may be paired with --ref-end.
   if (isWan3ModelSelectionLocal(options.model)) {
+    const isEnhancedSelection = isWan3EnhancedModelSelectionLocal(options.model);
     if (!options.videoWorkflow) {
       const hasLooseImages = Array.isArray(options.contextImages) && options.contextImages.length > 0;
       const hasAudio = Boolean(options.refAudio || options.refAudios.length > 0);
@@ -4799,7 +4833,10 @@ if (options.video) {
         options.videoWorkflow = 't2v';
       }
     }
-    options.model = WAN3_MODEL_ID;
+    options.model = isEnhancedSelection ? WAN3_ENHANCED_MODEL_ID : WAN3_MODEL_ID;
+    if (isEnhancedSelection && !cliSet.wan3Ratio) {
+      options.wan3Ratio = '16:9';
+    }
   }
 
   // Each MiniMax H3 tier has four concrete worker selectors and five prompt
@@ -5287,6 +5324,7 @@ if (options.video) {
   const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
   const isHappyHorseVideo = isHappyHorseModel(options.model);
   const isWan3Video = isWan3ModelLocal(options.model);
+  const isWan3EnhancedVideo = isWan3EnhancedModelLocal(options.model);
   const isMiniMaxH3Video = isMiniMaxH3Model(options.model);
   const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
   if (options.seedanceTaskType && !SEEDANCE_TASK_TYPES.has(options.seedanceTaskType)) {
@@ -5302,13 +5340,31 @@ if (options.video) {
     });
   }
   if ((cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
-    fatalCliError('Wan 3 controls are supported only by wan3 / wan3.0-video.', {
+    fatalCliError('Wan 3 controls are supported only by Wan 3 or Wan 3.0 Enhanced.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
     });
   }
-  if (isWan3Video && !WAN3_SUPPORTED_RATIOS.has(options.wan3Ratio)) {
-    fatalCliError('--wan3-ratio must be one of: adaptive, 16:9, 4:3, 1:1, 3:4, 9:16.', {
+  if (
+    isWan3EnhancedVideo &&
+    (options.wan3SmartDuration ||
+      options.wan3ReferenceFileUrl ||
+      options.wan3ReferenceLinkUrl ||
+      options.wan3Watermark ||
+      cliSet.apiExpandPrompt)
+  ) {
+    fatalCliError('Wan 3.0 Enhanced does not support smart duration, document/web context, watermark, or provider prompt expansion.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
+  }
+  const supportedWan3Ratios = isWan3EnhancedVideo
+    ? WAN3_ENHANCED_SUPPORTED_RATIOS
+    : WAN3_SUPPORTED_RATIOS;
+  if (isWan3Video && !supportedWan3Ratios.has(options.wan3Ratio)) {
+    fatalCliError(isWan3EnhancedVideo
+      ? '--wan3-ratio for Wan 3.0 Enhanced must be one of: 16:9, 4:3, 1:1, 3:4, 9:16.'
+      : '--wan3-ratio must be one of: adaptive, 16:9, 4:3, 1:1, 3:4, 9:16.', {
       code: 'INVALID_ARGUMENT',
       details: { ratio: options.wan3Ratio }
     });
@@ -5468,8 +5524,15 @@ if (options.video) {
       details: { promptLength: options.prompt.length, maximum: 20000 }
     });
   }
-  if (isWan3Video && cliSet.seed && (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > WAN3_MAX_SEED)) {
-    fatalCliError(`Wan 3 --seed must be an integer from 0 through ${WAN3_MAX_SEED}.`, {
+  const minimumWan3Seed = isWan3EnhancedVideo ? -1 : 0;
+  if (cliSet.seed && options.seed === -1 && !isWan3EnhancedVideo) {
+    fatalCliError('--seed must be between 0 and 4294967295.', {
+      code: 'INVALID_ARGUMENT',
+      details: { seed: options.seed }
+    });
+  }
+  if (isWan3Video && cliSet.seed && (!Number.isInteger(options.seed) || options.seed < minimumWan3Seed || options.seed > WAN3_MAX_SEED)) {
+    fatalCliError(`Wan 3 --seed must be an integer from ${minimumWan3Seed} through ${WAN3_MAX_SEED}.`, {
       code: 'INVALID_ARGUMENT',
       details: { seed: options.seed }
     });
@@ -5519,7 +5582,7 @@ if (options.video) {
       if (!options.refImage) {
         fatalCliError('Wan 3 i2v requires --ref as its first-frame image.', { code: 'INVALID_ARGUMENT' });
       }
-      if (options.contextImages.length > 0 || looseVideos > 0 || looseAudios > 0) {
+      if (!isWan3EnhancedVideo && (options.contextImages.length > 0 || looseVideos > 0 || looseAudios > 0)) {
         fatalCliError('Wan 3 first/last-frame anchors cannot be combined with loose image, video, or audio references.', { code: 'INVALID_ARGUMENT' });
       }
     }
@@ -11338,6 +11401,10 @@ function buildMiniMaxH3EstimateUnavailableError(cause) {
 
 async function ensureSufficientVideoBalance(client, log) {
   if (!options.video || options.estimateVideoCost) return;
+  // Wan 3.0 Enhanced launch credits live in the server-side model ledger and
+  // cannot be inferred from wallet balance. Let the socket apply credit first,
+  // then enforce PAYG balance for any remainder.
+  if (isWan3EnhancedModelLocal(options.model)) return;
   // Sogni Unlimited bills covered video jobs to the subscription, so a low
   // token balance must not block them client-side. Vendor models
   // (Seedance/HappyHorse) always bill Premium Spark and keep the check, as
@@ -12268,6 +12335,7 @@ async function main() {
       const isSeedanceVideo = isSeedanceModel(options.model);
       const isHappyHorseVideo = isHappyHorseModel(options.model);
       const isWan3Video = isWan3ModelLocal(options.model);
+      const isWan3EnhancedVideo = isWan3EnhancedModelLocal(options.model);
       const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
       // Vendor video models forward image references as HTTPS URL arrays (or
       // Sogni-hosted uploads) instead of inline buffers; HappyHorse takes
@@ -12712,11 +12780,13 @@ async function main() {
       if (isWan3Video) {
         projectConfig.ratio = options.wan3Ratio;
         projectConfig.generateAudio = options.apiGenerateAudio ?? true;
-        projectConfig.promptExtend = options.apiExpandPrompt ?? true;
-        projectConfig.watermark = options.wan3Watermark;
-        if (options.wan3SmartDuration) projectConfig.smartDuration = true;
-        if (options.wan3ReferenceFileUrl) projectConfig.referenceFileUrl = options.wan3ReferenceFileUrl;
-        if (options.wan3ReferenceLinkUrl) projectConfig.referenceLinkUrl = options.wan3ReferenceLinkUrl;
+        if (!isWan3EnhancedVideo) {
+          projectConfig.promptExtend = options.apiExpandPrompt ?? true;
+          projectConfig.watermark = options.wan3Watermark;
+          if (options.wan3SmartDuration) projectConfig.smartDuration = true;
+          if (options.wan3ReferenceFileUrl) projectConfig.referenceFileUrl = options.wan3ReferenceFileUrl;
+          if (options.wan3ReferenceLinkUrl) projectConfig.referenceLinkUrl = options.wan3ReferenceLinkUrl;
+        }
       }
 
       if (options.outputFormat) {

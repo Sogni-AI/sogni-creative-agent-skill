@@ -1,3 +1,18 @@
+# [3.37.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.36.0...v3.37.0) (2026-08-29)
+
+
+### Bug Fixes
+
+* **deps:** align current Sogni runtime packages ([5729a10](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/5729a107070c992b63186c542d6cd10e7bf2afc1))
+* **deps:** consume released Wan 3 client stack ([d807c85](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/d807c85494ccd8f4bc1356ac07b089466de900ec))
+* **video:** align enhanced Wan3 CLI ([f3bec1f](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/f3bec1f9955a414782aff3f993ce6841e2809fad))
+
+
+### Features
+
+* **video:** add MiniMax H3 Balanced selectors ([bf2cfaa](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/bf2cfaa4cac80a9687adb28af331c2cfbdd85c20))
+* **video:** add Wan 3 Enhanced CLI ([477c116](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/477c11668c2ad2881f9578635a5e07b2ae6ce783))
+
 # [3.37.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.36.0...v3.37.0) (2026-08-27)
 
 ### Bug Fixes

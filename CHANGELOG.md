@@ -1,3 +1,10 @@
+## [3.39.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.39.0...v3.39.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* **video:** replace retired MiniMax H3 recipe wording ([6c9b312](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/6c9b3121a14f8f16d79a497ab90017fe2161a015))
+
 # [3.39.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.38.0...v3.39.0) (2026-09-02)
 
 

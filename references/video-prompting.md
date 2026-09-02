@@ -141,7 +141,8 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   FastH3 is the separate FastVideo VSA engine: use
   `minimax-h3-fasth3-turbo`, `minimax-h3-fasth3-t2v-turbo`,
   `minimax-h3-fasth3-i2v-turbo`, or `minimax-h3-fasth3-flf2v-turbo`.
-  FastH3 uses Euler/simple only, is about 2x faster, and has no R2V mode.
+  FastH3 uses Euler/simple only, is about 2x faster than LightX2V Turbo and up
+  to 6x faster than Standard for comparable 768p, 15-second requests, and has no R2V mode.
 - **Native 32 kHz stereo audio is generated jointly with the picture.** Every
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the

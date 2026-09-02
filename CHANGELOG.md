@@ -32,7 +32,7 @@
 
 ### Features
 
-* **video:** add MiniMax H3 Balanced, a fast, high-quality tier powered by PDD (Parallel Decoding Distillation) for efficient text-to-video, image-to-video, first/last-frame, and reference-to-video generation ([bf2cfaa](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/bf2cfaa4cac80a9687adb28af331c2cfbdd85c20))
+* **video:** add MiniMax H3 Balanced, a fast, high-quality eight-step tier for text-to-video, image-to-video, first/last-frame, and reference-to-video generation ([bf2cfaa](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/bf2cfaa4cac80a9687adb28af331c2cfbdd85c20))
 
 # [3.36.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.35.4...v3.36.0) (2026-08-27)
 

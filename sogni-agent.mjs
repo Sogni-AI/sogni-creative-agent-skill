@@ -4212,7 +4212,7 @@ state negatives in the structured prompt.):
   minimax-h3-flf2v                  First-frame -> last-frame transition (--ref plus --ref-end)
   minimax-h3-r2v                    Multi-reference video: --ref/-c images, repeatable --ref-video/--ref-audio
                                      (9 images / 3 videos / 3 audios / 12 files total; requires an image or video)
-  minimax-h3-balanced               Fixed 8-step Euler/simple PDD tier; infers T2VA/I2VA/L2VA/FL2VA
+  minimax-h3-balanced               Fixed 8-step LightX2V/Larry v4 tier; infers T2VA/I2VA/L2VA/FL2VA
   minimax-h3-t2v-balanced           Balanced text-to-video
   minimax-h3-i2v-balanced           Balanced I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-balanced         Balanced first-frame -> last-frame (--ref plus --ref-end)
@@ -4224,7 +4224,7 @@ state negatives in the structured prompt.):
   minimax-h3-r2v-turbo              4-step Ref2VA Turbo with loose image/video/audio references
                                      (upstream default: 960x544, Euler/simple)
   minimax-h3-fasth3-turbo           FastVideo VSA FastH3 Turbo; infers T2VA/I2VA/L2VA/FL2VA; no R2V
-  minimax-h3-fasth3-t2v-turbo       FastH3 text-to-video (about 2x faster)
+  minimax-h3-fasth3-t2v-turbo       FastH3 text-to-video (up to 6x faster than Standard)
   minimax-h3-fasth3-i2v-turbo       FastH3 I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-fasth3-flf2v-turbo     FastH3 first-frame -> last-frame (--ref plus --ref-end)
   H3 FL2VA Turbo sampler override   --sampler euler|er_sde|sa_solver

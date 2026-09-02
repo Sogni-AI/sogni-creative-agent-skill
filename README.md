@@ -456,7 +456,7 @@ sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
 sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png \
   -c wardrobe.png "Keep the endpoint frames and use Image 1 for wardrobe detail"
 
-# MiniMax H3 Standard, 8-step Balanced, and 4-step Turbo video (native 32 kHz stereo audio)
+# MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, and FastH3 Turbo video
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png \
@@ -467,6 +467,9 @@ sogni-agent --video -m minimax-h3-flf2v-balanced --ref first.png --ref-end last.
 sogni-agent --video -m minimax-h3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-turbo --sampler sa_solver --duration 8 "<A/B variant of the same H3 prompt>"
 sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-turbo --duration 8 "<three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
@@ -586,7 +589,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
 | `--expand-prompt`, `--no-expand-prompt` | Enable provider prompt expansion for direct Wan 3 video, or preserve the exact submitted prompt |
 | `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track, enable/disable Wan 3 native audio, or control generated-keyframe workflows |
-| `--sampler <name>` | Image/music sampler; FL2VA H3 Turbo accepts `euler`, `er_sde`, or `sa_solver` and defaults to `er_sde` on Socket. Ref2VA Turbo accepts Euler only. The CLI omits this field unless explicitly set. |
+| `--sampler <name>` | Image/music sampler; LightX2V FL2VA H3 Turbo accepts `euler`, `er_sde`, or `sa_solver` and defaults to `er_sde` on Socket. Ref2VA Turbo and FastH3 Turbo accept Euler only. The CLI omits this field unless explicitly set. |
 | `--api-chat` | Use `/v1/chat/completions` with Sogni creative-agent tools |
 | `--api-workflow` | Start a `/v1/creative-agent/workflows` durable workflow with explicit `input.steps`; optional `storyboard-video` preset |
 | `--workflow-input <json\|@path>` | Explicit durable workflow input JSON. Use `@path` to load JSON from a file. |
@@ -655,10 +658,13 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 Balanced image-to-video | `minimax-h3-i2v-balanced` with `--ref` |
 | MiniMax H3 Balanced first-frame → last-frame video | `minimax-h3-flf2v-balanced` with `--ref A --ref-end B` |
 | MiniMax H3 Balanced reference-to-video | `minimax-h3-r2v-balanced` with up to 9 images, 3 videos, 3 audios / 12 files total |
-| MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
-| MiniMax H3 Turbo image-to-video | `minimax-h3-i2v-turbo` with `--ref` |
-| MiniMax H3 Turbo first-frame → last-frame video | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
-| MiniMax H3 Turbo reference-to-video | `minimax-h3-r2v-turbo` with up to 9 images, 3 videos, 3 audios / 12 files total |
+| MiniMax H3 LightX2V Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
+| MiniMax H3 LightX2V Turbo image-to-video | `minimax-h3-i2v-turbo` with `--ref` |
+| MiniMax H3 LightX2V Turbo first-frame → last-frame video | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
+| MiniMax H3 Ref2VA Turbo reference-to-video | `minimax-h3-r2v-turbo` with up to 9 images, 3 videos, 3 audios / 12 files total |
+| MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
+| MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
+| MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; FastH3 has no R2V mode |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |
@@ -691,7 +697,7 @@ sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video s
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **Wan 3** (`wan3.0-video`) is a Premium Spark Alibaba model with fixed 30 fps, fixed or smart 2–30 s output, native audio, 480P/720P/1080P tiers, and `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, or `9:16` output. It accepts one first frame plus an optional last frame, or loose references up to 10 images, 5 videos, and 5 audio clips. It can also use one public document (PDF/Office/text/Markdown/Keynote/Pages/Numbers, up to 100 MB; PDF/DOCX/DOC/PPTX/PPT/Keynote/Pages up to 50 pages) or one public webpage; file and link context are mutually exclusive and cannot be combined with first/last anchors. Each video/audio reference is 1–15 s and each modality's clips total at most 15 s. Video references condition a new generation; Alibaba exposes no edit/extend task mode or task-type field, so use a dedicated video-to-video model when source-preserving editing is required. Provider prompt expansion defaults on; `--no-expand-prompt` preserves the exact prompt. Watermark defaults off. Send no negative prompt, steps, guidance, sampler, scheduler, ControlNet, or mask. Sogni retail rates before subscription discounts are $0.065/$0.13/$0.26 per output second at 480p/720p/1080p (as of 2026-08).
 - **Wan 3.0 Enhanced** (`wan3.0-spicy-video`; MuleRouter provider ID `w3.0-video`; aliases `wan3-enhanced`, `wan3-spicy`) runs at fixed 30 fps with fixed or smart 2–30 s output, native audio, prompt expansion, 480P/720P/1080P, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`. It accepts either first/last-frame anchors or up to 10 image, 5 video, and 5 audio loose references; the two modes cannot be mixed. It has no document/web context, watermark, negative prompt, source-video edit, or extend mode. Standard PAYG is $0.0845/$0.169/$0.338 per output second at 480P/720P/1080P (as of 2026-08). Existing paid subscribers receive a one-time $10 Unlimited / $20 Unlimited Pro model credit through September 1, 2026 00:00 UTC (August 31 at 5:00 PM PT); this is a launch credit, not subscription coverage.
-- **MiniMax H3 Standard, Balanced, and Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap. Standard, Balanced, and FL2VA Turbo normally default to 1344×768 or 768×1344; Ref2VA Turbo defaults to 960×544 but supports other valid shapes. `--duration` snaps to the frame grid, so H3 delivers the nearest grid point rather than the exact requested seconds. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD sampling, and Turbo uses 4 steps. Standard and Balanced accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket, and the CLI omits the sampler unless `--sampler` is passed; FL2VA A/B tests may select `euler`, `er_sde`, or `sa_solver`. Ref2VA Turbo follows its exact upstream Euler/simple recipe and accepts only `--sampler euler`. Guidance 1 is fixed and there is no negative-prompt input. Standard, Balanced, and Turbo t2v/i2v/flf2v prompts use the exact ordered three fields; all Ref2VA tiers use exactly `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, and `non_diegetic_music`. Every Ref2VA tier accepts up to 9 images, 3 videos, and 3 audios, capped at 12 files; at least one visual reference is required, audio-only input is invalid, and r2v is never inferred. `--no-generate-audio` strips the jointly generated track from the result. This is the 768p-class open-weights release, not MiniMax's hosted 2K stage. FL2VA/Balanced/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact contracts.
+- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use a 32 px grid, fixed 24 fps, native 32 kHz stereo audio, 124–362 frames (`124 + n×17`, i.e. 5.17–15.08 s), and a 1,032,192-pixel render cap. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 normally default to 1344×768 or 768×1344; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD, and both Turbo engines use 4 steps. FL2VA H3 Turbo defaults to `er_sde` on Socket and permits `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo and the separate FastVideo VSA FastH3 engine use Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. FastH3 is about 2x faster and supports T2V/I2V/FLF2V, never R2V. Guidance 1 is fixed and there is no negative-prompt input. Every Ref2VA tier accepts up to 9 images, 3 videos, and 3 audios, capped at 12 files; at least one visual reference is required. FastH3 requires 23 GB without LoRA and 32 GB with an H3 LoRA; the other FL2VA/Balanced/Turbo and image-only R2V paths require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See `references/video-prompting.md` § MiniMax H3 Prompting for the exact contracts.
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips but caps at 480p/720p (no 1080p or 4K). Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second for each meaningful acting beat or pause. Keep quoted speech under the model's hard per-clip word budget.

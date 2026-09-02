@@ -186,10 +186,13 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3-i2v-balanced` | 8-step | H3 Balanced first-frame image-to-video |
 | `minimax-h3-flf2v-balanced` | 8-step | H3 Balanced first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-balanced` | 8-step | H3 Balanced reference-to-video from a whole reference set |
-| `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
-| `minimax-h3-i2v-turbo` | 4-step | H3 Turbo first-frame image-to-video |
-| `minimax-h3-flf2v-turbo` | 4-step | H3 Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
+| `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 LightX2V Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
+| `minimax-h3-i2v-turbo` | 4-step | H3 LightX2V Turbo first-frame image-to-video |
+| `minimax-h3-flf2v-turbo` | 4-step | H3 LightX2V Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-turbo` | 4-step | H3 Turbo reference-to-video from a whole reference set; 960×544 default |
+| `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | 4-step | FastVideo VSA FastH3 text-to-video; generic selector infers frame modes; about 2x faster |
+| `minimax-h3-fasth3-i2v-turbo` | 4-step | FastH3 first-frame image-to-video or last-frame-only L2VA |
+| `minimax-h3-fasth3-flf2v-turbo` | 4-step | FastH3 first-frame → last-frame video; no FastH3 R2V mode |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -421,18 +424,20 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family with **twelve current modes**: four
-Standard workflows, four 8-step Balanced PDD workflows, and four 4-step H3
-Turbo workflows. Every mode
+MiniMax H3 is a Sogni-hosted video family with **fifteen current selectors**:
+four Standard workflows, four 8-step Balanced PDD workflows, four 4-step
+LightX2V Turbo workflows, and three FastVideo VSA FastH3 Turbo workflows. Every mode
 generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3`, `minimax-h3-balanced`, and
-`minimax-h3-turbo` selectors resolve to the matching tier and mode inferred
-from your references; each accepts an explicit `--workflow r2v`.
+`minimax-h3-turbo`, and `minimax-h3-fasth3-turbo` selectors resolve to the matching engine and mode inferred
+from your references. The Standard, Balanced, and LightX2V Turbo families accept
+an explicit `--workflow r2v`; FastH3 rejects it.
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
 be asked for by name. Its Balanced and Turbo counterparts are
 `minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`.
+FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selector.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -448,6 +453,9 @@ be asked for by name. Its Balanced and Turbo counterparts are
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
 | `minimax-h3-r2v-turbo` | Turbo reference-to-video | Dedicated 4-step Ref2VA LoRA; Euler/simple and 960×544 by default |
+| `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | FastH3 text-to-video | Separate FastVideo VSA four-step engine; generic selector infers frame workflows |
+| `minimax-h3-fasth3-i2v-turbo` | FastH3 image-to-video | First-frame I2VA or last-frame-only L2VA from one endpoint |
+| `minimax-h3-fasth3-flf2v-turbo` | FastH3 first → last frame | Both endpoints; FastH3 has no R2V selector |
 
 The three standard frame modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
@@ -465,12 +473,16 @@ with `videoModel="minimax-h3-r2v"` (including callers such as Sogni Chat). The
 dedicated LightX2V LoRA exposes it as `minimax-h3-ref2va-fp8_r2v_turbo` through
 the public `minimax-h3-r2v-turbo` selector; the Balanced PDD version is
 `minimax-h3-ref2va-fp8_r2v_balanced`, exposed as `minimax-h3-r2v-balanced`.
+FastH3 is not an alias for LightX2V: it maps to
+`minimax-h3-fastvideo-int8_t2v_turbo`, `minimax-h3-fastvideo-int8_i2v_turbo`,
+and `minimax-h3-fastvideo-int8_flf2v_turbo`. Its qualified FastVideo VSA recipe
+is fixed four-step Euler/simple, it is about 2x faster, and it has no R2V mode.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
 **r2v is the one H3 mode that does**: see
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v).
-FL2VA/Balanced/Turbo and image-only R2V are routed to 32 GB-class workers;
+FastH3 uses 23 GB without LoRA and 32 GB with an H3 LoRA. FL2VA/Balanced/LightX2V Turbo and image-only R2V are routed to 32 GB-class workers;
 video-conditioned R2V requires a worker above 40 GB.
 
 **Fixed parameters (do not override):**
@@ -510,6 +522,7 @@ sogni-agent -q --video -m minimax-h3-i2v-balanced --ref first.png --duration 8 -
 sogni-agent -q --video -m minimax-h3-flf2v-balanced --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v-balanced --ref identity.png -c wardrobe.png --duration 8 -o ./video.mp4 "<six-field Ref2VA prompt>"
 sogni-agent -q --video -m minimax-h3-turbo --duration 8 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-turbo --duration 8 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 ```
@@ -728,10 +741,13 @@ model recommendations.
 | MiniMax H3 Balanced image-to-video from one first frame | `minimax-h3-i2v-balanced` with `--ref` |
 | MiniMax H3 Balanced first frame → last frame transition | `minimax-h3-flf2v-balanced` with `--ref A --ref-end B` |
 | MiniMax H3 Balanced from loose references | `minimax-h3-r2v-balanced` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
-| MiniMax H3 Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
-| MiniMax H3 Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
-| MiniMax H3 Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
-| MiniMax H3 Turbo from loose references | `minimax-h3-r2v-turbo` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
+| MiniMax H3 LightX2V Turbo text-to-video | `minimax-h3-turbo` or `minimax-h3-t2v-turbo` |
+| MiniMax H3 LightX2V Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
+| MiniMax H3 LightX2V Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
+| MiniMax H3 Ref2VA Turbo from loose references | `minimax-h3-r2v-turbo` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
+| MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
+| MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
+| MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
@@ -739,7 +755,7 @@ model recommendations.
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
-- **MiniMax H3 Standard, Balanced, and Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, and FL2VA Turbo default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD sampling, and Turbo uses 4 steps. Standard and Balanced accept no sampler override. FL2VA H3 Turbo defaults to `er_sde` on Socket and accepts `euler`, `er_sde`, or `sa_solver`; Ref2VA Turbo uses Euler/simple only. The CLI omits the sampler unless `--sampler` is passed. Guidance 1 and native stereo audio apply to all, with no negative-prompt input. FL2VA/Balanced/Turbo and image-only R2V require 32 GB-class workers; video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps, Balanced uses fixed 8-step Euler/simple PDD, and both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 and native stereo audio apply to all. FastH3 requires 23 GB without LoRA and 32 GB with an H3 LoRA; other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

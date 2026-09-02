@@ -53,6 +53,12 @@ test('intelligence contracts expose every real MiniMax H3 Turbo mode at fixed 24
   assert.ok(animateModels.includes('minimax-h3-flf2v-turbo'));
   assert.ok(generateModels.includes('minimax-h3-r2v-turbo'));
   assert.ok(!animateModels.includes('minimax-h3-r2v-turbo'));
+  assert.ok(generateModels.includes('minimax-h3-fasth3-t2v-turbo'));
+  assert.ok(animateModels.includes('minimax-h3-fasth3-i2v-turbo'));
+  assert.ok(animateModels.includes('minimax-h3-fasth3-flf2v-turbo'));
+  assert.ok(!generateModels.includes('minimax-h3-fasth3-r2v-turbo'));
+  assert.ok(!animateModels.includes('minimax-h3-fasth3-r2v-turbo'));
+  assert.match(generateVideoModel.description, /FastVideo VSA/);
 
   assert.match(generateVideoModel.description, /fixed 24fps/);
   assert.match(generateVideoModel.description, /integrated_multimodal_description/);

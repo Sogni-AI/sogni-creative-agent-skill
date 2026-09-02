@@ -192,7 +192,7 @@ test('every runtime video model alias is documented in references/models.md', ()
     `references/models.md never mentions these CLI video selectors the runtime resolves:\n${missing.join('\n')}`);
 });
 
-test('MiniMax H3 docs expose all Standard, Balanced, and Turbo workflows consistently', () => {
+test('MiniMax H3 docs expose Standard, Balanced, LightX2V Turbo, and FastH3 workflows consistently', () => {
   const checkedFiles = ['SKILL.md', 'README.md', 'references/models.md', 'references/video-prompting.md'];
   for (const docFile of checkedFiles) {
     const text = read(docFile);
@@ -214,6 +214,12 @@ test('MiniMax H3 docs expose all Standard, Balanced, and Turbo workflows consist
     assert.match(text, /er_sde/, `${docFile}: missing H3 Turbo ER-SDE override`);
     assert.match(text, /sa_solver/, `${docFile}: missing H3 Turbo SA-Solver sampler`);
     assert.match(text, /Ref2VA Turbo[\s\S]{0,120}(?:Euler|euler)/, `${docFile}: missing Ref2VA Turbo Euler recipe`);
+    assert.match(text, /minimax-h3-fasth3-turbo/, `${docFile}: missing generic FastH3 selector`);
+    assert.match(text, /minimax-h3-fasth3-t2v-turbo/, `${docFile}: missing FastH3 t2v selector`);
+    assert.match(text, /minimax-h3-fasth3-i2v-turbo/, `${docFile}: missing FastH3 i2v selector`);
+    assert.match(text, /minimax-h3-fasth3-flf2v-turbo/, `${docFile}: missing FastH3 flf2v selector`);
+    assert.match(text, /FastH3[\s\S]{0,180}(?:Euler|euler)\/simple/, `${docFile}: missing FastH3 Euler/simple recipe`);
+    assert.match(text, /FastH3[\s\S]{0,240}no (?:R2V|r2v)|no (?:R2V|r2v)[\s\S]{0,240}FastH3/, `${docFile}: missing FastH3 no-R2V boundary`);
     assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
       `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);
   }

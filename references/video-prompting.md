@@ -123,7 +123,7 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
-- **20 steps for Standard; 8 for Balanced; 4 for Turbo; guidance/CFG 1.** Do not
+- **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.
   FL2VA H3 Turbo defaults to `er_sde` on Socket, and
@@ -136,8 +136,12 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   direction goes in the prompt text instead.
 - **Balanced and Turbo use the same prompt contract as Standard H3.** Balanced
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
-  `simple` scheduler; only Turbo's sampler has the three
-  explicit variants above.
+  `simple` scheduler. Existing `minimax-h3-turbo` / `minimax-h3-*-turbo`
+  selectors are the LightX2V engine and retain the three sampler variants above.
+  FastH3 is the separate FastVideo VSA engine: use
+  `minimax-h3-fasth3-turbo`, `minimax-h3-fasth3-t2v-turbo`,
+  `minimax-h3-fasth3-i2v-turbo`, or `minimax-h3-fasth3-flf2v-turbo`.
+  FastH3 uses Euler/simple only, is about 2x faster, and has no R2V mode.
 - **Native 32 kHz stereo audio is generated jointly with the picture.** Every
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the
@@ -514,6 +518,9 @@ sogni-agent -q --video -m minimax-h3-turbo --duration 8 -w 1344 -h 768 -o ./vide
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref-end ./last.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<L2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-turbo --duration 8 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-flf2v-turbo --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 
 # Reference-to-video (reference order defines the prompt ordinals)
 sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"

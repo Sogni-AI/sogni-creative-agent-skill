@@ -1434,6 +1434,32 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
   }
 });
 
+test('MiniMax H3 FastH3 backend ids retain H3 geometry and fixed four-step settings', () => {
+  const cases = [
+    { model: 'minimax-h3-fastvideo-int8_t2v_turbo', args: [] },
+    { model: 'minimax-h3-fastvideo-int8_i2v_turbo', args: ['--ref', SCREENSHOT_FIXTURE] },
+    {
+      model: 'minimax-h3-fastvideo-int8_flf2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video', '-m', model, '--duration', '5', ...args,
+      'A single continuous cinematic shot with synchronized ambient audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, model);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+    assert.equal(state.lastVideoProject.steps, undefined);
+    assert.equal(state.lastVideoProject.guidance, undefined);
+    assert.equal(state.lastVideoProject.sampler, undefined);
+    assert.equal(state.lastVideoProject.scheduler, undefined);
+  }
+});
+
 test('MiniMax H3 Balanced backend tiers retain H3 workflow, frame, fps, and fixed sampling rules', () => {
   const cases = [
     {
@@ -1564,6 +1590,16 @@ test('MiniMax H3 Turbo rejects unsupported samplers while other video sampler be
     ['--video', '-m', 'minimax-h3-turbo', '--scheduler', 'simple', 'A record store conversation.'],
     '--scheduler is an image-only option'
   );
+  const fastH3Euler = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-t2v-turbo', '--sampler', 'euler',
+    'A record store conversation.'
+  ]);
+  assert.equal(fastH3Euler.exitCode, 0);
+  assert.equal(fastH3Euler.state.lastVideoProject.sampler, 'euler');
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-fasth3-t2v-turbo', '--sampler', 'er_sde', 'A record store conversation.'],
+    'MiniMax H3 FastH3 Turbo --sampler must be euler'
+  );
 });
 
 test('MiniMax H3 Turbo friendly selectors resolve all four supported modes', () => {
@@ -1600,6 +1636,62 @@ test('MiniMax H3 Turbo friendly selectors resolve all four supported modes', () 
     assert.equal(state.lastVideoProject.frames, 124);
     assert.equal(state.lastVideoProject.fps, 24);
   }
+});
+
+test('MiniMax H3 FastH3 friendly selectors resolve exactly three supported modes', () => {
+  const cases = [
+    {
+      model: 'minimax-h3-fasth3-t2v-turbo',
+      expected: 'minimax-h3-fastvideo-int8_t2v_turbo',
+      args: []
+    },
+    {
+      model: 'minimax-h3-fasth3-i2v-turbo',
+      expected: 'minimax-h3-fastvideo-int8_i2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE]
+    },
+    {
+      model: 'minimax-h3-fasth3-flf2v-turbo',
+      expected: 'minimax-h3-fastvideo-int8_flf2v_turbo',
+      args: ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]
+    }
+  ];
+
+  for (const { model, expected, args } of cases) {
+    const { exitCode, state } = runCli([
+      '--video', '-m', model, '--duration', '5', ...args,
+      'A detailed continuous shot with synchronized native audio.'
+    ]);
+    assert.equal(exitCode, 0, model);
+    assert.equal(state.lastVideoProject.modelId, expected);
+    assert.equal(state.lastVideoProject.frames, 124);
+    assert.equal(state.lastVideoProject.fps, 24);
+  }
+
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-fasth3-turbo', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    'MiniMax H3 FastH3 Turbo has no r2v workflow'
+  );
+});
+
+test('bare MiniMax H3 FastH3 selector infers text and frame workflows', () => {
+  const t2v = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', 'A record store conversation.']);
+  assert.equal(t2v.exitCode, 0);
+  assert.equal(t2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_t2v_turbo');
+
+  const i2v = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--ref', SCREENSHOT_FIXTURE,
+    'The clerk lifts a record sleeve and speaks.'
+  ]);
+  assert.equal(i2v.exitCode, 0);
+  assert.equal(i2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_i2v_turbo');
+
+  const flf2v = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--ref', SCREENSHOT_FIXTURE,
+    '--ref-end', SCREENSHOT_FIXTURE, 'Move continuously between the anchors.'
+  ]);
+  assert.equal(flf2v.exitCode, 0);
+  assert.equal(flf2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_flf2v_turbo');
 });
 
 test('MiniMax H3 Balanced friendly selectors resolve all four supported modes', () => {
@@ -6249,6 +6341,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('minimax-h3-r2v-balanced'), 'Help should include the MiniMax H3 Ref2VA Balanced selector');
   assert.ok(stdout.includes('minimax-h3-t2v-turbo'), 'Help should include the MiniMax H3 Turbo selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-turbo'), 'Help should include the MiniMax H3 Ref2VA Turbo selector');
+  assert.ok(stdout.includes('minimax-h3-fasth3-t2v-turbo'), 'Help should include the MiniMax H3 FastH3 selectors');
+  assert.ok(stdout.includes('FastH3 Turbo sampler'), 'Help should explain the FastH3 Euler-only sampler rule');
   assert.ok(stdout.includes('9 images / 3 videos / 3 audios / 12 files total'), 'Help should include MiniMax H3 r2v limits');
   assert.ok(stdout.includes('--expand-prompt'), 'Help should include --expand-prompt');
   assert.ok(

@@ -22,12 +22,18 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | Image-to-video | `-m minimax-h3-i2v` (`-turbo`) | `minimax-h3-fl2va-fp8_i2v` |
 | First+last frame | `-m minimax-h3-flf2v` (`-turbo`) | `minimax-h3-fl2va-fp8_flf2v` |
 | Reference-to-video | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
+| FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
+| FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |
+| FastH3 first+last frame | `-m minimax-h3-fasth3-flf2v-turbo` | `minimax-h3-fastvideo-int8_flf2v_turbo` |
 
 Bare `-m minimax-h3` is not enough to validate a LoRA request: it resolves by
 frame arguments, and availability differs per mode. Name the explicit mode.
 The Balanced PDD selectors do not currently publish user-selectable adapters
 (as of 2026-08); their built-in PDD acceleration dependency is not a custom
 LoRA slot. The live catalog remains authoritative if that changes.
+FastH3 supports H3 LoRAs but raises its worker requirement from 23 GB without
+LoRA to 32 GB with one. FastH3 has no R2V mode. Always check the exact
+FastVideo model id's live catalog before relying on a particular adapter.
 
 ## Published adapters
 

@@ -1,3 +1,15 @@
+# [3.39.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.38.0...v3.39.0) (2026-09-02)
+
+
+### Bug Fixes
+
+* **deps:** consume intelligence-client 3.27.0 ([7199baf](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/7199baffa673ed3ba5fc34d2891a9f42533c1665))
+
+
+### Features
+
+* **video:** add MiniMax H3 FastH3 Turbo selectors ([b17a468](https://github.com/Sogni-AI/sogni-creative-agent-skill/commit/b17a4685afa2f7503dcf2de5ee3316f5e4b0af41))
+
 # [3.38.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.37.0...v3.38.0) (2026-08-29)
 
 

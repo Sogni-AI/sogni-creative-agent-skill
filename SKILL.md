@@ -33,14 +33,20 @@ Generate **images, videos, and music** using Sogni AI's decentralized GPU networ
 
 ## Install Request Policy
 
-When a user asks to install this plugin or skill, install the command-line tool plus this skill:
+Users may ask to install this plugin or skill directly, or say **"Setup and install sogni.ai/skill"** — that short link resolves to this repository, so treat it as the same request. Either way, install the command-line tool plus this skill. Simplest path, one command:
+
+```bash
+npx setup-sogni-agent-skill
+```
+
+It auto-detects Claude Code, Claude Desktop, Codex CLI, and Hermes, installs the CLI globally, registers this skill, and prompts for the API key (it does not configure OpenClaw). Fallback when `npx` is unavailable or your runtime is not detected:
 
 ```bash
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 sogni-agent --version
 ```
 
-Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI. The one-command alternative `npx setup-sogni-agent-skill` auto-detects Claude Code, Codex CLI, and Hermes (it does not configure OpenClaw).
+Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI.
 
 After any install or upgrade, verify with:
 

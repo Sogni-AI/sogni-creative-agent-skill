@@ -6,10 +6,14 @@ Manus AI, and other SKILL.md-aware agent runtimes.
 
 ## Install (pick the integration that matches your environment)
 
+Simplest: the user tells their agent "Setup and install sogni.ai/skill". The
+short link https://sogni.ai/skill resolves to this repository; the agent then
+runs the one-command installer below (fallback: the manual npm install).
+
 ```bash
-# One-command install: detects Claude Code, Codex CLI, and Hermes; installs the
-# CLI globally; prompts for the API key; points to ChatGPT Custom-GPT setup.
-# (Does NOT configure OpenClaw — see below.)
+# One-command install: detects Claude Code, Claude Desktop, Codex CLI, and
+# Hermes; installs the CLI globally; prompts for the API key; points to ChatGPT
+# Custom-GPT setup. (Does NOT configure OpenClaw — see below.)
 npx setup-sogni-agent-skill
 
 # Print ChatGPT Custom-GPT instructions explicitly.

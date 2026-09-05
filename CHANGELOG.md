@@ -1,3 +1,8 @@
+## [3.39.2] - 2026-09-04
+
+- Update the client stack so canceled generation waits settle and recovered failures carry a useful error.
+- Include the current MiniMax H3 recipe guidance and rounded Wan 3.0 Enhanced pricing references.
+
 ## [3.39.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.39.0...v3.39.1) (2026-09-02)
 
 

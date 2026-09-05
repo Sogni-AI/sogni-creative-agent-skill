@@ -4203,7 +4203,7 @@ HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/108
 MiniMax H3 Video Model Selectors (fixed 24fps, native 32kHz stereo audio + dialogue,
 frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px. FL2VA/Balanced/LightX2V Turbo and
 image-only R2V need 32GB-class workers; video-conditioned R2V needs above 40GB.
-FastH3 needs 23GB without LoRA and 32GB with an H3 LoRA.
+FastH3 keeps the FastVideo engine with H3 LoRAs: base jobs need 23GB and LoRA jobs need 32GB.
 Prompts use MiniMax's exact ordered-field contracts and [Shot N] notation; see
 references/video-prompting.md "MiniMax H3 Prompting". No negative prompt field:
 state negatives in the structured prompt.):

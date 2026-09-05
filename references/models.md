@@ -416,8 +416,8 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
   supported. There is no document/web context, watermark control, negative
   prompt, sampling override, source-video edit, or extend mode. Seeds are
   integers from `0` through `2147483647`; omit the seed for a random result.
-- Standard artist PAYG rates are $0.0845/s at 480P, $0.169/s at 720P, and
-  $0.338/s at 1080P (as of 2026-08). Existing paid subscribers receive a
+- Standard artist PAYG rates are $0.0819/s at 480P, $0.1638/s at 720P, and
+  $0.3276/s at 1080P (as of 2026-09). Existing paid subscribers receive a
   one-time model credit of $10 on Unlimited or $20 on Unlimited Pro through
   September 1, 2026 00:00 UTC (August 31 at 5:00 PM PT). That credit is not
   subscription coverage; once used or expired, normal PAYG applies.

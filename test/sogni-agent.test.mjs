@@ -936,6 +936,12 @@ test('FlashVSR refuses sources outside the public limits before upload', () => {
   assert.match(large.stderr, /up to 768px on the short edge/);
   assert.equal(large.state?.lastVideoProject ?? null, null);
 
+  const tooWide = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1792, height: 768 });
+  const wide = runCli(['--upscale-video', tooWide.video], { FFPROBE_PATH: tooWide.fakeFfprobe });
+  assert.equal(wide.exitCode, 1);
+  assert.match(wide.stderr, /up to about 1344×768 pixels, or 768×1344 in portrait/);
+  assert.equal(wide.state?.lastVideoProject ?? null, null);
+
   const tooLong = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, nb_read_frames: '400' });
   const long = runCli(['--upscale-video', tooLong.video], { FFPROBE_PATH: tooLong.fakeFfprobe });
   assert.equal(long.exitCode, 1);

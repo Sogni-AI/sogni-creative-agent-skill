@@ -1375,6 +1375,8 @@ const FLASHVSR_MODEL_ID = 'flashvsr_v1.1_tiny_long_bf16';
 const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
 const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
 const VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE = 768;
+// Source area counted in 64-pixel blocks: about 1344x768, or 768x1344 in portrait.
+const VIDEO_UPSCALE_MAX_SOURCE_BLOCK_PIXELS = 1344 * 768;
 const VIDEO_UPSCALE_MAX_FRAMES = 362;
 const VIDEO_UPSCALE_MAX_DURATION_SECONDS = 362 / 24;
 const VIDEO_UPSCALE_MIN_FPS = 1;
@@ -1422,6 +1424,12 @@ function resolveVideoUpscaleOutput(sourceWidth, sourceHeight, requestedResolutio
   if (Math.min(sourceWidth, sourceHeight) > VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE) {
     fatalCliError(
       `This video is ${sourceWidth}×${sourceHeight}; video upscaling accepts sources up to ${VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE}px on the short edge.`,
+      { code: 'INVALID_UPSCALE_SOURCE', details: { sourceWidth, sourceHeight } }
+    );
+  }
+  if (Math.ceil(sourceWidth / 64) * 64 * Math.ceil(sourceHeight / 64) * 64 > VIDEO_UPSCALE_MAX_SOURCE_BLOCK_PIXELS) {
+    fatalCliError(
+      `This video is ${sourceWidth}×${sourceHeight}; video upscaling accepts sources up to about 1344×768 pixels, or 768×1344 in portrait.`,
       { code: 'INVALID_UPSCALE_SOURCE', details: { sourceWidth, sourceHeight } }
     );
   }

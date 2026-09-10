@@ -34,6 +34,7 @@ const GATING_POLICIES = [
                 "generate_video",
                 "sound_to_video",
                 "video_to_video",
+                "upscale_video",
                 "generate_music",
                 "generate_speech",
                 "extend_video",
@@ -69,6 +70,7 @@ const GATING_POLICIES = [
                 "generate_video",
                 "sound_to_video",
                 "video_to_video",
+                "upscale_video",
                 "generate_music",
                 "generate_speech",
                 "extend_video",
@@ -103,6 +105,7 @@ const GATING_POLICIES = [
                 "generate_video",
                 "sound_to_video",
                 "video_to_video",
+                "upscale_video",
                 "generate_music",
                 "generate_speech",
                 "extend_video",
@@ -138,6 +141,7 @@ const GATING_POLICIES = [
                 "generate_video",
                 "sound_to_video",
                 "video_to_video",
+                "upscale_video",
                 "generate_music",
                 "generate_speech",
                 "extend_video",
@@ -317,6 +321,31 @@ const GATING_POLICIES = [
         "rationale": "The planner identified uploaded-video stitching. Use stitch_video with the uploaded clips instead of rendering a fresh clip."
     },
     {
+        "policyId": "UPLOADED_BASE_VIDEO_UPSCALE",
+        "version": "1.0.0",
+        "trigger": {
+            "allOf": [
+                "has_uploaded_video",
+                "video_modification:upscale"
+            ],
+            "sources": {
+                "has_uploaded_video": "session_state",
+                "video_modification:upscale": "planner"
+            }
+        },
+        "effect": {
+            "forbid": [
+                "generate_video",
+                "animate_photo",
+                "video_to_video"
+            ],
+            "require": [
+                "upscale_video"
+            ]
+        },
+        "rationale": "The planner identified a pure resolution upscale of the uploaded video. Use the promptless upscale_video tool; do not re-render the clip with a generative model."
+    },
+    {
         "policyId": "HAS_PERSONA_AND_REQUESTS_VIDEO",
         "version": "1.0.0",
         "trigger": {
@@ -489,6 +518,15 @@ const REPAIR_RECIPES = [
         "recipeId": "video_to_video.user_input_incomplete",
         "version": "1.0.0",
         "toolName": "video_to_video",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
+        "recipeId": "upscale_video.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
         "errorCode": "USER_INPUT_INCOMPLETE",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -675,6 +713,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
+        "recipeId": "upscale_video.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
         "recipeId": "generate_music.cost_limit_exceeded",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -849,6 +896,15 @@ const REPAIR_RECIPES = [
         "recipeId": "video_to_video.asset_not_found",
         "version": "1.0.0",
         "toolName": "video_to_video",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "upscale_video.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
         "errorCode": "ASSET_NOT_FOUND",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1062,6 +1118,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
     },
     {
+        "recipeId": "upscale_video.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
         "recipeId": "generate_music.workflow_validation_failed",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -1242,6 +1307,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
     },
     {
+        "recipeId": "upscale_video.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
         "recipeId": "generate_music.parameter_invalid",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -1389,6 +1463,15 @@ const REPAIR_RECIPES = [
         "recipeId": "video_to_video.gpu_worker_failed",
         "version": "1.0.0",
         "toolName": "video_to_video",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "upscale_video.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
         "errorCode": "GPU_WORKER_FAILED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1575,6 +1658,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
     },
     {
+        "recipeId": "upscale_video.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
         "recipeId": "generate_music.model_unavailable",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -1749,6 +1841,15 @@ const REPAIR_RECIPES = [
         "recipeId": "video_to_video.permission_required",
         "version": "1.0.0",
         "toolName": "video_to_video",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "upscale_video.permission_required",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
         "errorCode": "PERMISSION_REQUIRED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -2045,6 +2146,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
     },
     {
+        "recipeId": "upscale_video.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
         "recipeId": "generate_music.provider_timeout",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -2225,6 +2335,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
     },
     {
+        "recipeId": "upscale_video.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
         "recipeId": "generate_music.user_cancelled",
         "version": "1.0.0",
         "toolName": "generate_music",
@@ -2331,6 +2450,16 @@ const PROMPT_CONTRACTS = [
         }
     },
     {
+        "contractId": "upscale_video_v1",
+        "version": "1.0.0",
+        "toolName": "upscale_video",
+        "baseDescription": "upscale_video performs promptless, deterministic FlashVSR super-resolution of exactly one\nuploaded or generated video. Use it when the user asks to upscale, enlarge, sharpen, or increase\nthe resolution of an existing video, or wants a 1080p, 1440p, 2K, or HD copy of it. The output\nkeeps every source frame, the exact frame rate, the full aspect ratio, and the original audio.\n\nDo not invent a prompt and do not route a pure video upscale through video_to_video,\ngenerate_video, extend_video, or replace_video_segment; those tools re-render or edit content.\nUse video_to_video only when the user explicitly names a generative model such as Seedance for\nthe re-render. Do not use upscale_image for videos.\n\nOmit sourceVideoIndex to use the latest generated video, falling back to the most recent upload.\nUse zero-based non-negative indices for generated videos; -1 selects the first uploaded video\nand -2 the second. targetResolution is the output short edge: omit it for 1440p (or 1080p when\nthe source is too small for 1440p), and set 1080 when the user asks for 1080p or Full HD.\nThe output is at most twice the source size, so 1440p needs a source short edge of 720-768px\nand 1080p needs 540-768px. Sources must also be at most 362 frames (about 15 seconds), 1-60 fps,\nand 100 MB. If the tool reports the source is outside these limits, explain the limit to the\nuser instead of switching to a generative video tool. It cannot produce 4K or any size above\n1440p: when the user asks for one, say so and offer 1440p instead of silently delivering less.",
+        "parameterDocs": {
+            "sourceVideoIndex": "Omit for the latest generated video, then the most recent upload. Generated videos are zero-based; -1/-2 select uploaded videos.",
+            "targetResolution": "Output short edge in pixels: 1440 or 1080. Omit for the default (1440, or 1080 for sources under 720px); set 1080 when the user asks for 1080p or Full HD."
+        }
+    },
+    {
         "contractId": "apply_style_v1",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -2423,13 +2552,13 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "video_to_video_v1",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "toolName": "video_to_video",
-        "baseDescription": "video_to_video transforms an uploaded video. Use for uploaded-video restyling, enhancement,\nupscaling/remastering, motion transfer from video to image, subject replacement, edge/pose/\ndepth-guided restyle, or explicit Seedance V2V transforms. Wan 3 is not a V2V model;\nits video inputs are loose references for new generation through generate_video.\n\nThis tool requires an uploaded video source. Do not use it for generated video indices. For\ngenerated or uploaded partial edits use replace_video_segment; for appended time use\nextend_video; for logos/text overlays use overlay_video; for stitching use stitch_video.\n\nChoose controlMode by intent. Use detailer for quality-only enhancement without restyling.\nUse seedance-v2v only when the user asks to transform/enhance/remaster an uploaded video\nwith Seedance, including uploaded-video upscale/remaster requests. For detailer,\ndescribe the original scene plus quality terms, not new content.\nUse outpaint to extend/expand the frame or change aspect ratio (positional, mask-free); set\noutpaintPosition and optionally outpaintAspectRatio. Use inpaint to regenerate a region\nwhile preserving the rest. If the user supplied a mask, set maskImageIndex; otherwise\nomit maskImageIndex so execution derives one from the source video and prompt.",
+        "baseDescription": "video_to_video transforms an uploaded video. Use for uploaded-video restyling, generative\nenhancement or remastering, motion transfer from video to image, subject replacement, edge/pose/\ndepth-guided restyle, or explicit Seedance V2V transforms. Wan 3 is not a V2V model;\nits video inputs are loose references for new generation through generate_video.\nFor a pure resolution upscale (a sharper 1080p, 1440p, 2K, or HD copy of the same video),\nuse upscale_video instead; it is promptless and keeps every frame, the frame rate, and the audio.\n\nThis tool requires an uploaded video source. Do not use it for generated video indices. For\ngenerated or uploaded partial edits use replace_video_segment; for appended time use\nextend_video; for logos/text overlays use overlay_video; for stitching use stitch_video.\n\nChoose controlMode by intent. Use detailer for generative detail enhancement without restyling\nwhen the user wants the content re-rendered rather than only more resolution.\nUse seedance-v2v only when the user asks to transform/enhance/remaster an uploaded video\nwith Seedance, including uploaded-video upscale/remaster requests that name Seedance. For detailer,\ndescribe the original scene plus quality terms, not new content.\nUse outpaint to extend/expand the frame or change aspect ratio (positional, mask-free); set\noutpaintPosition and optionally outpaintAspectRatio. Use inpaint to regenerate a region\nwhile preserving the rest. If the user supplied a mask, set maskImageIndex; otherwise\nomit maskImageIndex so execution derives one from the source video and prompt.",
         "parameterDocs": {
             "prompt": "Describe the target appearance in present tense. For detailer, describe the original content plus quality qualifiers only. For outpaint, describe what fills the new area; for inpaint, describe only the masked region.",
             "videoSourceIndex": "Uploaded video index. Omit when there is one uploaded video; use 0 for first uploaded video or -1 if using negative upload notation.",
-            "controlMode": "Pick from intent: detailer for enhance, seedance-v2v for explicit Seedance V2V, canny/depth for video-only control restyles, pose for motion transfer onto a reference-image subject, animate-move/replace for WAN Animate, outpaint to extend/expand the canvas, inpaint to regenerate a masked region.",
+            "controlMode": "Pick from intent: detailer for generative enhancement, seedance-v2v for explicit Seedance V2V, canny/depth for video-only control restyles, pose for motion transfer onto a reference-image subject, animate-move/replace for WAN Animate, outpaint to extend/expand the canvas, inpaint to regenerate a masked region.",
             "sourceImageIndex": "Required for animate-move, animate-replace, and pose when more than one image is available; the sole reference image may be auto-selected. LTX pose always needs a reference image. Ignored by canny, depth, detailer, outpaint, and inpaint.",
             "outpaintPosition": "outpaint only. Where the original frame sits in the expanded canvas (center/top/bottom/left/right); determines grow direction. Default center.",
             "outpaintAspectRatio": "outpaint only, optional. Target aspect ratio (e.g. 16:9) for the expanded canvas; the canvas only grows, never crops. Set only when the user names a target shape/orientation.",

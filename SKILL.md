@@ -415,7 +415,7 @@ When a generation cannot bill to the subscription, the CLI returns a structured 
 - **`4080` — Renewal payment is being retried; access is paused.** Tell the user Unlimited resumes automatically once the renewal succeeds and that they can render now with Spark or SOGNI (`--token-type spark` / `sogni`). **Never auto-retry the covered job in a loop** — it will keep failing until billing recovers.
 - **`4081` — Higher plan required.** Suggest upgrading to Unlimited Pro.
 
-Cancelling a paid subscription keeps access until the end of the paid period; cancelling during the trial ends access immediately. Manage billing where it was purchased (Stripe portal for web, App Store / Google Play settings for mobile) — the CLI does not change plans.
+Cancelling a paid subscription keeps access until the end of the paid period; cancelling during the trial prevents the first charge and keeps trial access until the original trial end. Manage billing where it was purchased (Stripe portal for web, App Store / Google Play settings for mobile) — the CLI does not change plans.
 
 ### Suggest next steps after a render
 

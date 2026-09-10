@@ -117,6 +117,15 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 
 ## Recommended path: you plan, Sogni executes
 
+Preserve the requested deliverable: capability questions need an answer, a
+writing/review request stops at the draft, and a storyboard-image request stops
+at the still. Continue through images, animation, and stitching when the user
+requested that full sequence; pause only at their requested review points.
+Keep exact prompts, model choices, source references, output counts, and the
+latest duration. Each variation needs its own complete prompt, including every
+shared lettering, visual, dialogue, or loop requirement. Once a stage succeeds,
+continue to the next requested stage instead of generating it again.
+
 You (the calling LLM) are almost always more capable than Sogni's hosted planning model, so **do the planning and tool selection yourself** and let the hosted endpoints do what only the server can — run on the GPU network, persist assets/manifests, orchestrate durable multi-step runs with replay, and apply structured-contract repair. Don't flatten a rich request into a single natural-language string and hand planning back to a weaker model. Match the mode to the work:
 
 - **One-shot generation** → direct-to-SDK flags (the Core Commands below). You already know the tool, model, and prompt — just run it. No LLM round-trip, lowest latency/cost.
@@ -124,6 +133,11 @@ You (the calling LLM) are almost always more capable than Sogni's hosted plannin
 - **`--api-chat` / `--durable-chat` (hosted LLM owns the loop)** → reserve for when you deliberately *want* the hosted model to drive a long server-side tool loop (saves client round-trips on long async jobs), when structured-contract repair recipes should govern, or when several local files must be uploaded for a single turn (multi-file local upload is only supported here). These delegate planning to the hosted model — choose them on purpose, not by default.
 
 **Read [`references/hosted-api.md`](./references/hosted-api.md) first** for the full hosted contract (tool surfaces, durable workflows, templates, replays, Seedance reference modes, media-reference uploads, cost controls).
+
+On a failed generation, preserve the returned error and recovery hint. Do not
+automatically add `--no-filter` or retry a rejected request. An optional filter
+change needs the user's explicit choice and does not override a model's own
+policy. If the hosted run waits for user input, surface that request and stop.
 
 ```bash
 # One-shot: you pick the tool, the server just executes (see Core Commands below)

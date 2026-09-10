@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs';
 import {
-  assertSafeUrl,
+  assertSafeUrl as assertSafeUrlReal,
   fetchSafeUrl as fetchSafeUrlReal,
   isBlockedIp,
 } from '../ssrf-guard.mjs';
 
 const TEST_MEDIA_URL = 'https://example.com/sogni-agent-test-reference.png';
 const TEST_VIDEO_URL = 'https://example.com/sogni-agent-test-reference.mp4';
+
+async function assertSafeUrl(input, options) {
+  const localApi = process.env.SOGNI_AGENT_TEST_HOSTED_API_BASE;
+  if (localApi && new URL(input).origin === localApi) return new URL(input);
+  return assertSafeUrlReal(input, options);
+}
 
 async function fetchSafeUrl(input, init, options) {
   const fixturePath = process.env.SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH;

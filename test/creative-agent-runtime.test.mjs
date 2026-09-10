@@ -20,6 +20,7 @@ import {
   formatModelRef,
   getVideoPromptGuardrailPlan,
   inferExplicitPixelDimensionsFromText,
+  inferExplicitStoryboardFrameCountFromText,
   inferNamedVideoResolutionShortSideFromText,
   inferRequestedVideoResolutionShortSideFromText,
   inferStoryboardLayoutSpec,
@@ -319,6 +320,17 @@ test('runtime does not collapse storyboard image-stage or overlong video request
     storyboardDurationSeconds: 12,
     maxDurationSeconds: 15
   }), null);
+});
+
+test('public runtime keeps storyboard panel counts separate from aspect ratios', () => {
+  for (const [prompt, expected] of [
+    ['Create six 9:16 frames for a storyboard.', 6],
+    ['Create 4 polished 16:9 storyboard frames.', 4],
+    ['Create a 16:9 storyboard with 3 portrait 9:16 frames.', 3],
+    ['Create a storyboard using 9:16 frames.', null],
+  ]) {
+    assert.equal(inferExplicitStoryboardFrameCountFromText(prompt), expected, prompt);
+  }
 });
 
 test('runtime exposes reusable storyboard image prompt compiler', () => {

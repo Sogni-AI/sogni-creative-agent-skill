@@ -256,6 +256,11 @@ class SogniClientWrapper extends EventEmitter {
 
   _emitJobs(urlField, count, seed) {
     if (process.env.SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS) return;
+    if (process.env.SOGNI_AGENT_TEST_FAILURE_EVENT_JSON) {
+      const { event, payload } = JSON.parse(process.env.SOGNI_AGENT_TEST_FAILURE_EVENT_JSON);
+      setImmediate(() => this.emit(event, payload));
+      return;
+    }
     queueMicrotask(() => {
       const state = getState();
       const ext = urlField === 'videoUrl' ? 'mp4' : urlField === 'audioUrl' ? 'mp3' : 'png';

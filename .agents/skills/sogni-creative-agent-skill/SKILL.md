@@ -53,13 +53,22 @@ a command fails because the CLI is missing.
   run `sogni-agent-hermes --json --list-media` instead of guessing filenames.
 - Honor an explicitly requested model. Otherwise use the CLI defaults and
   consult [models.md](references/models.md) only when model selection matters.
+- Answer capability questions without generating. Stop at text for a writing or
+  review request and at a still for a storyboard-image request. Continue through
+  a requested images-to-video sequence unless the user requested a review pause.
+- Preserve exact prompts, source choices, counts, and the latest duration. Each
+  variation needs all its own lettering, visual, dialogue, and loop requirements.
+  Continue from successful stages instead of rendering them again.
 - Plan multi-step work in Hermes, then invoke the focused CLI command. Use the
   hosted workflow API only when its durable orchestration or replay behavior is
   useful.
 - Parse `--json` output when subsequent steps need exact job IDs, paths, URLs,
   costs, or error fields.
 - Return the final local path and the important render settings. On failure,
-  preserve the CLI's error and actionable recovery hint.
+  preserve the CLI's error and actionable recovery hint. Do not automatically
+  add `--no-filter` or retry a rejection. Optional filter changes need the user's
+  explicit choice and cannot override a model's policy. Honor hosted requests
+  to wait for user input.
 
 ## Common commands
 

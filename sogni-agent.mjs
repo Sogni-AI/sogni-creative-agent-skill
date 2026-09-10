@@ -1423,12 +1423,18 @@ function isStructuredInsufficientBalanceError(error) {
  * / `addCanonicalErrorFields`) cannot tell that the failure is e.g.
  * `INSUFFICIENT_BALANCE`, so the "Buy Spark Packs" CTA silently no-ops.
  */
-function buildProjectResultError(projectResult) {
-  const message = projectResult?.error || projectResult?.message || 'Project failed';
+function buildProjectResultError(projectResult, fallback = 'Project failed') {
+  const nested = projectResult?.error;
+  const failure = nested && typeof nested === 'object' ? nested : projectResult;
+  const message = [typeof nested === 'object' ? nested?.message : nested, failure?.error, failure?.message, projectResult?.message, projectResult]
+    .find((value) => typeof value === 'string' && value.trim()) || fallback;
   const err = new Error(message);
-  if (projectResult?.code) err.code = projectResult.code;
-  if (projectResult?.details) err.details = projectResult.details;
-  if (projectResult?.hint) err.hint = projectResult.hint;
+  // SDK create responses and error events must keep the same typed failure.
+  // In particular, an object-valued error must never become "[object Object]".
+  for (const key of ['code', 'originalCode', 'errorCode', 'error_code', 'details', 'hint', 'originalError', 'isNSFW']) {
+    const value = failure?.[key] ?? projectResult?.[key];
+    if (value !== undefined) err[key] = value;
+  }
   if (classifyCliError(err).category === 'insufficient_credits' && !err.hint) {
     err.hint = SPARK_PACKS_PURCHASE_HINT;
   }
@@ -4045,7 +4051,7 @@ Hosted API Modes:
   --no-api-tool-execution  Ask for tool calls/plans but do not execute Sogni tools
   --llm-model <id>      LLM model for --api-chat (default: ${DEFAULT_LLM_MODEL})
   --task-profile <p>    LLM task profile for --api-chat: general|coding|reasoning
-  --max-tokens <num>    Max chat completion tokens for --api-chat and storyboard planning
+  --max-tokens <num>    Max chat completion tokens for --api-chat and storyboard planning (default: 4096)
   --thinking, --no-thinking  Toggle chat_template_kwargs.enable_thinking
   --system <text>       System prompt for --api-chat
   --list-api-models     List Sogni Intelligence LLM models from /v1/models
@@ -6528,6 +6534,7 @@ async function dispatchWorkflowActionViaSdk(action, apiKey, params) {
               ? { maxEstimatedCapacityUnits: params.maxEstimatedCapacityUnits }
               : {}),
             ...(params.confirmCost != null ? { confirmCost: params.confirmCost } : {}),
+            ...(typeof params.safeContentFilter === 'boolean' ? { safeContentFilter: params.safeContentFilter } : {}),
             ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
             ...(params.attribution ? { attribution: params.attribution } : {}),
           },
@@ -6663,6 +6670,13 @@ const DEFAULT_HTTP_TIMEOUT_MS = (() => {
   return Number.isFinite(raw) && raw > 0 ? raw : 30000;
 })();
 
+// Chat waits for a complete model response, including multi-scene tool JSON.
+// Keep catalog/download timeouts short while allowing hosted planning to finish.
+const CHAT_HTTP_TIMEOUT_MS = (() => {
+  const raw = Number.parseInt(getEnv('SOGNI_HTTP_TIMEOUT_MS') || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 120000;
+})();
+
 // Uploads keep the timer running for the whole request-body send (the fetch
 // promise only resolves once the server responds), so they get a longer budget
 // than the connect-phase default that suffices for GET/download/stream calls.
@@ -6694,6 +6708,7 @@ async function fetchApiJson(path, {
   body = undefined,
   headers = {},
   workloadAttribution = undefined,
+  timeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
 } = {}) {
   const url = await buildSafeApiUrl(path);
   const init = {
@@ -6702,7 +6717,7 @@ async function fetchApiJson(path, {
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   };
 
-  const response = await fetchWithTimeout(url, init);
+  const response = await fetchWithTimeout(url, init, timeoutMs);
   const text = await response.text();
   let payload = {};
   if (text) {
@@ -7125,12 +7140,20 @@ V2 TURN ARCHITECTURE:
 - Do not narrate hidden planning, tool selection, JSON, function names, or internal architecture to the user.
 
 SOGNI PRODUCT KNOWLEDGE:
-- Sogni can create and edit images, generate and transform videos, compose music/lyrics, restore photos, apply styles, analyze media, and use uploaded or generated assets as references.
+- Sogni can create and edit images, generate and transform videos, compose music/lyrics, generate speech, restore photos, apply styles, analyze media, and use uploaded or generated assets as references. Use the exposed tools and their current model contracts for exact capabilities.
 - GPT Image 2 in Sogni creates images from text prompts, edits/restyles uploaded or generated references, builds storyboard/keyframe sheets, character/reference boards, ad/product composites, and layout/text-heavy stills.
 - For action requests, use image generation for text-to-image and image editing when references guide identity, likeness, composition, style, objects, logos, or products. Paid renders show a preflight estimate before spending.
-- Featured workflow: GPT Image 2 storyboard/keyframes -> Seedance 2.0 for finished social videos such as ads, trailers, character intros, and storyboard-to-video flows.
+- A storyboard/keyframe sheet can guide a finished video when the user requests that stage. Honor an explicit model choice; select a supported workflow, duration, and reference mode from the exposed model contract.
 - For Sogni, model, GPT Image, Seedance, or creative capability questions, describe the media tools Sogni can use instead of falling back to generic text-only limitations.
-- For unknown product facts, state uncertainty and point to docs.sogni.ai or Discord.`;
+- For unknown product facts, state uncertainty and point to docs.sogni.ai or Discord.
+
+MEDIA EXECUTION:
+- Preserve the requested stage: writing or reviewing a storyboard stops at text; a storyboard image stops at the still. An explicit create-images, animate, and stitch request authorizes those stages in order unless the user asks for a review pause.
+- Preserve exact image prompts, visible lettering, model choices, source selection, dimensions, and the latest requested duration. A new task does not inherit unrelated earlier render settings. Text-only creation has no source image; pure enlargement of a source uses the promptless upscale tool.
+- For separate image variations, use the requested count and one complete Dynamic Prompt branch per output. Repeat shared visible text, visual elements, dialogue, and loop motion in every affected branch. For one storyboard sheet, fully write every requested scene, preserving scene titles, panel count, and layout; aspect-ratio numbers are not panel counts.
+- Use actual uploaded/generated asset indices and preserve reference order. Bind explicit first and last frames, including a return to the original still for a loop. Distinguish audio used as a loose reference from audio driving synchronized performance.
+- Treat returned media and completed stages as authoritative. Continue only unfinished requested stages; do not render a successful stage again because a summary lacks a tool call. Stop when a tool asks to wait for the user or reports that all outputs failed.
+- When a tool offers an optional content-filter change, wait for the user's choice and a successful setting change before retrying. If confirmation is declined or unavailable, stop. Do not automatically change settings after a failure, attribute an unknown rejection to a provider, or offer the setting as a remedy for a mandatory model policy.`;
 
 /**
  * Build the persona/memory/personality dynamic-system-prompt suffix the
@@ -7289,7 +7312,7 @@ async function runApiChat(log) {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages,
     temperature: 0.4,
-    max_tokens: options.apiMaxTokens || 1600,
+    max_tokens: options.apiMaxTokens || 4096,
     token_type: options.tokenType || 'spark',
     app_source: SOGNI_APP_SOURCE,
     sogni_tools: options.apiTools,
@@ -7314,6 +7337,7 @@ async function runApiChat(log) {
       apiKey,
       method: 'POST',
       body,
+      timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
   const message = extractChatMessage(payload);
@@ -7759,7 +7783,7 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
     model: options.llmModel || DEFAULT_LLM_MODEL,
     messages,
     temperature: 0.45,
-    max_tokens: options.apiMaxTokens || 1800,
+    max_tokens: options.apiMaxTokens || 4096,
     token_type: options.tokenType || 'spark',
     app_source: SOGNI_APP_SOURCE,
     ...(options.apiTaskProfile ? { task_profile: options.apiTaskProfile } : {}),
@@ -7779,6 +7803,7 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       apiKey,
       method: 'POST',
       body,
+      timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
   const message = extractChatMessage(payload);
@@ -8683,6 +8708,7 @@ async function runApiWorkflow() {
       mediaReferences: apiMediaReferences.length > 0 ? apiMediaReferences : undefined,
       maxEstimatedCapacityUnits: options.apiWorkflowMaxCost ?? undefined,
       confirmCost: options.apiWorkflowConfirmCost ?? undefined,
+      safeContentFilter: options.noFilter === true ? false : undefined,
       idempotencyKey: options.apiWorkflowIdempotencyKey ?? undefined,
       attribution: workloadAttribution,
     }))
@@ -8699,6 +8725,7 @@ async function runApiWorkflow() {
           max_estimated_capacity_units: options.apiWorkflowMaxCost,
         } : {}),
         ...(options.apiWorkflowConfirmCost !== null ? { confirm_cost: options.apiWorkflowConfirmCost } : {}),
+        ...(options.noFilter === true ? { safe_content_filter: false } : {}),
         token_type: tokenType,
         app_source: SOGNI_APP_SOURCE
       },
@@ -11006,7 +11033,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
     if (projectId && data.projectId !== projectId) return;
     if (!projectId) projectId = data.projectId;
     cleanup();
-    rejectPromise(new Error(data.error || 'Job failed'));
+    rejectPromise(buildProjectResultError(data, 'Job failed'));
   };
 
   const cleanup = () => {
@@ -12330,27 +12357,24 @@ async function main() {
       
       client.on(ClientEvent.JOB_FAILED, (data) => {
         clearTimeout(timeout);
-        reject(new Error(data.error || 'Job failed'));
+        reject(buildProjectResultError(data, 'Job failed'));
       });
 
       client.on(ClientEvent.PROJECT_FAILED, (data) => {
         clearTimeout(timeout);
-        const message = data?.message || data?.error || 'Project failed';
-        reject(new Error(message));
+        reject(buildProjectResultError(data));
       });
 
       client.on(ClientEvent.PROJECT_EVENT, (event) => {
         if (event?.type !== 'error') return;
         clearTimeout(timeout);
-        const message = event?.error?.message || event?.error?.error || 'Project failed';
-        reject(new Error(message));
+        reject(buildProjectResultError(event));
       });
 
       client.on(ClientEvent.JOB_EVENT, (event) => {
         if (event?.type !== 'error') return;
         clearTimeout(timeout);
-        const message = event?.error?.message || event?.error?.error || 'Job failed';
-        reject(new Error(message));
+        reject(buildProjectResultError(event, 'Job failed'));
       });
       
       // Progress for longer-running media jobs.
@@ -13486,12 +13510,12 @@ async function main() {
 
             client2.on(ClientEvent.JOB_FAILED, (data) => {
               clearTimeout(timeout);
-              reject(new Error(data.error || 'Second clip generation failed'));
+              reject(buildProjectResultError(data, 'Second clip generation failed'));
             });
 
             client2.on(ClientEvent.PROJECT_FAILED, (data) => {
               clearTimeout(timeout);
-              reject(new Error(data?.message || 'Second clip project failed'));
+              reject(buildProjectResultError(data, 'Second clip project failed'));
             });
 
             // Show progress for second clip

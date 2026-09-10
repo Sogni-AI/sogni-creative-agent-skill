@@ -1,3 +1,18 @@
+## Unreleased
+
+### Bug Fixes
+
+* Align the public runtime dependencies with Intelligence Client 3.28.4 and Sogni Client 5.36.3, including the fix that keeps storyboard aspect ratios separate from panel counts.
+* Forward explicit content-filter preferences when starting durable workflows through either HTTP or SDK transport; resumed runs retain their original preference.
+* Preserve structured SDK failures across project creation and job/project events, retaining actionable error messages and codes.
+* Give hosted chat, durable chat, and storyboard planning a 4,096-token default output budget so larger scene descriptions and tool arguments have room to complete. Explicit `--max-tokens` values still take precedence.
+* Allow two minutes for HTTP chat and storyboard-planning responses, preventing larger tool calls from hitting the former 30-second timeout. Explicit HTTP timeout overrides remain supported.
+
+### Documentation
+
+* Align the root, Codex/Claude plugin, and Hermes skill guidance with tested Chat workflows: requested stage boundaries, exact prompts and output counts, complete variation prompts, ordered references, model-specific durations, and continuing from completed stages.
+* Clarify user-confirmed recovery after generation failures, document the speech tool in the hosted surface, and distinguish local skill updates from server-side planner and repair behavior.
+
 # [3.40.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.39.1...v3.40.0) (2026-09-09)
 
 

@@ -138,6 +138,10 @@ async function withTestApiServer(fn) {
 
       res.setHeader('Content-Type', 'application/json');
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
+      if (requestUrl.pathname === '/v1/account/me' && req.method === 'GET') {
+        res.end(JSON.stringify({ status: 'success', data: { username: 'test-user' } }));
+        return;
+      }
       if (
         (requestUrl.pathname === '/v2/media/uploadUrl' || requestUrl.pathname === '/v2/image/uploadUrl')
         && req.method === 'GET'
@@ -3629,6 +3633,53 @@ test('--persona-resolve matches exact persona id but not relationship text', () 
   assert.equal(JSON.parse(byRelationship.stdout.trim()).found, false);
 });
 
+test('direct generation preserves structured failures from every SDK event path', () => {
+  const failure = { code: 'MODEL_UNAVAILABLE', message: 'The selected model is offline.', hint: 'Choose an available model.' };
+  for (const [event, payload] of [
+    ['JOB_FAILED', { projectId: 'proj-1', error: failure }],
+    ['PROJECT_FAILED', { projectId: 'proj-1', ...failure }],
+    ['PROJECT_EVENT', { projectId: 'proj-1', type: 'error', error: failure }],
+    ['JOB_EVENT', { projectId: 'proj-1', type: 'error', error: failure }],
+  ]) {
+    const result = runCli(['--json', '--token-type', 'spark', 'A watercolor landscape'], {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({ event, payload }),
+    });
+    assert.notEqual(result.exitCode, 0, event);
+    const output = JSON.parse(result.stdout.trim());
+    assert.equal(output.success, false, event);
+    assert.equal(output.errorCode, failure.code, event);
+    assert.equal(output.error, failure.message, event);
+    assert.equal(output.hint, failure.hint, event);
+  }
+});
+
+test('direct generation preserves nested SDK create errors instead of stringifying objects', () => {
+  const result = runCli(['--json', '--token-type', 'spark', 'A watercolor landscape'], {
+    SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON: JSON.stringify({
+      error: { code: 'MODEL_UNAVAILABLE', message: 'The selected model is offline.', hint: 'Choose an available model.' },
+    }),
+  });
+  assert.notEqual(result.exitCode, 0);
+  const output = JSON.parse(result.stdout.trim());
+  assert.equal(output.errorCode, 'MODEL_UNAVAILABLE');
+  assert.equal(output.error, 'The selected model is offline.');
+  assert.equal(output.hint, 'Choose an available model.');
+});
+
+test('direct generation preserves a specific error over a generic project message', () => {
+  const result = runCli(['--json', '--token-type', 'spark', 'A watercolor landscape'], {
+    SOGNI_AGENT_TEST_IMAGE_PROJECT_RESULT_JSON: JSON.stringify({
+      error: 'The selected model is offline.',
+      message: 'Project failed',
+      code: 'MODEL_UNAVAILABLE',
+    }),
+  });
+  assert.notEqual(result.exitCode, 0);
+  const output = JSON.parse(result.stdout.trim());
+  assert.equal(output.errorCode, 'MODEL_UNAVAILABLE');
+  assert.equal(output.error, 'The selected model is offline.');
+});
+
 test('--api-chat injects saved personas, memories, and personality into the system prompt', async () => {
   // Pre-populate the persona / memory / personality stores in a shared
   // temp dir so the CLI process picks them up via the SOGNI_* env vars
@@ -3762,6 +3813,28 @@ test('--durable-chat without SDK transport enabled fails with a clear error', as
   });
 });
 
+test('--api-chat honors an explicit HTTP response timeout', async () => {
+  const server = createServer((_request, response) => {
+    setTimeout(() => response.end(JSON.stringify({ choices: [] })), 200);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      SOGNI_HTTP_TIMEOUT_MS: '50',
+    });
+    assert.notEqual(result.exitCode, 0);
+    assert.equal(JSON.parse(result.stdout.trim()).errorCode, 'NETWORK_TIMEOUT');
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('--api-chat posts to /v1/chat/completions with creative-agent tools', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -3798,6 +3871,7 @@ test('--api-chat posts to /v1/chat/completions with creative-agent tools', async
     );
     assert.equal(request.body.sogni_tools, 'creative-agent');
     assert.equal(request.body.sogni_tool_execution, true);
+    assert.equal(request.body.max_tokens, 4096);
     assert.equal(request.body.token_type, 'spark');
     assert.equal(request.body.app_source, 'sogni-creative-agent-skill');
     assert.equal(Object.hasOwn(request.body, 'appSource'), false);
@@ -4519,6 +4593,31 @@ test('--api-chat accepts media-only planning requests for non-image references',
   });
 });
 
+test('--api-workflow forwards explicit filter preferences through HTTP and SDK transports', async () => {
+  for (const sdkTransport of [false, true]) {
+    for (const noFilter of [false, true]) {
+      await withTestApiServer(async (apiBaseUrl, requests) => {
+        const result = await runCliAsync([
+          '--api-workflow', '--api-base-url', apiBaseUrl, '--json',
+          ...(noFilter ? ['--no-filter'] : []),
+          'A graphite sketch on a drafting table',
+        ], {
+          SOGNI_API_KEY: 'test-api-key',
+          SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+          SOGNI_SKILL_USE_SDK_TRANSPORT: sdkTransport ? '1' : '',
+          SOGNI_AGENT_TEST_HOSTED_API_BASE: apiBaseUrl,
+        });
+        assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}\nRequests: ${requests.map(request => request.url).join(', ')}`);
+        const starts = requests.filter(request => request.url === '/v1/creative-agent/workflows');
+        assert.equal(starts.length, 1);
+        assert.equal(starts[0].body.safe_content_filter, noFilter ? false : undefined);
+        assert.equal(Object.hasOwn(starts[0].body, 'safe_content_filter'), noFilter);
+        assert.equal(Object.hasOwn(starts[0].body, 'safeContentFilter'), false);
+      });
+    }
+  }
+});
+
 test('--api-workflow starts an explicit durable generated-keyframe workflow', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
@@ -4922,6 +5021,7 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.equal(requests.length, 2);
     assert.equal(requests[0].url, '/v1/chat/completions');
     assert.equal(requests[0].body.sogni_tool_execution, false);
+    assert.equal(requests[0].body.max_tokens, 4096);
     assert.match(requests[0].body.messages[0].content, /SCENE NN - Title block/);
     assert.match(requests[0].body.messages[0].content, /DIALOGUE\/VO: \[no dialogue\]/);
     assert.equal(requests[1].url, '/v1/creative-agent/workflows');

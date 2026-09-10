@@ -25,6 +25,14 @@ Do not run the default `npx setup-sogni-agent-skill` from an installed plugin un
 
 ## Quick examples
 
+Preserve the requested stage: answer capability questions, deliver drafts for
+writing/review requests, and create only a still for storyboard-image requests.
+Continue an explicitly requested images-to-video sequence through its remaining
+stages unless the user requested a review pause. Preserve exact prompts, source
+choices, counts, and model choices; repeat shared requirements in every variation.
+Do not repeat a successful stage or automatically add `--no-filter` after failure.
+Honor requests to wait for user input; model-specific policies still apply.
+
 - Image: `sogni-agent "a cat on the moon, cinematic"`
 - Image edit: `sogni-agent -c <path> "make it night, add fireflies"`
 - Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"` (defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`)

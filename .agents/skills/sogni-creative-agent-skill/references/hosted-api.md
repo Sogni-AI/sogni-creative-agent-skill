@@ -48,6 +48,52 @@ The direct-to-SDK flags remain the right call for explicit one-shot generation
 when you already know the exact model, dimensions, and prompt — use them
 whenever latency or cost rules out an LLM round-trip.
 
+## Preserve the requested work
+
+- A model/capability question is an answer, not permission to render. A script
+  or storyboard-review request ends at the draft; a storyboard-image request
+  ends at the still. The `storyboard-video` preset creates a full video, so use
+  it only when that is the requested deliverable.
+- When the user requests images, animation, and stitching together, finish those
+  stages in order unless they ask to review or select an intermediate result.
+  Treat returned artifacts as evidence of completion; do not resubmit a
+  successful stage because the assistant's summary omitted its tool call.
+- Preserve exact image prompts, visible lettering, chosen models, source
+  selection, aspect ratio, and the latest requested duration. New tasks do not
+  inherit settings from unrelated previous renders. A pure size increase uses
+  `upscale_image`; editing requires an actual source reference.
+- Separate image variations need `numberOfVariations` and a complete Dynamic
+  Prompt branch per output. Repeat shared text, branding, dialogue, and loop
+  motion in every affected branch. A single storyboard sheet instead needs all
+  requested scenes in order, with complete visual/action, camera, transition,
+  dialogue, and sound instructions. Preserve supplied titles and layout. In
+  “six 9:16 frames,” six is the count and 9:16 is the frame shape.
+- Preserve reference order and bind the correct uploaded or generated asset.
+  An original image can be a prior generated result; it is not necessarily an
+  upload. For a loop ending on the original still, bind that original as the
+  final reference. Distinguish loose audio guidance from synchronized audio.
+- Check the chosen model's duration and reference limits. A long video may fit
+  one native clip or require segments and stitching; do not silently shorten it
+  or replace an explicit model. For segmented storyboards, assign each clip its
+  own time window and scene beats while preserving locked music and timing.
+- Let the hosted runtime repair malformed calls before dispatch. A correction
+  round does not authorize a second successful render. If a result says to wait
+  for the user or all outputs failed, surface that result and stop.
+- Optional content-filter changes require the user's explicit choice. In hosted
+  chat, a supported settings tool must report success before retrying; declined
+  or unavailable confirmation leaves the setting unchanged. In direct CLI mode,
+  do not add `--no-filter` on your own. The setting cannot change GPT Image's
+  mandatory policy or resolve an unknown rejection. Attribute a rejection to a
+  provider only when the returned error supports that attribution.
+  When explicitly requested, `--no-filter` is forwarded on new durable workflow
+  starts as well as hosted chat. Resuming a workflow retains its original
+  preference; passing the flag on a resume does not change it.
+
+These are also instructions for the calling agent when it authors direct CLI
+commands or workflow JSON. The public runtime exposes local helpers and shared
+contracts; the full hosted planner, call repair, and confirmation behavior run
+on the server. Updating this skill does not deploy those server components.
+
 ## --api-chat (`POST /v1/chat/completions`)
 
 Text-first natural-language workflows through Sogni API's OpenAI-compatible
@@ -66,12 +112,18 @@ Tune with `--api-tools creative-agent|creative-tools|none`,
 `--thinking` / `--no-thinking` (forwarded as
 `chat_template_kwargs.enable_thinking`; hosted Qwen may normalize thinking
 server-side, so do not rely on `--no-thinking` as a hard suppression switch).
+The default output budget is 4,096 tokens for hosted chat (including durable
+chat) and storyboard planning. Keep enough room for every requested scene and
+complete tool arguments; `--max-tokens` overrides that budget.
+HTTP chat and storyboard-planning requests allow up to two minutes for a full
+response by default; `SOGNI_HTTP_TIMEOUT_MS` overrides this timeout. Other HTTP
+requests keep their existing timeouts.
 
 ### Hosted tool surfaces (`sogni_tools`)
 
 - `creative-tools` — the public API default when `sogni_tools` is omitted or
   true. Generation/editing tools (`generate_image`, `generate_video`,
-  `generate_music`, `edit_image`, `upscale_image`, `apply_style`, `restore_photo`,
+  `generate_music`, `generate_speech`, `edit_image`, `upscale_image`, `apply_style`, `restore_photo`,
   `refine_result`, `animate_photo`, `change_angle`, `video_to_video`,
   `stitch_video`, `orbit_video`, `dance_montage`, `sound_to_video`,
   `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles`),

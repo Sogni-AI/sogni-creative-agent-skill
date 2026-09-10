@@ -1368,6 +1368,163 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
   };
 }
 
+// Promptless FlashVSR video upscaling (--upscale-video). The server probes the
+// uploaded source and stays authoritative; these public limits let the CLI
+// explain an unsupported clip before any upload.
+const FLASHVSR_MODEL_ID = 'flashvsr_v1.1_tiny_long_bf16';
+const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
+const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
+const VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE = 768;
+const VIDEO_UPSCALE_MAX_FRAMES = 362;
+const VIDEO_UPSCALE_MAX_DURATION_SECONDS = 362 / 24;
+const VIDEO_UPSCALE_MIN_FPS = 1;
+const VIDEO_UPSCALE_MAX_FPS = 60;
+const VIDEO_UPSCALE_MAX_BYTES = 100 * 1024 * 1024;
+const VIDEO_UPSCALE_MAX_OUTPUT_LONG_EDGE = 2560;
+const VIDEO_UPSCALE_MAX_OUTPUT_PIXELS = 2560 * 1440;
+const FLASHVSR_UNAVAILABLE_MESSAGE = 'FlashVSR video upscaling is not available yet. Please try again later.';
+
+function parseVideoUpscaleResolutionValue(raw, flag) {
+  const value = Number(String(raw ?? '').trim().toLowerCase().replace(/p$/, ''));
+  if (!VIDEO_UPSCALE_RESOLUTIONS.includes(value)) {
+    fatalCliError(`${flag} must be 1080 or 1440.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag, value: raw, allowed: VIDEO_UPSCALE_RESOLUTIONS }
+    });
+  }
+  return value;
+}
+
+function videoUpscaleOutputFor(sourceWidth, sourceHeight, resolution) {
+  const ratio = resolution / Math.min(sourceWidth, sourceHeight);
+  if (ratio > 2) {
+    return {
+      problem: `${resolution}p needs a source at least ${resolution / 2}px on its short edge; this video is ${sourceWidth}×${sourceHeight}.`
+    };
+  }
+  if (ratio <= 1) {
+    return { problem: `This ${sourceWidth}×${sourceHeight} video is already ${resolution}p or larger.` };
+  }
+  const width = Math.round((sourceWidth * ratio) / 2) * 2;
+  const height = Math.round((sourceHeight * ratio) / 2) * 2;
+  if (Math.max(width, height) > VIDEO_UPSCALE_MAX_OUTPUT_LONG_EDGE || width * height > VIDEO_UPSCALE_MAX_OUTPUT_PIXELS) {
+    return {
+      problem: `At ${resolution}p this ${sourceWidth}×${sourceHeight} video would be ${width}×${height}, larger than the 2560×1440 upscale output limit.`
+    };
+  }
+  return { resolution, width, height };
+}
+
+// Output geometry matches the server's derivation: the short edge becomes the
+// target and both edges round to even pixels. Without an explicit resolution,
+// 1440p is used when the source allows it and 1080p otherwise.
+function resolveVideoUpscaleOutput(sourceWidth, sourceHeight, requestedResolution = null) {
+  if (Math.min(sourceWidth, sourceHeight) > VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE) {
+    fatalCliError(
+      `This video is ${sourceWidth}×${sourceHeight}; video upscaling accepts sources up to ${VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE}px on the short edge.`,
+      { code: 'INVALID_UPSCALE_SOURCE', details: { sourceWidth, sourceHeight } }
+    );
+  }
+  const candidates = requestedResolution ? [requestedResolution] : [VIDEO_UPSCALE_DEFAULT_RESOLUTION, 1080];
+  let lastProblem = '';
+  for (const resolution of candidates) {
+    const output = videoUpscaleOutputFor(sourceWidth, sourceHeight, resolution);
+    if (!output.problem) return output;
+    lastProblem = output.problem;
+  }
+  fatalCliError(lastProblem, {
+    code: 'INVALID_UPSCALE_SIZE',
+    details: { sourceWidth, sourceHeight, requestedResolution },
+    ...(requestedResolution === 1440 ? { hint: 'Use --upscale-resolution 1080 for this source.' } : {})
+  });
+}
+
+// Read the exact source geometry, frame count, and frame rate with ffprobe so
+// the request matches what the server verifies after upload.
+async function probeVideoUpscaleSource(buffer, sourceLabel) {
+  if (buffer.length > VIDEO_UPSCALE_MAX_BYTES) {
+    fatalCliError('Video upscaling accepts source files up to 100 MB.', {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { sizeBytes: buffer.length, maxBytes: VIDEO_UPSCALE_MAX_BYTES }
+    });
+  }
+  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
+  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const tempDir = createTrackedTempDir('sogni-video-upscale-probe-');
+  const inputPath = mediaTempInputPath(tempDir, sourceLabel, '.mp4');
+  let result;
+  try {
+    writeFileSync(inputPath, buffer);
+    result = await runCommand(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-count_frames',
+      '-show_entries',
+      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation',
+      '-of', 'json',
+      inputPath,
+    ], { captureOutput: true });
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+  if (result?.error && result.status === null) {
+    const err = new Error('ffprobe is required for --upscale-video.');
+    err.code = 'MISSING_FFPROBE';
+    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary.';
+    err.details = { ffprobePath };
+    throw err;
+  }
+  let stream = null;
+  try {
+    stream = JSON.parse(result?.stdout || '{}')?.streams?.[0] ?? null;
+  } catch {
+    stream = null;
+  }
+  const width = Number(stream?.width);
+  const height = Number(stream?.height);
+  const frames = Number(stream?.nb_read_frames);
+  const fps = parseFrameRate(stream?.avg_frame_rate);
+  if (result?.status !== 0 || ![width, height, frames].every((value) => Number.isSafeInteger(value) && value > 0) || !fps) {
+    fatalCliError('The source video dimensions, frame count, or frame rate could not be read. Use an MP4 or MOV file of 100 MB or less.', {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { source: sourceLabel }
+    });
+  }
+  if (fps < VIDEO_UPSCALE_MIN_FPS || fps > VIDEO_UPSCALE_MAX_FPS) {
+    fatalCliError(`This video runs at ${Number(fps.toFixed(3))} fps; video upscaling accepts ${VIDEO_UPSCALE_MIN_FPS}-${VIDEO_UPSCALE_MAX_FPS} fps.`, {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { fps }
+    });
+  }
+  if (frames > VIDEO_UPSCALE_MAX_FRAMES || frames / fps > VIDEO_UPSCALE_MAX_DURATION_SECONDS + 0.001) {
+    fatalCliError(
+      `This video is ${frames} frames (${(frames / fps).toFixed(2)} s); video upscaling accepts up to ${VIDEO_UPSCALE_MAX_FRAMES} frames and about 15 seconds.`,
+      { code: 'INVALID_UPSCALE_SOURCE', details: { frames, fps } }
+    );
+  }
+  const rotated = Array.isArray(stream?.side_data_list)
+    && stream.side_data_list.some((item) => Number(item?.rotation || 0) % 360 !== 0);
+  if (!['1:1', 'N/A', undefined].includes(stream?.sample_aspect_ratio) || rotated) {
+    fatalCliError('Export the video with square pixels and its rotation applied before upscaling.', {
+      code: 'INVALID_UPSCALE_SOURCE'
+    });
+  }
+  if (['smpte2084', 'arib-std-b67'].includes(stream?.color_transfer ?? '')) {
+    fatalCliError('Convert HDR video to SDR before upscaling.', { code: 'INVALID_UPSCALE_SOURCE' });
+  }
+  return { width, height, frames, fps, sizeBytes: buffer.length };
+}
+
+function annotateVideoUpscaleError(error) {
+  const message = String(error?.message || error?.originalError?.message || '');
+  if (error && typeof error === 'object' && message.includes(FLASHVSR_UNAVAILABLE_MESSAGE)) {
+    if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'MODEL_UNAVAILABLE';
+    error.hint = 'FlashVSR upscaling workers are not online yet, so nothing was charged. Try again later.';
+  }
+  return error;
+}
+
 // Safety cap for -n/--count: every output is a paid generation, so a typo like
 // `-n 1000` (meant `-n 10`) must not launch a thousand-render batch. Raise
 // deliberately with SOGNI_MAX_COUNT when a bigger batch is really wanted.
@@ -2721,6 +2878,8 @@ const options = {
   upscaleImage: null, // Source image for promptless RTX VSR upscaling
   upscaleScale: 2,
   upscaleTargetLongestEdge: null,
+  upscaleVideo: null, // Source video for promptless FlashVSR upscaling
+  upscaleResolution: null, // FlashVSR output short edge (1080 | 1440)
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
   photobooth: false, // Photobooth mode (InstantID face transfer)
   cnStrength: null, // ControlNet strength override
@@ -2907,6 +3066,8 @@ const cliSet = {
   upscaleImage: false,
   upscaleScale: false,
   upscaleTargetLongestEdge: false,
+  upscaleVideo: false,
+  upscaleResolution: false,
   looping: false,
   photobooth: false,
   cnStrength: false,
@@ -3308,6 +3469,16 @@ for (let i = 0; i < args.length; i++) {
       RTX_VSR_MAX_DIMENSION
     );
     cliSet.upscaleTargetLongestEdge = true;
+  } else if (arg === '--upscale-video') {
+    const raw = expandHomePath(requireFlagValue(args, i, arg));
+    i++;
+    options.upscaleVideo = raw;
+    cliSet.upscaleVideo = true;
+  } else if (arg === '--upscale-resolution') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.upscaleResolution = parseVideoUpscaleResolutionValue(raw, arg);
+    cliSet.upscaleResolution = true;
   } else if (arg === '--photobooth') {
     options.photobooth = true;
     cliSet.photobooth = true;
@@ -3943,6 +4114,8 @@ Image Options:
   --upscale <path|url>  Promptless NVIDIA RTX VSR upscale, up to 16K (one source image)
   --upscale-scale <n>   Enlarge longest edge by 2, 3, or 4 (default: 2)
   --target-longest-edge <px>  Explicit output longest edge, up to 15360 (overrides scale)
+  --upscale-video <path|url>  Promptless FlashVSR upscale of one video to 1080p/1440p (keeps frames, fps, audio)
+  --upscale-resolution <p>    Output short edge for --upscale-video: 1080 or 1440 (default: 1440; 1080 below 720p)
 
 Photobooth (Face Transfer):
   --photobooth            Face transfer mode (InstantID + SDXL Turbo)
@@ -4182,6 +4355,9 @@ LTX 2.3 rollback-only capabilities:
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video rollback
   ltx23-22b-10eros-v1.4-fp8mixed_i2v  Private mature-theme I2V; first and/or last frame; requires --no-filter
+
+Video Upscale Model:
+  flashvsr_v1.1_tiny_long_bf16    Promptless FlashVSR upscale to 1080p/1440p (--upscale-video)
 
 Music Models:
   ace_step_1.5_xl_turbo           Default direct music generation
@@ -4635,7 +4811,7 @@ if (options.outputFormat) {
         details: { outputFormat: options.outputFormat }
       });
     }
-  } else if (options.video) {
+  } else if (options.video || options.upscaleVideo) {
     if (options.outputFormat !== 'mp4') {
       fatalCliError('Video output format must be "mp4".', {
         code: 'INVALID_ARGUMENT',
@@ -5144,6 +5320,17 @@ if (options.music) {
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 1800000; // 30 min for queued and long-running video jobs
   }
+} else if (options.upscaleVideo) {
+  if (options.model && options.model !== FLASHVSR_MODEL_ID) {
+    fatalCliError(`--upscale-video requires model ${FLASHVSR_MODEL_ID}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, requiredModel: FLASHVSR_MODEL_ID }
+    });
+  }
+  options.model = FLASHVSR_MODEL_ID;
+  if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
+    options.timeout = 1800000; // 30 min for queued video work
+  }
 } else if (options.upscaleImage) {
   if (options.model && options.model !== RTX_VSR_MODEL_ID) {
     fatalCliError(`--upscale requires model ${RTX_VSR_MODEL_ID}.`, {
@@ -5268,6 +5455,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.sourceReelDir &&
   !options.remixAudio &&
   !options.upscaleImage &&
+  !options.upscaleVideo &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -5306,7 +5494,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -5345,6 +5533,38 @@ if (options.upscaleImage) {
 
 if (!options.upscaleImage && (cliSet.upscaleScale || cliSet.upscaleTargetLongestEdge)) {
   fatalCliError('--upscale-scale and --target-longest-edge require --upscale <path|url>.', {
+    code: 'INVALID_ARGUMENT'
+  });
+}
+
+if (options.upscaleVideo) {
+  if (options.prompt) {
+    fatalCliError('--upscale-video is promptless and does not accept a prompt.', { code: 'INVALID_ARGUMENT' });
+  }
+  if (
+    options.upscaleImage || options.video || options.music || options.photobooth || options.multiAngle
+    || options.contextImages.length > 0 || options.refImage || options.refImageEnd || options.refAudio
+    || options.refAudios.length > 0 || options.refVideo || options.refVideos.length > 0 || options.refMask
+  ) {
+    fatalCliError('--upscale-video cannot be combined with --upscale, --video, --music, photobooth, --multi-angle, --ref, --ref-end, --ref-audio, --ref-video, --mask, or -c/--context.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+  if (options.count !== 1) {
+    fatalCliError('--upscale-video produces exactly one output; omit -n/--count or set it to 1.', {
+      code: 'INVALID_ARGUMENT',
+      details: { count: options.count }
+    });
+  }
+  if (cliSet.width || cliSet.height || cliSet.fps || cliSet.duration || cliSet.frames) {
+    fatalCliError('--upscale-video keeps the source frames, frame rate, and aspect ratio; choose the output with --upscale-resolution 1080 or 1440.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+}
+
+if (!options.upscaleVideo && cliSet.upscaleResolution) {
+  fatalCliError('--upscale-resolution requires --upscale-video <path|url>.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -12280,7 +12500,7 @@ async function main() {
 
     // Video catalog data is loaded before model-aware dimension planning.
     // Other media types retain the connected-stage lookup used previously.
-    if (!options.video) {
+    if (!options.video && !options.upscaleVideo) {
       await loadLiveModelDefaults(options.model);
     }
     await ensureSufficientVideoBalance(client, log);
@@ -12359,13 +12579,13 @@ async function main() {
       client.on(ClientEvent.JOB_COMPLETED, (data) => {
         const jobData = data.job?.data || {};
         results.push({
-          resultUrl: data.resultUrl || (options.music ? data.audioUrl : options.video ? data.videoUrl : data.imageUrl),
+          resultUrl: data.resultUrl || (options.music ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
           seed: jobData.seed,
           jobIndex: data.jobIndex,
           projectId: data.projectId
         });
         completedJobs++;
-        log(`${options.music ? 'Music' : options.video ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
+        log(`${options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
         
         if (completedJobs >= options.count) {
           clearTimeout(timeout);
@@ -12396,7 +12616,7 @@ async function main() {
       });
       
       // Progress for longer-running media jobs.
-      if (options.video || options.music) {
+      if (options.video || options.music || options.upscaleVideo) {
         client.on(ClientEvent.PROJECT_PROGRESS, (data) => {
           if (data.percentage && data.percentage > 0) {
             log(`Progress: ${Math.round(data.percentage)}%`);
@@ -13081,6 +13301,49 @@ async function main() {
       if (audioResult?.error || audioResult?.message) {
         throw buildProjectResultError(audioResult);
       }
+    } else if (options.upscaleVideo) {
+      log(`Upscaling video with ${FLASHVSR_MODEL_ID}...`);
+      const sourceBuffer = await fetchMediaBuffer(options.upscaleVideo);
+      const source = await probeVideoUpscaleSource(sourceBuffer, options.upscaleVideo);
+      const target = resolveVideoUpscaleOutput(source.width, source.height, options.upscaleResolution);
+      options.width = target.width;
+      options.height = target.height;
+      options.frames = source.frames;
+      options.fps = source.fps;
+      options.outputFormat = 'mp4';
+      options._videoUpscale = { source, resolution: target.resolution };
+      log(
+        `Source ${source.width}x${source.height}, ${source.frames} frames at ${Number(source.fps.toFixed(3))} fps; ` +
+        `output ${target.width}x${target.height} (${target.resolution}p), every frame and the audio kept.`
+      );
+
+      // The exact frame count and rate satisfy the SDK's FlashVSR validation;
+      // the server re-probes the upload and adopts its verified size, so the
+      // output width/height are not sent.
+      const upscaleVideoConfig = {
+        modelId: FLASHVSR_MODEL_ID,
+        positivePrompt: '',
+        numberOfMedia: 1,
+        referenceVideo: sourceBuffer,
+        upscaleResolution: target.resolution,
+        frames: source.frames,
+        fps: source.fps,
+        tokenType: options.tokenType || 'spark',
+        waitForCompletion: false,
+        autoResizeVideoAssets: false
+      };
+
+      let upscaleVideoResult;
+      try {
+        upscaleVideoResult = trackProjectResult(
+          await client.createVideoProject(withBillingMode(upscaleVideoConfig))
+        );
+      } catch (error) {
+        throw annotateVideoUpscaleError(error);
+      }
+      if (upscaleVideoResult?.error || upscaleVideoResult?.message) {
+        throw annotateVideoUpscaleError(buildProjectResultError(upscaleVideoResult));
+      }
     } else if (options.upscaleImage) {
       log(`Upscaling with ${RTX_VSR_MODEL_ID}...`);
       const sourceBuffer = await fetchMediaBuffer(options.upscaleImage);
@@ -13334,7 +13597,7 @@ async function main() {
       const seeds = results.map(r => r.seed ?? options.seed);
       const renderInfo = {
         timestamp: new Date().toISOString(),
-        type: options.music ? 'music' : options.video ? 'video' : 'image',
+        type: options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
         prompt: options.prompt,
         model: options.model,
         width: options.music ? null : options.width,
@@ -13379,6 +13642,14 @@ async function main() {
         if (options.musicShift !== null && options.musicShift !== undefined) {
           renderInfo.shift = options.musicShift;
         }
+      }
+      if (options.upscaleVideo && options._videoUpscale) {
+        renderInfo.upscaleResolution = options._videoUpscale.resolution;
+        renderInfo.fps = options.fps;
+        renderInfo.frames = options.frames;
+        renderInfo.sourceVideo = options.upscaleVideo;
+        renderInfo.sourceWidth = options._videoUpscale.source.width;
+        renderInfo.sourceHeight = options._videoUpscale.source.height;
       }
       if (options.video) {
         renderInfo.workflow = options.videoWorkflow;
@@ -13558,7 +13829,7 @@ async function main() {
           await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
           log(`Saved looping video to ${options.output}`);
         } else {
-          writeOutputFileSafe(options.output, buffer, options.video ? 'video' : options.music ? 'audio' : 'image');
+          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo) ? 'video' : options.music ? 'audio' : 'image');
           log(`Saved to ${options.output}`);
         }
       }
@@ -13567,7 +13838,7 @@ async function main() {
       if (options.json) {
         const output = {
           success: true,
-          type: options.music ? 'music' : options.video ? 'video' : 'image',
+          type: options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
           prompt: options.prompt,
           model: options.model,
           width: options.music ? null : options.width,
@@ -13610,6 +13881,13 @@ async function main() {
           if (options.musicShift !== null && options.musicShift !== undefined) {
             output.shift = options.musicShift;
           }
+        }
+        if (options.upscaleVideo && options._videoUpscale) {
+          output.upscaleResolution = options._videoUpscale.resolution;
+          output.fps = options.fps;
+          output.frames = options.frames;
+          output.sourceWidth = options._videoUpscale.source.width;
+          output.sourceHeight = options._videoUpscale.source.height;
         }
         if (options.video) {
           output.workflow = options.videoWorkflow;
@@ -13686,6 +13964,8 @@ async function main() {
     }
     
   } catch (error) {
+    // A FlashVSR refusal can also arrive as a project event after submission.
+    if (options.upscaleVideo) annotateVideoUpscaleError(error);
     // Token auto-fallback: if using auto mode and got insufficient balance, retry with the other token
     const isBalanceError = isStructuredInsufficientBalanceError(error);
     if (_allowAutoTokenFallback && isBalanceError && options.tokenType === 'spark') {

@@ -80,6 +80,9 @@ sogni-agent-hermes -c ./source.png -o ./edited.png "make it night; add fireflies
 # Promptless RTX VSR upscale
 sogni-agent-hermes --upscale ./source.png -o ./upscaled.png
 
+# Promptless FlashVSR video upscale to 1440p (or --upscale-resolution 1080)
+sogni-agent-hermes --upscale-video ./clip.mp4 -o ./clip-1440p.mp4
+
 # Generate or animate video
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
 sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "slow camera push-in"

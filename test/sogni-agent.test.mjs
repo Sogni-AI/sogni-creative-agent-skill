@@ -842,6 +842,138 @@ test('RTX VSR upscale rejects a target that would stretch an edge to the 512px m
   assert.equal(state?.lastImageProject, null);
 });
 
+function createVideoUpscaleFixture(stream) {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-video-upscale-'));
+  const video = join(dir, 'clip.mp4');
+  const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('source video bytes'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (!args.includes('-count_frames')) process.exit(1);
+console.log(JSON.stringify({ streams: [${JSON.stringify(stream)}] }));
+`);
+  chmodSync(fakeFfprobe, 0o755);
+  return { video, fakeFfprobe };
+}
+
+const VIDEO_UPSCALE_720P_STREAM = {
+  width: 1280,
+  height: 720,
+  nb_read_frames: '158',
+  avg_frame_rate: '24/1',
+  r_frame_rate: '24/1',
+  sample_aspect_ratio: '1:1'
+};
+
+test('FlashVSR --upscale-video is promptless and sends the exact source timing', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, state, stderr } = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+
+  assert.equal(exitCode, 0, stderr);
+  const project = state?.lastVideoProject;
+  assert.ok(project, 'createVideoProject was called');
+  assert.equal(project.modelId, 'flashvsr_v1.1_tiny_long_bf16');
+  assert.equal(project.positivePrompt, '');
+  assert.equal(project.numberOfMedia, 1);
+  assert.equal(project.upscaleResolution, 1440);
+  assert.equal(project.frames, 158);
+  assert.equal(project.fps, 24);
+  assert.equal(project.width, undefined);
+  assert.equal(project.height, undefined);
+  assert.equal(project.autoResizeVideoAssets, false);
+  assert.equal(project.seed, undefined);
+  assert.equal(project.steps, undefined);
+  assert.ok(project.referenceVideo?.data?.length > 0, 'the source video bytes are uploaded');
+  assert.match(stderr, /output 2560x1440 \(1440p\)/);
+});
+
+test('FlashVSR falls back to 1080p below 720p and keeps a fractional frame rate', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({
+    ...VIDEO_UPSCALE_720P_STREAM,
+    width: 960,
+    height: 540,
+    nb_read_frames: '240',
+    avg_frame_rate: '24000/1001',
+    r_frame_rate: '24000/1001'
+  });
+  const { exitCode, state, stderr } = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.upscaleResolution, 1080);
+  assert.equal(state.lastVideoProject.frames, 240);
+  assert.equal(state.lastVideoProject.fps, 24000 / 1001);
+});
+
+test('FlashVSR honors --upscale-resolution 1080 on a 720p source', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-resolution', '1080p'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.upscaleResolution, 1080);
+  assert.match(stderr, /output 1920x1080 \(1080p\)/);
+});
+
+test('FlashVSR explains why 1440p needs a larger source', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 960, height: 540 });
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-resolution', '1440'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /1440p needs a source at least 720px on its short edge; this video is 960×540/);
+  assert.match(stderr, /--upscale-resolution 1080/);
+  assert.equal(state?.lastVideoProject ?? null, null);
+});
+
+test('FlashVSR refuses sources outside the public limits before upload', () => {
+  const tooLarge = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1920, height: 1080 });
+  const large = runCli(['--upscale-video', tooLarge.video], { FFPROBE_PATH: tooLarge.fakeFfprobe });
+  assert.equal(large.exitCode, 1);
+  assert.match(large.stderr, /up to 768px on the short edge/);
+  assert.equal(large.state?.lastVideoProject ?? null, null);
+
+  const tooLong = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, nb_read_frames: '400' });
+  const long = runCli(['--upscale-video', tooLong.video], { FFPROBE_PATH: tooLong.fakeFfprobe });
+  assert.equal(long.exitCode, 1);
+  assert.match(long.stderr, /up to 362 frames and about 15 seconds/);
+  assert.equal(long.state?.lastVideoProject ?? null, null);
+});
+
+test('--upscale-video rejects prompts, counts, timing overrides, and mixed modes', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const cases = [
+    [['--upscale-video', video, 'make it cinematic'], /promptless/],
+    [['--upscale-video', video, '-n', '2'], /exactly one output/],
+    [['--upscale-video', video, '--video'], /cannot be combined/],
+    [['--upscale-video', video, '--upscale', SCREENSHOT_FIXTURE], /cannot be combined/],
+    [['--upscale-video', video, '--fps', '30'], /keeps the source frames/],
+    [['--upscale-video', video, '--upscale-resolution', '2160'], /must be 1080 or 1440/],
+    [['--upscale-resolution', '1080', 'a prompt'], /requires --upscale-video/],
+  ];
+  for (const [args, pattern] of cases) {
+    const { exitCode, stderr, state } = runCli(args, { FFPROBE_PATH: fakeFfprobe });
+    assert.equal(exitCode, 1, `expected failure for ${args.join(' ')}`);
+    assert.match(stderr, pattern, args.join(' '));
+    assert.equal(state?.lastVideoProject ?? null, null);
+  }
+});
+
+test('--upscale-video explains the FlashVSR availability refusal', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, stderr } = runCli(['--upscale-video', video], {
+    FFPROBE_PATH: fakeFfprobe,
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: 'FlashVSR video upscaling is not available yet. Please try again later.'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /FlashVSR video upscaling is not available yet/);
+  assert.match(stderr, /nothing was charged/);
+});
+
 test('Krea identity edit preserves explicitly supplied execution controls', () => {
   const { exitCode, state } = runCli([
     '-c', SCREENSHOT_FIXTURE,

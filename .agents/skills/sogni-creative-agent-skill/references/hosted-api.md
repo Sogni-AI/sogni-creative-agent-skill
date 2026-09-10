@@ -61,7 +61,8 @@ whenever latency or cost rules out an LLM round-trip.
 - Preserve exact image prompts, visible lettering, chosen models, source
   selection, aspect ratio, and the latest requested duration. New tasks do not
   inherit settings from unrelated previous renders. A pure size increase uses
-  `upscale_image`; editing requires an actual source reference.
+  `upscale_image` for images and `upscale_video` for videos; editing requires
+  an actual source reference.
 - Separate image variations need `numberOfVariations` and a complete Dynamic
   Prompt branch per output. Repeat shared text, branding, dialogue, and loop
   motion in every affected branch. A single storyboard sheet instead needs all
@@ -123,7 +124,7 @@ requests keep their existing timeouts.
 
 - `creative-tools` — the public API default when `sogni_tools` is omitted or
   true. Generation/editing tools (`generate_image`, `generate_video`,
-  `generate_music`, `generate_speech`, `edit_image`, `upscale_image`, `apply_style`, `restore_photo`,
+  `generate_music`, `generate_speech`, `edit_image`, `upscale_image`, `upscale_video`, `apply_style`, `restore_photo`,
   `refine_result`, `animate_photo`, `change_angle`, `video_to_video`,
   `stitch_video`, `orbit_video`, `dance_montage`, `sound_to_video`,
   `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles`),
@@ -146,6 +147,14 @@ For a pure resolution increase, call `upscale_image` with one source image and
 either `scale: 2|3|4` or `targetLongestEdge`. Use `7680` for 8K or `15360` for
 16K. The promptless NVIDIA RTX VSR path preserves the source aspect ratio,
 aligns both output edges to 8px, and returns JPG when the target exceeds 8K.
+
+For a pure resolution increase of a video, call `upscale_video` with
+`sourceVideoIndex` (generated results are 0-based; -1 is the first upload) and
+an optional `targetResolution` of 1080 or 1440. The promptless FlashVSR path
+keeps every frame, the frame rate, the aspect ratio, and the audio; the server
+reads the source metadata itself, so the model never supplies frames or fps.
+It cannot produce 4K, and it is not a substitute for `video_to_video` when the
+user asks a generative model such as Seedance to re-render the clip.
 
 ## --durable-chat (`POST /v1/chat/runs`)
 

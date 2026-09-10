@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports promptless RTX VSR image upscaling through 16K, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.40.1"
   homepage: https://sogni.ai
@@ -173,6 +173,10 @@ sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 4096 -o ./upsc
 sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 7680 -o ./upscaled-8k.png
 sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 15360 -o ./upscaled-16k.jpg
 
+# FlashVSR video upscale (promptless; 1440p by default, 1080p below 720p sources; keeps every frame, fps, audio)
+sogni-agent -q --upscale-video /path/to/clip.mp4 -o ./clip-1440p.mp4
+sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-resolution 1080 -o ./clip-1080p.mp4
+
 # Photobooth (face transfer — new portrait from a face photo)
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
@@ -274,6 +278,8 @@ sogni-agent doctor --json
 | `--upscale <path\|url>` | Promptless deterministic RTX VSR upscale | - |
 | `--upscale-scale 2\|3\|4` | Upscale factor when no explicit target is supplied | 2 |
 | `--target-longest-edge <px>` | RTX VSR target longest edge, preserving aspect ratio | 512–15360 box |
+| `--upscale-video <path\|url>` | Promptless FlashVSR video upscale (needs local ffprobe) | - |
+| `--upscale-resolution 1080\|1440` | FlashVSR output short edge | 1440 (1080 below 720p) |
 | `-m <id>` | Explicit model | `z_image_turbo_bf16` |
 | `-w` / `-h` | Width / height | 512×512 |
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
@@ -309,6 +315,7 @@ sogni-agent doctor --json
 ### Upscaling vs. generative editing
 
 - For a pure resolution increase that must preserve the source composition, use `--upscale` in direct CLI mode or `upscale_image` on hosted tool surfaces. RTX VSR is deterministic and promptless: never invent a prompt, and never route this request through `restore_photo`, `refine_result`, or `edit_image`.
+- For a pure resolution increase of an existing video (upscale, sharpen, HD/1080p/1440p/2K copy), use `--upscale-video` in direct CLI mode or `upscale_video` on hosted tool surfaces. FlashVSR is promptless and keeps every frame, the frame rate, the aspect ratio, and the audio. Never route it through `video_to_video` or `generate_video` unless the user names a generative model such as Seedance for a re-render. Output is 1080p or 1440p only — say so if the user asks for 4K. Sources must be ≤768px on the short edge (1440p needs ≥720px, 1080p ≥540px), ≤362 frames (~15 s), 1–60 fps, and ≤100 MB.
 - `--upscale-scale` accepts 2, 3, or 4; `--target-longest-edge` overrides it. The CLI derives an aspect-preserving target box and aligns both edges to the worker's 8-pixel step. Both output edges must remain within 512–15360px. Targets above 7680px use JPG so 16K results remain practical to transfer and display. If a scale would make the short edge smaller than 512px, the CLI reports the minimum valid `--target-longest-edge` instead of stretching the image; aspect ratios that cannot fit the box are rejected.
 
 ### Segmentation and 3D reconstruction

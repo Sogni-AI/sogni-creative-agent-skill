@@ -73,6 +73,24 @@ fits the result inside the requested box without cropping or stretching. Both
 16K; targets above 7680px return JPG. If a scale leaves the short edge below
 512px, use the minimum target longest edge reported by the CLI/tool.
 
+### Video upscaling
+
+| Model | Kind | Use Case |
+|-------|------|----------|
+| `flashvsr_v1.1_tiny_long_bf16` | Video job | Promptless FlashVSR v1.1 upscale of one finished video to 1080p or 1440p |
+
+FlashVSR is not a generation model. Invoke it with
+`sogni-agent --upscale-video <path|url>` (optionally
+`--upscale-resolution 1080|1440`), or use the hosted `upscale_video` tool with
+`sourceVideoIndex` and an optional `targetResolution`. The output short edge
+becomes 1080 or 1440 (default 1440; 1080 when the source is below 720p) while
+the aspect ratio, every frame, the exact frame rate, and the original audio are
+kept; nothing is trimmed, cropped, restyled, or interpolated. Sources must be
+at most 768px on the short edge, 1-362 frames (about 15 seconds), 1-60 fps,
+SDR with square pixels, and 100 MB or less; 1440p needs a source short edge of
+at least 720px and 1080p at least 540px. 4K is not available. The direct CLI
+reads the exact frame count and rate with a local ffprobe.
+
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
 `krea2_turbo_fp8_scaled`.

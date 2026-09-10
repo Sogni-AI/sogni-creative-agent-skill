@@ -903,7 +903,7 @@ With an active subscription, the CLI also skips its client-side "insufficient SP
 
 ### Free-trial access
 
-Trials include evaluation limits on generation volume, media size, and API access. Full plan limits apply once the trial converts to paid. Cancelling during the trial ends Unlimited access immediately and prevents the first charge.
+Trials include evaluation limits on generation volume, media size, and API access. Full plan limits apply once the trial converts to paid. Cancelling during the trial prevents the first charge and keeps trial access, with the same trial limits, until the original trial end date.
 
 ### Fair-use scheduling
 
@@ -918,7 +918,7 @@ Actual throughput varies with demand, available Supernet capacity, and fair-use 
 
 - **Active / trialing:** covered renders run normally.
 - **Cancellation (paid):** Unlimited access continues until the end of the period already paid for; it simply does not renew.
-- **Cancellation (during trial):** access ends immediately and no charge is made.
+- **Cancellation (during trial):** no charge is made, and trial access continues until the original trial end date. Cancelling does not extend the trial or make the account eligible for another one.
 - **Grace / payment retry:** if a renewal payment fails, the provider retries it and **Unlimited access is paused** during the retry window — covered renders are declined with a renewal-retry error, and access resumes automatically once payment succeeds. You can keep rendering with Spark or SOGNI in the meantime.
 - **Refunds:** mid-term refunds are not offered by default; App Store / Google Play purchases follow the store's refund process, and Stripe (web) refunds are handled by Sogni support.
 

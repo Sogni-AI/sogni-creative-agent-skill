@@ -114,7 +114,7 @@ function runCliAsync(args, envOverrides = {}) {
   });
 }
 
-async function withTestApiServer(fn) {
+async function withTestApiServer(fn, { durableEvents = [] } = {}) {
   const requests = [];
   const server = createServer((req, res) => {
     let body = '';
@@ -140,6 +140,18 @@ async function withTestApiServer(fn) {
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
       if (requestUrl.pathname === '/v1/account/me' && req.method === 'GET') {
         res.end(JSON.stringify({ status: 'success', data: { username: 'test-user' } }));
+        return;
+      }
+      if (requestUrl.pathname === '/v1/chat/runs' && req.method === 'POST') {
+        res.end(JSON.stringify({ status: 'success', data: { run: { runId: 'run_test' } } }));
+        return;
+      }
+      if (requestUrl.pathname === '/v1/chat/runs/run_test/events/stream' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'text/event-stream');
+        for (const [index, event] of durableEvents.entries()) {
+          res.write(`id: ${index + 1}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+        }
+        res.end();
         return;
       }
       if (
@@ -3811,6 +3823,80 @@ test('--durable-chat without SDK transport enabled fails with a clear error', as
     assert.equal(payload.success, false);
     assert.match(payload.errorCode || '', /DURABLE_CHAT/);
   });
+});
+
+test('--durable-chat reconciles streamed and completed assistant messages across rounds', async () => {
+  const durableEvents = [
+    { type: 'assistant_message_delta', payload: { content: 'First ' } },
+    { type: 'assistant_message_delta', payload: { content: 'draft.' } },
+    { type: 'assistant_message_completed', payload: { content: 'First draft.' } },
+    { type: 'assistant_message_completed', payload: { content: '\nCompletion only.' } },
+    { type: 'assistant_message_delta', payload: { content: '\nPartial' } },
+    { type: 'assistant_message_completed', payload: { content: '\nPartial with final suffix.' } },
+    { type: 'assistant_message_delta', payload: { content: '\nLast delta.' } },
+    { type: 'run_completed', payload: { status: 'completed' } },
+  ];
+  const expected = 'First draft.\nCompletion only.\nPartial with final suffix.\nLast delta.';
+  for (const json of [true, false]) {
+    await withTestApiServer(async (apiBaseUrl, requests) => {
+      const result = await runCliAsync([
+        '--durable-chat', '--api-base-url', apiBaseUrl,
+        ...(json ? ['--json'] : []), 'Write a draft.',
+      ], {
+        SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+        SOGNI_SKILL_USE_SDK_TRANSPORT: '1',
+        SOGNI_AGENT_TEST_HOSTED_API_BASE: apiBaseUrl,
+      });
+      assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
+      assert.equal(requests.filter(request => request.url === '/v1/chat/runs').length, 1);
+      if (json) {
+        const payload = JSON.parse(result.stdout.trim());
+        assert.equal(payload.content, expected);
+        assert.equal(payload.status, 'completed');
+      } else {
+        assert.ok(result.stdout.includes(expected), result.stdout);
+        assert.equal(result.stdout.split('First draft.').length - 1, 1);
+        assert.equal(result.stdout.split('Completion only.').length - 1, 1);
+      }
+    }, { durableEvents });
+  }
+});
+
+test('--durable-chat uses the authoritative completion snapshot in JSON output', async () => {
+  await withTestApiServer(async (apiBaseUrl) => {
+    const result = await runCliAsync([
+      '--durable-chat', '--api-base-url', apiBaseUrl, '--json', 'Write a draft.',
+    ], {
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      SOGNI_SKILL_USE_SDK_TRANSPORT: '1',
+      SOGNI_AGENT_TEST_HOSTED_API_BASE: apiBaseUrl,
+    });
+    assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout.trim()).content, 'Final draft.');
+  }, { durableEvents: [
+    { type: 'assistant_message_delta', payload: { content: 'Earlier draft.' } },
+    { type: 'assistant_message_completed', payload: { content: 'Final draft.' } },
+    { type: 'run_completed', payload: { status: 'completed' } },
+  ] });
+});
+
+test('--durable-chat rejects unsupported tool restrictions before making requests', async () => {
+  for (const flags of [['--no-api-tool-execution'], ['--api-tools', 'none'], ['--api-tools', 'creative-tools']]) {
+    await withTestApiServer(async (apiBaseUrl, requests) => {
+      const result = await runCliAsync([
+        '--durable-chat', '--api-base-url', apiBaseUrl, '--json', ...flags, 'Make an image.',
+      ], {
+        SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+        SOGNI_SKILL_USE_SDK_TRANSPORT: '1',
+        SOGNI_AGENT_TEST_HOSTED_API_BASE: apiBaseUrl,
+      });
+      assert.notEqual(result.exitCode, 0);
+      const payload = JSON.parse(result.stdout.trim());
+      assert.equal(payload.errorCode, 'DURABLE_CHAT_UNSUPPORTED_TOOL_OPTIONS');
+      assert.match(payload.error, /Use --api-chat/);
+      assert.equal(requests.length, 0);
+    });
+  }
 });
 
 test('--api-chat honors an explicit HTTP response timeout', async () => {

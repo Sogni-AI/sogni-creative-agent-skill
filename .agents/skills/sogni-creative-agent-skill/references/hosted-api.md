@@ -158,6 +158,16 @@ deltas plus de-duplicated per-job progress / ETA / result lines from hosted
 run events. The SDK exposes `sogni.chat.runs.{create, get, cancel,
 streamEvents}`.
 
+Durable chat runs the full creative agent with server-side tool execution.
+Use `--api-chat` for `--api-tools creative-tools|none` or
+`--no-api-tool-execution`; durable mode rejects those options before starting a
+run rather than silently ignoring them. Completed assistant snapshots reconcile
+with streamed text so each message appears once, including multi-round turns.
+
+Review returned storyboard titles, visible text, and timings against the request
+before rendering. Hosted draft generation can paraphrase supplied scene titles;
+correct the draft first when exact wording matters.
+
 ## --api-workflow (`POST /v1/creative-agent/workflows`)
 
 Durable, async workflow records with event streaming and cancellation. The

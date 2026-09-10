@@ -7302,6 +7302,11 @@ function chatRunWaitingStatus(type) {
 }
 
 async function runApiChat(log) {
+  if (options.durableChat && (options.apiTools !== 'creative-agent' || options.apiToolExecution === false)) {
+    const error = new Error('--durable-chat does not support --api-tools overrides or --no-api-tool-execution. Use --api-chat for restricted tools or planning without tool execution.');
+    error.code = 'DURABLE_CHAT_UNSUPPORTED_TOOL_OPTIONS';
+    throw error;
+  }
   const creds = loadCredentials();
   const apiKey = requireApiKeyCredentials(creds, '--api-chat');
   const apiMediaRefs = getApiModeMediaReferences();
@@ -7432,6 +7437,7 @@ async function runApiChatDurable(log, { apiKey, body, workloadAttribution }) {
   const restBase = new URL(restEndpoint).origin;
 
   const assistantParts = [];
+  let currentAssistantText = '';
   const toolCalls = [];
   const workflows = [];
   let runId = null;
@@ -7471,12 +7477,23 @@ async function runApiChatDurable(log, { apiKey, body, workloadAttribution }) {
       for await (const event of helpers.sdkChatRunsStreamEvents(client, runId, {})) {
         const type = event?.type || event?.event || '';
         const payload = chatRunEventPayload(event);
-        // Stream assistant message deltas as they arrive.
-        const delta = chatRunAssistantDelta(type, payload);
-        if (typeof delta === 'string' && delta) {
-          assistantParts.push(delta);
+        // Completion events contain a full message snapshot, not another
+        // delta. Reconcile the current message before starting the next round.
+        if (type === 'assistant_message_completed') {
+          const completedText = typeof payload?.content === 'string' ? payload.content : currentAssistantText;
           if (!options.json) {
-            process.stdout.write(delta);
+            const remainder = completedText.startsWith(currentAssistantText)
+              ? completedText.slice(currentAssistantText.length)
+              : `\n${completedText}`;
+            if (remainder) process.stdout.write(remainder);
+          }
+          assistantParts.push(completedText);
+          currentAssistantText = '';
+        } else {
+          const delta = chatRunAssistantDelta(type, payload);
+          if (typeof delta === 'string' && delta) {
+            currentAssistantText += delta;
+            if (!options.json) process.stdout.write(delta);
           }
         }
         // Per-job progress / ETA / completion / error log lines for
@@ -7561,6 +7578,7 @@ async function runApiChatDurable(log, { apiKey, body, workloadAttribution }) {
     },
   );
 
+  if (currentAssistantText) assistantParts.push(currentAssistantText);
   const content = assistantParts.join('');
   if (options.json) {
     console.log(JSON.stringify({

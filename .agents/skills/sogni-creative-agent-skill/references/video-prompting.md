@@ -202,6 +202,85 @@ supplies no words, author one concise line that realizes that request. If there
 is no vocal intent, do not invent speech. Use a compound ID such as `(S1,S2)`
 only when already-numbered speakers vocalize together.
 
+### Writing the body the way the Base model reads it
+
+Audited 2026-09-10 against MiniMax's `VIDEO_PROMPT_WRITING_GUIDE_base_en.md`
+(the guide the h3-prompt-writing skill wraps) and the LightX2V rewriter that
+was trained on the same rewrite policy. The open-weights H3-Base checkpoint
+reads the prompt directly with no hosted Context-IR rewrite in front of it, so
+every sentence is model input. Everything below is what the official examples
+do and never deviate from:
+
+- **Open `[Shot 1]` with the medium and look as concrete facts** (`Live-action,
+  cinematic`, `2D-animated`, `3D CG`, `claymation`, `watercolor`, `vintage
+  film`) plus the initial composition. In frame-anchored modes derive the look
+  from the picture. Genre, mood, audience, and intent labels (`horror`, `eerie`,
+  `adult`, `tense`, `jump scare`) are not visible and never appear in an
+  official example; write the light, surfaces, distances, movements, and sounds
+  that produce them.
+- **Every sentence is a depiction.** The guide's rule is that every detail must
+  correspond to something visible or audible. Never write notes to the model
+  (`preserve believable anatomy`, `keep the foley prominent`, `hard cut, no
+  morph or dissolve`, `hold six frames only`, `this anchor is excluded from the
+  presentation`) and never shout in capitals.
+- **State exclusions as positive facts.** There is no negative field and the
+  contract has no negation grammar, so `no people, faces or words` names the
+  things it tries to remove. Write `the hall is empty and still`, `the walls are
+  bare`, `the air is clear and sharply lit`. Keep a user-supplied exclusion only
+  when it cannot be stated positively, phrased once. `non_diegetic_music: N/A`
+  is the reliable way to keep score out even when the rest of the structure is
+  loose.
+- **Clock times exist only on cut markers.** `[Shot 2] At 00:03.500, the camera
+  cuts to …` is the only place a time appears. Inside a shot, order events with
+  words (`early in the shot`, `as the doors part`, `toward the end`). In-shot
+  ranges such as `From 00:02.000 to 00:04.000` are not H3 syntax; the shaper now
+  flags them.
+- **Camera moves use the official vocabulary** as natural prose: `Zoom In/Out`,
+  `Push In/Pull Out`, `Pan Left/Right`, `Truck Left/Right`, `Tilt Up/Down`,
+  `Pedestal Up/Down`, `Arc Shot`, `Tracking Shot`, `Static Shot`, `Shake
+  Slightly/Strongly`, `POV`, `Roll Clockwise/Counterclockwise`, with `with
+  small/large amplitude` and `at slow/fast speed` only when they matter. One
+  primary move per shot. First-person coverage is a `POV shot`; `handheld` reads
+  as camera shake, so write it only when shake is wanted.
+- **Frame-anchored modes describe the path, not the pictures.** The model sees
+  every attached picture; describing one back at length, or adding objects,
+  text, fluids, or figures that are not in it, produces crossfades and invented
+  props. I2VA: first-frame anchor → action onset → continuous development →
+  result or reaction. FL2VA: first-frame state → observable intermediate
+  changes → progressively narrowing differences → last-frame state, in **one
+  continuous shot** unless the user explicitly asks for cuts; begin `in the
+  position and framing established by Picture 1`, carry the identity anchors
+  that must stay fixed into the motion sentences, and end by settling `into the
+  pose, spacing, and composition established by Picture 2 at the end of the
+  shot`. L2VA: plausible preceding state → explicit action and transition path →
+  gradual convergence in the final shot → last-frame landing on `<Picture 1>`.
+  Exact composition matching applies only at a picture's assigned timestamp.
+- **Bind every vocal line to its speaker in the same sentence:**
+  `The young woman with a quiet, breathy voice (S1) says: <d>[English] I get
+  off at the next station.</d>` and `The two children (S1,S2) shout together,
+  <d>[English] Wait for us!</d>`.
+- **Length.** Official bodies run roughly 150–450 words; Ref2VA
+  `detailed_description` targets 350–500. Long is fine when every sentence is a
+  visible or audible event.
+
+### Worked example — first frame → last frame
+
+```text
+User ask (two uploaded stills): "the elevator doors open onto the laundry and we walk in"
+
+sogni-agent -q --video -m minimax-h3-flf2v-balanced --ref ./elevator.png --ref-end ./laundry.png --duration 8 -w 1344 -h 768 -o ./press-b.mp4 "<prompt below>"
+```
+
+```text
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a POV shot at standing eye level begins in the position and framing established by Picture 1, facing the closed brass elevator doors from inside the small wood-panelled vestibule with its dark red velvet panels, marble floor and crystal ceiling lamp. Early in the shot the lamp flickers twice and the floor shudders as the car settles. The brass doors slide apart with a slow steady motion, and bright white fluorescent light from beyond spills across the marble floor and the brass door frame. Through the widening gap the long white-tiled laundry hall comes into view: the raised tiled walkway with steel rails, the row of round steel washing-machine doors along the left wall, and the open steel service door with its amber wall lamp at the far right. The camera pushes in with large amplitude at slow speed through the open doorway, the brass frame sliding out of the picture on both sides as the tiled floor takes over the foreground and the red brake lever comes into view at the near left. Toward the end the differences narrow as the camera glides forward and settles into the composition, spacing and lighting established by Picture 2 at the end of the shot, with the machines still, the grey curtains hanging straight and the hall empty and quiet.
+
+overall_soundscape: A low electrical hum from the crystal lamp, a muffled cable groan and a soft mechanical shudder as the car settles, then the smooth metallic slide of the brass doors parting. Beyond the doors an even ventilation hum and the buzz of fluorescent tubes grow louder over slow footsteps that move from marble onto tile.
+
+non_diegetic_music: N/A
+```
+
 ### Worked example — text-to-video
 
 ```text
@@ -358,8 +437,9 @@ How the reference pictures align with the target video — Picture 1 (from Shot 
 ```
 
 `N` is the index of the actual final shot (`Shot 1` for the usual single-shot
-transition), and `S.SS` is the effective duration to exactly two decimal places
-— `10.13` for 243 frames at 24 fps (243 ÷ 24 = 10.125, rounded up).
+transition; FL2VA favours one continuous shot and cuts only when the user asks),
+and `S.SS` is the effective duration to exactly two decimal places — `10.13` for
+243 frames at 24 fps (243 ÷ 24 = 10.125, rounded up).
 
 ### MiniMax H3 reference-to-video (r2v)
 

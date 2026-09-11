@@ -1377,8 +1377,6 @@ const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
 const VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE = 768;
 // Source area counted in 64-pixel blocks: about 1344x768, or 768x1344 in portrait.
 const VIDEO_UPSCALE_MAX_SOURCE_BLOCK_PIXELS = 1344 * 768;
-const VIDEO_UPSCALE_MAX_FRAMES = 362;
-const VIDEO_UPSCALE_MAX_DURATION_SECONDS = 362 / 24;
 const VIDEO_UPSCALE_MIN_FPS = 1;
 const VIDEO_UPSCALE_MAX_FPS = 60;
 const VIDEO_UPSCALE_MAX_BYTES = 100 * 1024 * 1024;
@@ -1505,12 +1503,7 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
       details: { fps }
     });
   }
-  if (frames > VIDEO_UPSCALE_MAX_FRAMES || frames / fps > VIDEO_UPSCALE_MAX_DURATION_SECONDS + 0.001) {
-    fatalCliError(
-      `This video is ${frames} frames (${(frames / fps).toFixed(2)} s); video upscaling accepts up to ${VIDEO_UPSCALE_MAX_FRAMES} frames and about 15 seconds.`,
-      { code: 'INVALID_UPSCALE_SOURCE', details: { frames, fps } }
-    );
-  }
+  // The server owns the maximum clip length; submit the exact source count.
   const rotated = Array.isArray(stream?.side_data_list)
     && stream.side_data_list.some((item) => Number(item?.rotation || 0) % 360 !== 0);
   if (!['1:1', 'N/A', undefined].includes(stream?.sample_aspect_ratio) || rotated) {

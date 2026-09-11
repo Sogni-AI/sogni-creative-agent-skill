@@ -87,10 +87,12 @@ becomes 1080 or 1440 (default 1440; 1080 when the source is below 720p) while
 the aspect ratio, every frame, the exact frame rate, and the original audio are
 kept; nothing is trimmed, cropped, restyled, or interpolated. Sources must be
 at most 768px on the short edge and about 1344x768 pixels overall (768x1344 in
-portrait), 1-362 frames (about 15 seconds), 1-60 fps,
+portrait), 1-60 fps,
 SDR with square pixels, and 100 MB or less; 1440p needs a source short edge of
 at least 720px and 1080p at least 540px. 4K is not available. The direct CLI
-reads the exact frame count and rate with a local ffprobe.
+reads the exact frame count and rate with a local ffprobe. The server sets the
+maximum clip length; do not quote a fixed limit. Relay a server rejection if
+the source is too long, without trimming it or switching to a generative tool.
 
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID

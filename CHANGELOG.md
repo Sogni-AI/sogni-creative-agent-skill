@@ -8,6 +8,8 @@
 ### Bug Fixes
 
 * Include the shared attribution and version modules in the standalone Claude Desktop bundle, with a startup check that runs outside the repository.
+* Align the public runtime dependencies with Intelligence Client 3.29.1 and Sogni Client 5.39.1.
+* Let the server decide FlashVSR's maximum clip length, preserving the exact source timing and relaying any length rejection to the user.
 
 ## [3.41.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.40.1...v3.41.0) (2026-09-10)
 

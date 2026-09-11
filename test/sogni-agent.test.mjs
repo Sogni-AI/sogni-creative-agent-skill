@@ -942,11 +942,35 @@ test('FlashVSR refuses sources outside the public limits before upload', () => {
   assert.match(wide.stderr, /up to about 1344×768 pixels, or 768×1344 in portrait/);
   assert.equal(wide.state?.lastVideoProject ?? null, null);
 
-  const tooLong = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, nb_read_frames: '400' });
-  const long = runCli(['--upscale-video', tooLong.video], { FFPROBE_PATH: tooLong.fakeFfprobe });
-  assert.equal(long.exitCode, 1);
-  assert.match(long.stderr, /up to 362 frames and about 15 seconds/);
-  assert.equal(long.state?.lastVideoProject ?? null, null);
+});
+
+test('FlashVSR submits exact clip timing without a fixed local length limit', () => {
+  for (const [frames, fps] of [[400, 24], [200, 10]]) {
+    const { video, fakeFfprobe } = createVideoUpscaleFixture({
+      ...VIDEO_UPSCALE_720P_STREAM,
+      nb_read_frames: String(frames),
+      avg_frame_rate: `${fps}/1`,
+      r_frame_rate: `${fps}/1`,
+    });
+    const result = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.equal(result.state.lastVideoProject.frames, frames);
+    assert.equal(result.state.lastVideoProject.fps, fps);
+  }
+});
+
+test('FlashVSR relays the server clip length refusal', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({
+    ...VIDEO_UPSCALE_720P_STREAM,
+    nb_read_frames: '400',
+  });
+  const message = 'Source video exceeds the server clip length limit.';
+  const result = runCli(['--json', '--upscale-video', video], {
+    FFPROBE_PATH: fakeFfprobe,
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: message,
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(JSON.parse(result.stdout).error, message);
 });
 
 test('--upscale-video rejects prompts, counts, timing overrides, and mixed modes', () => {

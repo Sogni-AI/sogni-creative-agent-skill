@@ -1,3 +1,9 @@
+## [3.44.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.44.0) (2026-09-11)
+
+### Features
+
+* Add the beats-and-voices lessons to the MiniMax H3 reference: pace dramatic requests by beats with a final shot that may cut to the closing frame's composition, keep continuous motion for continuous action, write a fall or a bite as the physical act, describe each voice with accent, pitch, timbre and speaking rate, place dialogue after the action that motivates it, and say whose hands are in a first-person frame.
+
 ## [3.43.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.42.0...v3.43.0) (2026-09-10)
 
 ### Features

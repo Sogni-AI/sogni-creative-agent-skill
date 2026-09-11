@@ -99,13 +99,13 @@
     "sam-segmentation.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "3.30.1",
+    "@sogni-ai/sogni-intelligence-client": "3.31.1",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.42.0"
+    "@sogni-ai/sogni-client": "5.44.1"
   },
   "openclaw": {
     "extensions": [

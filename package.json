@@ -95,13 +95,13 @@
     "sogni-agent.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "3.28.5",
+    "@sogni-ai/sogni-intelligence-client": "3.29.0",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.37.0"
+    "@sogni-ai/sogni-client": "5.38.0"
   },
   "openclaw": {
     "extensions": [

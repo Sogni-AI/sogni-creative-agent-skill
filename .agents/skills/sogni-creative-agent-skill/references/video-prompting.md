@@ -263,6 +263,35 @@ do and never deviate from:
   `detailed_description` targets 350–500. Long is fine when every sentence is a
   visible or audible event.
 
+### Beats and voices (2026-09-11 review lessons)
+
+Tested on a branching horror route the same day, on top of the rules above:
+
+- **Pace by beats.** Something new every 1.5–2.5 seconds: an action, a reaction,
+  a reveal, a line. A single slow shot that "settles into Picture 2" reads as
+  boring and lands with a crossfade. A dramatic request is cut into beats
+  (`[Shot 2] At 00:01.500, the camera cuts to …`); its final shot may cut to
+  the Picture 2 composition and hold with a live action, which lands cleanly.
+- **But not everything is a cut.** Keep continuous motion when the action is
+  continuous, never cut a simple movement into pieces, and if both pictures
+  share one camera position the camera does not move at all (a curtain
+  dropping needs a static shot, not a tracking shot away).
+- **Write physical acts as acts.** A fall is the rail giving, the wall of
+  windows streaking upward, the ground rushing in. A bite is the jaws snapping
+  shut over the picture. A shove is two palms filling the frame. "His lips
+  part as he bends closer" produced no bite; "You brought it back" followed by
+  a cut to an aftermath still produced no fall.
+- **Describe the voice, not just the mood.** At a speaker's first line give
+  accent, pitch, timbre and speaking rate: `The woman (S1), speaking in a
+  plain American accent with a light, mid-pitched voice at a quick, breathless
+  pace, says: <d>[English] …</d>`. "A bright, breathless voice" alone drifted
+  to a British accent between takes.
+- **Dialogue after the action that motivates it.** She says "That's my dad"
+  after she has picked the photograph up, in the shot where she holds it.
+- **Whose hands.** In first-person coverage say whose hands are in frame
+  ("both his palms fill the frame as he shoves"); "hands seizing the front of
+  the cardigan" was rendered as the attacker's own point of view.
+
 ### Worked example — first frame → last frame
 
 ```text

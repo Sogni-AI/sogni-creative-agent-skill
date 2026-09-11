@@ -1,3 +1,15 @@
+## [3.43.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.42.0...v3.43.0) (2026-09-10)
+
+### Features
+
+* Teach MiniMax H3 prompt writing from MiniMax's official Base guide: `[Shot 1]` opens with the picture's own look rather than a genre label, every sentence depicts something seen or heard, exclusions are positive facts, clock times live only on cut markers, first-to-last-frame prompts describe the path between the pictures in one continuous shot, and each vocal line binds to its speaker. Adds a first-to-last-frame worked example.
+* The bundled creative-agent runtime (1.60.0) applies the same rules and flags in-shot clock times when it writes MiniMax H3 prompts.
+
+### Bug Fixes
+
+* `--upscale-video` relays the server's own refusal when a source is too long, with a hint to trim or split the clip, for direct and wrapped SDK errors.
+* Align the public runtime with Intelligence Client 3.29.2 and Sogni Client 5.40.0.
+
 ## [3.42.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.41.0...v3.42.0) (2026-09-10)
 
 ### Features

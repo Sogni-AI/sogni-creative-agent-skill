@@ -1,3 +1,19 @@
+## [3.45.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.45.0) (2026-09-11)
+
+3.44.0 was prepared but never published to npm; this release carries its changes too.
+
+### Features
+
+* Add GPT Image 2.5 Sunburst and Flare (`-m gpt-image-2.5-sunburst`, `-m gpt-image-2.5-flare`) for text-to-image and edits with up to 16 ordered `--context` references.
+* Add `--image-quality low|medium|high` for every GPT Image model, plus `xhigh|max` on 2.5. Auto quality is rejected: Sogni never lets the provider choose the quality.
+* Add `--image-background` (transparent on 2.5, PNG or WebP), `--image-output-compression 0-100` (JPEG or WebP) and `--image-mask`, a PNG alpha mask of the first `--context` image for edits.
+* GPT Image defaults to 1024x1024 and a 10-minute timeout, and rejects sizes outside the provider's bounds before submitting.
+* The MiniMax H3 reference keeps one continuous shot as the default, with beats and multi-shot sequences for when the context calls for them.
+
+### Bug Fixes
+
+* Align the public runtime with Intelligence Client 3.30.1 and Sogni Client 5.42.0.
+
 ## [3.44.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.44.0) (2026-09-11)
 
 ### Features

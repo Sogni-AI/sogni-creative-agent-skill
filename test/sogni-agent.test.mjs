@@ -783,6 +783,42 @@ test('Krea identity edit accepts two context images with worker-owned defaults',
   assert.equal(state.lastEditProject.scheduler, undefined);
 });
 
+test('SAM 3 sends original dimensions, point polarity and a safe lossless mask request', () => {
+  const { exitCode, state, stderr } = runCli(['--segment', SCREENSHOT_FIXTURE, '--segment-point', '0.4,0.6', '--segment-exclude', '0,1']);
+  assert.equal(exitCode, 0, stderr);
+  const config = state.lastImageProject;
+  assert.equal(config.modelId, 'sam3_image_segment_bf16');
+  assert.deepEqual(config.sam3Prompt.points, [{ x: 0.4, y: 0.6, label: 'positive' }, { x: 0, y: 1, label: 'negative' }]);
+  assert.equal(config.numberOfMedia, 1);
+  assert.equal(config.steps, 1);
+  assert.equal(config.outputFormat, 'png');
+  assert.equal(config.disableNSFWFilter, false);
+  assert.ok(config.startingImage.data.length > 0);
+  assert.ok(config.width > 512);
+});
+
+test('SAM 3 whole-object text and box prompts preserve the original image', () => {
+  const { exitCode, state, stderr } = runCli(['--segment', SCREENSHOT_FIXTURE, '--segment-text', 'lantern', '--segment-box', '0.2,0.6,0.3,0.8']);
+  assert.equal(exitCode, 0, stderr);
+  assert.deepEqual(state.lastImageProject.sam3Prompt, { text: 'lantern', boxes: [{ x0: 0.2, y0: 0.6, x1: 0.3, y1: 0.8 }], threshold: 0.5, multimask: false });
+  assert.ok(state.lastImageProject.startingImage.data.length > 0);
+});
+
+test('SAM 3 rejects ambiguous modes and malformed coordinates before creating a project', () => {
+  for (const extra of [['--segment-point', 'NaN,0'], ['--segment-point', ',1'], ['--segment-point', '2,0'], ['--segment-exclude', '0,0'], ['--segment-text', 'door', '--video'], ['--segment-text', 'door', '--width', '512'], ['--segment-text', 'door', '--segment-point', '0.5,0.5'], ['--segment-text', 'x'.repeat(241)], ['--segment-box', '0,0,0,1'], ['--segment-box', '0,0,NaN,1']]) {
+    const { exitCode, state } = runCli(['--segment', SCREENSHOT_FIXTURE, ...extra]);
+    assert.equal(exitCode, 1);
+    assert.ok(!state?.lastImageProject);
+  }
+});
+
+test('SAM 3 refuses to share a run with a FlashVSR video upscale', () => {
+  const { exitCode, state, stdout, stderr } = runCli(['--segment', SCREENSHOT_FIXTURE, '--segment-text', 'door', '--upscale-video', SCREENSHOT_FIXTURE]);
+  assert.equal(exitCode, 1);
+  assert.match(`${stdout}${stderr}`, /--segment requires one original image/);
+  assert.ok(!state?.lastImageProject && !state?.lastVideoProject);
+});
+
 test('RTX VSR upscale is promptless and sends the source as startingImage', () => {
   const { exitCode, state, stderr } = runCli([
     '--upscale', SCREENSHOT_FIXTURE,

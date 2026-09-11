@@ -13,6 +13,7 @@ const mirroredReferences = [
   'krea2-loras.md',
   'loop-maker.md',
   'models.md',
+  'object-selection.md',
   'personas-memory.md',
   'private-mature-video.md',
   'seamless-tiling.md',

@@ -20,6 +20,9 @@ metadata:
 
 Generate images, video, and music through Sogni AI's decentralized GPU network.
 
+For SAM 3 object masks, read [references/object-selection.md](references/object-selection.md).
+Use `--segment` with an original still and normalized points or an object description.
+
 Invoke `sogni-agent-hermes` for every command in this skill. Fall back to
 `sogni-agent` only when the Hermes launcher is not on `PATH`. The two commands
 have identical flags and output; the Hermes launcher adds host attribution.

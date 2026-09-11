@@ -28,6 +28,7 @@ import {
   semanticWorkloadAttribution,
 } from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
+import { SAM3_MODEL_ID, segmentPoint, segmentBox, validateSegmentationPrompts, segmentationConfig } from './sam-segmentation.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
   runForegroundCheck as runUpdateCheckForeground,
@@ -2913,6 +2914,10 @@ const options = {
   outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
   upscaleImage: null, // Source image for promptless RTX VSR upscaling
+  segmentImage: null,
+  segmentPoints: [],
+  segmentBoxes: [],
+  segmentText: null,
   upscaleScale: 2,
   upscaleTargetLongestEdge: null,
   upscaleVideo: null, // Source video for promptless FlashVSR upscaling
@@ -3494,6 +3499,16 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.contextImages.push(raw);
     cliSet.context = true;
+  } else if (arg === '--segment') {
+    options.segmentImage = expandHomePath(requireFlagValue(args, i++, arg));
+  } else if (arg === '--segment-point' || arg === '--segment-exclude') {
+    try { options.segmentPoints.push(segmentPoint(requireFlagValue(args, i++, arg), arg === '--segment-point' ? 'positive' : 'negative')); }
+    catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
+  } else if (arg === '--segment-box') {
+    try { options.segmentBoxes.push(segmentBox(requireFlagValue(args, i++, arg))); }
+    catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
+  } else if (arg === '--segment-text') {
+    options.segmentText = requireFlagValue(args, i++, arg);
   } else if (arg === '--upscale') {
     const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
@@ -4160,6 +4175,11 @@ Image Options:
   --lora-strengths <n>  Comma-separated LoRA strengths
   -c, --context <path>  Context image for editing (can use multiple)
   --last-image          Use last generated image as context
+  --segment <path|url>  SAM 3 object selection; returns one original-size PNG mask
+  --segment-point <x,y> Include point, normalized 0–1; repeat to refine
+  --segment-exclude <x,y> Exclude point, normalized 0–1; repeat to refine
+  --segment-box <x0,y0,x1,y1> Object bounds, normalized 0–1
+  --segment-text <text> Object description; combine with boxes, never points
   --upscale <path|url>  Promptless NVIDIA RTX VSR upscale, up to 16K (one source image)
   --upscale-scale <n>   Enlarge longest edge by 2, 3, or 4 (default: 2)
   --target-longest-edge <px>  Explicit output longest edge, up to 15360 (overrides scale)
@@ -5403,6 +5423,10 @@ if (options.music) {
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 1800000; // 30 min for queued video work
   }
+} else if (options.segmentImage) {
+  if (options.model && options.model !== SAM3_MODEL_ID) fatalCliError(`--segment requires model ${SAM3_MODEL_ID}.`, { code: 'INVALID_ARGUMENT' });
+  options.model = SAM3_MODEL_ID;
+  if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 180000;
 } else if (options.upscaleImage) {
   if (options.model && options.model !== RTX_VSR_MODEL_ID) {
     fatalCliError(`--upscale requires model ${RTX_VSR_MODEL_ID}.`, {
@@ -5539,6 +5563,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.remixAudio &&
   !options.upscaleImage &&
   !options.upscaleVideo &&
+  !options.segmentImage &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -5577,7 +5602,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !wan3HasMediaInput && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !wan3HasMediaInput && !options.segmentImage && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -5590,6 +5615,17 @@ if (storyboardPlanUtilityAction && !options.prompt) {
 
 if (options.apiChat && !options.prompt && getApiModeMediaReferences().length === 0) {
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
+}
+
+if (options.segmentImage) {
+  if (options.prompt || options.video || options.music || options.upscaleImage || options.upscaleVideo || options.photobooth || options.contextImages.length || options.refImage || options.refImageEnd
+    || options.apiChat || options.apiWorkflowAction || options.multiAngle || options.noFilter || options.count !== 1 || cliSet.width || cliSet.height) {
+    fatalCliError('--segment requires one original image with selection points or --segment-text; omit generation prompts, resize, other generation modes and --no-filter.', { code: 'INVALID_ARGUMENT' });
+  }
+  try { validateSegmentationPrompts(options.segmentPoints, options.segmentText, options.segmentBoxes); }
+  catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
+} else if (options.segmentPoints.length || options.segmentBoxes.length || options.segmentText !== null) {
+  fatalCliError('Selection prompts require --segment <path|url>.', { code: 'INVALID_ARGUMENT' });
 }
 
 if (options.upscaleImage) {
@@ -13428,6 +13464,14 @@ async function main() {
       if (upscaleVideoResult?.error || upscaleVideoResult?.message) {
         throw annotateVideoUpscaleError(buildProjectResultError(upscaleVideoResult));
       }
+    } else if (options.segmentImage) {
+      log('Selecting the object with SAM 3...');
+      const bytes = await fetchMediaBuffer(options.segmentImage);
+      const dimensions = getImageDimensionsFromBuffer(bytes);
+      const config = segmentationConfig(bytes, dimensions, options.segmentPoints, options.segmentText, options.tokenType || 'spark', options.segmentBoxes);
+      options.width = config.width; options.height = config.height; options.outputFormat = 'png';
+      const result = trackProjectResult(await client.createImageProject(withBillingMode(config)));
+      if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.upscaleImage) {
       log(`Upscaling with ${RTX_VSR_MODEL_ID}...`);
       const sourceBuffer = await fetchMediaBuffer(options.upscaleImage);

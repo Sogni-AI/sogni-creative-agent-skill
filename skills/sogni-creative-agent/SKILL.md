@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent
-description: Generate and edit images, video, and music using Sogni AI's decentralized GPU network. Use for image generation or editing, first-frame/last-frame animation, video generation, music and soundtrack creation, personas, style transfer, and other Sogni Creative Agent workflows.
+description: Generate and edit images, video, and music using Sogni AI's decentralized GPU network. Use for image generation or editing, SAM 3 object masks, first-frame/last-frame animation, video generation, music and soundtrack creation, personas, style transfer, and other Sogni Creative Agent workflows.
 ---
 
 # Sogni Creative Agent

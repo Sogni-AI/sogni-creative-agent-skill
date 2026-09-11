@@ -27,6 +27,7 @@ It ships four ways:
 With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
+- select an object in an original image and return its SAM 3 mask (`--segment`; see the [object selection guide](references/object-selection.md))
 - create videos from text, images, first/last frames, audio, or source video (LTX-2.5), with LTX-2.3 retained for voice ID, transition, and 10Eros workflows
 - turn an image folder into a visually deduplicated, music-backed seamless loop with one plugin skill invocation
 - generate instrumental music or full songs with lyrics
@@ -670,6 +671,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Deterministic image upscaling through 16K | `rtx_vsr_pro` via `--upscale` |
 | Promptless video upscaling to 1080p/1440p | `flashvsr_v1.1_tiny_long_bf16` via `--upscale-video` |
+| Object masks from points, boxes, or a description | `sam3_image_segment_bf16` via `--segment` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |

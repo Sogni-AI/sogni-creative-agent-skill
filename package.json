@@ -95,7 +95,8 @@
     "update-check.mjs",
     "node-version-check.mjs",
     "generated/creative-agent-runtime.mjs",
-    "sogni-agent.mjs"
+    "sogni-agent.mjs",
+    "sam-segmentation.mjs"
   ],
   "dependencies": {
     "@sogni-ai/sogni-intelligence-client": "3.30.1",

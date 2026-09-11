@@ -6902,3 +6902,43 @@ test('--snooze-update with no pending update is a friendly no-op', () => {
   assert.equal(exitCode, 0);
   assert.ok(stderr.includes('No pending update to snooze.'), `got: ${stderr}`);
 });
+
+test('GPT Image CLI never accepts provider-chosen auto quality', () => {
+  expectCliError(['-m', 'gpt-image-2.5-flare', '--image-quality', 'auto', 'a mug'],
+    '--image-quality must be low, medium, high, xhigh, or max.');
+});
+
+for (const model of ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']) {
+  for (const quality of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    test(`GPT Image 2.5 CLI preserves ${model} ${quality} options and ordered edit inputs`, () => {
+      const mask = createPngDimensionFixture(1024, 1024);
+      const { exitCode, state, stderr } = runCli(['-m', model, '--image-quality', quality,
+        '--image-background', 'transparent', '--output-format', 'webp', '--image-output-compression', '0',
+        '--context', SCREENSHOT_FIXTURE, '--context', mask, '--image-mask', mask,
+        'Change the first image using the second reference']);
+      assert.equal(exitCode, 0, stderr);
+      assert.equal(state.lastImageProject.modelId, model);
+      assert.equal(state.lastImageProject.gptImageQuality, quality);
+      assert.equal(state.lastImageProject.gptImageBackground, 'transparent');
+      assert.equal(state.lastImageProject.gptImageOutputCompression, 0);
+      assert.equal(state.lastImageProject.outputFormat, 'webp');
+      assert.equal(state.lastImageProject.contextImages.length, 2);
+      assert.deepEqual(state.lastImageProject.gptImageMask.data, [...readFileSync(mask)]);
+      assert.deepEqual(state.lastImageProject.contextImages[0].data, [...readFileSync(SCREENSHOT_FIXTURE)]);
+    });
+  }
+}
+
+test('GPT Image CLI rejects invalid quality, transparency, compression, and source-less masks before submit', () => {
+  for (const args of [
+    ['-m', 'gpt-image-2', '--image-quality', 'max'],
+    ['-m', 'gpt-image-2.5-flare', '--image-quality', 'typo'],
+    ['-m', 'gpt-image-2.5-flare', '--image-background', 'transparent', '--output-format', 'jpg'],
+    ['-m', 'gpt-image-2.5-flare', '--image-output-compression', '50', '--output-format', 'png'],
+    ['-m', 'gpt-image-2.5-flare', '--image-mask', SCREENSHOT_FIXTURE],
+  ]) {
+    const { exitCode, state } = runCli([...args, 'a ceramic mug']);
+    assert.equal(exitCode, 1, JSON.stringify(args));
+    assert.ok(!state?.lastImageProject);
+  }
+});

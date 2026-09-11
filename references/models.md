@@ -5,6 +5,24 @@ answering "which model should I use for X". For everyday generation prefer
 `-Q fast|hq|pro` and automatic workflow routing instead of memorizing IDs.
 `sogni-agent --help` is the canonical flag reference.
 
+## Contents
+
+- Live model discovery
+- Quality presets (images)
+- Image models
+- Utility and 3D models
+- Music models
+- Video models — current selectors
+- Seedance 2.5
+- HappyHorse 1.1 models
+- Alibaba Wan 3
+- Wan 3.0 Enhanced
+- MiniMax H3 models
+- LTX-2 / LTX-2.3 models
+- Recommended model selectors by need
+- Video sizing & aspect ratios
+- GPT Image 2.5 controls (as of 2026-09)
+
 ## Live model discovery
 
 The static tables below are recommendations, not the complete changing
@@ -52,6 +70,8 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 |-------|-------|----------|
 | `z_image_turbo_bf16` | Fast (~5-10s) | General purpose, default |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
+| `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency |
+| `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
@@ -934,3 +954,23 @@ model recommendations.
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but the ref becomes `1024×1535`). The CLI detects this for local refs and auto-adjusts to a nearby safe size.
 - Pass `--strict-size` to fail instead — the CLI prints a suggested size.
+
+## GPT Image 2.5 controls (as of 2026-09)
+
+Use `-m gpt-image-2.5-sunburst` or `-m gpt-image-2.5-flare` explicitly.
+`--image-quality low|medium|high|xhigh|max` preserves the exact quality;
+default is medium. Sogni never uses provider-chosen (auto) quality.
+`--image-background transparent` requires PNG or WebP. JPEG/WebP accept
+`--image-output-compression 0..100`; omit compression for PNG.
+For editing, repeat `--context` in source order (up to 16 total). `--image-mask`
+accepts an original PNG alpha mask of the first context image; it must match
+that image's dimensions (the image itself may be JPEG, PNG or WebP) and be
+smaller than 50 MB. Transparent
+mask regions identify edits; the model can also change pixels outside them.
+The image mask flag is separate from video `--mask` semantics.
+
+Dimensions default to 1024×1024: multiples of 16, at most 3840 per edge,
+3:1 maximum aspect ratio, 655,360–8,294,400 pixels. Above 3,686,400 pixels is
+experimental. Transparency is integrated but clean cutout edges failed the
+initial Flare canaries; inspect native output against a contrasting background.
+These source changes still require the coordinated package release and server rollout.

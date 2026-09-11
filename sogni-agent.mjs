@@ -89,6 +89,10 @@ import {
 } from '@sogni-ai/sogni-intelligence-client/chatRun';
 import {
   buildImageEditExecutionControls,
+  normalizeGptImageModelAlias,
+  normalizeGptImageQuality,
+  getGptImageRequestOptions,
+  isGptImageModel,
   isKreaIdentityEditModel,
   SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
   prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
@@ -1766,8 +1770,20 @@ function isWanAnimateVideoModelId(modelId) {
 }
 
 function isGptImage2ModelSelection(modelId) {
-  const normalized = String(modelId || '').trim().toLowerCase();
-  return ['gpt-image-2', 'gptimage2', 'gpt-image', 'gpt_image_2'].includes(normalized);
+  return isGptImageModel(normalizeGptImageModelAlias(modelId));
+}
+
+function imageOptionsFromCli() {
+  if (!isGptImage2ModelSelection(options.model)) return {};
+  return {
+    ...getGptImageRequestOptions({
+      gptImageBackground: options.imageBackground ?? undefined,
+      gptImageOutputCompression: options.imageOutputCompression ?? undefined,
+      outputFormat: options.outputFormat ?? 'png'
+    }, options.model),
+    gptImageQuality: normalizeGptImageQuality(options.imageQuality ??
+      (options.quality === 'pro' ? 'high' : options.quality === 'fast' ? 'low' : 'medium'), options.model)
+  };
 }
 
 const SEEDANCE_TASK_TYPES = new Set(['reference', 'edit', 'extend']);
@@ -2834,6 +2850,10 @@ const options = {
   steps: null,
   guidance: null,
   outputFormat: null,
+  imageQuality: null,
+  imageBackground: null,
+  imageOutputCompression: null,
+  imageMask: null,
   sampler: null,
   scheduler: null,
   loras: [],
@@ -3186,6 +3206,14 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.outputFormat = raw;
     cliSet.outputFormat = true;
+  } else if (arg === '--image-quality') {
+    options.imageQuality = requireFlagValue(args, i++, arg);
+  } else if (arg === '--image-background') {
+    options.imageBackground = requireFlagValue(args, i++, arg);
+  } else if (arg === '--image-output-compression') {
+    options.imageOutputCompression = parseNumberValue(requireFlagValue(args, i++, arg), arg);
+  } else if (arg === '--image-mask') {
+    options.imageMask = requireFlagValue(args, i++, arg);
   } else if (arg === '--sampler') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -4119,7 +4147,11 @@ Image Options:
   --distance <key>      close-up|medium|wide
   --angle-strength <n>  LoRA strength for multiple_angles (default: 0.9)
   --angle-description <text>  Optional subject description
-  --output-format <f>   Image output format: png|jpg (webp for gpt-image-2)
+  --output-format <f>   Image output format: png|jpg (webp for GPT Image)
+  --image-quality <q>   GPT Image: low|medium|high; 2.5 also xhigh|max
+  --image-background <b>  auto|opaque; 2.5 also transparent (PNG/WebP)
+  --image-output-compression <n>  JPEG/WebP compression, integer 0–100
+  --image-mask <path|url>  PNG alpha mask of first --context image, same size
   --sampler <name>      Sampler (images/music; H3 LightX2V Turbo: euler|er_sde|sa_solver; FastH3: euler)
   --scheduler <name>    Scheduler (model-dependent)
   --lora <id>           Image LoRA id (repeatable; order is significant)
@@ -4346,6 +4378,8 @@ Personas (named people with reference photos):
 Image Models:
   z_image_turbo_bf16              Fast, general purpose (default)
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
+  gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
+  gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   dark_beast_krea2_fp8            Dark Beast Krea 2 text-to-image
   krea2_identity_edit_v1_2        Krea 2 Identity Edit LoRA (up to 2 context images)
@@ -4818,6 +4852,9 @@ if (options.multiAngle) {
   }
 }
 
+if (!options.video && !options.music && options.model) {
+  options.model = normalizeGptImageModelAlias(options.model);
+}
 if (options.outputFormat) {
   const normalized = options.outputFormat.toLowerCase();
   options.outputFormat = normalized === 'jpeg' ? 'jpg' : normalized;
@@ -4840,6 +4877,24 @@ if (options.outputFormat) {
       code: 'INVALID_ARGUMENT',
       details: { outputFormat: options.outputFormat }
     });
+  }
+}
+
+if (options.imageQuality !== null || options.imageBackground !== null || options.imageOutputCompression !== null || options.imageMask !== null) {
+  try {
+    if (options.video || options.music || !isGptImage2ModelSelection(options.model)) {
+      throw new Error('Image quality, background, compression and mask options require a GPT Image model.');
+    }
+    // Provider-chosen (auto) quality is never used.
+    if (options.imageQuality !== null && !['low', 'medium', 'high', 'xhigh', 'max'].includes(options.imageQuality)) {
+      throw new Error('--image-quality must be low, medium, high, xhigh, or max.');
+    }
+    imageOptionsFromCli();
+    if (options.imageMask && options.contextImages.length === 0) {
+      throw new Error('--image-mask requires a first --context source image.');
+    }
+  } catch (error) {
+    fatalCliError(error.message, { code: 'INVALID_ARGUMENT' });
   }
 }
 
@@ -5375,6 +5430,17 @@ if (options.music) {
   }
 } else {
   options.model = options.model || openclawConfig?.defaultImageModel || 'z_image_turbo_bf16';
+}
+
+if (!options.video && !options.music && isGptImage2ModelSelection(options.model)) {
+  options.model = normalizeGptImageModelAlias(options.model);
+  if (!cliSet.width && !widthFromConfig && !widthFromPrompt) options.width = 1024;
+  if (!cliSet.height && !heightFromConfig && !heightFromPrompt) options.height = 1024;
+  const { width, height } = options;
+  if (width % 16 || height % 16 || Math.max(width, height) > 3840 || Math.max(width, height) / Math.min(width, height) > 3 || width * height < 655360 || width * height > 8294400) {
+    fatalCliError('GPT Image dimensions must be multiples of 16, at most 3840 per edge, within 3:1 and 655360–8294400 pixels.', { code: 'INVALID_ARGUMENT' });
+  }
+  if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 }
 
 if (options.music) {
@@ -7935,6 +8001,7 @@ function buildGeneratedKeyframeVideoWorkflowInput() {
 }
 
 function storyboardWorkflowImageQualityFromCli() {
+  if (options.imageQuality) return options.imageQuality;
   if (!cliSet.quality || !options.quality) return undefined;
   if (options.quality === 'pro') return 'high';
   if (options.quality === 'fast') return 'low';
@@ -13459,6 +13526,8 @@ async function main() {
       if (gptImageQuality) {
         editConfig.gptImageQuality = gptImageQuality;
       }
+      Object.assign(editConfig, imageOptionsFromCli());
+      if (options.imageMask) editConfig.gptImageMask = await fetchMediaBuffer(options.imageMask);
       if (options.loras.length > 0) {
         editConfig.loras = options.loras;
       }
@@ -13574,6 +13643,7 @@ async function main() {
         if (gptImageQuality) {
           projectConfig.gptImageQuality = gptImageQuality;
         }
+        Object.assign(projectConfig, imageOptionsFromCli());
         if (options.sampler) {
           projectConfig.sampler = options.sampler;
         }

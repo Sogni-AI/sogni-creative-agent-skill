@@ -89,15 +89,20 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
 
   assert.deepEqual(storyboardAdapterRegistry.list().map((adapter) => adapter.modelId).sort(), [
     'gpt-image-2',
+    'gpt-image-2.5-flare',
+    'gpt-image-2.5-sunburst',
     'ltx23',
     'ltx25',
     'seedance',
     'wan'
   ]);
+  assert.equal(storyboardAdapterRegistry.getAdapter('gpt-image-2.5-sunburst')?.modelId, 'gpt-image-2.5-sunburst');
+  assert.equal(storyboardAdapterRegistry.getAdapter('gpt-image-2.5-flare')?.modelId, 'gpt-image-2.5-flare');
   assert.equal(storyboardAdapterRegistry.getAdapter('wan22')?.modelId, 'wan');
   assert.equal(storyboardAdapterRegistry.getAdapter('flux-schnell'), null);
   assert.match(composeAdapterPromptGuidance(), /SEEDANCE STORYBOARD REFERENCES/);
-  assert.match(composeAdapterPromptGuidance(), /GPT IMAGE 2 ROUTING/);
+  assert.match(composeAdapterPromptGuidance(), /GPT IMAGE 2 ROUTING: When the user asks for a ChatGPT, OpenAI/);
+  assert.equal(composeAdapterPromptGuidance().match(/GPT IMAGE 2\.5 ROUTING:/g)?.length, 1);
 
   const project = buildStoryboardProject({
     prompt: [

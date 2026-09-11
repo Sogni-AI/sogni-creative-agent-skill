@@ -267,15 +267,20 @@ do and never deviate from:
 
 Tested on a branching horror route the same day, on top of the rules above:
 
-- **Pace by beats.** Something new every 1.5–2.5 seconds: an action, a reaction,
-  a reveal, a line. A single slow shot that "settles into Picture 2" reads as
-  boring and lands with a crossfade. A dramatic request is cut into beats
-  (`[Shot 2] At 00:01.500, the camera cuts to …`); its final shot may cut to
-  the Picture 2 composition and hold with a live action, which lands cleanly.
-- **But not everything is a cut.** Keep continuous motion when the action is
-  continuous, never cut a simple movement into pieces, and if both pictures
-  share one camera position the camera does not move at all (a curtain
-  dropping needs a static shot, not a tracking shot away).
+- **One continuous shot is still the default.** In most cases it is preferred
+  and the shot count stays as low as the content allows. What made the slow
+  takes boring was emptiness, not the lack of cuts: something new should
+  happen every 1.5–2.5 seconds inside the shot (an action, a reaction, a
+  reveal, a line), never walking or waiting.
+- **Beats and multi-shot are tools for when the context calls for them.** A
+  chase, a reveal that needs a new viewpoint, an exchange of lines, a jump in
+  space or time: then cut (`[Shot 2] At 00:01.500, the camera cuts to …`),
+  keep continuous motion inside each shot, and let the final shot cut to the
+  Picture 2 composition and hold with a live action, which lands cleanly where
+  a long interpolation would crossfade. Never cut a simple movement into
+  pieces, and if both pictures share one camera position the camera does not
+  move at all (a curtain dropping needs a static shot, not a tracking shot
+  away).
 - **Write physical acts as acts.** A fall is the rail giving, the wall of
   windows streaking upward, the ground rushing in. A bite is the jaws snapping
   shut over the picture. A shove is two palms filling the frame. "His lips

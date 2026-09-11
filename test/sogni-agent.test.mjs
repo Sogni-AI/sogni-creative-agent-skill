@@ -973,6 +973,35 @@ test('FlashVSR relays the server clip length refusal', () => {
   assert.equal(JSON.parse(result.stdout).error, message);
 });
 
+test('FlashVSR sets no clip-length limit and sends long sources to the server', () => {
+  for (const frames of [900, 1800]) {
+    const long = createVideoUpscaleFixture({
+      ...VIDEO_UPSCALE_720P_STREAM,
+      nb_read_frames: String(frames),
+      avg_frame_rate: '30/1',
+      r_frame_rate: '30/1'
+    });
+    const { exitCode, state, stderr } = runCli(['--upscale-video', long.video], { FFPROBE_PATH: long.fakeFfprobe });
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastVideoProject.frames, frames);
+    assert.equal(state.lastVideoProject.fps, 30);
+  }
+});
+
+test('--upscale-video relays the server refusal of a source that is too long', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const refusal = 'This video is too long to upscale. Video upscaling accepts up to 900 frames (30 seconds at 30 fps).';
+  for (const env of [
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: `job requested failed due to an error: ${refusal}` },
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_WRAPPED_ERROR: `job requested failed due to an error: ${refusal}` }
+  ]) {
+    const { exitCode, stderr } = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe, ...env });
+    assert.equal(exitCode, 1);
+    assert.ok(stderr.includes(`Error: ${refusal}`), stderr);
+    assert.match(stderr, /Trim the video, or split it into shorter clips/);
+  }
+});
+
 test('--upscale-video rejects prompts, counts, timing overrides, and mixed modes', () => {
   const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
   const cases = [

@@ -1369,8 +1369,11 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
 }
 
 // Promptless FlashVSR video upscaling (--upscale-video). The server probes the
-// uploaded source and stays authoritative; these public limits let the CLI
-// explain an unsupported clip before any upload.
+// uploaded source and stays authoritative; these public geometry, frame-rate
+// and file-size limits let the CLI explain an unsupported clip before any
+// upload. There is deliberately no frame-count or duration limit here: the
+// server's admission check alone sets the maximum clip length and refuses a
+// source that is too long (see annotateVideoUpscaleError).
 const FLASHVSR_MODEL_ID = 'flashvsr_v1.1_tiny_long_bf16';
 const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
 const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
@@ -1517,11 +1520,24 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
   return { width, height, frames, fps, sizeBytes: buffer.length };
 }
 
+// The server's own refusal of a source longer than it accepts. Only the server
+// knows the current maximum, so the CLI relays its sentence rather than
+// restating a limit.
+const VIDEO_UPSCALE_TOO_LONG_PATTERN = /This video is too long to upscale\b.*$/s;
+
 function annotateVideoUpscaleError(error) {
   const message = String(error?.message || error?.originalError?.message || '');
   if (error && typeof error === 'object' && message.includes(FLASHVSR_UNAVAILABLE_MESSAGE)) {
     if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'MODEL_UNAVAILABLE';
     error.hint = 'FlashVSR upscaling workers are not online yet, so nothing was charged. Try again later.';
+  }
+  const tooLong = [error?.message, error?.originalError?.message]
+    .map((text) => String(text || '').match(VIDEO_UPSCALE_TOO_LONG_PATTERN)?.[0].trim())
+    .find(Boolean);
+  if (error && typeof error === 'object' && tooLong) {
+    error.message = tooLong;
+    if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'INVALID_UPSCALE_SOURCE';
+    error.hint = 'Trim the video, or split it into shorter clips and upscale each one.';
   }
   return error;
 }

@@ -11,6 +11,7 @@ test('published host launchers set fixed framework and surface markers', () => {
     'sogni-agent-codex': ['host-launchers/codex.mjs', 'codex', 'plugin'],
     'sogni-agent-claude-code': ['host-launchers/claude-code.mjs', 'claude-code', 'plugin'],
     'sogni-agent-hermes': ['host-launchers/hermes.mjs', 'hermes-agent', 'personal_skill'],
+    'sogni-agent-goose': ['host-launchers/goose.mjs', 'goose', 'personal_skill'],
   };
   for (const [command, [path, framework, surface]] of Object.entries(expected)) {
     assert.equal(pkg.bin[command], path);
@@ -44,7 +45,9 @@ test('agent-facing and human-facing docs name every host launcher', () => {
   // the human and install-time equivalents, so a new bin has to land in all
   // three or some host silently keeps shipping unattributed renders.
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  const launchers = Object.keys(pkg.bin).filter((command) => command !== 'sogni-agent');
+  const launchers = Object.keys(pkg.bin).filter(
+    (command) => !['sogni-agent', 'sogni-agent-mcp'].includes(command),
+  );
   assert.ok(launchers.length > 0, 'expected at least one host launcher bin');
   for (const doc of ['SKILL.md', 'README.md', 'llm.txt']) {
     const contents = readFileSync(join(ROOT, doc), 'utf8');

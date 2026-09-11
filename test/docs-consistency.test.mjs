@@ -10,17 +10,21 @@ const repoRoot = process.cwd();
 const read = (relativePath) => readFileSync(join(repoRoot, relativePath), 'utf8');
 
 // Flags that legitimately appear in docs but belong to OTHER tools
-// (git, npm, and the separate setup-sogni-agent-skill installer).
+// (git, npm/npx, goose, skills, and the setup-sogni-agent-skill installer).
 const NON_SOGNI_FLAG_ALLOWLIST = new Set([
   '--ff-only',         // git pull
   '--prefix',          // npm
   '--global',          // npm
   '--package-lock-only', // npm
+  '--package',          // npx
+  '--with-extension',   // goose
+  '--agent',            // skills
+  '--skill',            // skills
   '--only',            // setup-sogni-agent-skill
   '--uninstall',       // setup-sogni-agent-skill
   '--remove-cli',      // setup-sogni-agent-skill
   '--purge',           // setup-sogni-agent-skill
-  '--yes',             // setup-sogni-agent-skill
+  '--yes',             // setup-sogni-agent-skill / skills
   '--no-credentials',  // setup-sogni-agent-skill
 ]);
 

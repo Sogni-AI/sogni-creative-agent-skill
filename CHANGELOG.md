@@ -1,3 +1,14 @@
+## [3.42.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.41.0...v3.42.0) (2026-09-10)
+
+### Features
+
+* Add a Goose host launcher and document skill and MCP extension installation.
+* Publish `sogni-agent-mcp` as a standalone command that uses the CLI bundled in the same npm package, with a global-install fallback for desktop extension bundles.
+
+### Bug Fixes
+
+* Include the shared attribution and version modules in the standalone Claude Desktop bundle, with a startup check that runs outside the repository.
+
 ## [3.41.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.40.1...v3.41.0) (2026-09-10)
 
 ### Features

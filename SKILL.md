@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.41.0"
+  version: "3.42.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -40,7 +40,9 @@ npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 sogni-agent --version
 ```
 
-Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI. The one-command alternative `npx setup-sogni-agent-skill` auto-detects Claude Code, Codex CLI, and Hermes (it does not configure OpenClaw).
+Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI. The one-command alternative `npx setup-sogni-agent-skill` auto-detects Claude Code, Codex CLI, and Hermes (it does not configure Goose or OpenClaw).
+
+For Goose, install this skill with `npx skills add Sogni-AI/sogni-creative-agent-skill --global --agent goose --skill sogni-creative-agent-skill --yes`, install the CLI above, then run `sogni-agent-goose doctor --json`. The [README](./README.md#goose) also covers the MCP extension.
 
 After any install or upgrade, verify with:
 
@@ -59,6 +61,7 @@ Always invoke the globally installed `sogni-agent` command. Do not call `node {{
 | Host | Command |
 | --- | --- |
 | Hermes | `sogni-agent-hermes` |
+| Goose | `sogni-agent-goose` |
 | Codex CLI | `sogni-agent-codex` |
 | Claude Code | `sogni-agent-claude-code` |
 | OpenClaw | `sogni-agent` (detected automatically from `OPENCLAW_PLUGIN_CONFIG`) |

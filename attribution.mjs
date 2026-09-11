@@ -12,6 +12,9 @@ const FRAMEWORK_ALIASES = new Map([
   ['claude-ai', 'claude-desktop'],
   ['hermes', 'hermes-agent'],
   ['hermes-agent', 'hermes-agent'],
+  ['goose', 'goose'],
+  ['goose-cli', 'goose'],
+  ['goose-desktop', 'goose'],
   ['openclaw', 'openclaw'],
   ['clawdbot', 'openclaw'],
 ]);

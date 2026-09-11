@@ -112,6 +112,19 @@ test('MCP clientInfo is allowlisted and raw names are never propagated', () => {
   assert.equal(JSON.stringify(attributionEnvironment(unknown)).includes('alice'), false);
 });
 
+test('Goose CLI and Desktop MCP client names normalize to goose', () => {
+  const fallback = resolveAgentAttribution({ env: {}, surfaceVersion: '3.21.0' });
+  for (const name of ['goose', 'goose-cli', 'goose-desktop']) {
+    const attribution = normalizeMcpClientInfo(
+      { name, version: '1.47.0' },
+      { fallback, surfaceVersion: '3.21.0' },
+    );
+    assert.equal(attribution.agentFramework, 'goose');
+    assert.equal(attribution.agentFrameworkVersion, '1.47.0');
+    assert.equal(attribution.agentSurface, 'mcp');
+  }
+});
+
 test('MCP uses an installer-owned fallback when clientInfo is unknown', () => {
   const fallback = resolveAgentAttribution({
     env: {

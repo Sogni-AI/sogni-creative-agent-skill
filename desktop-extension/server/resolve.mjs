@@ -5,8 +5,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PKG_REL = join('@sogni-ai', 'sogni-creative-agent-skill');
+const BUNDLED_AGENT_PATH = fileURLToPath(new URL('../../sogni-agent.mjs', import.meta.url));
 
 // System-wide npm global roots. Injectable (`roots`) so tests on machines that
 // really have the skill installed globally can sandbox resolution.
@@ -30,17 +32,23 @@ function nvmCandidates(home) {
     .map((v) => join(base, v, 'lib', 'node_modules', PKG_REL, 'sogni-agent.mjs'));
 }
 
-export function resolveAgentPath({ env = process.env, home = homedir(), roots = DEFAULT_GLOBAL_ROOTS } = {}) {
+export function resolveAgentPath({
+  env = process.env,
+  home = homedir(),
+  roots = DEFAULT_GLOBAL_ROOTS,
+  bundledAgentPath = BUNDLED_AGENT_PATH,
+} = {}) {
   if (env.SOGNI_AGENT_PATH) {
     return existsSync(env.SOGNI_AGENT_PATH) ? env.SOGNI_AGENT_PATH : null;
   }
   const candidates = [
+    bundledAgentPath,
     ...roots.map((root) => join(root, PKG_REL, 'sogni-agent.mjs')),
     join(home, '.npm-global', 'lib', 'node_modules', PKG_REL, 'sogni-agent.mjs'),
     ...(env.APPDATA ? [join(env.APPDATA, 'npm', 'node_modules', PKG_REL, 'sogni-agent.mjs')] : []),
     ...nvmCandidates(home),
   ];
-  return candidates.find((p) => existsSync(p)) ?? null;
+  return candidates.find((p) => p && existsSync(p)) ?? null;
 }
 
 export function resolveFfmpegPath({ env = process.env } = {}) {

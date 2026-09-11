@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync as fsExistsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync as fsExistsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -12,6 +12,7 @@ import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 import { importMedia } from '../desktop-extension/server/import-media.mjs';
 import { PACKAGE_VERSION } from '../version.mjs';
+import { stageMcpb } from '../scripts/build-mcpb.mjs';
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
@@ -35,17 +36,34 @@ test('resolveAgentPath probes ~/.npm-global and nvm layouts', () => {
   const npmGlobal = join(home, '.npm-global', rel);
   mkdirSync(npmGlobal, { recursive: true });
   writeFileSync(join(npmGlobal, 'sogni-agent.mjs'), '// stub');
-  assert.equal(resolveAgentPath({ env: {}, home, roots: [] }), join(npmGlobal, 'sogni-agent.mjs'));
+  assert.equal(
+    resolveAgentPath({ env: {}, home, roots: [], bundledAgentPath: null }),
+    join(npmGlobal, 'sogni-agent.mjs'),
+  );
 
   const home2 = tempHome();
   const nvm = join(home2, '.nvm', 'versions', 'node', 'v22.11.0', rel);
   mkdirSync(nvm, { recursive: true });
   writeFileSync(join(nvm, 'sogni-agent.mjs'), '// stub');
-  assert.equal(resolveAgentPath({ env: {}, home: home2, roots: [] }), join(nvm, 'sogni-agent.mjs'));
+  assert.equal(
+    resolveAgentPath({ env: {}, home: home2, roots: [], bundledAgentPath: null }),
+    join(nvm, 'sogni-agent.mjs'),
+  );
 });
 
 test('resolveAgentPath returns null when nothing is installed', () => {
-  assert.equal(resolveAgentPath({ env: {}, home: tempHome(), roots: [] }), null);
+  assert.equal(
+    resolveAgentPath({ env: {}, home: tempHome(), roots: [], bundledAgentPath: null }),
+    null,
+  );
+});
+
+test('resolveAgentPath uses the CLI bundled beside the published MCP server', () => {
+  const root = join(HERE, '..');
+  assert.equal(
+    resolveAgentPath({ env: {}, home: tempHome(), roots: [] }),
+    join(root, 'sogni-agent.mjs'),
+  );
 });
 
 test('buildChildEnv prepends bin dirs, sets FFMPEG_PATH, drops empty SOGNI_API_KEY', () => {
@@ -242,8 +260,8 @@ const TINY_PNG = Buffer.from(
 
 // Minimal line-delimited JSON-RPC client for driving the server under test.
 class McpClient {
-  constructor(extraEnv = {}) {
-    this.child = spawn(process.execPath, [SERVER], {
+  constructor(extraEnv = {}, serverPath = SERVER) {
+    this.child = spawn(process.execPath, [serverPath], {
       env: { ...process.env, SOGNI_AGENT_PATH: FAKE_AGENT, ...extraEnv },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -293,6 +311,27 @@ test('initialize handshake returns serverInfo and tools capability', async (t) =
   assert.equal(res.result.protocolVersion, '2025-06-18');
   assert.equal(res.result.serverInfo.name, 'sogni-creative-agent');
   assert.ok(res.result.capabilities.tools);
+});
+
+test('standalone MCPB starts outside the checkout with its shared modules', { timeout: 5000 }, async (t) => {
+  const staging = tempHome();
+  const manifest = stageMcpb(staging);
+  const client = new McpClient({}, join(staging, manifest.server.entry_point));
+  t.after(() => {
+    client.close();
+    rmSync(staging, { recursive: true, force: true });
+  });
+  const initialized = await client.request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'goose', version: '1.47.0' },
+  });
+  assert.equal(initialized.result.serverInfo.version, PACKAGE_VERSION);
+  const listed = await client.request('tools/list', {});
+  assert.equal(listed.result.tools.length, TOOLS.length);
+  const called = await client.request('tools/call', { name: 'sogni_doctor', arguments: {} });
+  assert.equal(called.result.isError ?? false, false);
+  assert.deepEqual(JSON.parse(called.result.content[0].text).argv, ['--doctor', '--json', '--no-update-check']);
 });
 
 test('tools/list returns all registered tools', async (t) => {
@@ -416,6 +455,7 @@ test('manifest.json version matches package.json and entry point exists', () => 
   assert.ok(fsExistsSync(join(root, 'desktop-extension', manifest.server.entry_point)));
   assert.deepEqual(manifest.server.mcp_config.args, ['${__dirname}/server/index.mjs']);
   assert.ok(pkg.files.includes('desktop-extension/'));
+  assert.equal(pkg.bin['sogni-agent-mcp'], 'desktop-extension/server/index.mjs');
 });
 
 test('collectInlineImages: localPath descriptor yields one PNG block', async () => {

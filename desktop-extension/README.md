@@ -1,7 +1,8 @@
-# Sogni Creative Agent — Claude Desktop extension
+# Sogni Creative Agent — MCP extension
 
-A dependency-free MCP stdio server that wraps the globally installed
-`sogni-agent` CLI. `manifest.json` follows the MCPB spec (v0.3).
+A dependency-free MCP stdio server that wraps the `sogni-agent` CLI bundled in
+the same npm package, with global-install fallback for standalone MCPB installs.
+`manifest.json` follows the MCPB spec (v0.3).
 
 ## Layout
 
@@ -46,6 +47,10 @@ The text block always keeps the full-resolution URL / saved path. Set
 
     npm run build:mcpb   # → dist/sogni-creative-agent.mcpb
 
+The bundle preserves `desktop-extension/server/` and includes the shared
+attribution and version modules. Its root manifest points to that nested
+server so every relative import resolves after a standalone install.
+
 ## Install paths
 
 1. `npx setup-sogni-agent-skill` writes a `claude_desktop_config.json` entry
@@ -55,9 +60,13 @@ The text block always keeps the full-resolution URL / saved path. Set
 3. OpenAI Codex uses the same server:
    `codex mcp add sogni-creative-agent -- node <abs path to server/index.mjs>`
    (the Codex CLI and IDE extension read `~/.codex/config.toml`).
+4. goose can launch the published server directly:
+   `goose session --with-extension "npx -y --package @sogni-ai/sogni-creative-agent-skill@latest sogni-agent-mcp"`.
 
-The server needs the CLI installed globally (`npm i -g @sogni-ai/sogni-creative-agent-skill`);
-when missing, every tool returns a hint to run `npx setup-sogni-agent-skill`.
+The packaged `sogni-agent-mcp` command runs the CLI bundled beside it. MCPB
+installs do not contain that sibling CLI, so they fall back to the global
+installation (`npm i -g @sogni-ai/sogni-creative-agent-skill`); when missing,
+every tool returns a setup hint.
 
 ## Testing
 

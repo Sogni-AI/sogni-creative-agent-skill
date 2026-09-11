@@ -78,7 +78,7 @@ const TESTS = [
   { key: 't2i', name: 'Text-to-image 512x512' },
   { key: 't2v', name: 'Text-to-video 640x640' },
   { key: 'i2v', name: 'Image-to-video from 512x512 input' },
-  { key: 'ltx23-i2v-audio-id', name: 'LTX 2.3 first-frame + Audio ID' }
+  { key: 'ltx25-i2v-audio-id', name: 'LTX 2.5 first-frame + Audio ID' }
 ];
 
 function loadOpenClawPluginConfig() {
@@ -636,28 +636,28 @@ if (!shouldRun) {
         });
       }
 
-      const ltx23I2vAudioIdBudget = await checkVideoBudget({
+      const ltx25I2vAudioIdBudget = await checkVideoBudget({
         workflow: 'i2v',
-        modelId: 'ltx23-22b-fp8_i2v_distilled',
-        label: 'LTX 2.3 first-frame + Audio ID',
+        modelId: 'ltx25-22b-int8_i2v_distilled',
+        label: 'LTX 2.5 first-frame + Audio ID',
         width: 640,
         height: 640,
         fps: 24,
         duration: 5,
         count: 1
       });
-      if (!ltx23I2vAudioIdBudget.ok) {
-        const reason = ltx23I2vAudioIdBudget.reason || 'Insufficient balance for LTX 2.3 video render';
-        status.setSkip('ltx23-i2v-audio-id');
-        await t.test('LTX 2.3 first-frame + Audio ID', { skip: reason }, () => {});
+      if (!ltx25I2vAudioIdBudget.ok) {
+        const reason = ltx25I2vAudioIdBudget.reason || 'Insufficient balance for LTX 2.5 video render';
+        status.setSkip('ltx25-i2v-audio-id');
+        await t.test('LTX 2.5 first-frame + Audio ID', { skip: reason }, () => {});
       } else {
-        await runSubtest(t, status, 'ltx23-i2v-audio-id', 'LTX 2.3 first-frame + Audio ID', async () => {
-          console.log(`Running test 4/${total}: LTX 2.3 first-frame + Audio ID`);
+        await runSubtest(t, status, 'ltx25-i2v-audio-id', 'LTX 2.5 first-frame + Audio ID', async () => {
+          console.log(`Running test 4/${total}: LTX 2.5 first-frame + Audio ID`);
           const json = await runCli([
             '--json',
             '--video',
             '--workflow', 'i2v',
-            '-m', 'ltx23-22b-fp8_i2v_distilled',
+            '-m', 'ltx25-22b-int8_i2v_distilled',
             '--ref', imagePath,
             '--reference-audio-identity', voicePath,
             '--first-frame-strength', '0.82',
@@ -667,18 +667,18 @@ if (!shouldRun) {
             '--duration', '5',
             '--timeout', String(VIDEO_TIMEOUT_SEC),
             'A presenter holds the mug, looks at the camera, and says "This is a live voice identity test."'
-          ], 'LTX 2.3 first-frame + Audio ID');
+          ], 'LTX 2.5 first-frame + Audio ID');
 
           assert.equal(json.success, true);
           assert.equal(json.type, 'video');
           assert.equal(json.workflow, 'i2v');
-          assert.equal(json.model, 'ltx23-22b-fp8_i2v_distilled');
+          assert.equal(json.model, 'ltx25-22b-int8_i2v_distilled');
           assert.equal(json.width, 640);
           assert.equal(json.height, 640);
           assert.equal(json.refImage, imagePath);
           assert.equal(json.referenceAudioIdentity, voicePath);
           assert.ok(Array.isArray(json.urls) && json.urls.length > 0, 'video url missing');
-          logGeneratedArtifacts('LTX 2.3 first-frame + Audio ID', json);
+          logGeneratedArtifacts('LTX 2.5 first-frame + Audio ID', json);
         });
       }
     } finally {

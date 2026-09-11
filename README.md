@@ -15,12 +15,13 @@
 
 ---
 
-**Sogni Creative Agent Skill** plugs into the agent runtime you already use — Claude Code, [OpenClaw](https://github.com/OpenClaw/OpenClaw), [Hermes Agent](https://hermes-agent.nousresearch.com/), [Manus AI](https://manus.im), and others — and gives it production-quality image, video, and music generation through a single CLI: `sogni-agent`.
+**Sogni Creative Agent Skill** plugs into the agent runtime you already use — Claude Code, [goose](https://goose-docs.ai/), [OpenClaw](https://github.com/OpenClaw/OpenClaw), [Hermes Agent](https://hermes-agent.nousresearch.com/), [Manus AI](https://manus.im), and others — and gives it production-quality image, video, and music generation through a single CLI: `sogni-agent`.
 
-It ships three ways:
+It ships four ways:
 
 - a standalone Node.js CLI (`sogni-agent`)
 - a skill source that any [`SKILL.md`](./SKILL.md)-aware agent can load
+- a local MCP stdio server (`sogni-agent-mcp`) for goose, Claude Desktop, Codex, and other MCP clients
 - a published [OpenClaw](https://github.com/OpenClaw/OpenClaw) plugin
 
 With this skill, an agent can:
@@ -46,6 +47,7 @@ With this skill, an agent can:
   - [Claude Code plugin](#claude-code-plugin)
   - [OpenAI Codex CLI](#openai-codex-cli)
   - [Hermes Agent](#hermes-agent)
+  - [goose](#goose)
   - [OpenClaw plugin](#openclaw-plugin)
   - [ChatGPT (Custom GPT)](#chatgpt-custom-gpt)
   - [Manus / other SKILL.md frameworks](#manus--other-skillmd-frameworks)
@@ -209,6 +211,28 @@ npx setup-sogni-agent-skill --only=hermes
 Start Hermes once before running the installer so `~/.hermes/` exists. If the
 selected local runtime is not detected, setup exits before installing anything.
 
+### goose
+
+[goose](https://goose-docs.ai/) supports both Agent Skills and MCP extensions. Pick one integration per installation so goose does not receive duplicate Sogni instructions and tools.
+
+To install the skill globally:
+
+```bash
+npx skills add Sogni-AI/sogni-creative-agent-skill --global --agent goose --skill sogni-creative-agent-skill --yes
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+sogni-agent-goose doctor
+```
+
+The skill is discovered from goose's global skill directories and uses the `sogni-agent-goose` launcher for host attribution.
+
+To run the MCP extension directly instead:
+
+```bash
+goose session --with-extension "npx -y --package @sogni-ai/sogni-creative-agent-skill@latest sogni-agent-mcp"
+```
+
+The same command can be added permanently from `goose configure` as a Command-line Extension. Once the public listing is accepted, it can also be installed from the [goose Extensions directory](https://goose-docs.ai/extensions/). The MCP package is self-contained; it reads `SOGNI_API_KEY` from the extension environment or the existing `~/.config/sogni/credentials` file.
+
 ### OpenClaw plugin
 
 The skill is published on ClawHub, so the simplest install is:
@@ -278,12 +302,13 @@ The package installs one launcher shim per host alongside `sogni-agent`. Each sh
 | Host | Command | Reported framework |
 | --- | --- | --- |
 | Hermes | `sogni-agent-hermes` | `hermes-agent` |
+| goose | `sogni-agent-goose` | `goose` |
 | OpenAI Codex CLI | `sogni-agent-codex` | `codex` |
 | Claude Code | `sogni-agent-claude-code` | `claude-code` |
 | OpenClaw | `sogni-agent` | `openclaw` (detected from `OPENCLAW_PLUGIN_CONFIG`) |
 | Anything else | `sogni-agent` | `unknown` |
 
-The Claude Code and Codex plugin surfaces already pin their launcher, and OpenClaw is detected automatically, so this mostly matters for Hermes and other plain [`SKILL.md`](./SKILL.md) installs: use `sogni-agent-hermes` wherever the docs say `sogni-agent`. Everything works normally through bare `sogni-agent` — the render is just attributed to `unknown`. Falling back to `sogni-agent` is always safe if a shim is not on `PATH`.
+The Claude Code and Codex plugin surfaces already pin their launcher, and OpenClaw is detected automatically. Goose and Hermes skill installs should use their matching launchers wherever the docs say `sogni-agent`. Everything works normally through bare `sogni-agent` — the render is just attributed to `unknown`. Falling back to `sogni-agent` is always safe if a shim is not on `PATH`.
 
 ### Verify your install
 

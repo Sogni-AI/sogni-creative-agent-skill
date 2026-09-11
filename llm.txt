@@ -1,7 +1,7 @@
 # sogni-creative-agent-skill
 
 Agent skill and CLI for Sogni AI image, video, and music generation. Works as
-a skill source for Claude Code, OpenAI Codex CLI, Hermes Agent, OpenClaw,
+a skill source for Claude Code, OpenAI Codex CLI, Goose, Hermes Agent, OpenClaw,
 Manus AI, and other SKILL.md-aware agent runtimes.
 
 ## Install (pick the integration that matches your environment)
@@ -38,6 +38,14 @@ npx setup-sogni-agent-skill --only=hermes
 hermes skills install skills-sh/sogni-ai/sogni-creative-agent-skill/sogni-creative-agent-skill
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 
+# Goose Agent Skill (install the skill plus the globally available CLI)
+npx skills add Sogni-AI/sogni-creative-agent-skill --global --agent goose --skill sogni-creative-agent-skill --yes
+npm install -g @sogni-ai/sogni-creative-agent-skill@latest
+
+# Goose MCP extension (temporary session; configure the same command permanently
+# through `goose configure`, or install it from the public Extensions directory)
+goose session --with-extension "npx -y --package @sogni-ai/sogni-creative-agent-skill@latest sogni-agent-mcp"
+
 # OpenClaw plugin (the npm package is scoped — use the npm: source prefix)
 openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill
 
@@ -72,6 +80,7 @@ the host that ran it. Use the shim matching your runtime wherever these docs say
 
 ```bash
 sogni-agent-hermes       # Hermes Agent
+sogni-agent-goose        # Goose
 sogni-agent-codex        # OpenAI Codex CLI
 sogni-agent-claude-code  # Claude Code
 sogni-agent              # OpenClaw (auto-detected) and everything else

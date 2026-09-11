@@ -1,3 +1,16 @@
+## [3.46.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.46.0) (2026-09-11)
+
+3.44.0 and 3.45.0 were prepared but never published to npm; this release carries their changes too, so 3.43.0 is the last version npm actually shipped.
+
+### Features
+
+* Add `--segment` with `--segment-point`, `--segment-exclude`, `--segment-box` and `--segment-text`, returning a SAM 3 mask for an original still. Text and point prompts never combine, point prompts take at most one box, and the limits are 32 points, 16 boxes and 240 text characters.
+
+### Bug Fixes
+
+* Align the public runtime with Intelligence Client 3.31.1 and Sogni Client 5.44.1, moving the exact pin, `skill-package.json` and the sogni-client override together.
+* The bundled creative-agent runtime (1.63.1) adds `detailPreference`, `processingSpeed` and `seed` to `upscale_video`; none of them changes the price.
+
 ## [3.45.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.45.0) (2026-09-11)
 
 3.44.0 was prepared but never published to npm; this release carries its changes too.

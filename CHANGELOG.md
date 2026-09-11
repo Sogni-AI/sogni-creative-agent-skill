@@ -1,3 +1,14 @@
+## [3.41.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.40.1...v3.41.0) (2026-09-10)
+
+### Features
+
+* Add `--upscale-video <path|url>` with `--upscale-resolution 1080|1440` for promptless FlashVSR v1.1 video upscaling. The CLI reads the source's exact size, frame count and frame rate with local ffprobe, checks the public limits (short edge up to 768px and area up to about 1344x768, 1-362 frames and about 15 seconds, 1-60 fps, SDR with square pixels, 100 MB), and saves the MP4 with the original audio. Prompts, more than one output, timing or size overrides, and other media are rejected.
+* Route pure video upscales to `--upscale-video` or the hosted `upscale_video` tool rather than `video_to_video`, and carry the `upscale_video` contracts in the public runtime.
+
+### Bug Fixes
+
+* Align the public runtime dependencies with Intelligence Client 3.29.0 and Sogni Client 5.38.0.
+
 ## [3.40.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.40.0...v3.40.1) (2026-09-10)
 
 ### Bug Fixes

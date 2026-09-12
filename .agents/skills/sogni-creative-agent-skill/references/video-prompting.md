@@ -123,6 +123,13 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
+- **2K output is a delivery switch, not a canvas.** `--2k` (`--output-scale 2`)
+  keeps the same canvas, length and audio and delivers the clip at twice its
+  width and height (1344×768 → 2688×1536); every H3 mode and tier accepts it.
+  Do not enlarge `-w`/`-h` to reach 2K — the pixel budget still applies to the
+  requested canvas. It costs +10 Spark per second at 544/768p-class sizes
+  (+6 at 480p) and needs the 2K-capable worker fleet; use it only when the
+  user asks for 2K, 1440p-class or extra-sharp output.
 - **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.

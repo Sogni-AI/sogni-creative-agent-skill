@@ -6978,3 +6978,94 @@ test('GPT Image CLI rejects invalid quality, transparency, compression, and sour
     assert.ok(!state?.lastImageProject);
   }
 });
+
+const MINIMAX_H3_2K_UNAVAILABLE = 'MiniMax H3 2K output is not available right now. Choose the standard output size, or try again later.';
+
+test('MiniMax H3 --2k sends outputScale 2 on the unchanged canvas and says what is delivered', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--2k', '--duration', '8',
+    'A record store conversation with vinyl crackle.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  const project = state.lastVideoProject;
+  assert.equal(project.modelId, 'minimax-h3-fastvideo-int8_t2v_turbo');
+  assert.equal(project.outputScale, 2);
+  assert.equal(project.width, 1344);
+  assert.equal(project.height, 768);
+  assert.equal(project.frames, 192);
+  assert.equal(project.fps, 24);
+  assert.match(stderr, /MiniMax H3 2K output: delivered at 2688x1536 \(twice the requested 1344x768 canvas\)/);
+  assert.match(stderr, /10 Spark per second/);
+});
+
+test('MiniMax H3 --output-scale accepts every H3 tier and stays silent at 1', () => {
+  for (const model of ['minimax-h3', 'minimax-h3-balanced', 'minimax-h3-turbo', 'minimax-h3-fl2va-fp8_t2v', 'minimax-h3-ref2va-fp8_r2v_turbo']) {
+    const args = ['--video', '-m', model, '--output-scale', '2', 'A quiet harbour at dawn with gull calls.'];
+    if (model.includes('r2v')) args.push('-c', SCREENSHOT_FIXTURE);
+    const scaled = runCli(args);
+    assert.equal(scaled.exitCode, 0, `${model}: ${scaled.stderr}`);
+    assert.equal(scaled.state.lastVideoProject.outputScale, 2, model);
+  }
+  const plain = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', '--output-scale', '1', 'A quiet harbour at dawn with gull calls.']);
+  assert.equal(plain.exitCode, 0, plain.stderr);
+  assert.equal('outputScale' in plain.state.lastVideoProject, false, 'scale 1 sends nothing new');
+  assert.doesNotMatch(plain.stderr, /2K output/);
+  const untouched = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', 'A quiet harbour at dawn with gull calls.']);
+  assert.equal('outputScale' in untouched.state.lastVideoProject, false);
+});
+
+test('MiniMax H3 --2k reaches the cost estimate and the JSON estimate report', () => {
+  const { exitCode, state, stdout, stderr } = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--2k', '--duration', '8', '--estimate-video-cost', '--json',
+    'A record store conversation with vinyl crackle.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEstimateVideoCost.outputScale, 2);
+  assert.equal(state.lastEstimateVideoCost.width, 1344);
+  assert.equal(state.lastEstimateVideoCost.height, 768);
+  const report = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(report.type, 'video-cost');
+  assert.equal(report.outputScale, 2);
+
+  const plain = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--duration', '8', '--estimate-video-cost', '--json',
+    'A record store conversation with vinyl crackle.'
+  ]);
+  assert.equal(plain.exitCode, 0, plain.stderr);
+  assert.equal('outputScale' in plain.state.lastEstimateVideoCost, false);
+  assert.equal('outputScale' in JSON.parse(plain.stdout.trim().split('\n').pop()), false);
+});
+
+test('--output-scale rejects other values, other models, and non-video runs', () => {
+  const invalid = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', '--output-scale', '3', 'A prompt.']);
+  assert.equal(invalid.exitCode, 1);
+  assert.match(invalid.stderr, /--output-scale must be 1 or 2/);
+  assert.equal(invalid.state?.lastVideoProject ?? null, null);
+
+  const fractional = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', '--output-scale', '1.5', 'A prompt.']);
+  assert.equal(fractional.exitCode, 1);
+  assert.match(fractional.stderr, /must be 1 or 2/);
+
+  for (const model of ['ltx25', 'wan22', 'seedance2']) {
+    const other = runCli(['--video', '-m', model, '--2k', 'A prompt for another model.']);
+    assert.equal(other.exitCode, 1, `${model} should refuse --2k`);
+    assert.match(other.stderr, /--output-scale 2 \(--2k\) is a MiniMax H3 option/, model);
+    assert.equal(other.state?.lastVideoProject ?? null, null, model);
+  }
+
+  const image = runCli(['--2k', 'A still image prompt.']);
+  assert.equal(image.exitCode, 1);
+  assert.match(image.stderr, /require --video/);
+  assert.equal(image.state?.lastImageProject ?? null, null);
+});
+
+test('MiniMax H3 --2k explains the 2K availability refusal', () => {
+  const { exitCode, stderr } = runCli(
+    ['--video', '-m', 'minimax-h3-fasth3-turbo', '--2k', 'A record store conversation with vinyl crackle.'],
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: MINIMAX_H3_2K_UNAVAILABLE }
+  );
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /MiniMax H3 2K output is not available right now/);
+  assert.match(stderr, /nothing was charged/);
+  assert.match(stderr, /Retry without --2k/);
+});

@@ -496,6 +496,7 @@ sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png
 sogni-agent --video -m minimax-h3-fasth3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-turbo --2k --duration 8 "<three-field H3 prompt>"   # 2K: delivered at 2x the canvas
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
@@ -611,6 +612,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | Music generation controls |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio |
+| `--output-scale <1\|2>`, `--2k` | MiniMax H3 only: deliver the clip at twice the requested canvas (2K); +10 Spark/s at 544/768p class, +6 at 480p |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
 | `--expand-prompt`, `--no-expand-prompt` | Enable provider prompt expansion for direct Wan 3 video, or preserve the exact submitted prompt |

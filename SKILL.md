@@ -234,6 +234,7 @@ sogni-agent --video -m minimax-h3-r2v-turbo -w 960 -h 544 --ref identity.png -c 
 sogni-agent --video -m minimax-h3-fasth3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-turbo --2k --duration 8 "<three-field H3 prompt>"   # 2K: any H3 tier, delivered at 2x the canvas, +10 Spark/s
 
 # HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
 # i2v from one first-frame image (--ref); r2v from 1-9 reference images (-c).

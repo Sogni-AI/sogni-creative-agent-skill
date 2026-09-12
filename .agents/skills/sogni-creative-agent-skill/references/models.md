@@ -695,11 +695,18 @@ video-conditioned R2V requires a worker above 40 GB.
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
   `simple` scheduler; only Turbo's sampler has the three
   explicit variants above.
-- **768p-class open-weights release.** Do not offer or claim 2K; MiniMax's 2K
-  stage is hosted-only and not part of the open release.
+- **2K output is an opt-in delivery switch.** `--2k` (`--output-scale 2`) keeps
+  the requested canvas, length and audio and delivers the clip at twice its
+  width and height (1344×768 → 2688×1536; Ref2VA Turbo 960×544 → 1920×1088)
+  through a learned latent enlargement plus a short refinement on the worker.
+  Every H3 mode and tier accepts it; it adds 10 Spark per second at
+  544/768p-class sizes (6 at 480p) and needs 2K-capable workers, which the
+  server confirms before charging. This is Sogni's own 2K path; MiniMax's
+  hosted 2K stage is still not part of the open release.
 
 ```bash
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-turbo --2k --duration 8 -o ./video-2k.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"

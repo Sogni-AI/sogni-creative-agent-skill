@@ -482,7 +482,7 @@ sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
 sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png \
   -c wardrobe.png "Keep the endpoint frames and use Image 1 for wardrobe detail"
 
-# MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, and FastH3 Turbo video
+# MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, FastH3 Turbo, and FastH3 Two-Stage (2K) video
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png \
@@ -496,7 +496,7 @@ sogni-agent --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png
 sogni-agent --video -m minimax-h3-fasth3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
-sogni-agent --video -m minimax-h3-fasth3-turbo --2k --duration 8 "<three-field H3 prompt>"   # 2K: delivered at 2x the canvas
+sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --duration 8 "<three-field H3 prompt>"   # 2K: FastH3 Two-Stage, delivered at 2x the canvas
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
@@ -612,7 +612,6 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | Music generation controls |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio |
-| `--output-scale <1\|2>`, `--2k` | MiniMax H3 only: deliver the clip at twice the requested canvas (2K); +10 Spark/s at 544/768p class, +6 at 480p |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
 | `--expand-prompt`, `--no-expand-prompt` | Enable provider prompt expansion for direct Wan 3 video, or preserve the exact submitted prompt |
@@ -695,6 +694,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; FastH3 has no R2V mode |
+| MiniMax H3 2K video (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (infers the frame mode), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |

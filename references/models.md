@@ -378,6 +378,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | 4-step | FastVideo VSA FastH3 text-to-video; generic selector infers frame modes; about 2x faster than LightX2V Turbo and up to 6x Standard |
 | `minimax-h3-fasth3-i2v-turbo` | 4-step | FastH3 first-frame image-to-video or last-frame-only L2VA |
 | `minimax-h3-fasth3-flf2v-turbo` | 4-step | FastH3 first-frame → last-frame video; no FastH3 R2V mode |
+| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | 4-step | FastH3 Two-Stage (2K) text-to-video, delivered at twice the canvas; generic selector infers frame modes |
+| `minimax-h3-fasth3-i2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame image-to-video or last-frame-only L2VA |
+| `minimax-h3-fasth3-flf2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame → last-frame video; no R2V mode |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -611,16 +614,17 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family with **fifteen current selectors**:
+MiniMax H3 is a Sogni-hosted video family with **eighteen current selectors**:
 four Standard workflows, four 8-step Balanced workflows, four 4-step
-LightX2V Turbo workflows, and three FastVideo VSA FastH3 Turbo workflows. Every mode
+LightX2V Turbo workflows, three FastVideo VSA FastH3 Turbo workflows, and
+three FastH3 Two-Stage (2K) workflows. Every mode
 generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3`, `minimax-h3-balanced`, and
-`minimax-h3-turbo`, and `minimax-h3-fasth3-turbo` selectors resolve to the matching engine and mode inferred
+`minimax-h3-turbo`, `minimax-h3-fasth3-turbo`, and `minimax-h3-fasth3-turbo-2stage` selectors resolve to the matching engine and mode inferred
 from your references. The Standard, Balanced, and LightX2V Turbo families accept
-an explicit `--workflow r2v`; FastH3 rejects it.
+an explicit `--workflow r2v`; FastH3 and FastH3 Two-Stage reject it.
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
 be asked for by name. Its Balanced and Turbo counterparts are
 `minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`.
@@ -643,6 +647,9 @@ FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selecto
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | FastH3 text-to-video | Separate FastVideo VSA four-step engine; generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo` | FastH3 image-to-video | First-frame I2VA or last-frame-only L2VA from one endpoint |
 | `minimax-h3-fasth3-flf2v-turbo` | FastH3 first → last frame | Both endpoints; FastH3 has no R2V selector |
+| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | FastH3 Two-Stage text-to-video | FastH3 request, delivered at twice the canvas (2K); generic selector infers frame workflows |
+| `minimax-h3-fasth3-i2v-turbo-2stage` | FastH3 Two-Stage image-to-video | First-frame I2VA or last-frame-only L2VA, delivered at twice the canvas |
+| `minimax-h3-fasth3-flf2v-turbo-2stage` | FastH3 Two-Stage first → last frame | Both endpoints, delivered at twice the canvas; no R2V |
 
 The three standard frame modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
@@ -665,6 +672,9 @@ FastH3 is not an alias for LightX2V: it maps to
 and `minimax-h3-fastvideo-int8_flf2v_turbo`. Its qualified FastVideo VSA recipe
 is fixed four-step Euler/simple, it is about 2x faster than LightX2V Turbo and
 up to 6x faster than Standard for comparable 768p, 15-second requests, and it has no R2V mode.
+FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2stage`,
+`minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
+with the FastH3 request shape unchanged.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -697,18 +707,20 @@ video-conditioned R2V requires a worker above 40 GB.
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
   `simple` scheduler; only Turbo's sampler has the three
   explicit variants above.
-- **2K output is an opt-in delivery switch.** `--2k` (`--output-scale 2`) keeps
-  the requested canvas, length and audio and delivers the clip at twice its
-  width and height (1344×768 → 2688×1536; Ref2VA Turbo 960×544 → 1920×1088)
-  through a learned latent enlargement plus a short refinement on the worker.
-  Every H3 mode and tier accepts it; it adds 10 Spark per second at
-  544/768p-class sizes (6 at 480p) and needs 2K-capable workers, which the
-  server confirms before charging. This is Sogni's own 2K path; MiniMax's
-  hosted 2K stage is still not part of the open release.
+- **2K output is FastH3 Two-Stage, a model choice.** `-m minimax-h3-fasth3-turbo-2stage`
+  (or the `-t2v-`, `-i2v-`, `-flf2v-turbo-2stage` selectors) sends the FastH3
+  request unchanged and delivers the clip at exactly twice the canvas
+  (1344×768 → 2688×1536) with the same frames and audio, through a learned
+  latent enlargement plus a short refinement on the worker. Keep the canvas at
+  768p; it adds 10 Spark per second to FastH3 at 544/768p-class canvases (6 at
+  480p), and the other H3 tiers have no 2K path. The server confirms a capable
+  worker before charging. This is Sogni's own 2K path; MiniMax's hosted 2K
+  stage is still not part of the open release. The retired `outputScale`
+  request option is refused.
 
 ```bash
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
-sogni-agent -q --video -m minimax-h3-fasth3-turbo --2k --duration 8 -o ./video-2k.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-turbo-2stage --duration 8 -o ./video-2k.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"
@@ -946,6 +958,7 @@ model recommendations.
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
+| MiniMax H3 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage`, or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios

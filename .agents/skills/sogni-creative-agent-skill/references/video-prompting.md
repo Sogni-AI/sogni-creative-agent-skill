@@ -123,13 +123,16 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
-- **2K output is a delivery switch, not a canvas.** `--2k` (`--output-scale 2`)
-  keeps the same canvas, length and audio and delivers the clip at twice its
-  width and height (1344×768 → 2688×1536); every H3 mode and tier accepts it.
-  Do not enlarge `-w`/`-h` to reach 2K — the pixel budget still applies to the
-  requested canvas. It costs +10 Spark per second at 544/768p-class sizes
-  (+6 at 480p) and needs the 2K-capable worker fleet; use it only when the
-  user asks for 2K, 1440p-class or extra-sharp output.
+- **2K output is the FastH3 Two-Stage model, not a canvas.**
+  `-m minimax-h3-fasth3-turbo-2stage` (or `minimax-h3-fasth3-t2v-turbo-2stage`,
+  `minimax-h3-fasth3-i2v-turbo-2stage`, `minimax-h3-fasth3-flf2v-turbo-2stage`)
+  renders the FastH3 request unchanged and delivers the clip at exactly twice
+  the canvas (1344×768 → 2688×1536) with the same length and audio; no other
+  H3 tier delivers 2K. Do not enlarge `-w`/`-h` to reach 2K — the pixel budget
+  still applies to the canvas. It adds 10 Spark per second to FastH3 at
+  544/768p-class canvases (6 at 480p); use it when the user asks for 2K,
+  1440p-class, two-stage or the sharpest H3 output. The prompt contract is
+  FastH3's.
 - **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.

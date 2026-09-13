@@ -1206,7 +1206,6 @@ function computePromptHashSeed(opts) {
     musicCreativity: opts.musicCreativity ?? null,
     musicShift: opts.musicShift ?? null,
     targetResolution: opts.targetResolution ?? null,
-    ...(opts.outputScale === 2 ? { outputScale: 2 } : {}),
     loras: opts.loras || [],
     loraStrengths: opts.loraStrengths || [],
     refImage: opts.refImage || '',
@@ -1290,17 +1289,6 @@ function parseIntegerValue(raw, flagName) {
     });
   }
   return num;
-}
-
-// MiniMax H3 2K delivery (--output-scale 2 / --2k): the clip renders on the
-// requested canvas and is delivered at twice its width and height.
-function parseOutputScaleValue(raw, flagName) {
-  const normalized = String(raw ?? '').trim().toLowerCase();
-  if (normalized === '1' || normalized === '2') return Number(normalized);
-  fatalCliError(`${flagName} must be 1 or 2 (2 delivers MiniMax H3 2K output).`, {
-    code: 'INVALID_ARGUMENT',
-    details: { flag: flagName, value: raw }
-  });
 }
 
 function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
@@ -1541,19 +1529,6 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
 // knows the current maximum, so the CLI relays its sentence rather than
 // restating a limit.
 const VIDEO_UPSCALE_TOO_LONG_PATTERN = /This video is too long to upscale\b.*$/s;
-
-const MINIMAX_H3_OUTPUT_SCALE_UNAVAILABLE_MESSAGE = 'MiniMax H3 2K output is not available right now';
-
-// Only Comfy workers 1.0.212+ render 2K; the socket refuses before reserving
-// funds when none is connected, so say so and point at the standard size.
-function annotateMiniMaxH3OutputScaleError(error) {
-  const message = String(error?.message || error?.originalError?.message || '');
-  if (error && typeof error === 'object' && message.includes(MINIMAX_H3_OUTPUT_SCALE_UNAVAILABLE_MESSAGE)) {
-    if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'MODEL_UNAVAILABLE';
-    error.hint = 'Workers that render MiniMax H3 2K are not online right now, so nothing was charged. Retry without --2k for the standard size, or try again later.';
-  }
-  return error;
-}
 
 function annotateVideoUpscaleError(error) {
   const message = String(error?.message || error?.originalError?.message || '');
@@ -2375,7 +2350,10 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v'],
   ['minimax-h3-fastvideo-int8_t2v_turbo', 't2v'],
   ['minimax-h3-fastvideo-int8_i2v_turbo', 'i2v'],
-  ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v']
+  ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v'],
+  ['minimax-h3-fastvideo-int8_t2v_turbo_2stage', 't2v'],
+  ['minimax-h3-fastvideo-int8_i2v_turbo_2stage', 'i2v'],
+  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage', 'flf2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
 const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
@@ -2385,12 +2363,25 @@ const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-ref2va-fp8_r2v_turbo',
   'minimax-h3-fastvideo-int8_t2v_turbo',
   'minimax-h3-fastvideo-int8_i2v_turbo',
-  'minimax-h3-fastvideo-int8_flf2v_turbo'
+  'minimax-h3-fastvideo-int8_flf2v_turbo',
+  'minimax-h3-fastvideo-int8_t2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
 ]);
+// FastH3 Two-Stage renders the FastH3 request unchanged on its own model ids
+// and delivers the clip at exactly twice the canvas (1344x768 -> 2688x1536),
+// same frames and audio. It is FastH3-class everywhere FastH3 is.
+const MINIMAX_H3_TWO_STAGE_MODEL_IDS = new Set([
+  'minimax-h3-fastvideo-int8_t2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
+]);
+const MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE = 2;
 const MINIMAX_H3_FASTH3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_t2v_turbo',
   'minimax-h3-fastvideo-int8_i2v_turbo',
-  'minimax-h3-fastvideo-int8_flf2v_turbo'
+  'minimax-h3-fastvideo-int8_flf2v_turbo',
+  ...MINIMAX_H3_TWO_STAGE_MODEL_IDS
 ]);
 const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']);
 const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
@@ -2521,6 +2512,29 @@ function resolveSkillVideoModelAlias(
   if (normalized === 'minimax-h3-fasth3-flf2v-turbo') {
     return 'minimax-h3-fastvideo-int8_flf2v_turbo';
   }
+  if (normalized === 'minimax-h3-fasth3-turbo-2stage' && workflow) {
+    if (workflow === 'r2v') {
+      fatalCliError('MiniMax H3 FastH3 Two-Stage has no r2v workflow.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: modelId, workflow }
+      });
+    }
+    if (workflow === 'i2v') {
+      return hasStartFrame && hasEndFrame
+        ? 'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
+        : 'minimax-h3-fastvideo-int8_i2v_turbo_2stage';
+    }
+    return 'minimax-h3-fastvideo-int8_t2v_turbo_2stage';
+  }
+  if (normalized === 'minimax-h3-fasth3-t2v-turbo-2stage') {
+    return 'minimax-h3-fastvideo-int8_t2v_turbo_2stage';
+  }
+  if (normalized === 'minimax-h3-fasth3-i2v-turbo-2stage') {
+    return 'minimax-h3-fastvideo-int8_i2v_turbo_2stage';
+  }
+  if (normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage') {
+    return 'minimax-h3-fastvideo-int8_flf2v_turbo_2stage';
+  }
   if (normalized === 'minimax-h3-balanced' && workflow) {
     if (workflow === 'r2v') {
       return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
@@ -2557,6 +2571,17 @@ function isMiniMaxH3TurboModel(modelId) {
   return MINIMAX_H3_TURBO_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
 }
 
+function isMiniMaxH3TwoStageModel(modelId) {
+  return MINIMAX_H3_TWO_STAGE_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
+function miniMaxH3TwoStageDeliveredSize(width, height) {
+  return {
+    width: width * MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE,
+    height: height * MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE
+  };
+}
+
 function isMiniMaxH3R2vModel(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
   return normalized === MINIMAX_H3_R2V_MODEL_ID
@@ -2577,6 +2602,10 @@ function isMiniMaxH3FastH3TurboSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo'
     || normalized === 'minimax-h3-fasth3-i2v-turbo'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo'
+    || normalized === 'minimax-h3-fasth3-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
     || MINIMAX_H3_FASTH3_TURBO_MODEL_IDS.has(normalized);
 }
 
@@ -2596,6 +2625,10 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo'
     || normalized === 'minimax-h3-fasth3-i2v-turbo'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo'
+    || normalized === 'minimax-h3-fasth3-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
     || normalized === 'minimax-h3-balanced'
     || normalized === 'minimax-h3-t2v-balanced'
     || normalized === 'minimax-h3-i2v-balanced'
@@ -2615,6 +2648,10 @@ function isMiniMaxH3TurboModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo'
     || normalized === 'minimax-h3-fasth3-i2v-turbo'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo'
+    || normalized === 'minimax-h3-fasth3-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
+    || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
     || isMiniMaxH3TurboModel(normalized);
 }
 
@@ -2631,6 +2668,9 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-fasth3-t2v-turbo') return 't2v';
   if (normalized === 'minimax-h3-fasth3-i2v-turbo') return 'i2v';
   if (normalized === 'minimax-h3-fasth3-flf2v-turbo') return 'flf2v';
+  if (normalized === 'minimax-h3-fasth3-t2v-turbo-2stage') return 't2v';
+  if (normalized === 'minimax-h3-fasth3-i2v-turbo-2stage') return 'i2v';
+  if (normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage') return 'flf2v';
   if (normalized === 'minimax-h3-t2v-balanced') return 't2v';
   if (normalized === 'minimax-h3-i2v-balanced') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
@@ -2918,7 +2958,6 @@ const options = {
   duration: 5,
   frames: null,
   targetResolution: null, // Short-side target for video, preserving aspect ratio
-  outputScale: 1, // MiniMax H3 delivery scale: 2 = 2K, twice the requested canvas
   autoResizeVideoAssets: null,
   estimateVideoCost: false,
   showBalance: false,
@@ -3114,7 +3153,6 @@ const cliSet = {
   duration: false,
   frames: false,
   targetResolution: false,
-  outputScale: false,
   autoResizeVideoAssets: false,
   angles360Video: false,
   videoModel: false,
@@ -3460,14 +3498,14 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.targetResolution = parsePositiveIntegerValue(raw, arg);
     cliSet.targetResolution = true;
-  } else if (arg === '--output-scale') {
-    const raw = requireFlagValue(args, i, arg);
-    i++;
-    options.outputScale = parseOutputScaleValue(raw, arg);
-    cliSet.outputScale = true;
-  } else if (arg === '--2k') {
-    options.outputScale = 2;
-    cliSet.outputScale = true;
+  } else if (arg === '--output-scale' || arg === '--2k') {
+    // Retired: MiniMax H3 1080p/2K output is its own model id now, and Sogni
+    // refuses any request carrying outputScale. Fail instead of guessing a model.
+    fatalCliError(`${arg} is no longer supported. MiniMax H3 2K output is the FastH3 Two-Stage model: use -m minimax-h3-fasth3-turbo-2stage.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: arg },
+      hint: 'Replace the flag with -m minimax-h3-fasth3-turbo-2stage (or minimax-h3-fasth3-t2v-turbo-2stage / -i2v- / -flf2v-); the clip is delivered at twice the canvas, 1344x768 -> 2688x1536.'
+    });
   } else if (arg === '--auto-resize-assets') {
     options.autoResizeVideoAssets = true;
     cliSet.autoResizeVideoAssets = true;
@@ -4261,9 +4299,6 @@ Video Options:
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
   --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080)
-  --output-scale <1|2>  MiniMax H3 only: 2 delivers 2K, twice the requested canvas (1344x768 -> 2688x1536),
-                         same length and audio; +10 Spark/s at 544/768p class, +6 at 480p (workers 1.0.212+)
-  --2k                  Shorthand for --output-scale 2
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
@@ -4522,6 +4557,14 @@ state negatives in the structured prompt.):
   minimax-h3-fasth3-t2v-turbo       FastH3 text-to-video (up to 6x faster than Standard)
   minimax-h3-fasth3-i2v-turbo       FastH3 I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-fasth3-flf2v-turbo     FastH3 first-frame -> last-frame (--ref plus --ref-end)
+  minimax-h3-fasth3-turbo-2stage    FastH3 Two-Stage (2K): delivered at twice the canvas (1344x768 -> 2688x1536);
+                                     infers T2VA/I2VA/L2VA/FL2VA; no R2V
+  minimax-h3-fasth3-t2v-turbo-2stage
+                                    FastH3 Two-Stage text-to-video
+  minimax-h3-fasth3-i2v-turbo-2stage
+                                    FastH3 Two-Stage I2VA (--ref) or L2VA (--ref-end)
+  minimax-h3-fasth3-flf2v-turbo-2stage
+                                    FastH3 Two-Stage first-frame -> last-frame (--ref plus --ref-end)
   H3 FL2VA Turbo sampler override   --sampler euler|er_sde|sa_solver
                                      (Socket default: er_sde; CLI omits unless set)
                                      (scheduler remains fixed to simple)
@@ -5058,7 +5101,7 @@ if (options.video && options.loras.length > 0) {
     const unknownVideoLoras = options.loras.filter(loraId => !videoLoraEntries.has(loraId));
     if (unknownVideoLoras.length > 0) {
       const availableIds = [...videoLoraEntries.keys()];
-      const isUnresolvedH3Alias = /^minimax-h3(?:-(?:fasth3-)?turbo)?$/.test(String(options.model || ''));
+      const isUnresolvedH3Alias = /^minimax-h3(?:-turbo|-fasth3-turbo(?:-2stage)?)?$/.test(String(options.model || ''));
       fatalCliError(
         `Video LoRA "${unknownVideoLoras[0]}" is not published for model "${options.model}". ` +
         (availableIds.length > 0
@@ -5744,8 +5787,8 @@ if (options.legacyWan3TaskType !== null) {
   );
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || cliSet.outputScale || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--output-scale/--2k/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -5893,15 +5936,6 @@ if (options.video) {
     fatalCliError('Wan 3 --target-resolution must be 480, 720, or 1080.', {
       code: 'INVALID_ARGUMENT',
       details: { targetResolution: options.targetResolution }
-    });
-  }
-  // 2K delivery exists only on MiniMax H3 (Comfy worker 1.0.212+); the SDK
-  // rejects it elsewhere, so refuse here with the model named instead.
-  if (cliSet.outputScale && options.outputScale === 2 && !isMiniMaxH3Model(options.model)) {
-    fatalCliError(`--output-scale 2 (--2k) is a MiniMax H3 option; ${options.model} is delivered at its requested size.`, {
-      code: 'INVALID_ARGUMENT',
-      details: { flag: '--output-scale', model: options.model },
-      hint: 'Use a MiniMax H3 model (for example -m minimax-h3-fasth3-turbo --2k), or drop --2k.'
     });
   }
   const seedanceWorkflows = isSeedance25Video
@@ -11849,8 +11883,7 @@ function buildVideoEstimateParams({ tokenType, steps }) {
     tokenType,
     ...(Number.isFinite(steps) && steps > 0 ? { steps } : {}),
     ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
-    ...(referenceImageCount !== undefined ? { referenceImageCount } : {}),
-    ...(options.outputScale === 2 && isMiniMaxH3Model(options.model) ? { outputScale: 2 } : {})
+    ...(referenceImageCount !== undefined ? { referenceImageCount } : {})
   };
 
   if ((isSeedanceVideo || isWan3Video) && options.refVideo) {
@@ -12709,6 +12742,9 @@ async function main() {
       }
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
+        const delivered = isMiniMaxH3TwoStageModel(options.model)
+          ? miniMaxH3TwoStageDeliveredSize(options.width, options.height)
+          : null;
         console.log(JSON.stringify({
           success: true,
           type: 'video-cost',
@@ -12721,7 +12757,7 @@ async function main() {
           steps,
           tokenType: options.tokenType || 'spark',
           count: options.count,
-          ...(options.outputScale === 2 ? { outputScale: 2 } : {}),
+          ...(delivered ? { deliveredWidth: delivered.width, deliveredHeight: delivered.height } : {}),
           estimate
         }));
       } else {
@@ -13354,17 +13390,13 @@ async function main() {
       if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3Video)) {
         projectConfig.generateAudio = options.apiGenerateAudio;
       }
-      if (options.outputScale === 2 && isMiniMaxH3Model(options.model)) {
-        // 2K delivery: same canvas, frames and audio; the worker enlarges the
-        // finished render 2x. Sent only when asked, so plain requests are unchanged.
-        projectConfig.outputScale = 2;
-        if (!options.quiet) {
-          console.error(
-            `MiniMax H3 2K output: delivered at ${projectConfig.width * 2}x${projectConfig.height * 2} ` +
-            `(twice the requested ${projectConfig.width}x${projectConfig.height} canvas), same length and audio; ` +
-            'adds 10 Spark per second at 544/768p-class sizes (6 at 480p).'
-          );
-        }
+      if (isMiniMaxH3TwoStageModel(options.model) && !options.quiet) {
+        // Two-stage renders this canvas and delivers twice it: same frames and audio.
+        const delivered = miniMaxH3TwoStageDeliveredSize(projectConfig.width, projectConfig.height);
+        console.error(
+          `MiniMax H3 FastH3 Two-Stage: delivered at ${delivered.width}x${delivered.height} ` +
+          `(twice the ${projectConfig.width}x${projectConfig.height} canvas), same length and audio.`
+        );
       }
       if (Number.isFinite(steps) && !isHappyHorseVideo && !isMiniMaxH3Model(options.model) && !isWan3Video) {
         // HappyHorse routes through the vendor-job path and ignores `steps`,
@@ -13863,7 +13895,6 @@ async function main() {
         renderInfo.duration = options.frames ? options.frames / options.fps : options.duration;
         if (options.frames) renderInfo.frames = options.frames;
         if (options.targetResolution) renderInfo.targetResolution = options.targetResolution;
-        if (options.outputScale === 2) renderInfo.outputScale = 2;
         if (options.autoResizeVideoAssets !== null) {
           renderInfo.autoResizeVideoAssets = options.autoResizeVideoAssets;
         }
@@ -13959,7 +13990,6 @@ async function main() {
           else if (options.duration) projectConfig2.duration = options.duration;
           if (Number.isFinite(steps2)) projectConfig2.steps = steps2;
           if (guidance2 !== null && guidance2 !== undefined) projectConfig2.guidance = guidance2;
-          if (options.outputScale === 2 && isMiniMaxH3Model(options.model)) projectConfig2.outputScale = 2;
 
           // Create a new client for second clip to avoid event conflicts
           const creds = loadCredentials();
@@ -14119,7 +14149,11 @@ async function main() {
           output.duration = options.frames ? options.frames / options.fps : options.duration;
           if (options.frames) output.frames = options.frames;
           if (options.targetResolution) output.targetResolution = options.targetResolution;
-          if (options.outputScale === 2) output.outputScale = 2;
+          if (isMiniMaxH3TwoStageModel(options.model)) {
+            const delivered = miniMaxH3TwoStageDeliveredSize(options.width, options.height);
+            output.deliveredWidth = delivered.width;
+            output.deliveredHeight = delivered.height;
+          }
           output.strictSize = options.strictSize || false;
           if (options.autoResizeVideoAssets !== null) {
             output.autoResizeVideoAssets = options.autoResizeVideoAssets;
@@ -14194,7 +14228,6 @@ async function main() {
   } catch (error) {
     // A FlashVSR refusal can also arrive as a project event after submission.
     if (options.upscaleVideo) annotateVideoUpscaleError(error);
-    if (options.video && options.outputScale === 2) annotateMiniMaxH3OutputScaleError(error);
     // Token auto-fallback: if using auto mode and got insufficient balance, retry with the other token
     const isBalanceError = isStructuredInsufficientBalanceError(error);
     if (_allowAutoTokenFallback && isBalanceError && options.tokenType === 'spark') {

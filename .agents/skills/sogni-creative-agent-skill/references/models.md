@@ -378,7 +378,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | 4-step | FastVideo VSA FastH3 text-to-video; generic selector infers frame modes; about 2x faster than LightX2V Turbo and up to 6x Standard |
 | `minimax-h3-fasth3-i2v-turbo` | 4-step | FastH3 first-frame image-to-video or last-frame-only L2VA |
 | `minimax-h3-fasth3-flf2v-turbo` | 4-step | FastH3 first-frame → last-frame video; no FastH3 R2V mode |
-| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | 4-step | FastH3 Two-Stage (2K) text-to-video, delivered at twice the canvas; generic selector infers frame modes |
+| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | 4-step | FastH3 Two-Stage text-to-video, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`); generic selector infers frame modes |
 | `minimax-h3-fasth3-i2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame image-to-video or last-frame-only L2VA |
 | `minimax-h3-fasth3-flf2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame → last-frame video; no R2V mode |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
@@ -617,7 +617,7 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
 MiniMax H3 is a Sogni-hosted video family with **eighteen current selectors**:
 four Standard workflows, four 8-step Balanced workflows, four 4-step
 LightX2V Turbo workflows, three FastVideo VSA FastH3 Turbo workflows, and
-three FastH3 Two-Stage (2K) workflows. Every mode
+three FastH3 Two-Stage (720p/1080p/2K) workflows. Every mode
 generates picture and **native 32 kHz stereo audio jointly**.
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
@@ -647,7 +647,7 @@ FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selecto
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | FastH3 text-to-video | Separate FastVideo VSA four-step engine; generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo` | FastH3 image-to-video | First-frame I2VA or last-frame-only L2VA from one endpoint |
 | `minimax-h3-fasth3-flf2v-turbo` | FastH3 first → last frame | Both endpoints; FastH3 has no R2V selector |
-| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | FastH3 Two-Stage text-to-video | FastH3 request, delivered at twice the canvas (2K); generic selector infers frame workflows |
+| `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | FastH3 Two-Stage text-to-video | FastH3 on a half-size canvas, delivered at twice it (2K default, 1080p or 720p); generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo-2stage` | FastH3 Two-Stage image-to-video | First-frame I2VA or last-frame-only L2VA, delivered at twice the canvas |
 | `minimax-h3-fasth3-flf2v-turbo-2stage` | FastH3 Two-Stage first → last frame | Both endpoints, delivered at twice the canvas; no R2V |
 
@@ -674,7 +674,7 @@ is fixed four-step Euler/simple, it is about 2x faster than LightX2V Turbo and
 up to 6x faster than Standard for comparable 768p, 15-second requests, and it has no R2V mode.
 FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2stage`,
 `minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
-with the FastH3 request shape unchanged.
+with the FastH3 request shape on a half-size canvas.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -707,20 +707,35 @@ video-conditioned R2V requires a worker above 40 GB.
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
   `simple` scheduler; only Turbo's sampler has the three
   explicit variants above.
-- **2K output is FastH3 Two-Stage, a model choice.** `-m minimax-h3-fasth3-turbo-2stage`
-  (or the `-t2v-`, `-i2v-`, `-flf2v-turbo-2stage` selectors) sends the FastH3
-  request unchanged and delivers the clip at exactly twice the canvas
-  (1344×768 → 2688×1536) with the same frames and audio, through a learned
-  latent enlargement plus a short refinement on the worker. Keep the canvas at
-  768p; it adds 10 Spark per second to FastH3 at 544/768p-class canvases (6 at
-  480p), and the other H3 tiers have no 2K path. The server confirms a capable
-  worker before charging. This is Sogni's own 2K path; MiniMax's hosted 2K
-  stage is still not part of the open release. The retired `outputScale`
-  request option is refused.
+- **1080p and 2K output is FastH3 Two-Stage, a model choice.**
+  `-m minimax-h3-fasth3-turbo-2stage` (or the `-t2v-`, `-i2v-`,
+  `-flf2v-turbo-2stage` selectors) sends the FastH3 request on a half-size
+  canvas and delivers the clip at exactly twice it with the same frames and
+  audio, through a learned latent enlargement plus a short refinement on the
+  worker. `--target-resolution` names the delivered size, from the Intelligence
+  Client's size table:
+
+  | `--target-resolution` | Canvas (16:9) | Delivered | Price |
+  | --- | --- | --- | --- |
+  | `2K` or `1440` (default) | 1344×768 | 2688×1536 | FastH3 + 10 Spark/s |
+  | `1080` | 960×544 | 1920×1088 | FastH3 + 10 Spark/s |
+  | `720` | 672×384 | 1344×768 | about the FastH3 rate |
+
+  The canvas keeps the prompt's aspect, or a `--ref`/`--ref-end` image's aspect
+  (a 1080 portrait renders 544×960); explicit `-w`/`-h` are used as given and
+  still delivered at twice. Any other value, 768 included, is refused. Other
+  480p-class canvases add 6 Spark/s. Ordinary 768p output stays on the regular
+  FastH3 selectors, and the other H3 tiers have no two-stage path. The summary
+  line and `--json` (`deliveredWidth`, `deliveredHeight`) report the delivered
+  size. If the server is not serving two-stage, it refuses before charging and
+  the CLI prints its message unchanged. This is Sogni's own path; MiniMax's
+  hosted 2K stage is still not part of the open release. The retired
+  `outputScale` request option is refused.
 
 ```bash
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-turbo-2stage --duration 8 -o ./video-2k.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-turbo-2stage --target-resolution 1080 --duration 8 -o ./video-1080p.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"
@@ -958,7 +973,7 @@ model recommendations.
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
-| MiniMax H3 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage`, or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
+| MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
@@ -972,7 +987,7 @@ model recommendations.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.
-- Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio.
+- Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio. On FastH3 Two-Stage it names the delivered size instead: `720`, `1080`, or `2K`/`1440` (the default).
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but the ref becomes `1024×1535`). The CLI detects this for local refs and auto-adjusts to a nearby safe size.
 - Pass `--strict-size` to fail instead — the CLI prints a suggested size.

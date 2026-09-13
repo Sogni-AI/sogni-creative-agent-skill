@@ -123,16 +123,20 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
   `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
-- **2K output is the FastH3 Two-Stage model, not a canvas.**
+- **1080p and 2K output is the FastH3 Two-Stage model, not a canvas.**
   `-m minimax-h3-fasth3-turbo-2stage` (or `minimax-h3-fasth3-t2v-turbo-2stage`,
   `minimax-h3-fasth3-i2v-turbo-2stage`, `minimax-h3-fasth3-flf2v-turbo-2stage`)
-  renders the FastH3 request unchanged and delivers the clip at exactly twice
-  the canvas (1344×768 → 2688×1536) with the same length and audio; no other
-  H3 tier delivers 2K. Do not enlarge `-w`/`-h` to reach 2K — the pixel budget
-  still applies to the canvas. It adds 10 Spark per second to FastH3 at
-  544/768p-class canvases (6 at 480p); use it when the user asks for 2K,
-  1440p-class, two-stage or the sharpest H3 output. The prompt contract is
-  FastH3's.
+  renders FastH3 on a half-size canvas and delivers the clip at exactly twice
+  it with the same length and audio; no other H3 tier delivers above 768p.
+  `--target-resolution` names the delivered size: `2K` (or `1440`, the default)
+  renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
+  renders 672×384 → 1344×768, in the prompt's or reference's aspect; any other
+  value is refused. Do not enlarge `-w`/`-h` to reach 2K — the pixel budget
+  still applies to the canvas. 1080p and 2K add 10 Spark per second to FastH3
+  (6 on other 480p-class canvases); 720p costs about the FastH3 rate. Use it
+  when the user asks for 1080p, 1440p or 2K H3 output, two-stage, or the
+  sharpest H3 output; ordinary 768p stays on the regular FastH3 selectors. The
+  prompt contract is FastH3's.
 - **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.
@@ -157,8 +161,10 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the
   delivered file; it does not skip audio generation.
-- **Sogni's H3 is the 768p-class open-weights release.** Do not offer or claim
-  2K; MiniMax's 2K stage is hosted-only and is not part of the open release.
+- **Sogni's H3 tiers render the 768p-class open-weights release.** Only FastH3
+  Two-Stage delivers 1080p or 2K (Sogni's own latent enlargement); do not claim
+  either for any other H3 selector. MiniMax's hosted 2K stage is not part of
+  the open release.
 - The Sogni CLI does not truncate H3 prompts. If another surface has a shorter
   cap, flag it explicitly instead of silently removing required fields.
 - FL2VA/Balanced/Turbo and image-only R2V are routed to 32 GB-class workers;

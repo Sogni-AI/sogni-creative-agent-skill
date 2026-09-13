@@ -99,7 +99,7 @@
     "sam-segmentation.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "3.32.1",
+    "@sogni-ai/sogni-intelligence-client": "3.33.0",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"

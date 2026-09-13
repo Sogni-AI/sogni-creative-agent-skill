@@ -7113,6 +7113,138 @@ test('MiniMax H3 FastH3 Two-Stage quotes its own model id and reports the delive
   assert.equal('outputScale' in output, false);
 });
 
+test('--target-resolution picks the FastH3 Two-Stage delivered class and its half-size canvas', () => {
+  for (const [value, canvas, delivered] of [
+    ['720', [672, 384], [1344, 768]],
+    ['720p', [672, 384], [1344, 768]],
+    ['1080', [960, 544], [1920, 1088]],
+    ['1080p', [960, 544], [1920, 1088]],
+    ['1440', [1344, 768], [2688, 1536]],
+    ['1536', [1344, 768], [2688, 1536]],
+    ['2K', [1344, 768], [2688, 1536]],
+    ['2k', [1344, 768], [2688, 1536]]
+  ]) {
+    const render = runCli([
+      '--json', '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', value,
+      'A record store conversation with vinyl crackle.'
+    ]);
+    assert.equal(render.exitCode, 0, `${value}: ${render.stderr}`);
+    const project = render.state.lastVideoProject;
+    assert.equal(project.modelId, 'minimax-h3-fastvideo-int8_t2v_turbo_2stage', value);
+    assert.deepEqual([project.width, project.height], canvas, value);
+    assert.equal('outputScale' in project, false, value);
+    const output = JSON.parse(render.stdout.trim().split('\n').pop());
+    assert.deepEqual([output.width, output.height], canvas, value);
+    assert.deepEqual([output.deliveredWidth, output.deliveredHeight], delivered, value);
+    assert.match(
+      render.stderr,
+      new RegExp(`delivered at ${delivered[0]}x${delivered[1]} \\(twice the ${canvas[0]}x${canvas[1]} canvas\\)`),
+      value
+    );
+  }
+
+  const estimate = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-t2v-turbo-2stage', '--target-resolution', '1080',
+    '--duration', '8', '--estimate-video-cost', 'A record store conversation with vinyl crackle.'
+  ]);
+  assert.equal(estimate.exitCode, 0, estimate.stderr);
+  assert.equal(estimate.state.lastEstimateVideoCost.modelId, 'minimax-h3-fastvideo-int8_t2v_turbo_2stage');
+  assert.equal(estimate.state.lastEstimateVideoCost.width, 960);
+  assert.equal(estimate.state.lastEstimateVideoCost.height, 544);
+  const report = JSON.parse(estimate.stdout.trim().split('\n').pop());
+  assert.equal(report.deliveredWidth, 1920);
+  assert.equal(report.deliveredHeight, 1088);
+
+  // An explicit canvas is used as given and still delivered at twice it.
+  const explicit = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '-w', '544', '-h', '960',
+    'A record store conversation with vinyl crackle.'
+  ]);
+  assert.equal(explicit.exitCode, 0, explicit.stderr);
+  assert.deepEqual([explicit.state.lastVideoProject.width, explicit.state.lastVideoProject.height], [544, 960]);
+  const explicitOutput = JSON.parse(explicit.stdout.trim().split('\n').pop());
+  assert.deepEqual([explicitOutput.deliveredWidth, explicitOutput.deliveredHeight], [1088, 1920]);
+});
+
+test('FastH3 Two-Stage keeps a frame reference on the requested delivered class', () => {
+  // docs/screenshot.jpg is 2314x1200: the canvas follows its aspect at the class short edge.
+  const i2v = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', '1080', '--ref', SCREENSHOT_FIXTURE,
+    'The clerk lifts a record sleeve and speaks.'
+  ]);
+  assert.equal(i2v.exitCode, 0, i2v.stderr);
+  assert.equal(i2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_i2v_turbo_2stage');
+  assert.deepEqual([i2v.state.lastVideoProject.width, i2v.state.lastVideoProject.height], [1056, 544]);
+  assert.match(i2v.stderr, /delivered at 2112x1088 \(twice the 1056x544 canvas\)/);
+
+  const l2v = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', '720', '--ref-end', SCREENSHOT_FIXTURE,
+    'The clerk walks to the counter.'
+  ]);
+  assert.equal(l2v.exitCode, 0, l2v.stderr);
+  assert.deepEqual([l2v.state.lastVideoProject.width, l2v.state.lastVideoProject.height], [736, 384]);
+  assert.match(l2v.stderr, /delivered at 1472x768 \(twice the 736x384 canvas\)/);
+});
+
+test('FastH3 Two-Stage refuses a delivered class it cannot render, and 2K on other models', () => {
+  for (const value of ['768', '480', '2160']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', value, 'A prompt.'
+    ]);
+    assert.equal(exitCode, 1, value);
+    assert.match(stderr, /targetResolution must be 720, 1080, or 1440/, value);
+    assert.match(stderr, /--target-resolution is the delivered size: 720, 1080, or 2K \(1440\)/, value);
+    assert.equal(state?.lastVideoProject ?? null, null, value);
+    assert.equal(state?.lastEstimateVideoCost ?? null, null, value);
+  }
+  for (const model of ['minimax-h3-fasth3-turbo', 'ltx25']) {
+    const { exitCode, state, stderr } = runCli(['--video', '-m', model, '--target-resolution', '2K', 'A prompt.']);
+    assert.equal(exitCode, 1, model);
+    assert.match(stderr, /--target-resolution 2K is the MiniMax H3 FastH3 Two-Stage delivered size/, model);
+    assert.equal(state?.lastVideoProject ?? null, null, model);
+  }
+  // Ordinary 768p FastH3 stays on its base id.
+  const base = runCli(['--video', '-m', 'minimax-h3-fasth3-turbo', '--target-resolution', '768', 'A prompt.']);
+  assert.equal(base.exitCode, 0, base.stderr);
+  assert.equal(base.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_t2v_turbo');
+  assert.deepEqual([base.state.lastVideoProject.width, base.state.lastVideoProject.height], [1344, 768]);
+});
+
+const MINIMAX_H3_TWO_STAGE_HOLD = 'MiniMax H3 Latent Upscaler (Community) will be available soon.';
+
+test('FastH3 Two-Stage relays the socket hold notice word for word', () => {
+  const created = runCli(
+    ['--video', '-m', 'minimax-h3-fasth3-turbo-2stage', 'A record store conversation with vinyl crackle.'],
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: MINIMAX_H3_TWO_STAGE_HOLD }
+  );
+  assert.equal(created.exitCode, 1);
+  assert.match(created.stderr, /^Error: MiniMax H3 Latent Upscaler \(Community\) will be available soon\.$/m);
+  assert.doesNotMatch(created.stderr, /Hint:/);
+
+  const admission = runCli(
+    ['--json', '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', '1080', 'A record store conversation.'],
+    {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+        event: 'PROJECT_FAILED',
+        payload: { projectId: 'proj-1', code: 4053, message: MINIMAX_H3_TWO_STAGE_HOLD }
+      })
+    }
+  );
+  assert.equal(admission.exitCode, 1);
+  const admissionOutput = JSON.parse(admission.stdout.trim().split('\n').pop());
+  assert.equal(admissionOutput.success, false);
+  assert.equal(admissionOutput.error, MINIMAX_H3_TWO_STAGE_HOLD);
+  assert.equal(admissionOutput.errorCode, 4053);
+  assert.equal(admissionOutput.retryable, false);
+
+  const quote = runCli(
+    ['--json', '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--estimate-video-cost', 'A record store conversation.'],
+    { SOGNI_AGENT_TEST_VIDEO_COST_ERROR: MINIMAX_H3_TWO_STAGE_HOLD }
+  );
+  assert.equal(quote.exitCode, 1);
+  assert.equal(JSON.parse(quote.stdout.trim().split('\n').pop()).error, MINIMAX_H3_TWO_STAGE_HOLD);
+});
+
 test('retired --2k and --output-scale fail hard and point at the FastH3 Two-Stage model', () => {
   for (const args of [
     ['--video', '-m', 'minimax-h3-fasth3-turbo', '--2k', 'A prompt.'],
@@ -7125,6 +7257,7 @@ test('retired --2k and --output-scale fail hard and point at the FastH3 Two-Stag
     assert.equal(exitCode, 1, JSON.stringify(args));
     assert.match(stderr, /--(?:2k|output-scale) is no longer supported/, JSON.stringify(args));
     assert.match(stderr, /-m minimax-h3-fasth3-turbo-2stage/, JSON.stringify(args));
+    assert.match(stderr, /--target-resolution 1080 or 720/, JSON.stringify(args));
     assert.equal(state?.lastVideoProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastImageProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastEstimateVideoCost ?? null, null, JSON.stringify(args));

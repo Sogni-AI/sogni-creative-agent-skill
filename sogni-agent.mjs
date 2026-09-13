@@ -96,6 +96,10 @@ import {
   isGptImageModel,
   isKreaIdentityEditModel,
   SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
+  calculateVideoDimensions as calculateSharedVideoDimensions,
+  isMinimaxH3TwoStageModelId,
+  minimaxH3TwoStageCanvasShortEdge,
+  minimaxH3TwoStageDeliveredSize,
   prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
@@ -1291,6 +1295,15 @@ function parseIntegerValue(raw, flagName) {
   return num;
 }
 
+// --target-resolution: a short side in pixels ("1080p" means 1080). "2K" names
+// the MiniMax H3 FastH3 Two-Stage 2K delivered class, 1440 in the Intelligence
+// Client's size table, and is refused for every other model once it resolves.
+function parseTargetResolutionValue(raw, flagName) {
+  const normalized = String(raw ?? '').trim().toLowerCase();
+  if (normalized === '2k') return { value: 1440, spelled2K: true };
+  return { value: parsePositiveIntegerValue(normalized.replace(/p$/, ''), flagName), spelled2K: false };
+}
+
 function parsePositiveIntegerValue(raw, flagName, min = 1, max = Infinity) {
   const num = parseIntegerValue(raw, flagName);
   if (num < min) {
@@ -2368,15 +2381,17 @@ const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
 ]);
-// FastH3 Two-Stage renders the FastH3 request unchanged on its own model ids
-// and delivers the clip at exactly twice the canvas (1344x768 -> 2688x1536),
-// same frames and audio. It is FastH3-class everywhere FastH3 is.
+// FastH3 Two-Stage renders the FastH3 request on its own model ids and delivers
+// the clip at exactly twice the canvas, same frames and audio: 720p from 672x384,
+// 1080p from 960x544, 2K from 1344x768. It is FastH3-class everywhere FastH3 is.
+// The size table, the id spellings and the delivered size come from the
+// Intelligence Client (isMinimaxH3TwoStageModelId, minimaxH3TwoStageCanvasShortEdge,
+// minimaxH3TwoStageDeliveredSize).
 const MINIMAX_H3_TWO_STAGE_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_t2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
 ]);
-const MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE = 2;
 const MINIMAX_H3_FASTH3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_t2v_turbo',
   'minimax-h3-fastvideo-int8_i2v_turbo',
@@ -2572,13 +2587,28 @@ function isMiniMaxH3TurboModel(modelId) {
 }
 
 function isMiniMaxH3TwoStageModel(modelId) {
-  return MINIMAX_H3_TWO_STAGE_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+  return isMinimaxH3TwoStageModelId(modelId);
 }
 
-function miniMaxH3TwoStageDeliveredSize(width, height) {
+/**
+ * The FastH3 Two-Stage canvas for a source of this size: the Intelligence Client
+ * turns the requested delivered class (720, 1080, or 1440/2K; undefined is 2K)
+ * into a 384, 544 or 768 short edge in the source's aspect (or aspectRatio's).
+ */
+function miniMaxH3TwoStageCanvas(modelId, deliveredClass, sourceWidth, sourceHeight, aspectRatio) {
+  const selector = `minimax-h3-fasth3-${miniMaxH3ModeFromModelId(modelId)}-turbo-2stage`;
+  return calculateSharedVideoDimensions(sourceWidth, sourceHeight, deliveredClass, selector, aspectRatio || undefined);
+}
+
+/**
+ * Dimension rules that keep a pre-resized reference on the two-stage canvas, so
+ * the resize cannot grow the clip into a larger, pricier delivered class.
+ */
+function miniMaxH3TwoStageReferenceRules(rules, canvas) {
   return {
-    width: width * MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE,
-    height: height * MINIMAX_H3_TWO_STAGE_DELIVERED_SCALE
+    ...rules,
+    maxDimension: Math.min(rules.maxDimension, Math.max(canvas.width, canvas.height)),
+    maxPixels: canvas.width * canvas.height
   };
 }
 
@@ -3153,6 +3183,7 @@ const cliSet = {
   duration: false,
   frames: false,
   targetResolution: false,
+  targetResolution2K: false,
   autoResizeVideoAssets: false,
   angles360Video: false,
   videoModel: false,
@@ -3496,15 +3527,17 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--target-resolution' || arg === '--short-side') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.targetResolution = parsePositiveIntegerValue(raw, arg);
+    const parsed = parseTargetResolutionValue(raw, arg);
+    options.targetResolution = parsed.value;
     cliSet.targetResolution = true;
+    cliSet.targetResolution2K = parsed.spelled2K;
   } else if (arg === '--output-scale' || arg === '--2k') {
     // Retired: MiniMax H3 1080p/2K output is its own model id now, and Sogni
     // refuses any request carrying outputScale. Fail instead of guessing a model.
     fatalCliError(`${arg} is no longer supported. MiniMax H3 2K output is the FastH3 Two-Stage model: use -m minimax-h3-fasth3-turbo-2stage.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: arg },
-      hint: 'Replace the flag with -m minimax-h3-fasth3-turbo-2stage (or minimax-h3-fasth3-t2v-turbo-2stage / -i2v- / -flf2v-); the clip is delivered at twice the canvas, 1344x768 -> 2688x1536.'
+      hint: 'Replace the flag with -m minimax-h3-fasth3-turbo-2stage (or minimax-h3-fasth3-t2v-turbo-2stage / -i2v- / -flf2v-), which delivers 2K by default (1344x768 -> 2688x1536); add --target-resolution 1080 or 720 for 1080p or 720p.'
     });
   } else if (arg === '--auto-resize-assets') {
     options.autoResizeVideoAssets = true;
@@ -4298,7 +4331,9 @@ Video Options:
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080)
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080).
+                         MiniMax H3 FastH3 Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
+                         rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
   --estimate-video-cost Estimate video cost and exit
@@ -4557,8 +4592,8 @@ state negatives in the structured prompt.):
   minimax-h3-fasth3-t2v-turbo       FastH3 text-to-video (up to 6x faster than Standard)
   minimax-h3-fasth3-i2v-turbo       FastH3 I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-fasth3-flf2v-turbo     FastH3 first-frame -> last-frame (--ref plus --ref-end)
-  minimax-h3-fasth3-turbo-2stage    FastH3 Two-Stage (2K): delivered at twice the canvas (1344x768 -> 2688x1536);
-                                     infers T2VA/I2VA/L2VA/FL2VA; no R2V
+  minimax-h3-fasth3-turbo-2stage    FastH3 Two-Stage: delivered at twice the canvas, 2K by default (1344x768 -> 2688x1536);
+                                     --target-resolution 1080 or 720 for 1080p or 720p; infers T2VA/I2VA/L2VA/FL2VA; no R2V
   minimax-h3-fasth3-t2v-turbo-2stage
                                     FastH3 Two-Stage text-to-video
   minimax-h3-fasth3-i2v-turbo-2stage
@@ -5481,15 +5516,50 @@ if (options.music) {
       options.steps = videoQuality.steps;
     }
   }
-  const videoShortSide = (cliSet.targetResolution || targetResolutionFromPrompt)
-    ? options.targetResolution
-    : (!isSeedanceVideo ? videoQuality?.shortSide : null);
-  if (videoShortSide && !cliSet.width && !cliSet.height && !widthFromConfig && !heightFromConfig && !widthFromPrompt && !heightFromPrompt) {
+  // MiniMax H3 FastH3 Two-Stage: --target-resolution names the delivered class
+  // (720, 1080, or 1440/2K; omitted is 2K) and the canvas is half of it, from the
+  // Intelligence Client's size table. Anything else is refused, never guessed.
+  const isTwoStageVideo = isMiniMaxH3TwoStageModel(options.model);
+  if (cliSet.targetResolution2K && !isTwoStageVideo) {
+    fatalCliError(`--target-resolution 2K is the MiniMax H3 FastH3 Two-Stage delivered size; ${options.model} takes a short side in pixels.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--target-resolution', value: '2K', model: options.model },
+      hint: 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
+    });
+  }
+  const hasExplicitVideoCanvas = cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt;
+  if (isTwoStageVideo) {
+    const requestedClass = (cliSet.targetResolution || targetResolutionFromPrompt) ? options.targetResolution : undefined;
+    try {
+      minimaxH3TwoStageCanvasShortEdge(requestedClass);
+    } catch (error) {
+      fatalCliError(`${error.message}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--target-resolution', value: requestedClass, model: options.model },
+        hint: 'MiniMax H3 FastH3 Two-Stage --target-resolution is the delivered size: 720, 1080, or 2K (1440). Omit it for 2K.'
+      });
+    }
+    options._miniMaxH3TwoStageClass = requestedClass;
+    // An explicit -w/-h is the canvas as given; otherwise the class sets it, and
+    // an i2v reference later re-derives it in the reference's aspect.
+    options._miniMaxH3TwoStageAutoCanvas = !hasExplicitVideoCanvas;
+    if (!hasExplicitVideoCanvas) {
+      const canvas = miniMaxH3TwoStageCanvas(options.model, requestedClass, options.width, options.height, aspectRatioFromPrompt);
+      options.width = canvas.width;
+      options.height = canvas.height;
+    }
+  }
+  const videoShortSide = isTwoStageVideo
+    ? null
+    : ((cliSet.targetResolution || targetResolutionFromPrompt)
+      ? options.targetResolution
+      : (!isSeedanceVideo ? videoQuality?.shortSide : null));
+  if (videoShortSide && !hasExplicitVideoCanvas) {
     const dims = dimensionsWithShortSide(options.width, options.height, videoShortSide);
     options.width = dims.width;
     options.height = dims.height;
   }
-  if (aspectRatioFromPrompt && !cliSet.width && !cliSet.height) {
+  if (aspectRatioFromPrompt && !cliSet.width && !cliSet.height && !isTwoStageVideo) {
     const dims = dimensionsForAspectRatio(options.width, options.height, aspectRatioFromPrompt);
     if (dims) {
       options.width = dims.width;
@@ -6498,12 +6568,34 @@ if (options.video) {
   // clients that ceiling is model-aware — e.g. 3840 for LTX-2.x — on legacy clients it is a
   // blanket 1536).
   const hasVideoReference = Boolean(options.refImage || options.refImageEnd);
-  const videoDimensionRules = hasVideoReference
+  const referenceVideoDimensionRules = hasVideoReference
     ? {
       ...baseVideoDimensionRules,
       maxDimension: Math.min(baseVideoDimensionRules.maxDimension, wrapperRefVideoDimensionCeiling(options.model))
     }
     : baseVideoDimensionRules;
+  // FastH3 Two-Stage follows a local reference's aspect at the requested
+  // delivered class, and caps the reference pre-resize to that canvas.
+  let twoStageReferenceCanvas = null;
+  if (options._miniMaxH3TwoStageAutoCanvas && options.videoWorkflow === 'i2v' && hasVideoReference) {
+    const twoStageRefPath = options.refImage || options.refImageEnd;
+    if (!isHttpUrl(twoStageRefPath) && existsSync(twoStageRefPath)) {
+      const twoStageRefDims = getImageDimensionsFromBuffer(readFileSync(twoStageRefPath));
+      if (twoStageRefDims?.width && twoStageRefDims?.height) {
+        twoStageReferenceCanvas = miniMaxH3TwoStageCanvas(
+          options.model,
+          options._miniMaxH3TwoStageClass,
+          twoStageRefDims.width,
+          twoStageRefDims.height
+        );
+        options.width = twoStageReferenceCanvas.width;
+        options.height = twoStageReferenceCanvas.height;
+      }
+    }
+  }
+  const videoDimensionRules = twoStageReferenceCanvas
+    ? miniMaxH3TwoStageReferenceRules(referenceVideoDimensionRules, twoStageReferenceCanvas)
+    : referenceVideoDimensionRules;
 
   // An implicit LTX i2v canvas follows an already-compatible local reference
   // directly. Resolve this before normalizing the model's landscape default so
@@ -12743,7 +12835,7 @@ async function main() {
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
         const delivered = isMiniMaxH3TwoStageModel(options.model)
-          ? miniMaxH3TwoStageDeliveredSize(options.width, options.height)
+          ? minimaxH3TwoStageDeliveredSize(options.width, options.height)
           : null;
         console.log(JSON.stringify({
           success: true,
@@ -13151,7 +13243,23 @@ async function main() {
         ? await prepareReferenceAudioIdentityMedia(options.referenceAudioIdentity)
         : undefined;
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
-      const videoDimensionRules = videoDimensionRulesFromDefaults(modelDefaults, options.model);
+      let videoDimensionRules = videoDimensionRulesFromDefaults(modelDefaults, options.model);
+      // FastH3 Two-Stage: a downloaded (or local) reference sets the canvas aspect
+      // at the requested delivered class, and the pre-resize stays on that canvas.
+      if (options._miniMaxH3TwoStageAutoCanvas && options.videoWorkflow === 'i2v' && (imageBuffer || endImageBuffer)) {
+        const twoStageRefDims = await getVideoImageDimensionsFromBuffer(imageBuffer || endImageBuffer);
+        if (twoStageRefDims?.width && twoStageRefDims?.height) {
+          const twoStageCanvas = miniMaxH3TwoStageCanvas(
+            options.model,
+            options._miniMaxH3TwoStageClass,
+            twoStageRefDims.width,
+            twoStageRefDims.height
+          );
+          options.width = twoStageCanvas.width;
+          options.height = twoStageCanvas.height;
+          videoDimensionRules = miniMaxH3TwoStageReferenceRules(videoDimensionRules, twoStageCanvas);
+        }
+      }
 
       if (
         options.videoWorkflow === 'v2v' &&
@@ -13392,7 +13500,7 @@ async function main() {
       }
       if (isMiniMaxH3TwoStageModel(options.model) && !options.quiet) {
         // Two-stage renders this canvas and delivers twice it: same frames and audio.
-        const delivered = miniMaxH3TwoStageDeliveredSize(projectConfig.width, projectConfig.height);
+        const delivered = minimaxH3TwoStageDeliveredSize(projectConfig.width, projectConfig.height);
         console.error(
           `MiniMax H3 FastH3 Two-Stage: delivered at ${delivered.width}x${delivered.height} ` +
           `(twice the ${projectConfig.width}x${projectConfig.height} canvas), same length and audio.`
@@ -14150,7 +14258,7 @@ async function main() {
           if (options.frames) output.frames = options.frames;
           if (options.targetResolution) output.targetResolution = options.targetResolution;
           if (isMiniMaxH3TwoStageModel(options.model)) {
-            const delivered = miniMaxH3TwoStageDeliveredSize(options.width, options.height);
+            const delivered = minimaxH3TwoStageDeliveredSize(options.width, options.height);
             output.deliveredWidth = delivered.width;
             output.deliveredHeight = delivered.height;
           }

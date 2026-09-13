@@ -1,3 +1,14 @@
+## [3.47.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.46.0...v3.47.0) (2026-09-12)
+
+### Features
+
+* Add `--output-scale 2` (alias `--2k`) for MiniMax H3 2K delivery: the clip renders on the requested canvas and comes back at twice its width and height (1344x768 becomes 2688x1536) with the same length and audio, for +10 Spark per second at 544/768p-class sizes and +6 at 480p. Other models refuse the flag by name. While Sogni holds 2K behind its "available soon" message, the CLI reports that refusal as `MODEL_UNAVAILABLE` with a hint to retry at the standard size.
+
+### Bug Fixes
+
+* Align the public runtime with Sogni Client 5.46.0 and Intelligence Client 3.33.0, moving the exact pin, `skill-package.json` and the sogni-client override together. 5.46.0 stops the SDK cancelling a project after its render moves to another worker, which killed the live retry.
+* The bundled creative-agent runtime is regenerated from 1.65.0; its public contracts are unchanged.
+
 ## [3.46.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.46.0) (2026-09-11)
 
 3.44.0 and 3.45.0 were prepared but never published to npm; this release carries their changes too, so 3.43.0 is the last version npm actually shipped.

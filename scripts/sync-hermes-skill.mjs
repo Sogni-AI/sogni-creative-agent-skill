@@ -19,6 +19,7 @@ const referenceFiles = [
   'h3-video-loras.md',
   'hosted-api.md',
   'image-prompting.md',
+  'interactive-worlds.md',
   'krea2-loras.md',
   'loop-maker.md',
   'models.md',

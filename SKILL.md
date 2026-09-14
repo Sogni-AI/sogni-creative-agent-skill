@@ -1,8 +1,8 @@
 ---
 name: sogni-creative-agent-skill
-description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent Skill: agent skill and CLI for image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.48.0"
+  version: "3.49.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -40,7 +40,7 @@ npm install -g @sogni-ai/sogni-creative-agent-skill@latest
 sogni-agent --version
 ```
 
-Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI. The one-command alternative `npx setup-sogni-agent-skill` auto-detects Claude Code, Codex CLI, and Hermes (it does not configure Goose or OpenClaw).
+Then configure the agent/runtime to use this `SKILL.md` and invoke the `sogni-agent` CLI. The one-command alternative `npx setup-sogni-agent-skill --version=latest` auto-detects Claude Code, Codex CLI, and Hermes (it does not configure Goose or OpenClaw).
 
 For Goose, install this skill with `npx skills add Sogni-AI/sogni-creative-agent-skill --global --agent goose --skill sogni-creative-agent-skill --yes`, install the CLI above, then run `sogni-agent-goose doctor --json`. The [README](./README.md#goose) also covers the MCP extension.
 
@@ -208,7 +208,7 @@ sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polish
 # Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p).
 # Edit inherits @Video1's ratio and uses its source duration; extend inherits
 # the ratio but uses the requested continuation duration.
-sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
+sogni-agent --video -m seedance2-5 --target-resolution 1080 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1; preserve its subject and timing"
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
 
@@ -325,10 +325,10 @@ sogni-agent doctor --json
 ### Segmentation and 3D reconstruction
 
 - To isolate an object in an image — a mask, or the subject cut out on transparency — use `sam3_image_segment_bf16` with a `sam3Prompt`. In direct CLI mode that is `--segment <original> --segment-point x,y` (repeat; `--segment-exclude` refines) or `--segment-text "<object>"` with optional `--segment-box x0,y0,x1,y1`, returning one binary PNG mask — read [`references/object-selection.md`](./references/object-selection.md) first. It is promptless in the ordinary sense: the selection comes from `text`, click `points`, or `boxes`, never from `positivePrompt`. Never route a "remove the background" or "select the X" request through `edit_image` or `refine_result`, which regenerate pixels instead of selecting them.
-- SDK callers: set `applyMask: true` when the result feeds a composite; leave it off when you need the black-and-white mask itself. If a text prompt matches more instances than intended, the result's `maskSelections` reports each one's score and bounds — re-run with `maxInstances: 1` or a box around the intended one rather than accepting a merged shape.
-- To turn one image into a textured 3D model, use `pixal3d_int8_i23d` with a `startingImage` and **no prompt** — the default graph isolates the subject on its own. Only the `templateVariant: 'i23d'` variant takes a `positivePrompt`, and there the prompt names which object to pull out of a busy scene. The artifact is a binary GLB, not a picture; never display or post-process it as an image. Set `meshTargetFaces` well below the 700000 default for anything headed into a real-time engine.
-- `birefnet_image_background_removal_fp16` (prompt-free background removal) is **not yet routable** — it still needs a Comfy Worker release, so do not offer it. Remove backgrounds with SAM 3 and `applyMask: true` in the meantime.
-- All are flat-priced per request, so resolution and step count change neither cost nor result. Details and full option ranges in [`references/models.md`](./references/models.md).
+- SDK callers: SAM 3 takes `sam3Prompt.applyMask: true` for a cutout; leave it off for the binary mask. If text matches too many instances, inspect `maskSelections` and refine with `maxInstances: 1` or points. BiRefNet uses top-level `applyMask` instead.
+- Pixal3D (`pixal3d_int8_i23d`) reconstructs one `startingImage` into a textured GLB. Its supported graph is promptless: omit `templateVariant` or use `i23d-birefnet`; the old prompted `i23d` variant is removed. Shape resolution defaults to 1024, with 1536 available at a higher price. Set `meshTargetFaces` below the 700000 maximum for a real-time asset. Discovery supports `--search-models pixal3d` and `--model-media model`; generate with `--image-to-3d object.png --mesh-faces 30000 -o object.glb`. Save the binary result as `.glb`, never process it as an image.
+- `birefnet_image_background_removal_fp16` is available on Supernet for promptless soft-matte background removal. SDK callers pass `startingImage` and top-level `applyMask: true` for an RGBA cutout. Use `--remove-background original.png -o cutout.png`; add `--matte` for a soft mask. Preserve original bytes and dimensions.
+- SAM 3 and BiRefNet are flat-priced; Pixal3D pricing changes with `shapeResolution`. Use `--music -m music3` for MiniMax Music 3 and `--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read [`references/models.md`](./references/models.md) before these modes: it covers promptless mesh/cutout controls, Music 3 section tags, exact speech scripts, studio voices, and 3–30s clone recordings. Speech never accepts music duration or diffusion controls.
 
 ### Photobooth vs. context editing
 
@@ -373,7 +373,7 @@ H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (
 
 For an H3 prompt-only request, the general prompt-authoring rule above requires returning only the applicable ordered-field contract. The fields themselves are the directly runnable deliverable; do not wrap them in commentary.
 
-For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders up to 1080p. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
+For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders up to 1080p. When the user requests Seedance 2.5 at 1080p, keep `-m seedance2-5 --target-resolution 1080`, including its frame, reference, edit, and extend workflows. For "hd" / "1080p" requests with no model selected, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" on LTX/WAN 2.2 without orientation, prefer `--target-resolution 768`; Seedance uses `720`.
 
 ### Video editing, stitching, 360 turnarounds
 

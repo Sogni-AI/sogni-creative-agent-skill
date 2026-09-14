@@ -12,6 +12,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Image models
 - Utility and 3D models
 - Music models
+- Speech models
 - Video models — current selectors
 - Seedance 2.5
 - HappyHorse 1.1 models
@@ -35,6 +36,8 @@ sogni-agent --search-models spicy
 sogni-agent --list-models --model-tag uncensored
 sogni-agent --list-models --model-tag spicy --model-tag uncensored
 sogni-agent --list-models --model-media video
+sogni-agent --list-models --model-media model
+sogni-agent --search-models pixal3d
 sogni-agent --json --search-models darkbeast
 sogni-agent --list-models --model-network relaxed
 ```
@@ -48,6 +51,11 @@ AND semantics.
 Availability, worker counts, media types, network coverage, and tags come from
 `https://api.sogni.ai/v1/model-catalog`. Only models that are live on the
 selected network are returned. Discovery does not require an API key.
+
+Use each model's dedicated input contract: `--image-to-3d` for Pixal3D,
+`--remove-background` for BiRefNet, `--music -m music3` for MiniMax Music 3,
+and `--speech` for Qwen3-TTS. A catalog ID alone does not supply its required
+inputs. Read the mode-specific commands and controls below.
 
 `--list-api-models` is different: it lists Sogni Intelligence language models
 from `/v1/models`, not Supernet media models.
@@ -69,16 +77,22 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | Model | Speed | Use Case |
 |-------|-------|----------|
 | `z_image_turbo_bf16` | Fast (~5-10s) | General purpose, default |
+| `z_image_bf16` | Variable | Full Z-Image; explicit model selection |
+| `dark_beast_z_image_turbo_v9_bf16` | Variable | Dark Beast Z-Image Turbo v9 community model |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency |
 | `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
+| `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
 | `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
 | `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
 | `dark_beast_krea2_identity_edit_v1_2` | Fast | Dark Beast Krea 2 Identity Edit community LoRA with 1-2 references |
 | `chroma-v.46-flash_fp8` | Medium | Balanced |
+| `chroma-v48-detail-svd_fp8` | Variable | Chroma v.48 detail-calibrated model |
+| `chroma1-hd_fp8_scaled` | Variable | Chroma1-HD |
+| `one_obsession_v22_fp16` | Variable | One Obsession v22 community model |
 | `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
 | `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
@@ -177,8 +191,8 @@ support up to 3; Krea identity edit models support up to 2).
 | `pixal3d_int8_i23d` | Slow (~120-170s) | Single-image reconstruction to a textured GLB |
 | `birefnet_image_background_removal_fp16` | Very fast (~1s warm) | Prompt-free background removal, soft matte — the better cut-out when the subject is clear |
 
-None is a text-to-image model. All always require a `startingImage`, and all are
-priced flat per request, so resolution and step count change nothing. None of
+None is a text-to-image model. All always require a `startingImage`. SAM 3 and
+BiRefNet are flat-priced; Pixal3D pricing depends on `shapeResolution`. None of
 the usual generation controls apply either: leave steps, guidance, sampler,
 scheduler, and the negative prompt unset for every one of them.
 
@@ -228,29 +242,33 @@ the one you actually wanted.
 
 ### Pixal3D image-to-3D (`pixal3d_int8_i23d`)
 
-$0.42 per reconstruction at the default shape resolution of 1536, $0.30 at 1024.
+$0.30 per reconstruction at the default shape resolution of 1024; explicitly
+selecting 1536 costs $0.42. These are the two priced shape settings.
 Takes one `startingImage` and returns a binary GLB — a TRELLIS.2 mesh of roughly
 695,000 triangles with a full PBR set baked in: 4K base colour and UV atlas, 4K
 metallic-roughness, 2K normal, and 1K ambient occlusion. Output is a 3D model,
 not a picture — do not treat the artifact as an image.
 
-**The default takes no prompt.** One workflow id serves two graphs, and the
-flagged default is now the BiRefNet one, which isolates the subject
-automatically. Sending a prompt to it does nothing.
+**Reconstruction takes no prompt.** The supported graph isolates the subject
+with BiRefNet. Omit `templateVariant`, or explicitly select `i23d-birefnet`.
+The old prompted `i23d` variant has been removed and is rejected by the current
+SDK and Socket; never select it. For a busy scene, isolate the intended object
+before reconstruction. Use a sharp original photo with the whole object
+visible and minimal occlusion; keep its input resolution.
 
-| Variant | `templateVariant` | Prompt | Use it when |
-|---------|-------------------|--------|-------------|
-| BiRefNet (default) | omit, or `i23d-birefnet` | none | The image has one clear subject |
-| Prompted | `i23d` | `positivePrompt`, required | A busy scene, where SAM 3 has to pick one object out of several |
+```bash
+sogni-agent --image-to-3d object.png --mesh-faces 30000 -o object.glb --json
+sogni-agent --image-to-3d object.png --shape-resolution 1536 --texture-size 2048 --normal-map-size 1024 --ao-map-size 512 -o detailed.glb
+```
 
-On the prompted variant the prompt NAMES the object to reconstruct — "the red
-ceramic teapot" — it does not restyle it, so describing a desired appearance
-changes nothing. Either way, use a sharp source photo with the whole object
-visible and minimal occlusion.
+`--pixal3d` is an alias for `--image-to-3d`. Supply one original PNG, JPEG,
+or WebP; the CLI preserves its bytes and saves a validated binary `.glb`.
+There is no prompt, seed, sampler, sizing, or batch control for this utility.
+SDK callers use an image project with `startingImage` and the options below.
+Do not substitute `--context`: that creates an image-edit request.
 
-Five generation options may only *reduce* work. Each maximum is the shipped
-default, so the flat price is a guaranteed upper bound and a smaller value
-simply produces a lighter asset:
+Texture and mesh controls reduce the shipped budgets; `shapeResolution` can
+increase work and price above the 1024 default:
 
 | Option | Range | Default |
 |--------|-------|---------|
@@ -258,7 +276,7 @@ simply produces a lighter asset:
 | `textureSize` | 1024-4096 | 4096 |
 | `normalMapSize` | 512-2048 | 2048 |
 | `ambientOcclusionSize` | 256-1024 | 1024 |
-| `shapeResolution` | 1024-1536 | 1536 |
+| `shapeResolution` | 1024 or 1536 | 1024 |
 
 `meshTargetFaces` is the one worth setting deliberately. The 700,000-triangle
 default is far heavier than a real-time engine wants, so asking for less usually
@@ -272,10 +290,19 @@ separates foreground from background — and returns either the foreground matte
 or, with `applyMask`, the source image carrying that matte in alpha. Output
 dimensions always match the input.
 
-It is still being seeded across the fleet, so it can have only a couple of
-workers and a job may queue behind other people's work. That is queueing, not
-failure — do not add a client-side timeout and resubmit, which only duplicates
-work that was always going to complete.
+BiRefNet is available on Supernet. Discover current availability with
+`--search-models birefnet`; do not repeat the obsolete "not yet routable" claim.
+Its SDK image project takes `startingImage` and top-level `applyMask: true`
+for a cutout. SAM 3 instead nests `applyMask` inside `sam3Prompt`.
+
+```bash
+sogni-agent --remove-background original.png -o cutout.png --json
+sogni-agent --remove-background original.png --matte -o matte.png --json
+```
+
+The default is an RGBA cutout; `--matte` returns the soft foreground mask.
+Both preserve source dimensions. Use one original image without a text prompt,
+steps, or resizing controls. Both outputs must be saved as PNG.
 
 ### Choosing between SAM 3 and BiRefNet
 
@@ -319,9 +346,10 @@ edges survive.
 |-------|----------|
 | `ace_step_1.5_xl_turbo` | Default direct music generation model (ACE-Step 1.5 XL Turbo) |
 | `ace_step_1.5_xl_sft` | Quality variant (ACE-Step 1.5 XL SFT) with stronger lyric handling |
+| `minimax_music3` | MiniMax Music 3; direct `--music -m music3` or hosted `generate_music` with `model: "music3"` |
 
-The `--music-model` keys are unchanged — `turbo` (default) and `sft` — but they
-now map to the ACE-Step XL ids (`turbo` → `ace_step_1.5_xl_turbo`, `sft` →
+The `--music-model` keys are `music3`, `turbo` (default), and `sft`. ACE selectors
+map to the XL ids (`turbo` → `ace_step_1.5_xl_turbo`, `sft` →
 `ace_step_1.5_xl_sft`). The legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft`
 models are no longer the default.
 
@@ -333,6 +361,62 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 `--prompt-strength` (0-10), `--creativity` (0-2), `--music-shift` (1-6),
 `--audio-format mp3|flac|wav`.
 
+Hosted `generate_music` defaults to MiniMax Music 3 (`model: "music3"`); direct
+`--music` still defaults to ACE-Step. Music 3 supports 10–300 seconds, with
+duration as a ceiling: it can finish early at a musical resolution. Put tempo
+and key in its prompt; BPM/key/time-signature controls do not apply. Use plain
+section tags in lyrics; instrumental tracks also need a section-tag skeleton
+to give the composer enough structure. The CLI preserves supplied lyrics:
+
+```bash
+sogni-agent --music -m music3 --duration 60 --lyrics $'[Intro]\n[Verse]\n[Chorus]\n[Outro]' -o score.mp3 "Instrumental orchestral score, 90 BPM, D minor"
+```
+
+Music 3 defaults to 60 seconds, 30 steps, guidance 1.7, `euler`, and `simple`.
+It rejects ACE-only shift, BPM, key, time-signature, language, and composer
+controls; put that direction in the prompt or lyrics. `--prompt-strength`
+(0–10), `--creativity` (0–2), `--guidance` (1–5), and `--steps` (10–100) are
+available. Output formats are MP3, FLAC, and WAV. Audio batches (`-n`) save
+all results, appending `-2`, `-3`, etc. to the requested output filename.
+
+## Speech models
+
+Qwen3-TTS is available through direct `--speech`, hosted `generate_speech`,
+and SDK audio projects. Speech reads the exact script; it does not use music
+samplers, steps, duration, or lyrics controls.
+
+```bash
+sogni-agent --speech --speech-voice ryan -o narration.wav "Welcome to the story."
+sogni-agent --speech --speech-mode clone --voice-reference voice.wav --voice-transcript "The known words in the recording." -o clone.wav "New words in the same voice."
+sogni-agent --speech --speech-mode design --voice-description "A warm, low-pitched narrator with a gentle Scottish accent" -o designed.wav "The journey begins."
+```
+
+Default mode is `voice`, default speaker `serena`, format WAV, language `auto`.
+`--speech-voice` accepts `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`,
+`ono_anna`, `sohee`, `eric`, or `dylan`. It is only valid in `voice` mode.
+`--voice-description` optionally directs a studio voice and is required for
+`design`; clone mode instead requires `--voice-reference` (local path or URL).
+Install `ffprobe` to check clone recordings; the CLI accepts 3–30 seconds and
+preserves the original recording. `--voice-transcript` is clone-only, up to
+1024 characters. `--language` takes `auto`, `english`, `chinese`, `japanese`,
+`korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, or `italian`.
+Optional `--speech-creativity` accepts 0.1–2. Use `--output-format wav|mp3|flac`
+and a matching filename extension. `-n` saves each requested audio result.
+
+| Model ID | Hosted `model` | Input |
+|----------|----------------|-------|
+| `qwen3_tts_1.7b_custom_voice_bf16` | `voice` | Exact script, studio `voice`, optional `voiceDescription` |
+| `qwen3_tts_1.7b_voice_clone_bf16` | `clone` | Exact script and `voiceSourceIndex`; include known `voiceTranscript` |
+| `qwen3_tts_1.7b_voice_design_bf16` | `design` | Exact script and required `voiceDescription` |
+
+`prompt` contains only the words to speak (up to 4096 characters); put delivery
+and speaker descriptions in `voiceDescription` (up to 512 characters).
+Clone mode uses a clean 3–30s recording, not written voice direction. Its known
+reference transcript improves conditioning; do not invent one. Evaluate voice
+identity and accent by listening, not by automatic transcription accuracy.
+Read [hosted-api.md](./hosted-api.md) for execution and
+[interactive-worlds.md](./interactive-worlds.md) for recurring-character audio.
+
 ## Video models — current selectors
 
 | Model | Speed | Use Case |
@@ -343,8 +427,9 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `ltx25-a2v` → `ltx25-22b-int8_a2v_distilled` | Distilled | Audio-to-video |
 | `ltx25-v2v` → `ltx25-22b-int8_v2v_distilled` | Distilled | Video-to-video canny, depth, pose, detailer, inpaint, and outpaint templates; pose requires both source video and subject reference image |
 | `ltx25-22b-int8_{t2v,i2v,ia2v,a2v,v2v}_dev` | Dev/HQ | Official two-stage Dev workflow for the matching mode |
-| `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Default text-to-video with native dialogue/audio |
-| `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Image-to-video with native dialogue/audio; **default for two-image first-frame → last-frame animation** (transition/morph LoRA auto-applies) |
+| `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Explicit LTX-2.3 text-to-video with native dialogue/audio; current default is LTX-2.5 |
+| `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Explicit LTX-2.3 image-to-video; current first/last-frame default is LTX-2.5, with no transition LoRA |
+| `ltx23-22b-fp8_{t2v,i2v,ia2v,a2v,v2v}_dev` | Dev/HQ | Explicit older LTX-2.3 modes; use the matching LTX-2.5 model for new requests without a version preference |
 | `ltx23-eros` → `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast | Explicit uncensored I2V; 30GB+ GPU and `--no-filter` required |
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
@@ -473,15 +558,15 @@ no negative prompt and no ControlNet.
   continuation or `reference` when a video is only a loose creative reference.
   Edit requires `--duration` equal to the source video's duration. Extend uses
   the requested 4-30 second continuation duration. For edit/extend, select only
-  `--target-resolution 480|720`; the provider inherits `@Video1`'s aspect ratio.
+  `--target-resolution 480|720|1080`; the provider inherits `@Video1`'s aspect ratio.
   Untyped automatic classification is rejected before billing because it can
   fail asynchronously after inferring the task.
 - **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
   its only loose reference.
 
-The pinned `@sogni-ai/sogni-intelligence-client` 3.24.1 runtime recognizes
-`seedance-2-5`, and the package override pins `@sogni-ai/sogni-client` 5.20.0
-for typed task transport. The direct CLI applies Seedance's fixed 24 fps,
+The bundled CLI and pinned SDKs recognize `seedance-2-5` and transport typed
+tasks; see `package.json` for the current dependency versions. The direct CLI
+applies Seedance's fixed 24 fps,
 4-30 s duration window, larger reference caps, reference-mode exclusivity, and
 HTTPS reference forwarding before dispatch.
 
@@ -944,10 +1029,12 @@ model recommendations.
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Select or cut out an object in an image | `sam3_image_segment_bf16` |
-| Remove a background | `sam3_image_segment_bf16` with `text` naming the subject and `applyMask: true` (`birefnet_image_background_removal_fp16` is not yet routable) |
-| Turn one image into a textured 3D model (GLB) | `pixal3d_int8_i23d`, no prompt on the default graph |
+| Remove a background | `--remove-background original.png` (BiRefNet); add `--matte` for a soft mask |
+| Turn one image into a textured 3D model (GLB) | `--image-to-3d original.png -o object.glb` (Pixal3D), no prompt |
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
+| MiniMax Music 3 songs and instrumentals | `--music -m music3` or hosted `generate_music` |
+| Spoken audio, voice cloning, or voice design | `--speech --speech-mode voice/clone/design` or hosted `generate_speech` |
 | Text-to-video with native dialogue/audio | `ltx25` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
 | Animate two images together (first frame → last frame) | `ltx25-i2v` with `--ref A --ref-end B` (FLF template, no transition LoRA) |

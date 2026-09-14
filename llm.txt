@@ -4,16 +4,28 @@ Agent skill and CLI for Sogni AI image, video, and music generation. Works as
 a skill source for Claude Code, OpenAI Codex CLI, Goose, Hermes Agent, OpenClaw,
 Manus AI, and other SKILL.md-aware agent runtimes.
 
+Current capabilities and limits: read `references/models.md` before answering
+model-selection questions. Seedance 2.5 supports 1080p with
+`--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,
+and optional last-frame images. Other recent additions include FastH3
+Two-Stage delivered 720p/1080p/2K, GPT Image 2.5 Sunburst/Flare, SAM 3 object
+masks, and promptless FlashVSR video upscaling to 1080p/1440p.
+Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb`; BiRefNet
+uses `--remove-background original.png -o cutout.png` (add `--matte` for a mask).
+MiniMax Music 3 uses `--music -m music3`; Qwen3-TTS uses `--speech` with
+`--speech-mode voice|clone|design`. Read the model reference for required inputs,
+allowed controls, and hosted alternatives.
+
 ## Install (pick the integration that matches your environment)
 
 ```bash
 # One-command install: detects Claude Code, Codex CLI, and Hermes; installs the
 # CLI globally; prompts for the API key; points to ChatGPT Custom-GPT setup.
 # (Does NOT configure OpenClaw — see below.)
-npx setup-sogni-agent-skill
+npx setup-sogni-agent-skill --version=latest
 
 # Print ChatGPT Custom-GPT instructions explicitly.
-npx setup-sogni-agent-skill --only=chatgpt
+npx setup-sogni-agent-skill --only=chatgpt --version=latest
 
 # Agent-safe manual CLI install or upgrade
 npm install -g @sogni-ai/sogni-creative-agent-skill@latest
@@ -27,11 +39,11 @@ sogni-agent --version
 # from the npx installer — not both.
 
 # OpenAI Codex CLI (start Codex once first so ~/.codex/ exists)
-npx setup-sogni-agent-skill --only=codex
+npx setup-sogni-agent-skill --version=latest --only=codex
 
 # Hermes Agent (start Hermes once first so ~/.hermes/ exists), then /reset the
 # Hermes session
-npx setup-sogni-agent-skill --only=hermes
+npx setup-sogni-agent-skill --version=latest --only=hermes
 
 # Hermes Skills Hub (install the narrow skill bundle plus the global CLI), then
 # /reset the Hermes session

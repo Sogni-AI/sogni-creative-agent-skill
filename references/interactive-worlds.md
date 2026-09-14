@@ -13,10 +13,16 @@ are not obvious and each one cost a day.
 
 ## The stack, in the order it runs
 
+The direct CLI now covers this stack, including `--image-to-3d` for Pixal3D,
+`--remove-background` for BiRefNet, `--music -m music3` for scores, and
+`--speech --speech-mode clone` for character voices. Hosted tools and SDK
+projects remain available. Read [models.md](./models.md) for the required
+inputs and controls before converting a stage into commands.
+
 | Step | Model | What it gives you |
 |---|---|---|
 | 1. Places | `krea2_turbo_fp8_scaled` | A scene as one wide still |
-| 2. The same character, somewhere new | `krea2_identity_edit_sogni_v0_3_alpha` | A new place with a recognisable character in it, from two context references |
+| 2. The same character, somewhere new | `krea2_identity_edit_v1_2` | A new place with a recognisable character in it, from two context references |
 | 3. Clickable objects | `sam3_image_segment_bf16` | A pixel mask of a named object, to trace into a hit area |
 | 4. Clean cut-outs | `birefnet_image_background_removal_fp16` | A soft matte with real edges, for anything going into 3D or a composite |
 | 5. Travel and dialogue | `minimax-h3-fastvideo-int8_flf2v_turbo`, `minimax-h3-fl2va-fp8_flf2v_turbo` | First/last-frame video with generated audio in one pass |
@@ -81,8 +87,8 @@ loosening the identity to get variety costs the thing the world is built on.
 
 ### Keeping a character
 
-A name is not an identity lock. `krea2_identity_edit_sogni_v0_3_alpha` takes
-exactly two context images: give it the world in one and the character in the
+A name is not an identity lock. `krea2_identity_edit_v1_2` accepts one or two
+context images; for this workflow give it the world in one and the character in the
 other, and say in the prompt which reference is for which. Everything a
 character's identity depends on has to be in a saved reference image you can
 hand back to the model.

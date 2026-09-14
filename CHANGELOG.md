@@ -1,3 +1,18 @@
+## [3.49.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.47.0...v3.49.0) (2026-09-14)
+
+### Features
+
+* Add promptless Pixal3D image-to-GLB generation with `--image-to-3d`, original-image uploads, mesh/texture controls, 1024 or 1536 shape resolution, binary downloads, and model result metadata.
+* Add BiRefNet background removal with `--remove-background`: transparent PNG cutouts by default, or soft foreground masks with `--matte`, preserving source dimensions.
+* Add direct MiniMax Music 3 through `--music -m music3`, using the shared SDK defaults and model-specific duration and control validation.
+* Add Qwen3-TTS studio speech, voice cloning, and voice design through `--speech`, with exact scripts, preset voices, written voice directions, original reference recordings, and WAV/MP3/FLAC output. Audio batches save every result to a separate file.
+
+### Bug Fixes
+
+* Include 3D artifacts in live model discovery and add `--model-media model` filtering.
+* Refresh model guidance and Codex, Claude, and Hermes entrypoints, including Seedance 2.5 1080p edit/extend support, current utility contracts, and current installation commands. Keep the Hermes interactive-worlds reference synchronized.
+* Check result download status and GLB headers before saving successful output metadata.
+
 ## [3.48.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.47.0...v3.48.0) (2026-09-13)
 
 ### Features

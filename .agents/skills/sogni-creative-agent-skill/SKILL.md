@@ -1,9 +1,9 @@
 ---
 name: sogni-creative-agent-skill
-description: "Generate and edit images, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
+description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.48.0"
+  version: "3.49.0"
   author: Sogni AI
   hermes:
     category: creative
@@ -76,6 +76,14 @@ a command fails because the CLI is missing.
 ## Common commands
 
 ```bash
+# Promptless 3D reconstruction and background removal
+sogni-agent-hermes --image-to-3d ./object.png --mesh-faces 30000 -o ./object.glb
+sogni-agent-hermes --remove-background ./source.png -o ./cutout.png
+
+# MiniMax Music 3 and Qwen3-TTS (read models.md for lyrics and voice controls)
+sogni-agent-hermes --music -m music3 --duration 30 -o ./score.mp3 "instrumental ambient score"
+sogni-agent-hermes --speech --speech-voice ryan -o ./speech.wav "Welcome to the story."
+
 # Generate or edit an image
 sogni-agent-hermes -o ./image.png "cinematic moonlit mountain lake"
 sogni-agent-hermes -c ./source.png -o ./edited.png "make it night; add fireflies"
@@ -90,6 +98,7 @@ sogni-agent-hermes --upscale-video ./clip.mp4 -o ./clip-1440p.mp4
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
 sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "slow camera push-in"
 sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "smooth transformation"
+sogni-agent-hermes --video -m seedance2-5 --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A quiet bookshop, slow camera push-in, soft room ambience"
 sogni-agent-hermes --video -m wan3 --target-resolution 1080 --duration 8 -o ./wan3.mp4 'a presenter says "Welcome" in a detailed studio'
 sogni-agent-hermes --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 -o ./wan3-enhanced.mp4 'a presenter says "Welcome" in a detailed studio'
 
@@ -103,6 +112,20 @@ sogni-agent-hermes --help
 ```
 
 ## Load detailed guidance only when needed
+
+Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
+with optional `--output-format mov` and `--return-last-frame`. FastH3 Two-Stage
+delivers 720p/1080p/2K through its own model selector. GPT Image 2.5 Sunburst
+and Flare support edits, masks, and transparency. For capability questions or
+model selection, read [models.md](references/models.md) for current controls
+and limits; preserve the user's requested model and resolution.
+
+Use `--image-to-3d` for Pixal3D, `--remove-background` for BiRefNet (add
+`--matte` for a soft mask), `--music -m music3` for MiniMax Music 3, and
+`--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read the model guide
+before these modes for exact scripts, studio voices, 3–30s clone references,
+and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
+`--model-media model`.
 
 - Model choice, quality tiers, Krea identity edits, and video aliases: read
   [models.md](references/models.md).
@@ -121,6 +144,8 @@ sogni-agent-hermes --help
   read [hosted-api.md](references/hosted-api.md).
 - Turning an image folder into a deduplicated, music-backed seamless reel:
   read [loop-maker.md](references/loop-maker.md) completely before starting.
+- Explorable scenes, clickable objects, collectible 3D assets, and recurring
+  voices: read [interactive-worlds.md](references/interactive-worlds.md).
 - Seamless textures or tiles: read
   [seamless-tiling.md](references/seamless-tiling.md).
 - Explicit private/adult video requests: read

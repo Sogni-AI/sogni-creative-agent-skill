@@ -4,6 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { QUALITY_TIERS } from '../generated/creative-agent-runtime.mjs';
 import { VIDEO_MODEL_ALIASES } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
+import { MusicModel, SPEECH_MODEL_IDS } from '@sogni-ai/sogni-intelligence-client/media';
+import { MESH_FLAGS, SPEECH_VALUE_FLAGS } from '../media-utilities.mjs';
 import { checkVersionSync } from '../scripts/check-version-sync.mjs';
 
 const repoRoot = process.cwd();
@@ -41,8 +43,8 @@ const DOC_FILES = [
 
 function parserFlags() {
   const source = read('sogni-agent.mjs');
-  const flags = new Set();
-  // Every flag the parser understands is compared as a string literal:
+  const flags = new Set([...Object.keys(MESH_FLAGS), ...Object.keys(SPEECH_VALUE_FLAGS)]);
+  // Alongside the mode-specific flag maps, the parser compares string literals:
   //   arg === '--flag'   or   RAW_ARGS[0] === '--flag'
   for (const match of source.matchAll(/===\s*'(--[a-z][a-z0-9-]*)'/g)) {
     flags.add(match[1]);
@@ -194,6 +196,13 @@ test('every runtime video model alias is documented in references/models.md', ()
   const missing = aliases.filter((alias) => !models.includes(alias));
   assert.deepEqual(missing, [],
     `references/models.md never mentions these CLI video selectors the runtime resolves:\n${missing.join('\n')}`);
+});
+
+test('model guidance covers every published music and speech model', () => {
+  const models = read('references/models.md');
+  const ids = [...Object.values(MusicModel), ...SPEECH_MODEL_IDS];
+  assert.deepEqual(ids.filter(id => !models.includes(id)), [],
+    'Published audio models need documented execution routes, including hosted-only routes.');
 });
 
 test('MiniMax H3 docs expose Standard, Balanced, LightX2V Turbo, and FastH3 workflows consistently', () => {

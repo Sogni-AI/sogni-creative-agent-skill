@@ -4348,6 +4348,28 @@ test('--search-models queries the public REST model catalog without a socket cli
   assert.equal(state?.clientConfigs, undefined);
 });
 
+test('model discovery includes Pixal3D GLB outputs in search, all, and 3D filters', () => {
+  const models = [
+    { id: 'pixal3d_int8_i23d', name: 'Pixal3D Image to 3D', workerCount: 3, media: 'model' },
+    { id: 'z_image_turbo_bf16', name: 'Z-Image Turbo', workerCount: 5, media: 'image' },
+  ];
+  for (const args of [
+    ['--search-models', 'pixal3d'],
+    ['--list-models', '--model-media', 'model'],
+    ['--list-models'],
+  ]) {
+    const { exitCode, stdout, stderr, state } = runCli(['--json', ...args], {
+      SOGNI_API_KEY: '',
+      SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(models),
+    });
+    assert.equal(exitCode, 0, stderr);
+    const payload = JSON.parse(stdout.trim());
+    assert.ok(payload.models.some(model => model.id === 'pixal3d_int8_i23d' && model.media === 'model'));
+    assert.equal(payload.count, args.length === 1 ? 2 : 1);
+    assert.equal(state?.clientConfigs, undefined, 'discovery must not initialize a generation client');
+  }
+});
+
 test('--search-models matches the spicy catalog tag', () => {
   const models = [
     {
@@ -7305,4 +7327,202 @@ test('Seedance 2.5 transports 1080p MOV and last-frame export', () => {
 test('Seedance export flags reject other video models', () => {
   expectCliError(['--video', '-m', 'seedance2', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
   expectCliError(['--video', '-m', 'seedance2', '--output-format', 'mov', 'A quiet bookshop.'], 'Video output format must be');
+});
+
+// Media utility contracts run through the public CLI, including argument parsing,
+// SDK dispatch, completion events, binary downloads, and saved result metadata.
+function speechReferenceFixture(seconds = 4) {
+  const path = join(mkdtempSync(join(tmpdir(), 'sogni-speech-')), 'reference.wav');
+  const rate = 24000;
+  const dataSize = seconds * rate * 2;
+  const bytes = Buffer.alloc(44 + dataSize);
+  bytes.write('RIFF'); bytes.writeUInt32LE(36 + dataSize, 4); bytes.write('WAVEfmt ', 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(rate, 24); bytes.writeUInt32LE(rate * 2, 28);
+  bytes.writeUInt16LE(2, 32); bytes.writeUInt16LE(16, 34); bytes.write('data', 36); bytes.writeUInt32LE(dataSize, 40);
+  writeFileSync(path, bytes);
+  return path;
+}
+
+async function withMediaResult(bytes, fn, status = 200) {
+  const server = createServer((_req, res) => { res.writeHead(status); res.end(bytes); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try { await fn(`http://127.0.0.1:${server.address().port}/result`); }
+  finally { await new Promise(resolve => server.close(resolve)); }
+}
+
+test('Pixal3D preserves original bytes and forwards all mesh controls without image defaults', () => {
+  const source = createPngDimensionFixture(3100, 2070);
+  const result = runCli(['--image-to-3d', source, '--mesh-faces', '12000', '--shape-resolution', '1536',
+    '--texture-size', '1024', '--normal-map-size', '512', '--ao-map-size', '256', '--json']);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = result.state.lastImageProject;
+  assert.equal(config.modelId, 'pixal3d_int8_i23d');
+  assert.deepEqual(Buffer.from(config.startingImage.data), readFileSync(source));
+  assert.equal(config.positivePrompt, '');
+  assert.equal(config.meshTargetFaces, 12000); assert.equal(config.shapeResolution, 1536);
+  assert.equal(config.textureSize, 1024); assert.equal(config.normalMapSize, 512);
+  assert.equal(config.ambientOcclusionSize, 256);
+  for (const key of ['width', 'height', 'steps', 'guidance', 'sampler', 'scheduler', 'outputFormat', 'contextImages', 'seed']) assert.equal(config[key], undefined, key);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.type, 'model'); assert.equal(output.outputFormat, 'glb'); assert.equal(output.width, null);
+});
+
+test('BiRefNet offers a transparent cutout or a soft matte with source dimensions', () => {
+  const source = createPngDimensionFixture(1170, 1630);
+  for (const matte of [false, true]) {
+    const result = runCli(['--remove-background', source, ...(matte ? ['--matte'] : []), '--json']);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const config = result.state.lastImageProject;
+    assert.equal(config.modelId, 'birefnet_image_background_removal_fp16');
+    assert.equal(config.applyMask, !matte); assert.equal(config.outputFormat, 'png');
+    assert.equal(config.sam3Prompt, undefined); assert.equal(config.positivePrompt, '');
+    assert.deepEqual(Buffer.from(config.startingImage.data), readFileSync(source));
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.width, 1170); assert.equal(output.height, 1630); assert.equal(output.applyMask, !matte);
+  }
+});
+
+test('image utility controls reject conflicts and invalid inputs before connecting', () => {
+  for (const args of [
+    ['--image-to-3d', 'object.png', 'invent a castle'],
+    ['--image-to-3d', 'object.png', '--shape-resolution', '1200'],
+    ['--image-to-3d', 'object.png', '--mesh-faces', '4999'],
+    ['--remove-background', 'object.png', '--matte', '--output-format', 'jpg'],
+    ['--remove-background', 'object.png', '--image-to-3d', 'object.png'],
+    ['--remove-background', 'object.png', '-n', '2'],
+    ['--image-to-3d', 'object.png', '--video'],
+    ['--image-to-3d', 'object.png', '-c', 'context.png'],
+    ['--image-to-3d', 'object.png', '-o', 'wrong.png'],
+    ['--image-to-3d', 'object.png', '--steps', '20'],
+    ['--matte', 'anything'], ['--mesh-faces', '6000', 'anything'],
+    ['-m', 'pixal3d_int8_i23d', 'anything']
+  ]) {
+    const result = runCli([...args, '--json']);
+    assert.equal(result.exitCode, 1, JSON.stringify(args));
+    assert.equal(JSON.parse(result.stdout).errorCode, 'INVALID_ARGUMENT', result.stdout);
+    assert.equal(result.state?.lastImageProject, undefined);
+    assert.equal(result.state?.clientConfigs, undefined);
+  }
+});
+
+test('Qwen speech voice and design preserve literal scripts and use speech-only fields', () => {
+  const script = 'Say {hello|goodbye}. Keep this 1080p video exactly 5 seconds long!';
+  for (const mode of ['voice', 'design']) {
+    const result = runCli(['--speech', '--speech-mode', mode, '--voice-description', 'Warm, calm delivery',
+      '--language', 'english', '--speech-creativity', '0.7', '--output-format', 'flac', '--seed', '123', script, '--json']);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const config = result.state.lastAudioProject;
+    assert.equal(config.positivePrompt, script);
+    assert.equal(config.modelId, mode === 'voice' ? 'qwen3_tts_1.7b_custom_voice_bf16' : 'qwen3_tts_1.7b_voice_design_bf16');
+    assert.equal(config.instruct, 'Warm, calm delivery'); assert.equal(config.language, 'english');
+    assert.equal(config.creativity, 0.7); assert.equal(config.seed, 123);
+    assert.equal(config.speaker, mode === 'voice' ? 'serena' : undefined);
+    for (const key of ['duration', 'steps', 'sampler', 'scheduler', 'width', 'guidance', 'shift', 'lyrics']) assert.equal(config[key], undefined, key);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.type, 'speech'); assert.equal(output.speechMode, mode);
+    assert.equal(output.outputFormat, 'flac'); assert.equal(output.width, null); assert.equal(output.duration, undefined);
+  }
+});
+
+test('Qwen speech clone forwards the original recording and known transcript', () => {
+  const path = speechReferenceFixture();
+  const result = runCli(['--speech', '--speech-mode', 'clone', '--voice-reference', path,
+    '--voice-transcript', 'Known reference words.', 'New words.', '--json']);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = result.state.lastAudioProject;
+  assert.equal(config.modelId, 'qwen3_tts_1.7b_voice_clone_bf16');
+  assert.deepEqual(Buffer.from(config.referenceAudio.data), readFileSync(path));
+  assert.equal(config.referenceText, 'Known reference words.');
+  assert.equal(config.speaker, undefined); assert.equal(config.instruct, undefined);
+  assert.equal(config.outputFormat, 'wav');
+});
+
+test('Qwen speech rejects missing and incompatible inputs', () => {
+  for (const args of [
+    ['--speech', '--speech-mode', 'clone'],
+    ['--speech', '--speech-mode', 'design'],
+    ['--speech', '--speech-mode', 'bogus'],
+    ['--speech', '--speech-mode', 'clone', '--voice-reference', 'r.wav', '--speech-voice', 'ryan'],
+    ['--speech', '--voice-reference', 'r.wav'],
+    ['--speech', '--voice-transcript', 'words'],
+    ['--speech', '--speech-voice', 'nobody'],
+    ['--speech', '--language', 'en'],
+    ['--speech', '--duration', '30'],
+    ['--speech', '--music'],
+    ['--speech', '--steps', '20'],
+    ['--speech', '--speech-creativity', '3'],
+    ['--speech-mode', 'voice'],
+    ['--speech', '-m', 'minimax_music3'],
+    ['--speech', '-o', 'speech.mp4']
+  ]) {
+    const result = runCli([...args, 'Read this.', '--json']);
+    assert.equal(result.exitCode, 1, JSON.stringify(args));
+    assert.equal(JSON.parse(result.stdout).errorCode, 'INVALID_ARGUMENT', result.stdout);
+    assert.equal(result.state?.lastAudioProject, undefined);
+  }
+});
+
+test('Qwen clone rejects a recording shorter than three seconds', () => {
+  const result = runCli(['--speech', '--speech-mode', 'clone', '--voice-reference', speechReferenceFixture(1), 'New words.', '--json']);
+  assert.equal(result.exitCode, 1);
+  assert.match(JSON.parse(result.stdout).error, /3–30 second/);
+  assert.equal(result.state.lastAudioProject, null);
+});
+
+test('Music 3 uses current shared defaults and preserves lyrics', () => {
+  const result = runCli(['--music', '-m', 'music3', '--lyrics', '[Intro]\n[Verse]\n[Outro]', 'instrumental jazz in C major at 100 BPM', '--json']);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const config = result.state.lastAudioProject;
+  assert.equal(config.modelId, 'minimax_music3'); assert.equal(config.duration, 60);
+  assert.equal(config.steps, 30); assert.equal(config.guidance, 1.7);
+  assert.equal(config.sampler, 'euler'); assert.equal(config.scheduler, 'simple');
+  assert.equal(config.shift, undefined); assert.equal(config.lyrics, '[Intro]\n[Verse]\n[Outro]');
+});
+
+test('Music 3 rejects unsupported controls and duration above 300 seconds', () => {
+  for (const args of [['--duration', '301'], ['--music-shift', '3'], ['--bpm', '100'], ['--timesig', '4'], ['--language', 'en'], ['--composer-mode'], ['--guidance', '6']]) {
+    const result = runCli(['--music', '-m', 'minimax_music3', ...args, 'music', '--json']);
+    assert.equal(result.exitCode, 1, result.stderr);
+    assert.equal(JSON.parse(result.stdout).errorCode, 'INVALID_ARGUMENT');
+    assert.equal(result.state?.lastAudioProject, undefined);
+  }
+  const result = runCli(['--music', '-m', 'music3', '--duration', '300', 'music', '--json']);
+  assert.equal(result.exitCode, 0, result.stderr);
+});
+
+test('Pixal3D saves binary GLB and rejects invalid artifacts and HTTP errors', async () => {
+  const source = createPngDimensionFixture(512, 512);
+  const output = join(mkdtempSync(join(tmpdir(), 'sogni-glb-')), 'object.glb');
+  const json = Buffer.from('{"asset":{"version":"2.0"}} ');
+  const glb = Buffer.alloc(20 + json.length);
+  glb.write('glTF'); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8);
+  glb.writeUInt32LE(json.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); json.copy(glb, 20);
+  await withMediaResult(glb, async url => {
+    const result = await runCliAsync(['--image-to-3d', source, '-o', output, '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), glb);
+    assert.deepEqual(JSON.parse(result.stdout).localPaths, [output]);
+  });
+  await withMediaResult(Buffer.from('<html>error</html>'), async url => {
+    const result = await runCliAsync(['--image-to-3d', source, '-o', output, '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    assert.equal(result.exitCode, 1); assert.match(JSON.parse(result.stdout).error, /invalid GLB/);
+    assert.deepEqual(readFileSync(output), glb);
+  });
+  await withMediaResult(Buffer.from('Unavailable'), async url => {
+    const result = await runCliAsync(['--image-to-3d', source, '-o', output, '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    assert.equal(result.exitCode, 1); assert.match(JSON.parse(result.stdout).error, /HTTP 503/);
+  }, 503);
+});
+
+test('Qwen speech batch downloads every result to a distinct local file', async () => {
+  const bytes = readFileSync(speechReferenceFixture());
+  const output = join(mkdtempSync(join(tmpdir(), 'sogni-speech-batch-')), 'speech.wav');
+  await withMediaResult(bytes, async url => {
+    const result = await runCliAsync(['--speech', '-n', '2', '-o', output, 'Read this.', '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    assert.equal(result.exitCode, 0, result.stderr);
+    const paths = JSON.parse(result.stdout).localPaths;
+    assert.deepEqual(paths, [output, output.replace('.wav', '-2.wav')]);
+    for (const path of paths) assert.deepEqual(readFileSync(path), bytes);
+  });
 });

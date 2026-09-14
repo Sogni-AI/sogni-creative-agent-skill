@@ -28,6 +28,10 @@ import {
   semanticWorkloadAttribution,
 } from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
+import {
+  MESH_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
+  prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
+} from './media-utilities.mjs';
 import { SAM3_MODEL_ID, segmentPoint, segmentBox, validateSegmentationPrompts, segmentationConfig } from './sam-segmentation.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
@@ -391,6 +395,7 @@ const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
 const MUSIC_MODEL_IDS = {
+  music3: MUSIC3_MODEL_ID,
   turbo: 'ace_step_1.5_xl_turbo',
   speed: 'ace_step_1.5_xl_turbo',
   fast: 'ace_step_1.5_xl_turbo',
@@ -399,6 +404,7 @@ const MUSIC_MODEL_IDS = {
   lyric: 'ace_step_1.5_xl_sft'
 };
 const MUSIC_MODEL_DEFAULTS = {
+  [MUSIC3_MODEL_ID]: MUSIC3_DEFAULTS,
   'ace_step_1.5_xl_turbo': {
     steps: { min: 4, max: 16, default: 8 },
     shift: { min: 1, max: 6, default: 3 },
@@ -1190,7 +1196,12 @@ function computePromptHashSeed(opts) {
   const payload = {
     prompt: opts.prompt || '',
     model: opts.model || '',
-    workflow: opts.video ? opts.videoWorkflow : opts.music ? 'music' : 'image',
+    workflow: opts.video ? opts.videoWorkflow : opts.speech ? 'speech' : opts.imageTo3d ? 'model' : opts.music ? 'music' : 'image',
+    ...(opts.speech ? {
+      speechMode: opts.speechMode || '', speechVoice: opts.speechVoice || '',
+      voiceDescription: opts.voiceDescription || '', voiceReference: opts.voiceReference || '',
+      voiceTranscript: opts.voiceTranscript || '', speechCreativity: opts.speechCreativity ?? null
+    } : {}),
     width: opts.width,
     height: opts.height,
     azimuth: opts.azimuth || '',
@@ -2982,6 +2993,17 @@ const options = {
   seed: null,
   lastSeed: false,
   seedStrategy: null,
+  speech: false,
+  speechMode: null,
+  speechVoice: null,
+  voiceDescription: null,
+  voiceReference: null,
+  voiceTranscript: null,
+  speechCreativity: null,
+  imageTo3d: null,
+  removeBackground: null,
+  matte: false,
+  meshSettings: {},
   music: false,
   musicLyrics: null,
   musicLanguage: null,
@@ -3115,7 +3137,7 @@ const options = {
   apiModelId: null,
   liveModelAction: null, // list|search
   liveModelQuery: null,
-  liveModelMedia: 'all', // image|video|audio|all
+  liveModelMedia: 'all', // image|video|audio|model|all
   liveModelNetwork: null, // fast|relaxed; defaults to configured network
   liveModelTags: [], // repeatable --model-tag filters (AND semantics)
   loraCatalogAction: null, // list|search
@@ -3625,6 +3647,23 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.contextImages.push(raw);
     cliSet.context = true;
+  } else if (arg === '--image-to-3d' || arg === '--pixal3d') {
+    options.imageTo3d = expandHomePath(requireFlagValue(args, i++, arg));
+  } else if (arg === '--remove-background') {
+    options.removeBackground = expandHomePath(requireFlagValue(args, i++, arg));
+  } else if (arg === '--matte') {
+    options.matte = true;
+  } else if (Object.hasOwn(MESH_FLAGS, arg)) {
+    const [key, min, max] = MESH_FLAGS[arg];
+    options.meshSettings[key] = parsePositiveIntegerValue(requireFlagValue(args, i++, arg), arg, min, max);
+  } else if (arg === '--speech') {
+    options.speech = true;
+  } else if (Object.hasOwn(SPEECH_VALUE_FLAGS, arg)) {
+    const key = SPEECH_VALUE_FLAGS[arg];
+    const value = requireFlagValue(args, i++, arg);
+    options[key] = key === 'voiceReference' ? expandHomePath(value) : value;
+  } else if (arg === '--speech-creativity') {
+    options.speechCreativity = parseNumberValue(requireFlagValue(args, i++, arg), arg);
   } else if (arg === '--segment') {
     options.segmentImage = expandHomePath(requireFlagValue(args, i++, arg));
   } else if (arg === '--segment-point' || arg === '--segment-exclude') {
@@ -3914,8 +3953,8 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--model-media') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    if (!['image', 'video', 'audio', 'all'].includes(raw)) {
-      fatalCliError('--model-media must be one of image, video, audio, or all.', {
+    if (!['image', 'video', 'audio', 'model', 'all'].includes(raw)) {
+      fatalCliError('--model-media must be one of image, video, audio, model, or all.', {
         code: 'INVALID_ARGUMENT',
         details: { value: raw }
       });
@@ -4319,12 +4358,27 @@ Photobooth (Face Transfer):
   --cn-strength <n>       ControlNet strength (default: 0.8)
   --cn-guidance-end <n>   ControlNet guidance end point (default: 0.3)
 
+3D and Background Removal:
+  --image-to-3d <image>  Pixal3D: original image to binary GLB (alias --pixal3d)
+  --shape-resolution <n> 1024 (default) or 1536; optional --mesh-faces 5000–700000
+  --texture-size <n>     1024–4096; --normal-map-size 512–2048; --ao-map-size 256–1024
+  --remove-background <image>  BiRefNet transparent PNG; --matte returns soft mask
+
+Speech Options:
+  --speech              Read the exact prompt as speech; output WAV by default
+  --speech-mode <mode>   voice (default), clone, or design
+  --speech-voice <id>    serena (default), vivian, uncle_fu, ryan, aiden, ono_anna, sohee, eric, dylan
+  --voice-description <text>  Optional delivery direction; required for design
+  --voice-reference <audio>   Required 3–30 second recording for clone (needs ffprobe)
+  --voice-transcript <text>   Optional transcript of clone reference
+  --speech-creativity <n>     Speech temperature 0.1–2; --language auto or language name
+
 Music Options:
   --music               Generate music/audio instead of image
-  --music-model <id>    Music model: turbo|sft|ace_step_1.5_xl_turbo|ace_step_1.5_xl_sft
-  --lyrics <text>       Optional song lyrics (omit for instrumental)
+  --music-model <id>    Music model: music3|turbo|sft (or full model ID)
+  --lyrics <text>       Song lyrics; Music 3 instrumentals benefit from section tags
   --language <code>     Lyrics language code (default: en)
-  --duration <sec>      Music duration in seconds (10-600, default: 30)
+  --duration <sec>      ACE: 10–600s, default 30; Music 3: 10–300s, default 60
   --length <sec>        Alias for --duration
   --bpm <num>           Beats per minute (30-300)
   --keyscale <text>     Key/scale, e.g. "C major" or "A minor"
@@ -4461,7 +4515,7 @@ General:
   --balance, --balances Show account, plan, and SPARK/SOGNI balances and exit
   --list-models [query] List live Supernet media models; optionally filter by query
   --search-models <q>   Search live models by ID or name (separator-insensitive)
-  --model-media <type>  Filter model discovery: image|video|audio|all (default: all)
+  --model-media <type>  Filter model discovery: image|video|audio|model|all (default: all; model = 3D)
   --model-network <n>   Model discovery network: fast|relaxed (default: configured network)
   --model-tag <tag>     Filter by catalog tag, e.g. spicy or uncensored (repeatable, AND)
   --list-loras [query]  List the live LoRA catalog with each LoRA's strength contract
@@ -4694,6 +4748,9 @@ Examples:
     options.prompt = arg;
   }
 }
+
+try { prepareMediaUtilityOptions(options, cliSet); }
+catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
 
 let timeoutFromConfig = false;
 let widthFromConfig = false;
@@ -5015,9 +5072,11 @@ if (!options.video && !options.music && options.model) {
 if (options.outputFormat) {
   const normalized = options.outputFormat.toLowerCase();
   options.outputFormat = normalized === 'jpeg' ? 'jpg' : normalized;
-  if (options.music) {
+  if (options.imageTo3d) {
+    // GLB is a model artifact, not an SDK image outputFormat.
+  } else if (options.music || options.speech) {
     if (!MUSIC_OUTPUT_FORMATS.has(options.outputFormat)) {
-      fatalCliError('Music output format must be "mp3", "flac", or "wav".', {
+      fatalCliError(`${options.speech ? 'Speech' : 'Music'} output format must be "mp3", "flac", or "wav".`, {
         code: 'INVALID_ARGUMENT',
         details: { outputFormat: options.outputFormat }
       });
@@ -5406,14 +5465,14 @@ if (options.music) {
   const configuredMusicModel = options.model || openclawConfig?.defaultMusicModel || 'turbo';
   options.model = normalizeMusicModelId(configuredMusicModel);
   if (!options.model) {
-    fatalCliError(`Unknown music model "${configuredMusicModel}". Use turbo, sft, ace_step_1.5_xl_turbo, or ace_step_1.5_xl_sft.`, {
+    fatalCliError(`Unknown music model "${configuredMusicModel}". Use music3, turbo, sft, minimax_music3, ace_step_1.5_xl_turbo, or ace_step_1.5_xl_sft.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: cliSet.model ? '--model' : 'defaultMusicModel', value: configuredMusicModel }
     });
   }
   const musicDefaults = getMusicModelDefaults(options.model);
   if (!cliSet.duration || !Number.isFinite(options.duration)) {
-    options.duration = MUSIC_DURATION_LIMITS.default;
+    options.duration = (musicDefaults.duration || MUSIC_DURATION_LIMITS).default;
   }
   if (!options.outputFormat) {
     options.outputFormat = 'mp3';
@@ -5431,11 +5490,13 @@ if (options.music) {
     options.scheduler = musicDefaults.scheduler.default;
   }
   if (!cliSet.musicShift) {
-    options.musicShift = musicDefaults.shift.default;
+    options.musicShift = musicDefaults.shift?.default ?? null;
   }
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 600000;
   }
+} else if (options.speech || options.imageTo3d || options.removeBackground) {
+  if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 } else if (options.video) {
   if (!options.model) {
     let defaultVideoModel = selectDefaultVideoModel(options.videoWorkflow, options, openclawConfig);
@@ -5645,8 +5706,12 @@ if (!options.video && !options.music && isGptImage2ModelSelection(options.model)
 
 if (options.music) {
   const musicDefaults = getMusicModelDefaults(options.model);
-  if (options.duration < MUSIC_DURATION_LIMITS.min || options.duration > MUSIC_DURATION_LIMITS.max) {
-    fatalCliError(`Music duration must be between ${MUSIC_DURATION_LIMITS.min} and ${MUSIC_DURATION_LIMITS.max} seconds.`, {
+  const durationLimits = musicDefaults.duration || MUSIC_DURATION_LIMITS;
+  if (options.model === MUSIC3_MODEL_ID && (cliSet.musicShift || cliSet.musicBpm || cliSet.musicKeyscale || cliSet.musicTimesig || cliSet.musicLanguage || cliSet.musicComposerMode)) {
+    fatalCliError('Music 3 does not use shift, BPM, key, time signature, language, or composer controls. Describe musical direction in the prompt and lyrics.', { code: 'INVALID_ARGUMENT' });
+  }
+  if (options.duration < durationLimits.min || options.duration > durationLimits.max) {
+    fatalCliError(`Music duration must be between ${durationLimits.min} and ${durationLimits.max} seconds.`, {
       code: 'INVALID_ARGUMENT',
       details: { duration: options.duration }
     });
@@ -5739,7 +5804,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.remixAudio &&
   !options.upscaleImage &&
   !options.upscaleVideo &&
-  !options.segmentImage &&
+  !options.segmentImage && !options.imageTo3d && !options.removeBackground &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -5778,7 +5843,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !wan3HasMediaInput && !options.segmentImage && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -8579,7 +8644,7 @@ async function runLiveModels() {
       ? [...new Set(model.tags.map(normalizeLiveModelTag).filter(Boolean))].sort()
       : []
   })).filter(model =>
-    ['image', 'video', 'audio'].includes(model.media) &&
+    ['image', 'video', 'audio', 'model'].includes(model.media) &&
     model.networks.includes(network) &&
     (media === 'all' || model.media === media)
   );
@@ -12901,14 +12966,14 @@ async function main() {
       client.on(ClientEvent.JOB_COMPLETED, (data) => {
         const jobData = data.job?.data || {};
         results.push({
-          resultUrl: data.resultUrl || (options.music ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
+          resultUrl: data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
           lastFrameUrl: data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
           projectId: data.projectId
         });
         completedJobs++;
-        log(`${options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
+        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
         
         if (completedJobs >= options.count) {
           clearTimeout(timeout);
@@ -12939,7 +13004,7 @@ async function main() {
       });
       
       // Progress for longer-running media jobs.
-      if (options.video || options.music || options.upscaleVideo) {
+      if (options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.upscaleVideo) {
         client.on(ClientEvent.PROJECT_PROGRESS, (data) => {
           if (data.percentage && data.percentage > 0) {
             log(`Progress: ${Math.round(data.percentage)}%`);
@@ -13692,6 +13757,27 @@ async function main() {
       if (upscaleVideoResult?.error || upscaleVideoResult?.message) {
         throw annotateVideoUpscaleError(buildProjectResultError(upscaleVideoResult));
       }
+    } else if (options.speech) {
+      log(`Generating speech (${options.speechMode}) with ${options.model}...`);
+      let referenceAudio;
+      if (options.voiceReference) {
+        referenceAudio = await fetchMediaBuffer(options.voiceReference);
+        const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.voiceReference);
+        if (!Number.isFinite(seconds)) throw new Error('Cannot read voice reference duration. Install ffprobe and supply a valid audio recording.');
+        if (seconds < SPEECH_REFERENCE_SECONDS.min || seconds > SPEECH_REFERENCE_SECONDS.max) {
+          throw new Error('Voice cloning requires a 3–30 second reference recording.');
+        }
+      }
+      const result = trackProjectResult(await client.createAudioProject(withBillingMode(speechConfig(options, referenceAudio))));
+      if (result?.error || result?.message) throw buildProjectResultError(result);
+    } else if (options.imageTo3d || options.removeBackground) {
+      log(options.imageTo3d ? 'Building a GLB with Pixal3D...' : 'Removing the background with BiRefNet...');
+      const bytes = await fetchMediaBuffer(options.imageTo3d || options.removeBackground);
+      const dimensions = getImageDimensionsFromBuffer(bytes);
+      if (!dimensions?.width || !dimensions?.height) throw new Error('Supply an original PNG, JPEG, or WebP image.');
+      options.width = dimensions.width; options.height = dimensions.height;
+      const result = trackProjectResult(await client.createImageProject(withBillingMode(imageUtilityConfig(options, bytes))));
+      if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.segmentImage) {
       log('Selecting the object with SAM 3...');
       const bytes = await fetchMediaBuffer(options.segmentImage);
@@ -13956,11 +14042,11 @@ async function main() {
       const seeds = results.map(r => r.seed ?? options.seed);
       const renderInfo = {
         timestamp: new Date().toISOString(),
-        type: options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
+        type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
         prompt: options.prompt,
         model: options.model,
-        width: options.music ? null : options.width,
-        height: options.music ? null : options.height,
+        width: (options.music || options.speech || options.imageTo3d) ? null : options.width,
+        height: (options.music || options.speech || options.imageTo3d) ? null : options.height,
         seed: firstResult.seed ?? options.seed,
         seedStrategy: options.seedStrategy || null,
         seeds,
@@ -14063,12 +14149,15 @@ async function main() {
         renderInfo.photobooth = true;
         renderInfo.refImage = options.refImage;
       }
-      saveLastRender(renderInfo);
-      
+      Object.assign(renderInfo, utilityResultMetadata(options));
+      const localPaths = [];
+
       // Save to file if requested
       if (options.output && urls[0]) {
         const response = await fetchWithTimeout(urls[0]);
+        if (!response.ok) throw new Error(`Result download failed: HTTP ${response.status}`);
         const buffer = Buffer.from(await response.arrayBuffer());
+        if (options.imageTo3d) validateGlb(buffer);
 
         const dir = dirname(options.output);
         if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -14192,11 +14281,22 @@ async function main() {
           await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
           log(`Saved looping video to ${options.output}`);
         } else {
-          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo) ? 'video' : options.music ? 'audio' : 'image');
+          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo) ? 'video' : (options.music || options.speech) ? 'audio' : options.imageTo3d ? 'model' : 'image');
           log(`Saved to ${options.output}`);
         }
       }
       
+      if (options.output && urls[0]) localPaths.push(options.output);
+      if (options.output && (options.speech || options.music)) {
+        for (let index = 1; index < urls.length; index++) {
+          const extension = extname(options.output);
+          const path = options.output.slice(0, options.output.length - extension.length) + `-${index + 1}` + extension;
+          await downloadUrlToFile(urls[index], path);
+          localPaths.push(path);
+        }
+      }
+      if (localPaths.length) renderInfo.localPaths = localPaths;
+      saveLastRender(renderInfo);
       const lastFramePaths = [];
       if (options.returnLastFrame && options.output) {
         for (const [index, result] of results.entries()) {
@@ -14213,11 +14313,11 @@ async function main() {
       if (options.json) {
         const output = {
           success: true,
-          type: options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
+          type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
           prompt: options.prompt,
           model: options.model,
-          width: options.music ? null : options.width,
-          height: options.music ? null : options.height,
+          width: (options.music || options.speech || options.imageTo3d) ? null : options.width,
+          height: (options.music || options.speech || options.imageTo3d) ? null : options.height,
           seed: firstResult.seed ?? options.seed,
           seedStrategy: options.seedStrategy || null,
           seeds,
@@ -14225,6 +14325,8 @@ async function main() {
           localPath: options.output || null,
           tokenType: options.tokenType || 'spark'
         };
+        Object.assign(output, utilityResultMetadata(options));
+        if (localPaths.length) output.localPaths = localPaths;
         if (options.outputFormat) {
           output.outputFormat = options.outputFormat;
         }

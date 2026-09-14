@@ -1,7 +1,7 @@
 {
   "name": "sogni-creative-agent",
-  "version": "3.48.0",
-  "description": "Create images, generative video, music, and polished image-folder loops with Sogni AI.",
+  "version": "3.49.0",
+  "description": "Create images, 3D models, speech, generative video, music, and image-folder loops with Sogni AI.",
   "author": {
     "name": "Sogni AI",
     "url": "https://sogni.ai"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Sogni Creative Agent",
     "shortDescription": "Create images, video, music, and seamless loops",
-    "longDescription": "Generate and edit images, animate first-frame-to-last-frame video, create music, and turn image folders into verified seamless reels using Sogni AI.",
+    "longDescription": "Generate and edit images, reconstruct Pixal3D models, remove backgrounds, create Qwen3-TTS speech and Music 3 tracks, animate video, and turn image folders into seamless reels using Sogni AI.",
     "developerName": "Sogni AI",
     "category": "Creativity",
     "capabilities": [

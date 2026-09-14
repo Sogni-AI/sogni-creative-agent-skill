@@ -85,7 +85,7 @@ With this skill, an agent can:
 2. Install (one command):
 
    ```bash
-   npx setup-sogni-agent-skill
+   npx setup-sogni-agent-skill --version=latest
    ```
 
    This auto-detects Claude Code, OpenAI Codex CLI, and Hermes Agent; installs the
@@ -154,7 +154,7 @@ The Claude Code plugin shells out to the `sogni-agent` CLI installed above, so b
 
 The first command registers a `sogni` marketplace with one plugin entry (`sogni-creative-agent`) backed by a lean Claude-Code-focused [`plugin-skills/sogni-creative-agent/SKILL.md`](./plugin-skills/sogni-creative-agent/SKILL.md); the second installs the plugin into Claude Code. The full skill spec still lives at the repository root [`SKILL.md`](./SKILL.md).
 
-> **Pick one registration per machine.** Install either this plugin **or** the personal skill that `npx setup-sogni-agent-skill` writes to `~/.claude/skills/` — not both. With both installed, Claude Code lists two near-identical skills, which wastes context and makes skill selection ambiguous.
+> **Pick one registration per machine.** Install either this plugin **or** the personal skill that `npx setup-sogni-agent-skill --version=latest` writes to `~/.claude/skills/` — not both. With both installed, Claude Code lists two near-identical skills, which wastes context and makes skill selection ambiguous.
 
 ### OpenAI Codex CLI
 
@@ -178,7 +178,7 @@ For local development, replace the GitHub shorthand in `codex plugin marketplace
 Alternatively, the `npx` installer writes the full monolithic skill to `~/.codex/skills/sogni-creative-agent-skill/`, which Codex discovers automatically:
 
 ```bash
-npx setup-sogni-agent-skill --only=codex
+npx setup-sogni-agent-skill --version=latest --only=codex
 ```
 
 Start Codex once before running the installer so `~/.codex/` exists. If the selected local runtime is not detected, setup exits before installing anything.
@@ -206,7 +206,7 @@ For a combined CLI + personal-skill setup, the `npx` installer still places the
 skill at `~/.hermes/skills/media/sogni-creative-agent-skill/`:
 
 ```bash
-npx setup-sogni-agent-skill --only=hermes
+npx setup-sogni-agent-skill --version=latest --only=hermes
 ```
 
 Start Hermes once before running the installer so `~/.hermes/` exists. If the
@@ -248,7 +248,7 @@ To install as a code plugin instead, use OpenClaw's `npm:` source prefix (the np
 openclaw plugins install npm:@sogni-ai/sogni-creative-agent-skill
 ```
 
-The installed plugin loads its behavior from [`SKILL.md`](./SKILL.md) via [`openclaw.plugin.json`](./openclaw.plugin.json). The `npx setup-sogni-agent-skill` installer does **not** configure OpenClaw — use the command above (or the local-link flow below) instead.
+The installed plugin loads its behavior from [`SKILL.md`](./SKILL.md) via [`openclaw.plugin.json`](./openclaw.plugin.json). The `npx setup-sogni-agent-skill --version=latest` installer does **not** configure OpenClaw — use the command above (or the local-link flow below) instead.
 
 > **API key under OpenClaw:** the plugin config holds non-secret defaults only (models, timeouts, paths) — it does **not** carry your API key. Provide `SOGNI_API_KEY` via the environment the OpenClaw gateway passes to the CLI, or save it to `~/.config/sogni/credentials` (`SOGNI_API_KEY=<your-key>`). This keeps your key out of plugin config files.
 
@@ -282,7 +282,7 @@ When loaded through OpenClaw, this skill reads plugin defaults from OpenClaw con
 
 ### ChatGPT (Custom GPT)
 
-Run `npx setup-sogni-agent-skill --only=chatgpt` to print step-by-step instructions for creating a ChatGPT Custom GPT whose Instructions embed this skill. Note that ChatGPT cannot run the local CLI; the Custom GPT path covers prompt-side behavior only.
+Run `npx setup-sogni-agent-skill --only=chatgpt --version=latest` to print step-by-step instructions for creating a ChatGPT Custom GPT whose Instructions embed this skill. Note that ChatGPT cannot run the local CLI; the Custom GPT path covers prompt-side behavior only.
 
 ### Manus / other SKILL.md frameworks
 
@@ -350,7 +350,7 @@ Claude Desktop can't run skills against your local files, so Sogni ships as a lo
 
 **Recommended — one command (also installs the CLI, saves your API key, and offers to install ffmpeg):**
 
-    npx setup-sogni-agent-skill
+    npx setup-sogni-agent-skill --version=latest
 
 This registers the Sogni tools in `claude_desktop_config.json`. Fully quit and reopen Claude Desktop afterwards. Generated images display inline in the chat automatically.
 
@@ -511,6 +511,20 @@ sogni-agent --video --ref first.png --ref-end last.png \
 sogni-agent --video --ref cover.jpg --ref-audio song.mp3 \
   "music video with synchronized motion"
 
+# Pixal3D textured GLB from one original image (no prompt)
+sogni-agent --image-to-3d object.png --mesh-faces 30000 -o object.glb
+
+# BiRefNet transparent PNG (add --matte for the soft mask)
+sogni-agent --remove-background original.png -o cutout.png
+
+# MiniMax Music 3 and Qwen3-TTS studio speech
+sogni-agent --music -m music3 --duration 30 -o score.mp3 "instrumental orchestral theme"
+sogni-agent --speech --speech-voice ryan -o speech.wav "Welcome to the story."
+
+# Voice cloning from a 3–30s recording, or voice design from a description
+sogni-agent --speech --speech-mode clone --voice-reference voice.wav -o clone.wav "A new line in this voice."
+sogni-agent --speech --speech-mode design --voice-description "Warm, low-pitched storyteller" -o designed.wav "The journey begins."
+
 # Direct music generation
 sogni-agent --music --duration 30 \
   "uplifting cinematic synthwave theme for a product launch"
@@ -610,7 +624,11 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `-c <path>` | Provide image context for edits |
 | `--video` | Generate video instead of image |
 | `--music` | Generate music/audio instead of image |
-| `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | Music generation controls |
+| `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | ACE-Step music controls; for Music 3 put tempo/key in the prompt |
+| `--music -m music3` | MiniMax Music 3, 10–300s (60s default) |
+| `--speech`, `--speech-mode` | Qwen3-TTS voice, clone, or design |
+| `--image-to-3d <image>` | Pixal3D binary GLB from one original image |
+| `--remove-background <image>`, `--matte` | BiRefNet transparent PNG or soft mask |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio; on MiniMax H3 FastH3 Two-Stage, the delivered size `720`, `1080`, or `2K` (default 2K) |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
@@ -710,6 +728,8 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 `gpt-image-2` supports flexible OpenAI image sizes up to 3840 px on either edge, max 3:1 aspect ratio, and total pixels from 655,360 to 8,294,400; the API snaps dimensions to valid multiples of 16. For image editing with `gpt-image-2`, you can pass up to 16 context images. For likeness-preserving edits of a referenced person or character, agents default to Krea 2 Identity Edit (`krea2_identity_edit_v1_2`) unless you explicitly choose another model. It and Dark Beast Krea 2 Identity Edit (`dark_beast_krea2_identity_edit_v1_2`) use `-c/--context`, accept 1-2 references at 512-2048 px, and leave execution defaults to the current model tier.
+
+For Pixal3D mesh budgets, BiRefNet cutouts/mattes, Music 3 section tags, and all Qwen3-TTS modes, read [the model guide](references/models.md). Speech uses exact scripts without music duration or sampler controls; clone mode checks 3–30s recordings with `ffprobe`. Audio batches save every output with numbered filenames.
 
 Music generation uses `--music` and outputs `mp3` by default. `--audio` remains the video-reference alias for `--ref-audio`; use `--music` or `--generate-music` for direct audio-only generation.
 

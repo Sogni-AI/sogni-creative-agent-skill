@@ -8,8 +8,10 @@ const HERMES_SKILL = '.agents/skills/sogni-creative-agent-skill';
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 
 const mirroredReferences = [
+  'h3-video-loras.md',
   'hosted-api.md',
   'image-prompting.md',
+  'interactive-worlds.md',
   'krea2-loras.md',
   'loop-maker.md',
   'models.md',

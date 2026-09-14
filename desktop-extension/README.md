@@ -53,7 +53,7 @@ server so every relative import resolves after a standalone install.
 
 ## Install paths
 
-1. `npx setup-sogni-agent-skill` writes a `claude_desktop_config.json` entry
+1. `npx setup-sogni-agent-skill --version=latest` writes a `claude_desktop_config.json` entry
    pointing at this server inside the global npm package (preferred).
 2. The packed `.mcpb` is the manual drag-and-drop alternative
    (Claude Desktop → Settings → Extensions).

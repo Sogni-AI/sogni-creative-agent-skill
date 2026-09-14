@@ -13,10 +13,16 @@ are not obvious and each one cost a day.
 
 ## The stack, in the order it runs
 
+The direct CLI now covers this stack, including `--image-to-3d` for Pixal3D,
+`--remove-background` for BiRefNet, `--music -m music3` for scores, and
+`--speech --speech-mode clone` for character voices. Hosted tools and SDK
+projects remain available. Read [models.md](./models.md) for the required
+inputs and controls before converting a stage into commands.
+
 | Step | Model | What it gives you |
 |---|---|---|
 | 1. Places | `krea2_turbo_fp8_scaled` | A scene as one wide still |
-| 2. The same character, somewhere new | `krea2_identity_edit_sogni_v0_3_alpha` | A new place with a recognisable character in it, from two context references |
+| 2. The same character, somewhere new | `krea2_identity_edit_v1_2` | A new place with a recognisable character in it, from two context references |
 | 3. Clickable objects | `sam3_image_segment_bf16` | A pixel mask of a named object, to trace into a hit area |
 | 4. Clean cut-outs | `birefnet_image_background_removal_fp16` | A soft matte with real edges, for anything going into 3D or a composite |
 | 5. Travel and dialogue | `minimax-h3-fastvideo-int8_flf2v_turbo`, `minimax-h3-fl2va-fp8_flf2v_turbo` | First/last-frame video with generated audio in one pass |
@@ -55,10 +61,34 @@ its exact bytes and its hash. Never re-save, re-crop or screenshot it, and never
 substitute a frame extracted from a video for it — a mask traced against one
 copy will not fit another.
 
+### Where the character goes in the shot
+
+**Do not put the character front, centre, large and looking at the camera.**
+This is the easiest mistake to make and the hardest to undo, because it is
+usually written once into a shared identity block and then inherited by every
+scene in the world. One build asked for "this single mascot visibly present and
+full-bodied, around one third of the picture height" and then added "stands
+center foreground" to each scene on top of it. Twenty-odd scenes came back as
+the same portrait with different wallpaper. Mark: "NEVER PLACE the main
+character front and center looking at the viewer in every scene ... the main
+character should move in depth and position and not take up so much of the
+screen and not always be looking at the viewer."
+
+Compose around the *place* and let the character be in it: off to one side,
+well back in depth, small against the scale, seen from the back or three-
+quarters, occupied with something, entering or leaving. Vary it scene to scene.
+A large camera-facing foreground pose is a choice to make once, for the scene
+where it is the point — never the default.
+
+Identity and framing are separate instructions, and only the framing should
+move. Keep every clause about fur, glasses, nose, horn and proportions exactly
+as it is; a character whose placement varies is still the same character, and
+loosening the identity to get variety costs the thing the world is built on.
+
 ### Keeping a character
 
-A name is not an identity lock. `krea2_identity_edit_sogni_v0_3_alpha` takes
-exactly two context images: give it the world in one and the character in the
+A name is not an identity lock. `krea2_identity_edit_v1_2` accepts one or two
+context images; for this workflow give it the world in one and the character in the
 other, and say in the prompt which reference is for which. Everything a
 character's identity depends on has to be in a saved reference image you can
 hand back to the model.
@@ -101,6 +131,54 @@ Four SAM 3 failures worth knowing before you spend anything:
   and vertex counts, normals, UVs.
 
 ### Crossings between scenes
+
+**Describe a journey, never a transformation.** This is the single biggest
+quality lever on a crossing and it is easy to get wrong. Write "the cabin drops
+down the cable, cloud tearing past the windows, until the platform slides into
+frame" and you get travel. Write "the cloud thins into rainforest mist" or "the
+street gives way to the hill" and you get a dissolve — the model reads
+*becomes*, *gives way to*, *opens out into* as an instruction to blend, and no
+amount of "no crossfade" elsewhere in the prompt will override a concrete
+instruction to morph.
+
+The tell that a crossing is about to fail is that the journey is *impossible*:
+into a telescope barrel, into a phone earpiece, into a jukebox cabinet, through
+a mirror, into a slot in a rack. With no space to move through, blending is all
+the model has left. Give it real geography instead — go *around* rather than
+*through*. A telescope crossing works if the camera climbs the barrel and keeps
+going up through actual cloud to the observatory; it dissolves if it goes in at
+the eyepiece.
+
+The reliable trick for a crossing that really is a portal — under a basket lid,
+into a diving bell — is to let the object physically swallow the lens. The lid
+swings down across frame, it is dark for a beat, and the camera comes out the
+other side. That is occlusion, which is travel, and it never reads as a fade.
+
+Distance matters as much as wording. A crossing is about five seconds; asking
+for rainforest canopy to open ocean to Manhattan in that time makes the model
+stall and go to mush even when every verb is a travel verb. Cut the geography
+until the move is one continuous gesture.
+
+**No frame-statistics metric can detect a fade. Look at the clip.** This is
+worth stating flatly because two plausible metrics were tried and both inverted:
+
+- *Edge energy at the midpoint against the ends.* Reads as a softness detector,
+  but fast camera travel with objects whipping past the lens produces real
+  motion blur, which drops edge energy exactly as a dissolve does.
+- *Correlating the middle against both ends and taking the lower.* Reads as a
+  superimposition detector, but two scenes that simply look alike — two rainy
+  streets — correlate highly with nothing blended, and a deliberate dark
+  occlusion beat correlates with neither end while being exactly right.
+
+Combining them does not help, because the occlusion the crossing wants — a lid
+swinging over the lens, a bell going down into dark water, a turn into an
+unlit stairwell — is, in frame statistics, indistinguishable from mush: a
+middle that resembles neither end and carries little detail. Both rewrites
+measured *worse* than the transformations they replaced and both were plainly
+better on screen. Extract a strip of eight frames across the whole clip and
+look at it. One picture smeared or blocked is travel; two pictures
+superimposed is a fade. That judgement takes seconds and is the only one that
+has been right.
 
 Anchor first *and* last frame on the exact retained stills. That is what makes a
 journey feel continuous instead of like a cut: the clip opens on the frame the

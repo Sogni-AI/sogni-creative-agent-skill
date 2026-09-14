@@ -671,10 +671,11 @@ audio references keep their existing handling.
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
 - For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders up to 1080p.
+- For **Seedance 2.5 HD / 1080p**, preserve the requested model with `-m seedance2-5 --target-resolution 1080`. Its frame, loose-reference, edit, and extend workflows also accept 1080p; edit/extend inherit the source video's aspect ratio.
 - For **non-vendor HD / 1080p text-to-video**, use `-m ltx25`.
 - For **non-vendor HD / 1080p image-to-video**, use `-m ltx25-i2v`.
 - Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.
-- For bare named resolutions such as "720p" without orientation or exact pixels, prefer `--target-resolution 768` or the closest requested short side instead of forcing landscape dimensions.
+- For bare "720p" on LTX/WAN 2.2 without orientation or exact pixels, prefer `--target-resolution 768` instead of forcing landscape dimensions. Seedance uses `--target-resolution 720`; honor the selected model's supported tiers.
 - When the prompt combines a named resolution with an aspect ratio, such as "720p 9:16", let the CLI infer both instead of forcing manual `-w`/`-h` unless the user gave exact pixels.
 - If the user explicitly asks for `vertical`, `portrait`, `story`, `reel`, `tiktok`, `square`, or `4:3`, apply the matching dimensions from the **Orientation Mapping** rules instead of defaulting to 16:9.
 - Rewrite the user's request using the **LTX-2.x Prompt Rule** only when invoking an LTX model. Do not send short slogan-style prompts to LTX.

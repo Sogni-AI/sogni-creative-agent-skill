@@ -205,7 +205,7 @@ sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
-# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p).
+# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p).
 # Edit inherits @Video1's ratio and uses its source duration; extend inherits
 # the ratio but uses the requested continuation duration.
 sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
@@ -373,7 +373,7 @@ H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (
 
 For an H3 prompt-only request, the general prompt-authoring rule above requires returning only the applicable ordered-field contract. The fields themselves are the directly runnable deliverable; do not wrap them in commentary.
 
-For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders 480p/720p only. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
+For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders up to 1080p. For "hd" / "1080p" requests, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" without orientation, prefer `--target-resolution 768`.
 
 ### Video editing, stitching, 360 turnarounds
 

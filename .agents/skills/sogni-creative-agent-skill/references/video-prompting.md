@@ -670,7 +670,7 @@ audio references keep their existing handling.
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
-- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders 480p/720p only.
+- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders up to 1080p.
 - For **non-vendor HD / 1080p text-to-video**, use `-m ltx25`.
 - For **non-vendor HD / 1080p image-to-video**, use `-m ltx25-i2v`.
 - Prefer LTX-sized dimensions such as `-w 1920 -h 1088` when the chosen model is LTX.
@@ -697,7 +697,7 @@ sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my
 # Seedance 2.0 standard (4-15s vendor video path with native audio)
 sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with native ambient sound"
 
-# Seedance 2.5 (4-30s single clips, 480p/720p only — the one Seedance that renders past 15s in one call)
+# Seedance 2.5 (4-30s single clips, 480p/720p/1080p — the one Seedance that renders past 15s in one call)
 sogni-agent --video -m seedance2-5 --duration 24 "A continuous one-take product story with native ambient sound"
 
 # Seedance 2.5 edit (duration must match @Video1; aspect ratio is inherited)

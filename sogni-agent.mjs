@@ -2377,9 +2377,46 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v'],
   ['minimax-h3-fastvideo-int8_t2v_turbo_2stage', 't2v'],
   ['minimax-h3-fastvideo-int8_i2v_turbo_2stage', 'i2v'],
-  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage', 'flf2v']
+  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage', 'flf2v'],
+  ['minimax-h3-fastvideo-int8_ia2v_turbo', 'ia2v'],
+  ['minimax-h3-fastvideo-int8_flfa2v_turbo', 'flfa2v'],
+  ['minimax-h3-fastvideo-int8_a2v_turbo', 'a2v'],
+  ['minimax-h3-fastvideo-int8_ia2v_turbo_2stage', 'ia2v'],
+  ['minimax-h3-fastvideo-int8_flfa2v_turbo_2stage', 'flfa2v'],
+  ['minimax-h3-fastvideo-int8_a2v_turbo_2stage', 'a2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
+// FastH3 audio guide: an uploaded audio file drives the
+// video from frame 0 and is kept in the output. ia2v takes a first frame plus
+// the audio, flfa2v a first and a last frame plus the audio, a2v the audio only.
+// Each has a two-stage id with the same request, delivered at twice the canvas.
+const MINIMAX_H3_AUDIO_GUIDE_MODEL_IDS = new Set([
+  'minimax-h3-fastvideo-int8_ia2v_turbo',
+  'minimax-h3-fastvideo-int8_flfa2v_turbo',
+  'minimax-h3-fastvideo-int8_a2v_turbo',
+  'minimax-h3-fastvideo-int8_ia2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_a2v_turbo_2stage'
+]);
+// The two-stage audio ids and their selectors. The pinned Intelligence Client's
+// isMinimaxH3TwoStageModelId lists only the t2v/i2v/flf2v two-stage ids, so the
+// CLI adds these until the pin carries them.
+const MINIMAX_H3_AUDIO_GUIDE_TWO_STAGE_SELECTIONS = new Set([
+  'minimax-h3-fastvideo-int8_ia2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage',
+  'minimax-h3-fastvideo-int8_a2v_turbo_2stage',
+  'minimax-h3-fasth3-ia2v-turbo-2stage',
+  'minimax-h3-fasth3-flfa2v-turbo-2stage',
+  'minimax-h3-fasth3-a2v-turbo-2stage'
+]);
+const MINIMAX_H3_AUDIO_GUIDE_SELECTORS = new Map([
+  ['minimax-h3-fasth3-ia2v-turbo', 'minimax-h3-fastvideo-int8_ia2v_turbo'],
+  ['minimax-h3-fasth3-flfa2v-turbo', 'minimax-h3-fastvideo-int8_flfa2v_turbo'],
+  ['minimax-h3-fasth3-a2v-turbo', 'minimax-h3-fastvideo-int8_a2v_turbo'],
+  ['minimax-h3-fasth3-ia2v-turbo-2stage', 'minimax-h3-fastvideo-int8_ia2v_turbo_2stage'],
+  ['minimax-h3-fasth3-flfa2v-turbo-2stage', 'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage'],
+  ['minimax-h3-fasth3-a2v-turbo-2stage', 'minimax-h3-fastvideo-int8_a2v_turbo_2stage']
+]);
 const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fl2va-fp8_t2v_turbo',
   'minimax-h3-fl2va-fp8_i2v_turbo',
@@ -2390,7 +2427,8 @@ const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_flf2v_turbo',
   'minimax-h3-fastvideo-int8_t2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
-  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
+  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage',
+  ...MINIMAX_H3_AUDIO_GUIDE_MODEL_IDS
 ]);
 // FastH3 Two-Stage renders the FastH3 request on its own model ids and delivers
 // the clip at exactly twice the canvas, same frames and audio: 720p from 672x384,
@@ -2407,7 +2445,8 @@ const MINIMAX_H3_FASTH3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_t2v_turbo',
   'minimax-h3-fastvideo-int8_i2v_turbo',
   'minimax-h3-fastvideo-int8_flf2v_turbo',
-  ...MINIMAX_H3_TWO_STAGE_MODEL_IDS
+  ...MINIMAX_H3_TWO_STAGE_MODEL_IDS,
+  ...MINIMAX_H3_AUDIO_GUIDE_MODEL_IDS
 ]);
 const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']);
 const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
@@ -2527,7 +2566,16 @@ function resolveSkillVideoModelAlias(
         ? 'minimax-h3-fastvideo-int8_flf2v_turbo'
         : 'minimax-h3-fastvideo-int8_i2v_turbo';
     }
+    if (workflow === 'ia2v') {
+      return hasEndFrame
+        ? 'minimax-h3-fastvideo-int8_flfa2v_turbo'
+        : 'minimax-h3-fastvideo-int8_ia2v_turbo';
+    }
+    if (workflow === 'a2v') return 'minimax-h3-fastvideo-int8_a2v_turbo';
     return 'minimax-h3-fastvideo-int8_t2v_turbo';
+  }
+  if (MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)) {
+    return MINIMAX_H3_AUDIO_GUIDE_SELECTORS.get(normalized);
   }
   if (normalized === 'minimax-h3-fasth3-t2v-turbo') {
     return 'minimax-h3-fastvideo-int8_t2v_turbo';
@@ -2550,6 +2598,12 @@ function resolveSkillVideoModelAlias(
         ? 'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
         : 'minimax-h3-fastvideo-int8_i2v_turbo_2stage';
     }
+    if (workflow === 'ia2v') {
+      return hasEndFrame
+        ? 'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage'
+        : 'minimax-h3-fastvideo-int8_ia2v_turbo_2stage';
+    }
+    if (workflow === 'a2v') return 'minimax-h3-fastvideo-int8_a2v_turbo_2stage';
     return 'minimax-h3-fastvideo-int8_t2v_turbo_2stage';
   }
   if (normalized === 'minimax-h3-fasth3-t2v-turbo-2stage') {
@@ -2598,8 +2652,18 @@ function isMiniMaxH3TurboModel(modelId) {
 }
 
 function isMiniMaxH3TwoStageModel(modelId) {
-  return isMinimaxH3TwoStageModelId(modelId);
+  return isMinimaxH3TwoStageModelId(modelId)
+    || MINIMAX_H3_AUDIO_GUIDE_TWO_STAGE_SELECTIONS.has(String(modelId || '').trim().toLowerCase());
 }
+
+function isMiniMaxH3AudioGuideModel(modelId) {
+  return MINIMAX_H3_AUDIO_GUIDE_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
+// The two-stage canvas depends only on the delivered class and the source
+// aspect, never on the inputs, so each audio mode sizes like the frame mode
+// with the same images (the pinned Intelligence Client sizes only those).
+const MINIMAX_H3_TWO_STAGE_CANVAS_MODE = Object.freeze({ ia2v: 'i2v', flfa2v: 'flf2v', a2v: 't2v' });
 
 /**
  * The FastH3 Two-Stage canvas for a source of this size: the Intelligence Client
@@ -2607,7 +2671,8 @@ function isMiniMaxH3TwoStageModel(modelId) {
  * into a 384, 544 or 768 short edge in the source's aspect (or aspectRatio's).
  */
 function miniMaxH3TwoStageCanvas(modelId, deliveredClass, sourceWidth, sourceHeight, aspectRatio) {
-  const selector = `minimax-h3-fasth3-${miniMaxH3ModeFromModelId(modelId)}-turbo-2stage`;
+  const mode = miniMaxH3ModeFromModelId(modelId);
+  const selector = `minimax-h3-fasth3-${MINIMAX_H3_TWO_STAGE_CANVAS_MODE[mode] || mode}-turbo-2stage`;
   return calculateSharedVideoDimensions(sourceWidth, sourceHeight, deliveredClass, selector, aspectRatio || undefined);
 }
 
@@ -2647,7 +2712,20 @@ function isMiniMaxH3FastH3TurboSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
+    || MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)
     || MINIMAX_H3_FASTH3_TURBO_MODEL_IDS.has(normalized);
+}
+
+// An explicit FastH3 audio-guide selector or id, or a FastH3 family selector
+// that --ref-audio turns into one. Used before the workflow is resolved.
+function isMiniMaxH3AudioGuideSelectionLocal(modelId, hasReferenceAudio) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)
+    || isMiniMaxH3AudioGuideModel(normalized)
+    || (
+      Boolean(hasReferenceAudio)
+      && (normalized === 'minimax-h3-fasth3-turbo' || normalized === 'minimax-h3-fasth3-turbo-2stage')
+    );
 }
 
 function isMiniMaxH3ModelSelectionLocal(modelId) {
@@ -2670,6 +2748,7 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
+    || MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)
     || normalized === 'minimax-h3-balanced'
     || normalized === 'minimax-h3-t2v-balanced'
     || normalized === 'minimax-h3-i2v-balanced'
@@ -2693,6 +2772,7 @@ function isMiniMaxH3TurboModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-fasth3-t2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-i2v-turbo-2stage'
     || normalized === 'minimax-h3-fasth3-flf2v-turbo-2stage'
+    || MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)
     || isMiniMaxH3TurboModel(normalized);
 }
 
@@ -2716,7 +2796,18 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-i2v-balanced') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
   if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
+  if (MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)) {
+    return MINIMAX_H3_MODEL_MODES.get(MINIMAX_H3_AUDIO_GUIDE_SELECTORS.get(normalized));
+  }
   return MINIMAX_H3_MODEL_MODES.get(normalized) || null;
+}
+
+// The FastH3 audio-guide selector that takes the audio the user supplied to an
+// H3 mode without an audio input, picked by the frame images supplied alongside
+// it (the Socket names the same substitute for such a request).
+function miniMaxH3AudioGuideSelectorFor(modelId, hasStartFrame, hasEndFrame) {
+  const mode = hasEndFrame ? 'flfa2v' : hasStartFrame ? 'ia2v' : 'a2v';
+  return `minimax-h3-fasth3-${mode}-turbo${isMiniMaxH3TwoStageModel(modelId) ? '-2stage' : ''}`;
 }
 
 function normalizeMultiAngleValue(value, aliases, allowedKeys, label) {
@@ -4409,8 +4500,10 @@ Video Options:
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance; H3 r2v uploads local/remote files.
                          On LTX/WAN: single primary only (for ia2v/a2v/s2v lip-sync).
-  --audio-start <sec>   Start offset into --ref-audio for audio-driven clips
-  --audio-duration <sec> Duration slice from --ref-audio
+                         MiniMax H3 FastH3 audio-to-video: one file that drives the clip and is its soundtrack.
+  --audio-start <sec>   Start offset into --ref-audio for audio-driven clips (FastH3 audio-to-video:
+                         where the audio window begins; the window is the video length)
+  --audio-duration <sec> Duration slice from --ref-audio (not MiniMax H3 FastH3 audio-to-video)
   --reference-audio-identity <path>  Voice identity clip for LTX native audio
   --voice-persona <name>  Use saved persona voice clip as LTX voice identity
   --ref-video <path|url> Video reference. Repeatable on Seedance and H3 r2v (up to 3 total);
@@ -4664,6 +4757,15 @@ state negatives in the structured prompt.):
                                     FastH3 Two-Stage I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-fasth3-flf2v-turbo-2stage
                                     FastH3 Two-Stage first-frame -> last-frame (--ref plus --ref-end)
+  minimax-h3-fasth3-ia2v-turbo      FastH3 audio-to-video: --ref first frame plus --ref-audio, which drives the
+                                     motion from frame 0 and is the clip's soundtrack
+  minimax-h3-fasth3-flfa2v-turbo    FastH3 first + last frame plus audio (--ref, --ref-end, --ref-audio)
+  minimax-h3-fasth3-a2v-turbo       FastH3 audio only (--ref-audio). Audio modes: --audio-start picks the window,
+                                     --duration/--frames set its length; no LoRAs, --audio-duration or
+                                     --no-generate-audio. minimax-h3-fasth3-turbo with --ref-audio picks one of these.
+  minimax-h3-fasth3-ia2v-turbo-2stage / -flfa2v-turbo-2stage / -a2v-turbo-2stage
+                                    FastH3 Two-Stage audio-to-video; minimax-h3-fasth3-turbo-2stage with --ref-audio
+                                     picks one of these
   H3 FL2VA Turbo sampler override   --sampler euler|er_sde|sa_solver
                                      (Socket default: er_sde; CLI omits unless set)
                                      (scheduler remains fixed to simple)
@@ -5145,6 +5247,14 @@ if (options.music && options.loras.length > 0) {
 }
 
 if (options.video && options.loras.length > 0) {
+  // No LoRA has been qualified on the FastH3 audio-guide graphs; Sogni refuses
+  // them, so stop before reading the catalog or uploading anything.
+  if (isMiniMaxH3AudioGuideSelectionLocal(options.model, options.refAudio)) {
+    fatalCliError('MiniMax H3 FastH3 audio-to-video does not support LoRAs. Remove --lora/--loras.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, loras: options.loras }
+    });
+  }
   if (options.loras.length > 8) {
     fatalCliError('Video generation supports at most 8 LoRAs per render.', {
       code: 'INVALID_ARGUMENT',
@@ -5364,9 +5474,16 @@ if (options.video) {
   // is a separate r2v checkpoint and is never inferred from loose references.
   // Selecting the tier's minimax-h3-r2v* alias or explicitly passing
   // --workflow r2v with its bare tier selector is required.
+  // FastH3 alone also has the audio guide: ia2v (first frame + audio, and with
+  // --ref-end the flfa2v first/last frame + audio id, as i2v covers flf2v) and
+  // a2v (audio only). Its family selectors pick them when --ref-audio is given.
   if (isMiniMaxH3ModelSelectionLocal(options.model)) {
+    const selection = String(options.model).trim().toLowerCase();
     const pinnedMode = miniMaxH3ModeFromModelId(options.model);
-    const pinnedWorkflow = pinnedMode === 'flf2v' ? 'i2v' : pinnedMode;
+    const pinnedWorkflow = pinnedMode === 'flf2v' ? 'i2v' : pinnedMode === 'flfa2v' ? 'ia2v' : pinnedMode;
+    const hasReferenceAudio = Boolean(options.refAudio || options.refAudios.length > 0);
+    const isFastH3FamilySelection = selection === 'minimax-h3-fasth3-turbo'
+      || selection === 'minimax-h3-fasth3-turbo-2stage';
     if (pinnedWorkflow) {
       if (options.videoWorkflow && options.videoWorkflow !== pinnedWorkflow) {
         fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
@@ -5376,7 +5493,40 @@ if (options.video) {
       }
       options.videoWorkflow = pinnedWorkflow;
     } else if (!options.videoWorkflow) {
-      options.videoWorkflow = (options.refImage || options.refImageEnd) ? 'i2v' : 't2v';
+      const hasFrameImage = Boolean(options.refImage || options.refImageEnd);
+      options.videoWorkflow = hasReferenceAudio && isFastH3FamilySelection
+        ? (hasFrameImage ? 'ia2v' : 'a2v')
+        : (hasFrameImage ? 'i2v' : 't2v');
+    }
+    const audioGuideSelector = miniMaxH3AudioGuideSelectorFor(
+      options.model,
+      Boolean(options.refImage),
+      Boolean(options.refImageEnd)
+    );
+    const audioGuideHint = 'FastH3 audio-to-video: -m minimax-h3-fasth3-ia2v-turbo (--ref plus --ref-audio), '
+      + '-m minimax-h3-fasth3-flfa2v-turbo (--ref, --ref-end and --ref-audio), or '
+      + '-m minimax-h3-fasth3-a2v-turbo (--ref-audio only); add -2stage for Two-Stage. '
+      + 'For audio as a loose reference rather than the soundtrack, use -m minimax-h3-r2v.';
+    if (
+      (options.videoWorkflow === 'ia2v' || options.videoWorkflow === 'a2v')
+      && !isMiniMaxH3FastH3TurboSelectionLocal(options.model)
+    ) {
+      fatalCliError(`MiniMax H3 ${options.videoWorkflow} is the FastH3 audio guide; use -m ${audioGuideSelector}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { workflow: options.videoWorkflow, model: options.model, suggestedModel: audioGuideSelector },
+        hint: audioGuideHint
+      });
+    }
+    if (hasReferenceAudio && !['r2v', 'ia2v', 'a2v'].includes(options.videoWorkflow)) {
+      fatalCliError(
+        `${options.model} has no audio input, so --ref-audio would be ignored. `
+        + `To drive the video with this audio, use -m ${audioGuideSelector}.`,
+        {
+          code: 'INVALID_ARGUMENT',
+          details: { workflow: options.videoWorkflow, model: options.model, suggestedModel: audioGuideSelector },
+          hint: audioGuideHint
+        }
+      );
     }
     options.model = resolveSkillVideoModelAlias(
       options.model,
@@ -6107,8 +6257,31 @@ if (options.video) {
       details: { workflow: options.videoWorkflow, model: options.model }
     });
   }
-  if (isMiniMaxH3Video && !['t2v', 'i2v', 'r2v'].includes(options.videoWorkflow)) {
-    fatalCliError('MiniMax H3 models support only t2v, i2v/flf2v, or r2v workflows.', {
+  const isMiniMaxH3AudioGuideVideo = isMiniMaxH3AudioGuideModel(options.model);
+  if (isMiniMaxH3AudioGuideVideo) {
+    const audioGuideWorkflow = miniMaxH3ModeFromModelId(options.model) === 'a2v' ? 'a2v' : 'ia2v';
+    if (options.videoWorkflow !== audioGuideWorkflow) {
+      fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
+        code: 'INVALID_ARGUMENT',
+        details: { workflow: options.videoWorkflow, model: options.model }
+      });
+    }
+    // The graph always delivers the uploaded audio, trimmed to the video length.
+    if (options.apiGenerateAudio === false) {
+      fatalCliError('MiniMax H3 FastH3 audio-to-video always keeps the uploaded audio. Omit --no-generate-audio.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model }
+      });
+    }
+    if (options.audioDuration !== null) {
+      fatalCliError(
+        'MiniMax H3 FastH3 audio-to-video has no --audio-duration: the uploaded audio is trimmed to the video length. '
+        + 'Set --duration or --frames, and --audio-start to choose where the audio window begins.',
+        { code: 'INVALID_ARGUMENT', details: { model: options.model, audioDuration: options.audioDuration } }
+      );
+    }
+  } else if (isMiniMaxH3Video && !['t2v', 'i2v', 'r2v'].includes(options.videoWorkflow)) {
+    fatalCliError('MiniMax H3 models support only t2v, i2v/flf2v, or r2v workflows; FastH3 also has ia2v/flfa2v/a2v audio-to-video.', {
       code: 'INVALID_ARGUMENT',
       details: { workflow: options.videoWorkflow, model: options.model }
     });
@@ -6328,6 +6501,36 @@ if (options.video) {
     }
     if (options.refVideo) {
       fatalCliError('s2v does not accept reference video.', { code: 'INVALID_ARGUMENT' });
+    }
+  } else if (isMiniMaxH3AudioGuideVideo) {
+    // Each FastH3 audio mode renders from exactly its own uploads.
+    const h3AudioMode = miniMaxH3ModeFromModelId(options.model);
+    const required = h3AudioMode === 'flfa2v'
+      ? { flags: '--ref, --ref-end and --ref-audio', ok: options.refImage && options.refImageEnd && options.refAudio }
+      : h3AudioMode === 'ia2v'
+        ? { flags: '--ref and --ref-audio', ok: options.refImage && options.refAudio }
+        : { flags: '--ref-audio', ok: options.refAudio };
+    if (!required.ok) {
+      fatalCliError(`MiniMax H3 FastH3 ${h3AudioMode} requires ${required.flags}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model }
+      });
+    }
+    const extras = [
+      h3AudioMode === 'a2v' && options.refImage ? '--ref' : null,
+      h3AudioMode !== 'flfa2v' && options.refImageEnd ? '--ref-end' : null,
+      options.contextImages.length > 0 ? '-c/--context' : null,
+      options.refVideo || options.refVideos.length > 0 ? '--ref-video' : null,
+      options.refAudios.length > 0 ? 'a second --ref-audio' : null
+    ].filter(Boolean);
+    if (extras.length > 0) {
+      const substitute = h3AudioMode !== 'flfa2v' && options.refImageEnd && options.refImage
+        ? ` For a first and a last frame, use -m ${miniMaxH3AudioGuideSelectorFor(options.model, true, true)}.`
+        : '';
+      fatalCliError(
+        `MiniMax H3 FastH3 ${h3AudioMode} takes only ${required.flags}; remove ${extras.join(', ')}.${substitute}`,
+        { code: 'INVALID_ARGUMENT', details: { model: options.model, unsupported: extras } }
+      );
     }
   } else if (options.videoWorkflow === 'ia2v') {
     if (isSeedanceVideo) {
@@ -6653,7 +6856,7 @@ if (options.video) {
   // FastH3 Two-Stage follows a local reference's aspect at the requested
   // delivered class, and caps the reference pre-resize to that canvas.
   let twoStageReferenceCanvas = null;
-  if (options._miniMaxH3TwoStageAutoCanvas && options.videoWorkflow === 'i2v' && hasVideoReference) {
+  if (options._miniMaxH3TwoStageAutoCanvas && videoWorkflowHasFrameAnchors() && hasVideoReference) {
     const twoStageRefPath = options.refImage || options.refImageEnd;
     if (!isHttpUrl(twoStageRefPath) && existsSync(twoStageRefPath)) {
       const twoStageRefDims = getImageDimensionsFromBuffer(readFileSync(twoStageRefPath));
@@ -6735,7 +6938,7 @@ if (options.video) {
     );
   }
 
-  if (options.videoWorkflow === 'i2v' && (options.refImage || options.refImageEnd)) {
+  if (videoWorkflowHasFrameAnchors() && (options.refImage || options.refImageEnd)) {
     const references = [
       {
         key: 'refImage',
@@ -12033,6 +12236,56 @@ async function runMultiAngleFlow(client, log) {
   }
 }
 
+// The images of the MiniMax H3 FastH3 ia2v/flfa2v audio guide are first/last
+// frame anchors exactly like i2v's, so they follow i2v's canvas and
+// reference-resize rules. (Other ia2v models treat --ref as a loose reference.)
+function videoWorkflowHasFrameAnchors() {
+  return options.videoWorkflow === 'i2v'
+    || (options.videoWorkflow === 'ia2v' && isMiniMaxH3AudioGuideModel(options.model));
+}
+
+/**
+ * Fit FastH3 audio-guide frame images to the H3 canvas the way the client
+ * wrapper fits i2v frames: normalize the canvas, fit the first frame inside it
+ * (cover-cropping onto the grid if that lands off it), then cover the last frame
+ * to the same size. The pinned Intelligence Client wrapper predates these ids
+ * and would size them with its generic video rules (480 px minimum, 16 px grid),
+ * moving an H3 canvas off its 32 px grid, so the caller sends the result with
+ * autoResizeVideoAssets false. Remove once the pin sizes the audio ids itself.
+ */
+async function fitMiniMaxH3AudioGuideFrames({ imageBuffer, endImageBuffer, width, height, rules }) {
+  let canvas = normalizeVideoDimensionsLikeWrapper(width, height, rules);
+  let start = imageBuffer;
+  if (start) {
+    const dims = await getVideoImageDimensionsFromBuffer(start);
+    if (dims?.width !== canvas.width || dims?.height !== canvas.height) {
+      const fitted = await sharp(start)
+        .resize(canvas.width, canvas.height, { fit: 'inside', position: 'center', withoutEnlargement: false })
+        .toBuffer({ resolveWithObject: true });
+      const onGrid = normalizeVideoDimensionsLikeWrapper(fitted.info.width, fitted.info.height, rules);
+      if (onGrid.adjusted) {
+        start = await sharp(imageBuffer)
+          .resize(onGrid.width, onGrid.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
+          .toBuffer();
+        canvas = onGrid;
+      } else {
+        start = fitted.data;
+        canvas = { width: fitted.info.width, height: fitted.info.height };
+      }
+    }
+  }
+  let end = endImageBuffer;
+  if (end) {
+    const dims = await getVideoImageDimensionsFromBuffer(end);
+    if (dims?.width !== canvas.width || dims?.height !== canvas.height) {
+      end = await sharp(end)
+        .resize(canvas.width, canvas.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
+        .toBuffer();
+    }
+  }
+  return { imageBuffer: start, endImageBuffer: end, width: canvas.width, height: canvas.height };
+}
+
 function miniMaxH3R2vReferenceImageCount() {
   if (!isMiniMaxH3R2vModel(options.model)) return undefined;
   return (options.refImage ? 1 : 0)
@@ -13341,7 +13594,7 @@ async function main() {
       let videoDimensionRules = videoDimensionRulesFromDefaults(modelDefaults, options.model);
       // FastH3 Two-Stage: a downloaded (or local) reference sets the canvas aspect
       // at the requested delivered class, and the pre-resize stays on that canvas.
-      if (options._miniMaxH3TwoStageAutoCanvas && options.videoWorkflow === 'i2v' && (imageBuffer || endImageBuffer)) {
+      if (options._miniMaxH3TwoStageAutoCanvas && videoWorkflowHasFrameAnchors() && (imageBuffer || endImageBuffer)) {
         const twoStageRefDims = await getVideoImageDimensionsFromBuffer(imageBuffer || endImageBuffer);
         if (twoStageRefDims?.width && twoStageRefDims?.height) {
           const twoStageCanvas = miniMaxH3TwoStageCanvas(
@@ -13415,7 +13668,7 @@ async function main() {
       // Pre-resize reference images to model-compatible dimensions if needed for i2v workflow.
       // The earlier preflight can inspect local files, but HTTPS references are downloaded only
       // here. Re-check the actual buffer so remote and local inputs follow the same grid rules.
-      if (options.videoWorkflow === 'i2v' && imageBuffer) {
+      if (videoWorkflowHasFrameAnchors() && imageBuffer) {
         const dims = await getVideoImageDimensionsFromBuffer(imageBuffer);
         if (dims?.width && dims?.height) {
           const predicted = predictSharpInsideResizeDims(dims.width, dims.height, options.width, options.height);
@@ -13455,7 +13708,7 @@ async function main() {
           }
         }
       }
-      if (options.videoWorkflow === 'i2v' && endImageBuffer && options._needsRefEndResize) {
+      if (videoWorkflowHasFrameAnchors() && endImageBuffer && options._needsRefEndResize) {
         const dims = getImageDimensionsFromBuffer(endImageBuffer);
         if (dims?.width && dims?.height) {
           const resizedBuffer = await resizeImageBufferForVideo(endImageBuffer, dims.width, dims.height, videoDimensionRules);
@@ -13468,6 +13721,21 @@ async function main() {
           }
           endImageBuffer = resizedBuffer;
         }
+      }
+      const fitsMiniMaxH3AudioGuideFrames = isMiniMaxH3AudioGuideModel(options.model)
+        && options.autoResizeVideoAssets !== false;
+      if (fitsMiniMaxH3AudioGuideFrames) {
+        const fitted = await fitMiniMaxH3AudioGuideFrames({
+          imageBuffer,
+          endImageBuffer,
+          width: options.width,
+          height: options.height,
+          rules: videoDimensionRules
+        });
+        imageBuffer = fitted.imageBuffer;
+        endImageBuffer = fitted.endImageBuffer;
+        options.width = fitted.width;
+        options.height = fitted.height;
       }
       // Preserve the prepared start-frame buffer so looping (A->B->A) can reuse it later.
       loopingStartImageBuffer = imageBuffer;
@@ -13524,7 +13792,7 @@ async function main() {
       // validation, so keep this compatibility guard as narrow as possible.
       const hasLooseBinaryReference = Boolean(projectConfig.referenceImage)
         && (options.videoWorkflow === 'r2v' || options.seedanceTaskType === 'reference');
-      if (hasLooseBinaryReference) {
+      if (hasLooseBinaryReference || fitsMiniMaxH3AudioGuideFrames) {
         projectConfig.autoResizeVideoAssets = false;
       } else if (options.autoResizeVideoAssets !== null) {
         projectConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;

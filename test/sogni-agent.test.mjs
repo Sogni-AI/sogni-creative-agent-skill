@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7329,6 +7330,193 @@ test('retired --2k and --output-scale fail hard and point at the FastH3 Two-Stag
     assert.equal(state?.lastVideoProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastImageProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastEstimateVideoCost ?? null, null, JSON.stringify(args));
+  }
+});
+
+function h3AudioFixture() {
+  const path = join(mkdtempSync(join(tmpdir(), 'sogni-h3-audio-guide-')), 'song.m4a');
+  writeFileSync(path, Buffer.from('driving audio track'));
+  return path;
+}
+
+test('MiniMax H3 FastH3 audio guide selectors send the uploaded audio on the audio ids', () => {
+  const audio = h3AudioFixture();
+  const firstFrame = ['--ref', SCREENSHOT_FIXTURE];
+  const bothFrames = ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE];
+  const cases = [
+    ['minimax-h3-fasth3-ia2v-turbo', 'minimax-h3-fastvideo-int8_ia2v_turbo', firstFrame],
+    ['minimax-h3-fasth3-flfa2v-turbo', 'minimax-h3-fastvideo-int8_flfa2v_turbo', bothFrames],
+    ['minimax-h3-fasth3-a2v-turbo', 'minimax-h3-fastvideo-int8_a2v_turbo', []],
+    ['minimax-h3-fasth3-ia2v-turbo-2stage', 'minimax-h3-fastvideo-int8_ia2v_turbo_2stage', firstFrame],
+    ['minimax-h3-fasth3-flfa2v-turbo-2stage', 'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage', bothFrames],
+    ['minimax-h3-fasth3-a2v-turbo-2stage', 'minimax-h3-fastvideo-int8_a2v_turbo_2stage', []],
+    ['minimax-h3-fastvideo-int8_ia2v_turbo', 'minimax-h3-fastvideo-int8_ia2v_turbo', firstFrame],
+    ['minimax-h3-fastvideo-int8_flfa2v_turbo_2stage', 'minimax-h3-fastvideo-int8_flfa2v_turbo_2stage', bothFrames]
+  ];
+  for (const [model, expected, frames] of cases) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, ...frames, '--ref-audio', audio, '--audio-start', '2.5', '--duration', '8',
+      'A singer performs the uploaded song on a small stage.'
+    ]);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    const project = state.lastVideoProject;
+    assert.equal(project.modelId, expected, model);
+    assert.equal(project.frames, 192, model);
+    assert.equal(project.fps, 24, model);
+    assert.equal(project.audioStart, 2.5, model);
+    assert.equal('audioDuration' in project, false, model);
+    assert.equal('generateAudio' in project, false, model);
+    assert.equal(project.steps, undefined, model);
+    assert.equal(project.guidance, undefined, model);
+    assert.equal(project.loras, undefined, model);
+    assert.ok(project.referenceAudio, model);
+    assert.equal(Boolean(project.referenceImage), frames.length > 0, model);
+    assert.equal(Boolean(project.referenceImageEnd), frames.length > 2, model);
+    // The CLI fits the frames to the 32 px H3 canvas itself.
+    assert.equal(project.autoResizeVideoAssets, false, model);
+    assert.equal(project.width % 32, 0, model);
+    assert.equal(project.height % 32, 0, model);
+    assert.ok(project.width * project.height <= 1_032_192, model);
+    assert.equal(/Two-Stage: delivered at/.test(stderr), expected.endsWith('_2stage'), model);
+  }
+});
+
+test('FastH3 family selectors pick the audio guide from --ref-audio and the frames supplied', () => {
+  const audio = h3AudioFixture();
+  for (const [family, suffix] of [['minimax-h3-fasth3-turbo', ''], ['minimax-h3-fasth3-turbo-2stage', '_2stage']]) {
+    for (const [frames, mode] of [
+      [[], 'a2v'],
+      [['--ref', SCREENSHOT_FIXTURE], 'ia2v'],
+      [['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE], 'flfa2v']
+    ]) {
+      const { exitCode, state, stderr } = runCli([
+        '--video', '-m', family, ...frames, '--ref-audio', audio, 'A dancer moves to the uploaded beat.'
+      ]);
+      assert.equal(exitCode, 0, `${family} ${mode}: ${stderr}`);
+      assert.equal(state.lastVideoProject.modelId, `minimax-h3-fastvideo-int8_${mode}_turbo${suffix}`);
+      assert.equal(state.lastVideoProject.frames, 124);
+    }
+  }
+  const explicit = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo', '--workflow', 'a2v', '--ref-audio', audio, 'A visualizer.'
+  ]);
+  assert.equal(explicit.exitCode, 0, explicit.stderr);
+  assert.equal(explicit.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_a2v_turbo');
+});
+
+test('FastH3 audio guide Two-Stage keeps the requested delivered class on its canvas', () => {
+  const audio = h3AudioFixture();
+  const i2v = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-ia2v-turbo-2stage', '--target-resolution', '720',
+    '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio, 'A singer on a rooftop.'
+  ]);
+  assert.equal(i2v.exitCode, 0, i2v.stderr);
+  assert.deepEqual([i2v.state.lastVideoProject.width, i2v.state.lastVideoProject.height], [736, 384]);
+  assert.match(i2v.stderr, /delivered at 1472x768 \(twice the 736x384 canvas\)/);
+
+  const a2v = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-a2v-turbo-2stage', '--target-resolution', '1080',
+    '--ref-audio', audio, 'An abstract visualizer.'
+  ]);
+  assert.equal(a2v.exitCode, 0, a2v.stderr);
+  assert.deepEqual([a2v.state.lastVideoProject.width, a2v.state.lastVideoProject.height], [960, 544]);
+  const output = JSON.parse(a2v.stdout.trim().split('\n').pop());
+  assert.deepEqual([output.deliveredWidth, output.deliveredHeight], [1920, 1088]);
+});
+
+test('FastH3 audio guide Two-Stage relays the socket hold notice word for word', () => {
+  const audio = h3AudioFixture();
+  const created = runCli(
+    ['--video', '-m', 'minimax-h3-fasth3-a2v-turbo-2stage', '--ref-audio', audio, 'An abstract visualizer.'],
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: MINIMAX_H3_TWO_STAGE_HOLD }
+  );
+  assert.equal(created.exitCode, 1);
+  assert.match(created.stderr, /^Error: MiniMax H3 Latent Upscaler \(Community\) will be available soon\.$/m);
+  assert.doesNotMatch(created.stderr, /Hint:/);
+});
+
+test('FastH3 audio guide refuses missing and extra uploads and unsupported controls before submitting', () => {
+  const audio = h3AudioFixture();
+  for (const [args, message] of [
+    [['-m', 'minimax-h3-fasth3-ia2v-turbo', '--ref-audio', audio], 'MiniMax H3 FastH3 ia2v requires --ref and --ref-audio.'],
+    [['-m', 'minimax-h3-fasth3-ia2v-turbo', '--ref', SCREENSHOT_FIXTURE], 'MiniMax H3 FastH3 ia2v requires --ref and --ref-audio.'],
+    [['-m', 'minimax-h3-fasth3-flfa2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio], 'requires --ref, --ref-end and --ref-audio'],
+    [['-m', 'minimax-h3-fasth3-turbo', '--ref-end', SCREENSHOT_FIXTURE, '--ref-audio', audio], 'requires --ref, --ref-end and --ref-audio'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo'], 'MiniMax H3 FastH3 a2v requires --ref-audio.'],
+    [
+      ['-m', 'minimax-h3-fasth3-ia2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE, '--ref-audio', audio],
+      'takes only --ref and --ref-audio; remove --ref-end. For a first and a last frame, use -m minimax-h3-fasth3-flfa2v-turbo.'
+    ],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio], 'takes only --ref-audio; remove --ref.'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '-c', SCREENSHOT_FIXTURE, '--ref-audio', audio], 'remove -c/--context'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--ref-audio', audio], 'remove a second --ref-audio'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--no-generate-audio'], 'always keeps the uploaded audio. Omit --no-generate-audio.'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--audio-duration', '4'], 'has no --audio-duration'],
+    [['-m', 'minimax-h3-fasth3-ia2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio, '--lora', 'any-h3-lora'], 'does not support LoRAs'],
+    [['-m', 'minimax-h3-fasth3-turbo', '--ref-audio', audio, '--lora', 'any-h3-lora'], 'does not support LoRAs'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--sampler', 'er_sde'], 'MiniMax H3 FastH3 Turbo --sampler must be euler'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--frames', '130'], 'MiniMax H3 frames must be 124 + n×17'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--workflow', 'ia2v'], 'does not match model'],
+    [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--steps', '8'], 'omit --steps and --guidance']
+  ]) {
+    const { exitCode, state, stderr } = runCli(['--video', ...args, 'A singer.']);
+    assert.equal(exitCode, 1, JSON.stringify(args));
+    assert.ok(stderr.includes(message), `${JSON.stringify(args)}: ${stderr}`);
+    assert.equal(state?.lastVideoProject ?? null, null, JSON.stringify(args));
+    assert.equal(state?.lastEstimateVideoCost ?? null, null, JSON.stringify(args));
+  }
+});
+
+test('MiniMax H3 modes without an audio input refuse --ref-audio and name the audio-guide selector', () => {
+  const audio = h3AudioFixture();
+  for (const [args, selector] of [
+    [['-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE], 'minimax-h3-fasth3-ia2v-turbo'],
+    [['-m', 'minimax-h3-fasth3-flf2v-turbo-2stage', '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE], 'minimax-h3-fasth3-flfa2v-turbo-2stage'],
+    [['-m', 'minimax-h3-fastvideo-int8_t2v_turbo'], 'minimax-h3-fasth3-a2v-turbo'],
+    [['-m', 'minimax-h3'], 'minimax-h3-fasth3-a2v-turbo'],
+    [['-m', 'minimax-h3-turbo', '--ref', SCREENSHOT_FIXTURE], 'minimax-h3-fasth3-ia2v-turbo'],
+    [['-m', 'minimax-h3-fasth3-turbo', '--workflow', 'i2v', '--ref', SCREENSHOT_FIXTURE], 'minimax-h3-fasth3-ia2v-turbo']
+  ]) {
+    const { exitCode, state, stderr } = runCli(['--video', ...args, '--ref-audio', audio, 'A singer.']);
+    assert.equal(exitCode, 1, JSON.stringify(args));
+    assert.match(stderr, /has no audio input, so --ref-audio would be ignored/, JSON.stringify(args));
+    assert.ok(stderr.includes(`use -m ${selector}.`), `${JSON.stringify(args)}: ${stderr}`);
+    assert.equal(state?.lastVideoProject ?? null, null, JSON.stringify(args));
+  }
+  const balanced = runCli([
+    '--video', '-m', 'minimax-h3-balanced', '--workflow', 'ia2v', '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio, 'A singer.'
+  ]);
+  assert.equal(balanced.exitCode, 1);
+  assert.match(balanced.stderr, /MiniMax H3 ia2v is the FastH3 audio guide; use -m minimax-h3-fasth3-ia2v-turbo\./);
+});
+
+test('FastH3 audio guide requests pass the pinned SDK request validation', () => {
+  const require = createRequire(import.meta.url);
+  const serialize = require('../node_modules/@sogni-ai/sogni-client/dist/Projects/createJobRequestMessage.js').default;
+  const videoOptions = {
+    type: 'video',
+    width: { min: 32, max: 1344, step: 32, default: 1344 },
+    height: { min: 32, max: 1344, step: 32, default: 768 },
+    sampler: { allowed: [], default: null },
+    scheduler: { allowed: [], default: null }
+  };
+  const toBuffers = (value) => (value && value.type === 'Buffer' ? Buffer.from(value.data) : value);
+  const audio = h3AudioFixture();
+  for (const [model, frames, uploads] of [
+    ['minimax-h3-fasth3-ia2v-turbo', ['--ref', SCREENSHOT_FIXTURE], ['hasReferenceImage', 'hasReferenceAudio']],
+    ['minimax-h3-fasth3-flfa2v-turbo-2stage', ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE], ['hasReferenceImage', 'hasReferenceImageEnd', 'hasReferenceAudio']],
+    ['minimax-h3-fasth3-a2v-turbo', [], ['hasReferenceAudio']]
+  ]) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, ...frames, '--ref-audio', audio, '--audio-start', '1', 'A singer.'
+    ]);
+    assert.equal(exitCode, 0, stderr);
+    const { autoResizeVideoAssets, waitForCompletion, ...params } = state.lastVideoProject;
+    const project = Object.fromEntries(Object.entries({ ...params, type: 'video' }).map(([key, value]) => [key, toBuffers(value)]));
+    const keyFrame = serialize('00000000-0000-4000-8000-000000000001', project, videoOptions).keyFrames[0];
+    assert.equal(keyFrame.modelID, project.modelId, model);
+    for (const flag of uploads) assert.equal(keyFrame[flag], true, `${model} ${flag}`);
+    assert.equal(keyFrame.audioStart, 1, model);
   }
 });
 

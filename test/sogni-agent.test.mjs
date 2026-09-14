@@ -1374,7 +1374,7 @@ test('invalid image output format returns a validation error', () => {
 });
 
 test('invalid video output format returns a validation error', () => {
-  expectCliError(['--video', '--output-format', 'jpg', 'a cat'], 'Video output format must be "mp4".');
+  expectCliError(['--video', '--output-format', 'jpg', 'a cat'], 'Video output format must be "mp4" (Seedance 2.5 also supports "mov").');
 });
 
 test('help advertises a 30 minute default video timeout', () => {
@@ -2624,16 +2624,16 @@ test('seedance 2.5 task modes reject frame anchors and explicit aspect dimension
   );
 });
 
-test('seedance 2.5 accepts only its 480p and 720p target resolution tiers', () => {
+test('seedance 2.5 accepts only its 480p, 720p and 1080p target resolution tiers', () => {
   expectCliError(
     [
       '--video', '-m', 'seedance2-5-v2v',
       '--seedance-task-type', 'extend',
       '--ref-video', 'https://example.com/source.mp4',
-      '--target-resolution', '1080',
+      '--target-resolution', '2160',
       'Extend @Video1.'
     ],
-    'Seedance 2.5 --target-resolution must be 480 or 720'
+    'Seedance 2.5 --target-resolution must be 480, 720 or 1080'
   );
 });
 
@@ -7068,4 +7068,18 @@ test('MiniMax H3 --2k explains the 2K availability refusal', () => {
   assert.match(stderr, /MiniMax H3 2K output is not available right now/);
   assert.match(stderr, /nothing was charged/);
   assert.match(stderr, /Retry without --2k/);
+});
+
+
+test('Seedance 2.5 transports 1080p MOV and last-frame export', () => {
+  const { exitCode, state, stderr } = runCli(['--video', '-m', 'seedance2-5', '--target-resolution', '1080', '--output-format', 'mov', '--return-last-frame', 'A quiet bookshop.']);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.outputFormat, 'mov');
+  assert.equal(state.lastVideoProject.returnLastFrame, true);
+  assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 1080);
+});
+
+test('Seedance export flags reject other video models', () => {
+  expectCliError(['--video', '-m', 'seedance2', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
+  expectCliError(['--video', '-m', 'seedance2', '--output-format', 'mov', 'A quiet bookshop.'], 'Video output format must be');
 });

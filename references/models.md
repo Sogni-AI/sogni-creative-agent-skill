@@ -355,7 +355,7 @@ direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
-| `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p only |
+| `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p/1080p, MP4/MOV and last-frame export |
 | `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
 | `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
@@ -448,8 +448,10 @@ no negative prompt and no ControlNet.
   renders past 15 s in a single call. Prefer `seedance2-5` over splitting and
   stitching 2.0 segments when the user wants one continuous Seedance clip
   longer than 15 s.
-- **Resolution**: 480p/720p only (max dimension 1280; default 1280×720). It
-  cannot render 1080p or 4K — keep full `seedance2` for those requests.
+- **Resolution**: 480p/720p/1080p (up to 2206 pixels on the long side;
+  default 1280×720). Keep full `seedance2` for 4K requests.
+- **Exports**: MP4 or MOV with `--output-format`, plus an optional final-frame
+  image with `--return-last-frame` for the first frame of a subsequent clip.
 - **Workflows**: text-to-video, image-to-video from a first frame, first- and
   last-frame conditioning (`--ref` + `--ref-end`), image+audio-to-video
   (`seedance2-5-ia2v`), and multimodal reference / video-to-video including
@@ -922,7 +924,7 @@ model recommendations.
 | Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
-| Seedance 2.5 single clip up to 30s (480p/720p only) | `seedance2-5` |
+| Seedance 2.5 single clip up to 30s (480p/720p/1080p, MP4/MOV and last-frame export) | `seedance2-5` |
 | Seedance 2.5 video-to-video, editing, or extension | `seedance2-5-v2v` |
 | HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
 | HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
@@ -953,7 +955,7 @@ model recommendations.
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
 - **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 and native stereo audio apply to all. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) but caps at 480p/720p (max dimension 1280) — it cannot render 1080p or 4K. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.

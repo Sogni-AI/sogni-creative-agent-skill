@@ -2876,6 +2876,7 @@ const options = {
   steps: null,
   guidance: null,
   outputFormat: null,
+  returnLastFrame: false,
   imageQuality: null,
   imageBackground: null,
   imageOutputCompression: null,
@@ -3233,6 +3234,8 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.guidance = parseNumberValue(raw, arg);
     cliSet.guidance = true;
+  } else if (arg === '--return-last-frame') {
+    options.returnLastFrame = true;
   } else if (arg === '--output-format' || arg === '--format') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -4197,7 +4200,8 @@ Image Options:
   --distance <key>      close-up|medium|wide
   --angle-strength <n>  LoRA strength for multiple_angles (default: 0.9)
   --angle-description <text>  Optional subject description
-  --output-format <f>   Image output format: png|jpg (webp for GPT Image)
+  --output-format <f>   Images: png|jpg (webp for GPT Image); video: mp4|mov (MOV: Seedance 2.5)
+  --return-last-frame   Export the final video frame as an image (Seedance 2.5)
   --image-quality <q>   GPT Image: low|medium|high; 2.5 also xhigh|max
   --image-background <b>  auto|opaque; 2.5 also transparent (PNG/WebP)
   --image-output-compression <n>  JPEG/WebP compression, integer 0–100
@@ -4256,7 +4260,7 @@ Video Options:
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480 or 720)
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080)
   --output-scale <1|2>  MiniMax H3 only: 2 delivers 2K, twice the requested canvas (1344x768 -> 2688x1536),
                          same length and audio; +10 Spark/s at 544/768p class, +6 at 480p (workers 1.0.212+)
   --2k                  Shorthand for --output-scale 2
@@ -4481,7 +4485,7 @@ Seedance Video Model Selectors:
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet
   seedance2-5                       Seedance 2.5 text-to-video (alias seedance2-5-t2v): 4-30s single clips,
-                                     480p/720p only (no 1080p/4K), native audio, first/last frame via
+                                     480p/720p/1080p (no 4K), MP4/MOV and last-frame export, native audio, first/last frame via
                                      --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (30 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
@@ -4924,8 +4928,8 @@ if (options.outputFormat) {
       });
     }
   } else if (options.video || options.upscaleVideo) {
-    if (options.outputFormat !== 'mp4') {
-      fatalCliError('Video output format must be "mp4".', {
+    if (!['mp4', ...(options.video && isSeedance25ModelSelectionLocal(options.model) ? ['mov'] : [])].includes(options.outputFormat)) {
+      fatalCliError('Video output format must be "mp4" (Seedance 2.5 also supports "mov").', {
         code: 'INVALID_ARGUMENT',
         details: { outputFormat: options.outputFormat }
       });
@@ -4936,6 +4940,10 @@ if (options.outputFormat) {
       details: { outputFormat: options.outputFormat }
     });
   }
+}
+
+if (options.returnLastFrame && (!options.video || !isSeedance25ModelSelectionLocal(options.model))) {
+  fatalCliError('--return-last-frame requires Seedance 2.5 video.', { code: 'INVALID_ARGUMENT' });
 }
 
 if (options.imageQuality !== null || options.imageBackground !== null || options.imageOutputCompression !== null || options.imageMask !== null) {
@@ -5864,7 +5872,7 @@ if (options.video) {
     (cliSet.width || cliSet.height)
   ) {
     fatalCliError(
-      `Seedance 2.5 ${options.seedanceTaskType} inherits @Video1's aspect ratio; use --target-resolution 480 or 720 instead of --width/--height.`,
+      `Seedance 2.5 ${options.seedanceTaskType} inherits @Video1's aspect ratio; use --target-resolution 480, 720 or 1080 instead of --width/--height.`,
       {
         code: 'INVALID_ARGUMENT',
         details: { seedanceTaskType: options.seedanceTaskType }
@@ -5874,9 +5882,9 @@ if (options.video) {
   if (
     isSeedance25Video &&
     cliSet.targetResolution &&
-    ![480, 720].includes(options.targetResolution)
+    ![480, 720, 1080].includes(options.targetResolution)
   ) {
-    fatalCliError('Seedance 2.5 --target-resolution must be 480 or 720.', {
+    fatalCliError('Seedance 2.5 --target-resolution must be 480, 720 or 1080.', {
       code: 'INVALID_ARGUMENT',
       details: { targetResolution: options.targetResolution }
     });
@@ -12749,6 +12757,7 @@ async function main() {
         const jobData = data.job?.data || {};
         results.push({
           resultUrl: data.resultUrl || (options.music ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
+          lastFrameUrl: data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
           projectId: data.projectId
@@ -13253,6 +13262,7 @@ async function main() {
       if (options.seedanceTaskType) {
         projectConfig.seedanceTaskType = options.seedanceTaskType;
       }
+      if (options.returnLastFrame) projectConfig.returnLastFrame = true;
       if (isWan3Video) {
         projectConfig.ratio = options.wan3Ratio;
         projectConfig.generateAudio = options.apiGenerateAudio ?? true;
@@ -13806,6 +13816,10 @@ async function main() {
       if (options.outputFormat) {
         renderInfo.outputFormat = options.outputFormat;
       }
+      if (options.returnLastFrame) {
+        renderInfo.returnLastFrame = true;
+        renderInfo.lastFrameUrls = results.map(result => result.lastFrameUrl).filter(Boolean);
+      }
       if (options.sampler) {
         renderInfo.sampler = options.sampler;
       }
@@ -14028,6 +14042,18 @@ async function main() {
         }
       }
       
+      const lastFramePaths = [];
+      if (options.returnLastFrame && options.output) {
+        for (const [index, result] of results.entries()) {
+          if (!result.lastFrameUrl) continue;
+          const extension = new URL(result.lastFrameUrl).pathname.match(/\.(png|jpe?g|webp)$/i)?.[1] || 'jpg';
+          const framePath = options.output.replace(/\.[^/.]+$/, '') + `-last-frame${results.length > 1 ? `-${index + 1}` : ''}.${extension}`;
+          await downloadUrlToFile(result.lastFrameUrl, framePath);
+          lastFramePaths.push(framePath);
+          log(`Saved last frame to ${framePath}`);
+        }
+      }
+
       // Output result
       if (options.json) {
         const output = {
@@ -14046,6 +14072,10 @@ async function main() {
         };
         if (options.outputFormat) {
           output.outputFormat = options.outputFormat;
+        }
+        if (options.returnLastFrame) {
+          output.lastFrameUrls = results.map(result => result.lastFrameUrl).filter(Boolean);
+          if (lastFramePaths.length) output.lastFramePaths = lastFramePaths;
         }
         if (options.sampler) {
           output.sampler = options.sampler;
@@ -14153,6 +14183,9 @@ async function main() {
         console.log(JSON.stringify(output));
       } else {
         urls.forEach(url => console.log(url));
+        if (options.returnLastFrame) {
+          results.forEach(result => { if (result.lastFrameUrl) console.log(`Last frame: ${result.lastFrameUrl}`); });
+        }
       }
     } else {
       throw new Error('No output generated - may have been filtered');

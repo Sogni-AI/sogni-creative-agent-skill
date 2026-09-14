@@ -4,6 +4,8 @@ import {
 } from '@sogni-ai/sogni-intelligence-client/media';
 
 export const PIXAL3D_MODEL_ID = 'pixal3d_int8_i23d';
+// A front view (--image-to-3d) plus any subset of three orbit views.
+export const PIXAL3D_MULTIVIEW_MODEL_ID = 'pixal3d_multiview_int8_i23d';
 export const BIREFNET_MODEL_ID = 'birefnet_image_background_removal_fp16';
 export const MUSIC3_MODEL_ID = MusicModel.best;
 export const MUSIC3_DEFAULTS = MUSIC_MODELS.best;
@@ -12,6 +14,17 @@ export { SPEECH_REFERENCE_SECONDS };
 export const SPEECH_VALUE_FLAGS = {
   '--speech-mode': 'speechMode', '--speech-voice': 'speechVoice', '--voice-description': 'voiceDescription',
   '--voice-reference': 'voiceReference', '--voice-transcript': 'voiceTranscript'
+};
+
+// Pixal3D multi-view orbit views, named by the SUBJECT's own sides, not the
+// viewer's: --left-view shows the subject turned so its own left side faces the
+// camera (it faces screen-left), --right-view its own right side (it faces
+// screen-right), --back-view the subject from behind. Templates that label the
+// subject's right side "left" build a model turned 180 degrees.
+export const PIXAL3D_VIEW_FLAGS = {
+  '--left-view': 'leftViewImage',
+  '--back-view': 'backViewImage',
+  '--right-view': 'rightViewImage'
 };
 
 export const MESH_FLAGS = {
@@ -31,7 +44,14 @@ export function prepareMediaUtilityOptions(options, explicit) {
     options.speech = true;
     options.speechMode = selectedSpeechMode;
   }
+  const orbitViews = Object.keys(options.pixal3dViews);
   if (options.model === PIXAL3D_MODEL_ID && !options.imageTo3d) fail('Pixal3D requires --image-to-3d <original-image>.');
+  if (options.model === PIXAL3D_MULTIVIEW_MODEL_ID && !options.imageTo3d) {
+    fail('Pixal3D multi-view requires --image-to-3d <front-view-image> plus --left-view, --back-view and/or --right-view.');
+  }
+  if (orbitViews.length && !options.imageTo3d) {
+    fail('--left-view, --back-view and --right-view add views to --image-to-3d, which takes the front view.');
+  }
   if (options.model === BIREFNET_MODEL_ID && !options.removeBackground) fail('BiRefNet requires --remove-background <original-image>.');
   if (Object.keys(options.meshSettings).length && !options.imageTo3d) fail('Mesh settings require --image-to-3d.');
   if (options.matte && !options.removeBackground) fail('--matte requires --remove-background.');
@@ -74,8 +94,18 @@ export function prepareMediaUtilityOptions(options, explicit) {
     if (options.prompt) fail('Pixal3D and BiRefNet are promptless; supply only the original image.');
     if (options.count !== 1) fail('Image utilities accept one image and produce one result; --count must be 1.');
     if (explicit.musicLanguage || explicit.seed || options.lastSeed) fail('Image utilities do not accept language or seed controls.');
-    const model = options.imageTo3d ? PIXAL3D_MODEL_ID : BIREFNET_MODEL_ID;
-    if (explicit.model && options.model !== model) fail('--model conflicts with the selected image utility.');
+    const model = options.imageTo3d
+      ? (orbitViews.length ? PIXAL3D_MULTIVIEW_MODEL_ID : PIXAL3D_MODEL_ID)
+      : BIREFNET_MODEL_ID;
+    if (explicit.model && options.model !== model) {
+      if (options.model === PIXAL3D_MULTIVIEW_MODEL_ID) {
+        fail(`${PIXAL3D_MULTIVIEW_MODEL_ID} needs --left-view, --back-view and/or --right-view; a front image alone uses ${PIXAL3D_MODEL_ID}.`);
+      }
+      if (options.model === PIXAL3D_MODEL_ID && orbitViews.length) {
+        fail(`${PIXAL3D_MODEL_ID} reconstructs from one image; orbit views use ${PIXAL3D_MULTIVIEW_MODEL_ID}.`);
+      }
+      fail('--model conflicts with the selected image utility.');
+    }
     options.model = model;
     const format = options.imageTo3d ? 'glb' : 'png';
     if (options.outputFormat && options.outputFormat.toLowerCase() !== format) fail(`This mode produces ${format.toUpperCase()} only.`);
@@ -90,11 +120,12 @@ export function prepareMediaUtilityOptions(options, explicit) {
   }
 }
 
-export function imageUtilityConfig(options, bytes) {
+// viewBytes maps leftViewImage/backViewImage/rightViewImage to image bytes.
+export function imageUtilityConfig(options, bytes, viewBytes = {}) {
   return {
     modelId: options.model, positivePrompt: '', startingImage: bytes,
     numberOfMedia: 1, tokenType: options.tokenType || 'spark', waitForCompletion: false,
-    ...(options.imageTo3d ? { ...options.meshSettings } : { applyMask: !options.matte, outputFormat: 'png' })
+    ...(options.imageTo3d ? { ...options.meshSettings, ...viewBytes } : { applyMask: !options.matte, outputFormat: 'png' })
   };
 }
 
@@ -119,7 +150,9 @@ export function utilityResultMetadata(options) {
     ...(options.voiceReference ? { voiceReference: options.voiceReference } : {}),
     ...(options.voiceTranscript ? { voiceTranscript: options.voiceTranscript } : {}),
     ...(options.speechCreativity !== null ? { creativity: options.speechCreativity } : {}) };
-  if (options.imageTo3d) return { sourceImage: options.imageTo3d, meshSettings: { shapeResolution: 1024, ...options.meshSettings } };
+  if (options.imageTo3d) return { sourceImage: options.imageTo3d,
+    ...(Object.keys(options.pixal3dViews).length ? { orbitViews: { ...options.pixal3dViews } } : {}),
+    meshSettings: { shapeResolution: 1024, ...options.meshSettings } };
   if (options.removeBackground) return { sourceImage: options.removeBackground, applyMask: !options.matte };
   return {};
 }

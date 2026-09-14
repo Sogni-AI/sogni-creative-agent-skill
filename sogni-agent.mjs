@@ -29,7 +29,7 @@ import {
 } from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
 import {
-  MESH_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
+  MESH_FLAGS, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
   prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
 } from './media-utilities.mjs';
 import { SAM3_MODEL_ID, segmentPoint, segmentBox, validateSegmentationPrompts, segmentationConfig } from './sam-segmentation.mjs';
@@ -2984,6 +2984,7 @@ const options = {
   voiceTranscript: null,
   speechCreativity: null,
   imageTo3d: null,
+  pixal3dViews: {},
   removeBackground: null,
   matte: false,
   meshSettings: {},
@@ -3632,6 +3633,8 @@ for (let i = 0; i < args.length; i++) {
     cliSet.context = true;
   } else if (arg === '--image-to-3d' || arg === '--pixal3d') {
     options.imageTo3d = expandHomePath(requireFlagValue(args, i++, arg));
+  } else if (arg === '--left-view' || arg === '--back-view' || arg === '--right-view') {
+    options.pixal3dViews[PIXAL3D_VIEW_FLAGS[arg]] = expandHomePath(requireFlagValue(args, i++, arg));
   } else if (arg === '--remove-background') {
     options.removeBackground = expandHomePath(requireFlagValue(args, i++, arg));
   } else if (arg === '--matte') {
@@ -4342,7 +4345,14 @@ Photobooth (Face Transfer):
   --cn-guidance-end <n>   ControlNet guidance end point (default: 0.3)
 
 3D and Background Removal:
-  --image-to-3d <image>  Pixal3D: original image to binary GLB (alias --pixal3d)
+  --image-to-3d <image>  Pixal3D: original image to binary GLB (alias --pixal3d); with views, the FRONT view
+  --left-view <image>    Pixal3D multi-view: the subject turned so ITS OWN left side faces the camera
+                         (it faces screen-left)
+  --back-view <image>    Pixal3D multi-view: the subject seen from behind
+  --right-view <image>   Pixal3D multi-view: ITS OWN right side faces the camera (it faces screen-right).
+                         Any subset of views selects pixal3d_multiview_int8_i23d; views are named by the
+                         subject's sides, not the viewer's. Templates that label the subject's right side
+                         "left" build a model turned 180 degrees.
   --shape-resolution <n> 1024 (default) or 1536; optional --mesh-faces 5000–700000
   --texture-size <n>     1024–4096; --normal-map-size 512–2048; --ao-map-size 256–1024
   --remove-background <image>  BiRefNet transparent PNG; --matte returns soft mask
@@ -13774,12 +13784,22 @@ async function main() {
       const result = trackProjectResult(await client.createAudioProject(withBillingMode(speechConfig(options, referenceAudio))));
       if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.imageTo3d || options.removeBackground) {
-      log(options.imageTo3d ? 'Building a GLB with Pixal3D...' : 'Removing the background with BiRefNet...');
+      const orbitViews = Object.entries(options.pixal3dViews);
+      log(options.imageTo3d
+        ? `Building a GLB with Pixal3D${orbitViews.length ? ` from ${orbitViews.length + 1} views` : ''}...`
+        : 'Removing the background with BiRefNet...');
       const bytes = await fetchMediaBuffer(options.imageTo3d || options.removeBackground);
       const dimensions = getImageDimensionsFromBuffer(bytes);
       if (!dimensions?.width || !dimensions?.height) throw new Error('Supply an original PNG, JPEG, or WebP image.');
       options.width = dimensions.width; options.height = dimensions.height;
-      const result = trackProjectResult(await client.createImageProject(withBillingMode(imageUtilityConfig(options, bytes))));
+      const viewBytes = {};
+      for (const [view, source] of orbitViews) {
+        viewBytes[view] = await fetchMediaBuffer(source);
+        if (!getImageDimensionsFromBuffer(viewBytes[view])?.width) {
+          throw new Error(`Supply an original PNG, JPEG, or WebP image for ${Object.keys(PIXAL3D_VIEW_FLAGS).find(flag => PIXAL3D_VIEW_FLAGS[flag] === view)}.`);
+        }
+      }
+      const result = trackProjectResult(await client.createImageProject(withBillingMode(imageUtilityConfig(options, bytes, viewBytes))));
       if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.segmentImage) {
       log('Selecting the object with SAM 3...');

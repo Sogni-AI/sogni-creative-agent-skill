@@ -7385,6 +7385,58 @@ test('Pixal3D preserves original bytes and forwards all mesh controls without im
   assert.equal(output.type, 'model'); assert.equal(output.outputFormat, 'glb'); assert.equal(output.width, null);
 });
 
+test('Pixal3D multi-view sends each orbit view in its own field and any subset of them', () => {
+  const front = createPngDimensionFixture(1024, 1024);
+  const left = createPngDimensionFixture(1024, 1000);
+  const back = createPngDimensionFixture(1000, 1024);
+  const right = createPngDimensionFixture(1010, 1010);
+  const all = runCli(['--image-to-3d', front, '--left-view', left, '--back-view', back, '--right-view', right,
+    '--mesh-faces', '30000', '--json']);
+  assert.equal(all.exitCode, 0, all.stderr);
+  const config = all.state.lastImageProject;
+  assert.equal(config.modelId, 'pixal3d_multiview_int8_i23d');
+  assert.deepEqual(Buffer.from(config.startingImage.data), readFileSync(front));
+  assert.deepEqual(Buffer.from(config.leftViewImage.data), readFileSync(left));
+  assert.deepEqual(Buffer.from(config.backViewImage.data), readFileSync(back));
+  assert.deepEqual(Buffer.from(config.rightViewImage.data), readFileSync(right));
+  assert.equal(config.meshTargetFaces, 30000); assert.equal(config.positivePrompt, '');
+  assert.equal(config.contextImages, undefined);
+  const output = JSON.parse(all.stdout);
+  assert.equal(output.model, 'pixal3d_multiview_int8_i23d');
+  assert.deepEqual(output.orbitViews, { leftViewImage: left, backViewImage: back, rightViewImage: right });
+
+  const backOnly = runCli(['--pixal3d', front, '--back-view', back, '-m', 'pixal3d_multiview_int8_i23d', '--json']);
+  assert.equal(backOnly.exitCode, 0, backOnly.stderr);
+  assert.equal(backOnly.state.lastImageProject.modelId, 'pixal3d_multiview_int8_i23d');
+  assert.ok(backOnly.state.lastImageProject.backViewImage);
+  assert.equal(backOnly.state.lastImageProject.leftViewImage, undefined);
+  assert.equal(backOnly.state.lastImageProject.rightViewImage, undefined);
+
+  const single = runCli(['--image-to-3d', front, '--json']);
+  assert.equal(single.exitCode, 0, single.stderr);
+  assert.equal(single.state.lastImageProject.modelId, 'pixal3d_int8_i23d');
+  for (const key of ['leftViewImage', 'backViewImage', 'rightViewImage']) assert.equal(single.state.lastImageProject[key], undefined, key);
+  assert.equal(JSON.parse(single.stdout).orbitViews, undefined);
+});
+
+test('Pixal3D orbit views are refused without the front view, on other modes, and on the single-view model', () => {
+  for (const [args, message] of [
+    [['--left-view', 'left.png'], '--left-view, --back-view and --right-view add views to --image-to-3d'],
+    [['--video', '--back-view', 'back.png', 'a turntable'], '--left-view, --back-view and --right-view add views to --image-to-3d'],
+    [['--remove-background', 'object.png', '--right-view', 'right.png'], '--left-view, --back-view and --right-view add views to --image-to-3d'],
+    [['-m', 'pixal3d_multiview_int8_i23d', '--left-view', 'left.png'], 'Pixal3D multi-view requires --image-to-3d'],
+    [['--image-to-3d', 'object.png', '-m', 'pixal3d_multiview_int8_i23d'], 'needs --left-view, --back-view and/or --right-view'],
+    [['--image-to-3d', 'object.png', '--left-view', 'left.png', '-m', 'pixal3d_int8_i23d'], 'reconstructs from one image']
+  ]) {
+    const result = runCli([...args, '--json']);
+    assert.equal(result.exitCode, 1, JSON.stringify(args));
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.errorCode, 'INVALID_ARGUMENT', result.stdout);
+    assert.ok(payload.error.includes(message), `${JSON.stringify(args)}: ${payload.error}`);
+    assert.equal(result.state?.lastImageProject, undefined);
+  }
+});
+
 test('BiRefNet offers a transparent cutout or a soft matte with source dimensions', () => {
   const source = createPngDimensionFixture(1170, 1630);
   for (const matte of [false, true]) {

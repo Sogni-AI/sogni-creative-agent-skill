@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateProjectConfig } from '@sogni-ai/sogni-intelligence-client';
-import { imageUtilityConfig, speechConfig, PIXAL3D_MODEL_ID, BIREFNET_MODEL_ID } from '../media-utilities.mjs';
+import { imageUtilityConfig, speechConfig, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, BIREFNET_MODEL_ID } from '../media-utilities.mjs';
 
 const require = createRequire(import.meta.url);
 const serialize = require('../node_modules/@sogni-ai/sogni-client/dist/Projects/createJobRequestMessage.js').default;
@@ -24,6 +24,23 @@ test('pinned SDK accepts Pixal3D original-image config and transports every mesh
   assert.equal(message.modelID, PIXAL3D_MODEL_ID);
   assert.equal(message.positivePrompt, '');
   for (const [key, value] of Object.entries(meshSettings)) assert.equal(message[key], value, key);
+});
+
+test('pinned SDK slots Pixal3D multi-view orbit views by the subject\'s own sides', () => {
+  const views = { leftViewImage: Buffer.from('left'), backViewImage: Buffer.from('back'), rightViewImage: Buffer.from('right') };
+  const options = { model: PIXAL3D_MULTIVIEW_MODEL_ID, imageTo3d: 'front.png', meshSettings: { meshTargetFaces: 30000 } };
+  const all = wire(imageUtilityConfig(options, source, views), 'image', imageOptions);
+  assert.equal(all.modelID, PIXAL3D_MULTIVIEW_MODEL_ID);
+  assert.equal(all.hasStartingImage, true);
+  // Worker slots: left contextImage1, back contextImage2, right contextImage3.
+  assert.deepEqual([all.hasContextImage1, all.hasContextImage2, all.hasContextImage3], [true, true, true]);
+  assert.equal(all.meshTargetFaces, 30000);
+  const rightOnly = wire(imageUtilityConfig(options, source, { rightViewImage: views.rightViewImage }), 'image', imageOptions);
+  assert.deepEqual([rightOnly.hasContextImage1, rightOnly.hasContextImage2, rightOnly.hasContextImage3], [false, false, true]);
+  assert.throws(
+    () => wire(imageUtilityConfig({ ...options, model: PIXAL3D_MODEL_ID }, source, views), 'image', imageOptions),
+    /pixal3d_int8_i23d reconstructs from startingImage alone/
+  );
 });
 
 test('pinned SDK transports BiRefNet applyMask at the correct level', () => {

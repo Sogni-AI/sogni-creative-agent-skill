@@ -1,3 +1,10 @@
+## [3.49.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.0...v3.49.1) (2026-09-14)
+
+### Bug Fixes
+
+* Include video inputs in Seedance estimates and all reference-video counts and measured durations in Wan 3 and MiniMax H3 estimates. Wan 3 quotes use the selected source window.
+* Use intelligence-client 4.0.1 and SDK 5.48.1 consistently in the CLI and installed skill runtime.
+
 ## [3.49.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.47.0...v3.49.0) (2026-09-14)
 
 ### Features

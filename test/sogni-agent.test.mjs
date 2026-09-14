@@ -7131,26 +7131,9 @@ test('MiniMax H3 FastH3 Two-Stage selectors and socket ids keep the FastH3 reque
   assert.doesNotMatch(plain.stderr, /Two-Stage/);
 });
 
-test('MiniMax H3 720p two-stage socket ids are FastH3 Turbo ids and are never chosen by --target-resolution 720', () => {
-  for (const [model, args] of [
-    ['minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p', []],
-    ['minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p', ['--ref', SCREENSHOT_FIXTURE]],
-    ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p', ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]]
-  ]) {
-    const { exitCode, state, stderr } = runCli([
-      '--video', '-m', model, '--duration', '5', '-w', '672', '-h', '384', ...args,
-      'A detailed continuous shot with synchronized native audio.'
-    ]);
-    assert.equal(exitCode, 0, `${model}: ${stderr}`);
-    const project = state.lastVideoProject;
-    assert.equal(project.modelId, model);
-    assert.equal(project.frames, 124, model);
-    assert.equal(project.fps, 24, model);
-    assert.equal(project.steps, undefined, model);
-    assert.equal(project.guidance, undefined, model);
-    assert.equal('outputScale' in project, false, model);
-  }
-
+test('MiniMax H3 --target-resolution 720 sends the canonical two-stage id with the 384 px canvas', () => {
+  // The `_2stage_720p` ids were retired on 2026-09-14: every canvas class uses
+  // the same `_2stage` id.
   const p720 = runCli([
     '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--target-resolution', '720',
     'A quiet harbour at dawn with gull calls.'

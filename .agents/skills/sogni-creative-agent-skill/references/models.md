@@ -759,13 +759,9 @@ is fixed four-step Euler/simple, it is about 2x faster than LightX2V Turbo and
 up to 6x faster than Standard for comparable 768p, 15-second requests, and it has no R2V mode.
 FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2stage`,
 `minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
-with the FastH3 request shape on a half-size canvas. The Socket records 720p
-two-stage work (the 384 px canvas) under
-`minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p`,
-`minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p`, and
-`minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p`. The CLI recognizes those
-ids but never sends them itself: `--target-resolution 720` sends the `_2stage`
-id with the 384 px canvas.
+with the FastH3 request shape on a half-size canvas. Every output class (720p,
+1080p and 2K) uses the same `_2stage` id; `--target-resolution 720` sends it
+with the 384 px canvas.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.

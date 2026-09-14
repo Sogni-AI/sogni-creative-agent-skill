@@ -2377,10 +2377,7 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v'],
   ['minimax-h3-fastvideo-int8_t2v_turbo_2stage', 't2v'],
   ['minimax-h3-fastvideo-int8_i2v_turbo_2stage', 'i2v'],
-  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage', 'flf2v'],
-  ['minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p', 't2v'],
-  ['minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p', 'i2v'],
-  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p', 'flf2v']
+  ['minimax-h3-fastvideo-int8_flf2v_turbo_2stage', 'flf2v']
 ]);
 const MINIMAX_H3_MODEL_IDS = new Set(MINIMAX_H3_MODEL_MODES.keys());
 const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
@@ -2393,10 +2390,7 @@ const MINIMAX_H3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_flf2v_turbo',
   'minimax-h3-fastvideo-int8_t2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
-  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage',
-  'minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p',
-  'minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p',
-  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p'
+  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
 ]);
 // FastH3 Two-Stage renders the FastH3 request on its own model ids and delivers
 // the clip at exactly twice the canvas, same frames and audio: 720p from 672x384,
@@ -2409,22 +2403,11 @@ const MINIMAX_H3_TWO_STAGE_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_i2v_turbo_2stage',
   'minimax-h3-fastvideo-int8_flf2v_turbo_2stage'
 ]);
-// The Socket records 720p two-stage work (a 384 px canvas) under its own ids.
-// Nothing here sends them: `--target-resolution 720` on a two-stage selector
-// sends the `_2stage` id with the 384 px canvas. They are recognized as FastH3
-// Turbo H3 ids; one named directly goes to the Socket unchanged, and the Socket
-// requires its 384 px canvas.
-const MINIMAX_H3_TWO_STAGE_720P_SOCKET_MODEL_IDS = new Set([
-  'minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p',
-  'minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p',
-  'minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p'
-]);
 const MINIMAX_H3_FASTH3_TURBO_MODEL_IDS = new Set([
   'minimax-h3-fastvideo-int8_t2v_turbo',
   'minimax-h3-fastvideo-int8_i2v_turbo',
   'minimax-h3-fastvideo-int8_flf2v_turbo',
-  ...MINIMAX_H3_TWO_STAGE_MODEL_IDS,
-  ...MINIMAX_H3_TWO_STAGE_720P_SOCKET_MODEL_IDS
+  ...MINIMAX_H3_TWO_STAGE_MODEL_IDS
 ]);
 const MINIMAX_H3_TURBO_SAMPLERS = Object.freeze(['euler', 'er_sde', 'sa_solver']);
 const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);

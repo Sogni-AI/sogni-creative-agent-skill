@@ -5568,6 +5568,40 @@ test('MiniMax H3 r2v estimates carry actual image counts without changing other 
   assert.equal(Object.hasOwn(textToVideo.state.lastEstimateVideoCost, 'referenceImageCount'), false);
 });
 
+test('reference-video estimates bill every clip and the selected Wan 3 window', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-video-estimate-'));
+  const first = join(tempDir, 'first.mp4');
+  const second = join(tempDir, 'second.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(first, Buffer.from('first reference'));
+  writeFileSync(second, Buffer.from('second reference'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+console.log(args.includes('format=duration') ? (args.at(-1).endsWith('first.mp4') ? '8' : '4') : '24/1');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+
+  for (const model of ['wan3', 'wan3-enhanced', 'minimax-h3-r2v']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--duration', '10', '--estimate-video-cost', '--json',
+      '--ref-video', first, '--ref-video', second,
+    ], { FFPROBE_PATH: fakeFfprobe });
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastEstimateVideoCost.hasVideoInput, true, model);
+    assert.equal(state.lastEstimateVideoCost.referenceVideoCount, 2, model);
+    assert.equal(state.lastEstimateVideoCost.referenceVideoDurationSeconds, 12, model);
+    assert.equal(state.lastVideoProject, null, 'An estimate must not submit a render');
+  }
+
+  const trimmed = runCli([
+    '--video', '-m', 'wan3', '--duration', '20', '--estimate-video-cost', '--json',
+    '--ref-video', first, '--ref-video', second, '--video-start', '3',
+  ], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(trimmed.exitCode, 0, trimmed.stderr);
+  assert.equal(trimmed.state.lastEstimateVideoCost.referenceVideoCount, 2);
+  assert.equal(trimmed.state.lastEstimateVideoCost.referenceVideoDurationSeconds, 9);
+});
+
 test('LTX 2.3 video dimensions follow wrapper 2048px cap and 64-multiple rules', () => {
   const { exitCode, stdout } = runCli([
     '--json',

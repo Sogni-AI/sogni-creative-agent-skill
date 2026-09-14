@@ -5832,6 +5832,7 @@ if (typeof options.prompt === 'string' && options.prompt.trim() === '') {
 }
 const wan3ReferenceMediaCache = new Map();
 const wan3ReferencePreparationPlan = new Map();
+let wan3ReferenceVideoDurationSeconds = 0;
 const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   options.refImage
   || options.refImageEnd
@@ -9934,6 +9935,7 @@ async function prepareWan3ReferenceMediaPlan() {
       details: { referenceVideoDuration: totalVideoDuration, outputDuration: fixedOutputDuration }
     });
   }
+  wan3ReferenceVideoDurationSeconds = totalVideoDuration;
 }
 
 async function transcodeSeedanceReferenceAudioToMp3(request) {
@@ -12044,9 +12046,11 @@ function miniMaxH3R2vReferenceImageCount() {
     + (Array.isArray(options.contextImages) ? options.contextImages.length : 0);
 }
 
-function buildVideoEstimateParams({ tokenType, steps }) {
+async function buildVideoEstimateParams({ tokenType, steps }) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isWan3Video = isWan3ModelLocal(options.model);
+  const isMiniMaxH3R2v = isMiniMaxH3R2vModel(options.model);
+  const videoSources = [options.refVideo, ...options.refVideos].filter(Boolean);
   const referenceImageCount = miniMaxH3R2vReferenceImageCount();
   const params = {
     modelId: options.model,
@@ -12060,12 +12064,28 @@ function buildVideoEstimateParams({ tokenType, steps }) {
     ...(referenceImageCount !== undefined ? { referenceImageCount } : {})
   };
 
-  if ((isSeedanceVideo || isWan3Video) && options.refVideo) {
+  if ((isSeedanceVideo || isWan3Video || isMiniMaxH3R2v) && videoSources.length > 0) {
     params.hasVideoInput = true;
-    if (isHttpsUrl(options.refVideo)) {
-      params.referenceVideoUrls = [options.refVideo];
-    } else {
+    params.referenceVideoUrls = videoSources.filter(isHttpsUrl);
+    if (videoSources.some(source => !isHttpsUrl(source))) {
       params.referenceVideo = true;
+    }
+    params.referenceVideoCount = videoSources.length;
+    if (isWan3Video) {
+      params.referenceVideoDurationSeconds = wan3ReferenceVideoDurationSeconds;
+    } else if (isMiniMaxH3R2v) {
+      const durations = await Promise.all(videoSources.map(async (source, index) => {
+        const duration = await probeLocalMediaDurationSeconds(source)
+          ?? await probeMediaBufferDurationSeconds(
+            await fetchMediaBuffer(source),
+            mediaFilenameFromSource(source, `h3-reference-video-${index + 1}.mp4`)
+          );
+        if (!Number.isFinite(duration) || duration < 2 || duration > 15) {
+          throw new Error(`MiniMax H3 reference video ${index + 1} must be between 2 and 15 seconds.`);
+        }
+        return duration;
+      }));
+      params.referenceVideoDurationSeconds = durations.reduce((sum, duration) => sum + duration, 0);
     }
   }
 
@@ -12137,7 +12157,7 @@ async function ensureSufficientVideoBalance(client, log) {
 
   let estimate;
   try {
-    estimate = await client.estimateVideoCost(buildVideoEstimateParams({ tokenType, steps }));
+    estimate = await client.estimateVideoCost(await buildVideoEstimateParams({ tokenType, steps }));
   } catch (err) {
     if (!options.quiet) {
       if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
@@ -12901,7 +12921,7 @@ async function main() {
         err.hint = 'Pass --steps explicitly (e.g. --steps 4 for lightx2v models).';
         throw err;
       }
-      const estimateParams = buildVideoEstimateParams({
+      const estimateParams = await buildVideoEstimateParams({
         tokenType: options.tokenType || 'spark',
         steps
       });

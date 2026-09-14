@@ -12244,48 +12244,6 @@ function videoWorkflowHasFrameAnchors() {
     || (options.videoWorkflow === 'ia2v' && isMiniMaxH3AudioGuideModel(options.model));
 }
 
-/**
- * Fit FastH3 audio-guide frame images to the H3 canvas the way the client
- * wrapper fits i2v frames: normalize the canvas, fit the first frame inside it
- * (cover-cropping onto the grid if that lands off it), then cover the last frame
- * to the same size. The pinned Intelligence Client wrapper predates these ids
- * and would size them with its generic video rules (480 px minimum, 16 px grid),
- * moving an H3 canvas off its 32 px grid, so the caller sends the result with
- * autoResizeVideoAssets false. Remove once the pin sizes the audio ids itself.
- */
-async function fitMiniMaxH3AudioGuideFrames({ imageBuffer, endImageBuffer, width, height, rules }) {
-  let canvas = normalizeVideoDimensionsLikeWrapper(width, height, rules);
-  let start = imageBuffer;
-  if (start) {
-    const dims = await getVideoImageDimensionsFromBuffer(start);
-    if (dims?.width !== canvas.width || dims?.height !== canvas.height) {
-      const fitted = await sharp(start)
-        .resize(canvas.width, canvas.height, { fit: 'inside', position: 'center', withoutEnlargement: false })
-        .toBuffer({ resolveWithObject: true });
-      const onGrid = normalizeVideoDimensionsLikeWrapper(fitted.info.width, fitted.info.height, rules);
-      if (onGrid.adjusted) {
-        start = await sharp(imageBuffer)
-          .resize(onGrid.width, onGrid.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
-          .toBuffer();
-        canvas = onGrid;
-      } else {
-        start = fitted.data;
-        canvas = { width: fitted.info.width, height: fitted.info.height };
-      }
-    }
-  }
-  let end = endImageBuffer;
-  if (end) {
-    const dims = await getVideoImageDimensionsFromBuffer(end);
-    if (dims?.width !== canvas.width || dims?.height !== canvas.height) {
-      end = await sharp(end)
-        .resize(canvas.width, canvas.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
-        .toBuffer();
-    }
-  }
-  return { imageBuffer: start, endImageBuffer: end, width: canvas.width, height: canvas.height };
-}
-
 function miniMaxH3R2vReferenceImageCount() {
   if (!isMiniMaxH3R2vModel(options.model)) return undefined;
   return (options.refImage ? 1 : 0)
@@ -13722,21 +13680,6 @@ async function main() {
           endImageBuffer = resizedBuffer;
         }
       }
-      const fitsMiniMaxH3AudioGuideFrames = isMiniMaxH3AudioGuideModel(options.model)
-        && options.autoResizeVideoAssets !== false;
-      if (fitsMiniMaxH3AudioGuideFrames) {
-        const fitted = await fitMiniMaxH3AudioGuideFrames({
-          imageBuffer,
-          endImageBuffer,
-          width: options.width,
-          height: options.height,
-          rules: videoDimensionRules
-        });
-        imageBuffer = fitted.imageBuffer;
-        endImageBuffer = fitted.endImageBuffer;
-        options.width = fitted.width;
-        options.height = fitted.height;
-      }
       // Preserve the prepared start-frame buffer so looping (A->B->A) can reuse it later.
       loopingStartImageBuffer = imageBuffer;
 
@@ -13792,7 +13735,7 @@ async function main() {
       // validation, so keep this compatibility guard as narrow as possible.
       const hasLooseBinaryReference = Boolean(projectConfig.referenceImage)
         && (options.videoWorkflow === 'r2v' || options.seedanceTaskType === 'reference');
-      if (hasLooseBinaryReference || fitsMiniMaxH3AudioGuideFrames) {
+      if (hasLooseBinaryReference) {
         projectConfig.autoResizeVideoAssets = false;
       } else if (options.autoResizeVideoAssets !== null) {
         projectConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;

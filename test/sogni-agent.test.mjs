@@ -7372,8 +7372,9 @@ test('MiniMax H3 FastH3 audio guide selectors send the uploaded audio on the aud
     assert.ok(project.referenceAudio, model);
     assert.equal(Boolean(project.referenceImage), frames.length > 0, model);
     assert.equal(Boolean(project.referenceImageEnd), frames.length > 2, model);
-    // The CLI fits the frames to the 32 px H3 canvas itself.
-    assert.equal(project.autoResizeVideoAssets, false, model);
+    // Intelligence Client 4.1.0 sizes the audio-guide ids like every other H3
+    // id, so the CLI no longer fits the frames itself or forces manual sizing.
+    assert.notEqual(project.autoResizeVideoAssets, false, model);
     assert.equal(project.width % 32, 0, model);
     assert.equal(project.height % 32, 0, model);
     assert.ok(project.width * project.height <= 1_032_192, model);

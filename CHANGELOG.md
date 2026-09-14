@@ -1,4 +1,4 @@
-## Unreleased
+## [3.50.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.1...v3.50.0) (2026-09-14)
 
 ### Features
 
@@ -7,7 +7,7 @@
 
 ### Bug Fixes
 
-* Use Sogni Client 5.49.0, which carries the FastH3 audio-to-video ids and Pixal3D multi-view uploads, in both the npm package and the installed skill runtime (`skill-package.json` now carries the same client override).
+* Use Sogni Client 5.50.0 and intelligence-client 4.1.0, which carry the FastH3 audio-to-video ids, the hosted `sound_to_video` audio-guide selectors and Pixal3D multi-view uploads, in both the npm package and the installed skill runtime (`skill-package.json`); the wrapper now sizes audio-guide frames on the H3 canvas itself, so the CLI's local frame-fitting workaround is gone.
 
 ## [3.49.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.0...v3.49.1) (2026-09-14)
 

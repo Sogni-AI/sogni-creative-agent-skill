@@ -674,7 +674,13 @@ is fixed four-step Euler/simple, it is about 2x faster than LightX2V Turbo and
 up to 6x faster than Standard for comparable 768p, 15-second requests, and it has no R2V mode.
 FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2stage`,
 `minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
-with the FastH3 request shape on a half-size canvas.
+with the FastH3 request shape on a half-size canvas. The Socket records 720p
+two-stage work (the 384 px canvas) under
+`minimax-h3-fastvideo-int8_t2v_turbo_2stage_720p`,
+`minimax-h3-fastvideo-int8_i2v_turbo_2stage_720p`, and
+`minimax-h3-fastvideo-int8_flf2v_turbo_2stage_720p`. The CLI recognizes those
+ids but never sends them itself: `--target-resolution 720` sends the `_2stage`
+id with the 384 px canvas.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -717,14 +723,15 @@ video-conditioned R2V requires a worker above 40 GB.
 
   | `--target-resolution` | Canvas (16:9) | Delivered | Price |
   | --- | --- | --- | --- |
-  | `2K` or `1440` (default) | 1344×768 | 2688×1536 | FastH3 + 10 Spark/s |
-  | `1080` | 960×544 | 1920×1088 | FastH3 + 10 Spark/s |
-  | `720` | 672×384 | 1344×768 | about the FastH3 rate |
+  | `2K` or `1440` (default) | 1344×768 | 2688×1536 | 16 Spark/s (FastH3 + 12) |
+  | `1080` | 960×544 | 1920×1088 | 10 Spark/s (FastH3 + 6) |
+  | `720` | 672×384 | 1344×768 | 4 Spark/s (the FastH3 rate) |
 
   The canvas keeps the prompt's aspect, or a `--ref`/`--ref-end` image's aspect
   (a 1080 portrait renders 544×960); explicit `-w`/`-h` are used as given and
   still delivered at twice. Any other value, 768 included, is refused. Other
-  480p-class canvases add 6 Spark/s. Ordinary 768p output stays on the regular
+  canvases up to a 544 px short edge add 6 Spark/s, and larger ones 12. Prices
+  follow measured GPU time. Ordinary 768p output stays on the regular
   FastH3 selectors, and the other H3 tiers have no two-stage path. The summary
   line and `--json` (`deliveredWidth`, `deliveredHeight`) report the delivered
   size. If the server is not serving two-stage, it refuses before charging and

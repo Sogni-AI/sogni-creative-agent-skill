@@ -132,8 +132,8 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
   renders 672×384 → 1344×768, in the prompt's or reference's aspect; any other
   value is refused. Do not enlarge `-w`/`-h` to reach 2K — the pixel budget
-  still applies to the canvas. 1080p and 2K add 10 Spark per second to FastH3
-  (6 on other 480p-class canvases); 720p costs about the FastH3 rate. Use it
+  still applies to the canvas. 1080p costs 10 Spark per second (FastH3's 4 plus
+  6), 2K costs 16 (plus 12), and 720p costs the FastH3 rate of 4. Use it
   when the user asks for 1080p, 1440p or 2K H3 output, two-stage, or the
   sharpest H3 output; ordinary 768p stays on the regular FastH3 selectors. The
   prompt contract is FastH3's.

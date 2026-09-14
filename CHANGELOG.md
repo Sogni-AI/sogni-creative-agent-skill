@@ -1,14 +1,26 @@
+## [3.48.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.47.0...v3.48.0) (2026-09-13)
+
+### Features
+
+* Add MiniMax H3 FastH3 Two-Stage for 720p, 1080p and 2K video: `-m minimax-h3-fasth3-turbo-2stage` picks text-to-video, image-to-video or first/last-frame from the frames you pass (like `minimax-h3-fasth3-turbo`, no R2V), and `minimax-h3-fasth3-t2v-turbo-2stage`, `-i2v-turbo-2stage`, `-flf2v-turbo-2stage` and the `minimax-h3-fastvideo-int8_*_turbo_2stage` ids name a mode directly. FastH3 renders a half-size canvas and the clip is delivered at twice it with the same length and audio. `--target-resolution` names the delivered size: `2K` or `1440` (the default) renders 1344x768 and delivers 2688x1536, `1080` renders 960x544 and delivers 1920x1088, and `720` renders 672x384 and delivers 1344x768, in the prompt's or the `--ref`/`--ref-end` image's aspect; any other value is refused, and `2K` is refused on other models. 1080p costs 10 Spark per second (FastH3 plus 6), 2K costs 16 (plus 12), and 720p costs the FastH3 rate of 4. The summary line and `--json` output (`deliveredWidth`, `deliveredHeight`) report the delivered size, and a server refusal of two-stage (such as its "available soon" notice) is printed word for word. The `minimax-h3-fastvideo-int8_*_turbo_2stage_720p` ids the Socket records 720p work under are recognized when named directly.
+* Seedance 2.5 renders 1080p as well as 480p and 720p (`--target-resolution 1080`), exports MOV with `--output-format mov`, and returns the clip's final frame as an image with `--return-last-frame`, for the first frame of a following clip. With `-o` the frame is saved next to the video as `<name>-last-frame.<ext>`; `--json` reports `lastFrameUrls` and `lastFramePaths`. Both flags are refused on every other model.
+* `--2k` and `--output-scale`, added in 3.47.0, are removed. Sogni now refuses the `outputScale` request option, so neither flag can render; the CLI fails on either one and points at `-m minimax-h3-fasth3-turbo-2stage` (with `--target-resolution 1080` or `720`).
+
+### Bug Fixes
+
+* Align the public runtime with Sogni Client 5.48.0 and Intelligence Client 4.0.0 (Sogni Protocol 1.0.0-alpha.40), moving the exact pin, `skill-package.json` and the sogni-client override together. Intelligence Client 4.0.0 carries the two-stage sizing helpers the CLI uses.
+* The bundled creative-agent runtime is regenerated from 2.0.0: `generate_video` and `animate_photo` drop `outputScale` and offer the FastH3 Two-Stage selectors, whose `targetResolution` names the delivered class, 720, 1080 or 2K, at the GPU-time prices above.
+
 ## [3.47.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.46.0...v3.47.0) (2026-09-12)
 
 ### Features
 
-* Add MiniMax H3 FastH3 Two-Stage for 720p, 1080p and 2K video: `-m minimax-h3-fasth3-turbo-2stage` picks text-to-video, image-to-video or first/last-frame from the frames you pass (like `minimax-h3-fasth3-turbo`, no R2V), and `minimax-h3-fasth3-t2v-turbo-2stage`, `-i2v-turbo-2stage`, `-flf2v-turbo-2stage` and the `minimax-h3-fastvideo-int8_*_turbo_2stage` ids name a mode directly. FastH3 renders a half-size canvas and the clip is delivered at twice it with the same length and audio. `--target-resolution` names the delivered size: `2K` or `1440` (the default) renders 1344x768 and delivers 2688x1536, `1080` renders 960x544 and delivers 1920x1088, and `720` renders 672x384 and delivers 1344x768, in the prompt's or the `--ref`/`--ref-end` image's aspect; any other value is refused, and `2K` is refused on other models. 1080p costs 10 Spark per second (FastH3 plus 6), 2K costs 16 (plus 12), and 720p costs the FastH3 rate of 4. The summary line and `--json` output (`deliveredWidth`, `deliveredHeight`) report the delivered size, and a server refusal of two-stage (such as its "available soon" notice) is printed word for word.
-* `--2k` and `--output-scale`, prepared for this release but never published, are gone: Sogni now refuses the `outputScale` request option, so the CLI fails on either flag and points at `-m minimax-h3-fasth3-turbo-2stage` (and `--target-resolution 1080` or `720`).
+* Add `--output-scale 2` (alias `--2k`) for MiniMax H3 2K delivery: the clip renders on the requested canvas and comes back at twice its width and height (1344x768 becomes 2688x1536) with the same length and audio, for +10 Spark per second at 544/768p-class sizes and +6 at 480p. Other models refuse the flag by name. While Sogni holds 2K behind its "available soon" message, the CLI reports that refusal as `MODEL_UNAVAILABLE` with a hint to retry at the standard size.
 
 ### Bug Fixes
 
 * Align the public runtime with Sogni Client 5.46.0 and Intelligence Client 3.33.0, moving the exact pin, `skill-package.json` and the sogni-client override together. 5.46.0 stops the SDK cancelling a project after its render moves to another worker, which killed the live retry.
-* The bundled creative-agent runtime is regenerated: `generate_video` and `animate_photo` drop `outputScale` and offer the FastH3 Two-Stage selectors, whose `targetResolution` names the delivered class, 720, 1080 or 2K (`generate_video_v1` 1.4.0, `animate_photo_v1` 1.2.0).
+* The bundled creative-agent runtime is regenerated from 1.65.0; its public contracts are unchanged.
 
 ## [3.46.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.43.0...v3.46.0) (2026-09-11)
 

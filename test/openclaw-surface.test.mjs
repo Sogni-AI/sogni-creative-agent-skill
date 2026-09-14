@@ -58,6 +58,11 @@ test('non-OpenClaw skill distribution keeps a single root skill source', () => {
     rootPackage.dependencies['@sogni-ai/sogni-intelligence-client'],
     'skill-package.json must install the same SDK package as the published npm package',
   );
+  assert.equal(
+    skillPackage.overrides?.['@sogni-ai/sogni-client'],
+    rootPackage.overrides['@sogni-ai/sogni-client'],
+    'skill-package.json must pin the same Sogni Client transport as the published npm package',
+  );
 });
 
 test('skill instructions invoke the installed CLI instead of local script paths', () => {

@@ -27,7 +27,7 @@ inputs and controls before converting a stage into commands.
 | 4. Clean cut-outs | `birefnet_image_background_removal_fp16` | A soft matte with real edges, for anything going into 3D or a composite |
 | 5. Travel and dialogue | `minimax-h3-fastvideo-int8_flf2v_turbo`, `minimax-h3-fl2va-fp8_flf2v_turbo` | First/last-frame video with generated audio in one pass |
 | 6. Score | `minimax_music3` | A loopable instrumental cue per region |
-| 7. Figures | `pixal3d_int8_i23d` | A textured GLB from one image on transparency |
+| 7. Figures | `pixal3d_int8_i23d` (`pixal3d_multiview_int8_i23d` with side and back views) | A textured GLB from one image on transparency |
 | 8. A character's own voice | `qwen3_tts_1.7b_voice_clone_bf16` | Any line spoken in a cloned voice |
 | 9. A character speaking on camera | `wan_v2.2-14b-fp8_s2v_lightx2v` | Image plus audio to lip-synced video |
 
@@ -129,6 +129,13 @@ Four SAM 3 failures worth knowing before you spend anything:
   input resolution, so a bigger input costs nothing at runtime.
 - **Parse the GLB rather than trusting it** — chunk table, glTF JSON, triangle
   and vertex counts, normals, UVs.
+- **Give it the sides when you have them.** One image leaves Pixal3D guessing
+  the back; `--image-to-3d front.png --left-view left.png --back-view back.png
+  --right-view right.png` (any subset) uses `pixal3d_multiview_int8_i23d` at the
+  same price. Name each view by the subject's own side: the left view shows it
+  turned so its own left side faces the camera (facing screen-left). A
+  turnaround template that labels the subject's right side "left" builds the
+  model turned 180 degrees. (Not part of the measured build above.)
 
 ### Crossings between scenes
 
@@ -235,6 +242,13 @@ lips stay on the old rhythm. Regenerate with `wan_v2.2-14b-fp8_s2v_lightx2v`,
 which takes one image and one audio track and animates the person in the image
 to that audio. Feed it the frame where the character is already standing in the
 scene, so the new clip starts where the story left them.
+
+On MiniMax H3 the same job is FastH3 audio-to-video:
+`-m minimax-h3-fasth3-ia2v-turbo --ref frame.png --ref-audio line.wav` animates
+from that frame to the uploaded line and keeps it as the soundtrack, and
+`minimax-h3-fasth3-flfa2v-turbo` adds `--ref-end` to land on a known last frame.
+Write the spoken words inside the prompt's `<d>` tag. No LoRAs load on these
+modes. (Not part of the measured build above.)
 
 If the character is *never seen* — written as a voice, which is worth doing
 deliberately for most of a cast — their clips need no regeneration at all.

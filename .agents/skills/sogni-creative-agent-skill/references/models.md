@@ -189,6 +189,7 @@ support up to 3; Krea identity edit models support up to 2).
 |-------|-------|----------|
 | `sam3_image_segment_bf16` | Very fast | SAM 3 object selection from one starting image: text, click points, or boxes in, one mask or cutout out |
 | `pixal3d_int8_i23d` | Slow (~120-170s) | Single-image reconstruction to a textured GLB |
+| `pixal3d_multiview_int8_i23d` | Slow (~1.5-4 min) | Front view plus any of left, back and right views of the same object to a textured GLB |
 | `birefnet_image_background_removal_fp16` | Very fast (~1s warm) | Prompt-free background removal, soft matte — the better cut-out when the subject is clear |
 
 None is a text-to-image model. All always require a `startingImage`. SAM 3 and
@@ -281,6 +282,43 @@ increase work and price above the 1024 default:
 `meshTargetFaces` is the one worth setting deliberately. The 700,000-triangle
 default is far heavier than a real-time engine wants, so asking for less usually
 yields a *more* useful asset. Sampling steps are deliberately not exposed.
+
+### Pixal3D multi-view (`pixal3d_multiview_int8_i23d`)
+
+When the user has more than one photo of the same object, reconstruct from all
+of them instead of letting Pixal3D guess the sides the front cannot show. The
+`--image-to-3d` image is the **front** view and stays required; add any subset
+of the three orbit views. With at least one view the CLI uses
+`pixal3d_multiview_int8_i23d`; with none it stays on `pixal3d_int8_i23d`. The
+options, defaults, and prices are the single-view ones ($0.30 at the default
+1024 shape resolution, $0.42 at 1536). It is promptless and has no
+`templateVariant`.
+
+| Flag | SDK field | What the photo shows |
+|------|-----------|----------------------|
+| `--image-to-3d` | `startingImage` | The front of the subject (required) |
+| `--left-view` | `leftViewImage` | The subject turned so **its own left side** faces the camera — it faces screen-left |
+| `--back-view` | `backViewImage` | The subject seen from behind |
+| `--right-view` | `rightViewImage` | The subject turned so **its own right side** faces the camera — it faces screen-right |
+
+Views are named by the subject's sides, never the viewer's. Some turnaround
+templates (including the Comfy-Org Pixal3D example) label the photo of the
+subject's right side "left"; following those labels swaps left and right and
+builds a model turned 180 degrees, so the front faces backwards. Use photos of
+the same object at the same height and distance, about 90 degrees apart at eye
+level, like a character turnaround sheet.
+
+```bash
+sogni-agent --image-to-3d front.png --left-view left.png --back-view back.png --right-view right.png --mesh-faces 30000 -o object.glb --json
+sogni-agent --image-to-3d front.png --back-view back.png -o object.glb
+```
+
+The view flags require `--image-to-3d` and are refused with every other mode;
+`-m pixal3d_int8_i23d` with a view, or `-m pixal3d_multiview_int8_i23d` without
+one, is refused rather than silently switched. SDK callers send the views as
+`leftViewImage`, `backViewImage` and `rightViewImage` on the image project; do
+not put them in `contextImages`. `--json` reports the view files under
+`orbitViews`.
 
 ### BiRefNet background removal (`birefnet_image_background_removal_fp16`)
 
@@ -702,8 +740,10 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
 MiniMax H3 is a Sogni-hosted video family with **eighteen current selectors**:
 four Standard workflows, four 8-step Balanced workflows, four 4-step
 LightX2V Turbo workflows, three FastVideo VSA FastH3 Turbo workflows, and
-three FastH3 Two-Stage (720p/1080p/2K) workflows. Every mode
-generates picture and **native 32 kHz stereo audio jointly**.
+three FastH3 Two-Stage (720p/1080p/2K) workflows. Every one of those modes
+generates picture and **native 32 kHz stereo audio jointly**. FastH3 also has
+three audio-to-video modes, each with a Two-Stage form, that take the user's
+own audio instead; see [FastH3 audio-to-video](#fasth3-audio-to-video).
 `--no-generate-audio` (SDK `generateAudio=false`) strips the generated track
 from the delivered file rather than skipping audio generation. It is an explicit model choice, never a
 universal default. The bare `minimax-h3`, `minimax-h3-balanced`, and
@@ -735,6 +775,10 @@ FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selecto
 | `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | FastH3 Two-Stage text-to-video | FastH3 on a half-size canvas, delivered at twice it (2K default, 1080p or 720p); generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo-2stage` | FastH3 Two-Stage image-to-video | First-frame I2VA or last-frame-only L2VA, delivered at twice the canvas |
 | `minimax-h3-fasth3-flf2v-turbo-2stage` | FastH3 Two-Stage first → last frame | Both endpoints, delivered at twice the canvas; no R2V |
+| `minimax-h3-fasth3-ia2v-turbo` | FastH3 image + audio to video | `--ref` first frame plus `--ref-audio`; the upload drives the clip and is its soundtrack |
+| `minimax-h3-fasth3-flfa2v-turbo` | FastH3 first + last frame + audio | `--ref`, `--ref-end` and `--ref-audio` |
+| `minimax-h3-fasth3-a2v-turbo` | FastH3 audio to video | `--ref-audio` only |
+| `minimax-h3-fasth3-ia2v-turbo-2stage` / `-flfa2v-turbo-2stage` / `-a2v-turbo-2stage` | FastH3 Two-Stage audio to video | The same uploads, delivered at twice the canvas |
 
 The three standard frame modes share the FL2VA checkpoint: worker ids
 `minimax-h3-fl2va-fp8_t2v`, `minimax-h3-fl2va-fp8_i2v`, and
@@ -765,7 +809,8 @@ with the 384 px canvas.
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
-**r2v is the one H3 mode that does**: see
+The CLI refuses `--ref-audio` on them and names the FastH3 audio-to-video
+selector that takes it. **r2v takes audio as a labelled reference**: see
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v).
 FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. FL2VA/Balanced/LightX2V Turbo and image-only R2V are routed to 32 GB-class workers;
 video-conditioned R2V requires a worker above 40 GB.
@@ -836,6 +881,56 @@ sogni-agent -q --video -m minimax-h3-fasth3-turbo --duration 8 -o ./video.mp4 "<
 sogni-agent -q --video -m minimax-h3-i2v-turbo --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 ```
+
+### FastH3 audio-to-video
+
+The FastH3 audio guide drives the video with an audio file the user supplies —
+a voice, a song, a soundtrack — from frame 0, lips included, and delivers that
+audio as the clip's soundtrack instead of generating one.
+
+| Selector | Worker id | Uploads |
+|----------|-----------|---------|
+| `minimax-h3-fasth3-ia2v-turbo` | `minimax-h3-fastvideo-int8_ia2v_turbo` | `--ref` (first frame) and `--ref-audio` |
+| `minimax-h3-fasth3-flfa2v-turbo` | `minimax-h3-fastvideo-int8_flfa2v_turbo` | `--ref`, `--ref-end` (last frame) and `--ref-audio` |
+| `minimax-h3-fasth3-a2v-turbo` | `minimax-h3-fastvideo-int8_a2v_turbo` | `--ref-audio` only |
+
+Each selector has a `-2stage` form (`minimax-h3-fasth3-ia2v-turbo-2stage`, …,
+worker ids `..._turbo_2stage`) with the same uploads, delivered at twice the
+canvas like the other FastH3 Two-Stage models: `--target-resolution` names the
+delivered size, and a server refusal of two-stage is printed unchanged.
+`-m minimax-h3-fasth3-turbo --ref-audio track` (or `-m
+minimax-h3-fasth3-turbo-2stage`) picks the mode from the frames supplied: audio
+alone is a2v, `--ref` is ia2v, `--ref` plus `--ref-end` is flfa2v. A last frame
+without a first frame is refused. `--workflow ia2v` or `a2v` selects these modes
+on the FastH3 family selectors only.
+
+- **Length:** fixed 24 fps and the usual `124 + n×17` frame grid (5.17-15.08 s),
+  set with `--duration` (snapped) or `--frames`. The audio is trimmed to the
+  clip, so choose a length that covers the part you want.
+- **Window:** `--audio-start <sec>` picks where in the upload the window begins.
+  There is no `--audio-duration`: the window is always the clip length.
+- **Audio:** always kept. `--no-generate-audio` is refused.
+- **Sampling and size:** fixed 4-step Euler/simple, no steps or guidance, the
+  32 px grid up to 1,032,192 pixels (1344×768 by default, or the first frame's
+  aspect). Frames are fitted to the canvas exactly as for i2v/flf2v.
+- **No LoRAs:** `--lora` is refused on these modes.
+- **Uploads:** each mode refuses any upload it does not take (an end frame on
+  ia2v, an image on a2v, loose `-c`, `--ref-video`, a second `--ref-audio`).
+- **Price:** the FastH3 per-second price of the matching frame mode (ia2v as
+  i2v, flfa2v as flf2v, a2v as t2v); `--estimate-video-cost` quotes it.
+- **Prompt:** FastH3's ordered-field contract with the I2V or FLF2V preamble
+  when frames are supplied. Write the words actually spoken in the upload inside
+  `<d>[Language] …</d>` so the text matches what the audio says.
+
+```bash
+sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo --ref portrait.png --ref-audio voice.m4a --duration 8 -o ./talking.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-flfa2v-turbo --ref first.png --ref-end last.png --ref-audio song.mp3 --duration 12 -o ./music-video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-a2v-turbo --ref-audio song.mp3 --audio-start 30 --duration 15 -o ./visualizer.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo-2stage --target-resolution 1080 --ref portrait.png --ref-audio voice.m4a -o ./talking-1080p.mp4 "<I2V preamble plus three-field H3 prompt>"
+```
+
+For audio used as a loose reference rather than the soundtrack (a voice or
+rhythm the prompt assigns a job to), use H3 r2v instead.
 
 ### MiniMax H3 prompting
 
@@ -1027,6 +1122,7 @@ model recommendations.
 | Select or cut out an object in an image | `sam3_image_segment_bf16` |
 | Remove a background | `--remove-background original.png` (BiRefNet); add `--matte` for a soft mask |
 | Turn one image into a textured 3D model (GLB) | `--image-to-3d original.png -o object.glb` (Pixal3D), no prompt |
+| Turn several photos of one object into a 3D model | `--image-to-3d front.png` plus `--left-view` / `--back-view` / `--right-view` (Pixal3D multi-view; views named by the subject's own sides) |
 | Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
 | Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
 | MiniMax Music 3 songs and instrumentals | `--music -m music3` or hosted `generate_music` |
@@ -1064,6 +1160,7 @@ model recommendations.
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
 | MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
+| MiniMax H3 video driven by the user's own voice or song | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); add `-2stage` for Two-Stage |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
 ## Video sizing & aspect ratios
@@ -1071,7 +1168,7 @@ model recommendations.
 - **WAN 2.2 models** use dimensions divisible by 16, min 480 px, max 1536 px.
 - **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
-- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 and native stereo audio apply to all. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` renders 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

@@ -77,6 +77,9 @@ export const TOOLS = [
       'ref_end = end frame (with ref, defaults to ltx25-22b-int8_i2v_distilled and the standard first/last-frame template; no transition LoRA), ' +
       'MiniMax H3 supports t2v, i2v, first/last-frame, and r2v; H3 r2v accepts up to 9 images, 3 videos, ' +
       'and 3 audios (12 files total) through the repeatable reference arrays and uses <Picture 1>/<Video 1>/<Audio 1> prompt tags. ' +
+      'MiniMax H3 FastH3 audio-to-video (model minimax-h3-fasth3-ia2v-turbo with ref + ref_audio, ' +
+      'minimax-h3-fasth3-flfa2v-turbo with ref + ref_end + ref_audio, minimax-h3-fasth3-a2v-turbo with ref_audio only) ' +
+      'drives the clip with the uploaded audio and keeps it as the soundtrack; no LoRAs. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {

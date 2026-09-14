@@ -69,8 +69,13 @@ It covers Seedance 2.5 1080p (including edit/extend), FastH3 Two-Stage delivered
 and image upscale limits. Honor an explicitly selected model and resolution.
 For FastH3, read `../../references/video-prompting.md` before writing its
 ordered-field prompt; select the Two-Stage model for higher delivered sizes.
+To drive H3 with the user's own voice or song, use FastH3 audio-to-video:
+`-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`
+(`-flfa2v-turbo` adds `--ref-end`, `-a2v-turbo` takes the audio alone).
 
-Pixal3D: `--image-to-3d original.png --mesh-faces 30000 -o object.glb`.
+Pixal3D: `--image-to-3d original.png --mesh-faces 30000 -o object.glb`; add
+`--left-view`, `--back-view` and/or `--right-view` for multi-view (named by the
+subject's own sides: the left view shows it facing screen-left).
 BiRefNet: `--remove-background original.png -o cutout.png`; add `--matte`
 for a soft mask. Both are promptless and preserve the original input bytes.
 Music 3: `--music -m music3`; speech: `--speech --speech-mode voice|clone|design`.

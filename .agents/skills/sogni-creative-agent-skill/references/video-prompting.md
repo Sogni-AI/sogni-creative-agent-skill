@@ -161,6 +161,18 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the
   delivered file; it does not skip audio generation.
+- **FastH3 audio-to-video takes the user's own audio instead.**
+  `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`),
+  `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`) and
+  `minimax-h3-fasth3-a2v-turbo` (`--ref-audio` only), plus their `-2stage`
+  forms, drive the picture from the uploaded track and deliver that track as
+  the soundtrack. Keep the same ordered-field contract, with the I2V or FLF2V
+  preamble when frames are supplied. Write the words actually spoken in the
+  upload, exactly, inside `<d>[Language] …</d>` with their `(Sx)` speaker so the
+  mouth follows the right text, and describe the uploaded sound in the sound
+  fields rather than requesting different audio. `--audio-start` picks the
+  window; its length is the clip length. No LoRAs; see
+  [models.md § FastH3 audio-to-video](./models.md#fasth3-audio-to-video).
 - **Sogni's H3 tiers render the 768p-class open-weights release.** Only FastH3
   Two-Stage delivers 1080p or 2K (Sogni's own latent enlargement); do not claim
   either for any other H3 selector. MiniMax's hosted 2K stage is not part of
@@ -652,6 +664,7 @@ sogni-agent -q --video -m minimax-h3-flf2v-turbo --ref ./first.png --ref-end ./l
 sogni-agent -q --video -m minimax-h3-fasth3-turbo --duration 8 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-flf2v-turbo --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo --ref ./first.png --ref-audio ./voice.m4a --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt with the uploaded words in <d> tags>"
 
 # Reference-to-video (reference order defines the prompt ordinals)
 sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"

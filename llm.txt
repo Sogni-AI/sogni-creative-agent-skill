@@ -8,9 +8,12 @@ Current capabilities and limits: read `references/models.md` before answering
 model-selection questions. Seedance 2.5 supports 1080p with
 `--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,
 and optional last-frame images. Other recent additions include FastH3
-Two-Stage delivered 720p/1080p/2K, GPT Image 2.5 Sunburst/Flare, SAM 3 object
+Two-Stage delivered 720p/1080p/2K, FastH3 audio-to-video from an uploaded track
+(`-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`, or
+`-flfa2v-turbo` / `-a2v-turbo`), GPT Image 2.5 Sunburst/Flare, SAM 3 object
 masks, and promptless FlashVSR video upscaling to 1080p/1440p.
-Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb`; BiRefNet
+Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb` (add
+`--left-view`, `--back-view`, `--right-view` for multi-view); BiRefNet
 uses `--remove-background original.png -o cutout.png` (add `--matte` for a mask).
 MiniMax Music 3 uses `--music -m music3`; Qwen3-TTS uses `--speech` with
 `--speech-mode voice|clone|design`. Read the model reference for required inputs,

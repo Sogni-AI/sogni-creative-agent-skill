@@ -1,3 +1,14 @@
+## Unreleased
+
+### Features
+
+* Add MiniMax H3 FastH3 audio-to-video, driven by your own voice or song: `-m minimax-h3-fasth3-ia2v-turbo` takes a first frame (`--ref`) and `--ref-audio`, `-m minimax-h3-fasth3-flfa2v-turbo` a first and last frame (`--ref`, `--ref-end`) and `--ref-audio`, and `-m minimax-h3-fasth3-a2v-turbo` the audio alone. The upload drives the picture from frame 0 and is the delivered soundtrack, trimmed to the clip: `--duration` or `--frames` set the length on the usual 124-362 frame grid at 24 fps, and `--audio-start` picks where the window begins. `-m minimax-h3-fasth3-turbo --ref-audio` picks the mode from the frames you pass, and the `-2stage` selectors (and `minimax-h3-fastvideo-int8_{ia2v,flfa2v,a2v}_turbo[_2stage]` ids) deliver at twice the canvas with `--target-resolution`, printing a server refusal word for word like the other two-stage models. The CLI refuses a missing or extra upload, LoRAs, `--audio-duration` and `--no-generate-audio` before submitting, and every other H3 mode except r2v refuses `--ref-audio` and names the audio selector to use. Prices are FastH3's per-second price for the matching frame mode.
+* Add Pixal3D multi-view: `--image-to-3d front.png` with any of `--left-view`, `--back-view` and `--right-view` builds the GLB with `pixal3d_multiview_int8_i23d` at the single-view options and prices. Views are named by the subject's own sides: the left view shows the subject turned so its own left side faces the camera (facing screen-left), the right view its own right side (facing screen-right), the back view the subject from behind. Templates that label the subject's right side "left" build a model turned 180 degrees. The view flags are refused without `--image-to-3d`, with other modes, and with `-m pixal3d_int8_i23d`; `--json` reports them under `orbitViews`.
+
+### Bug Fixes
+
+* Use Sogni Client 5.49.0, which carries the FastH3 audio-to-video ids and Pixal3D multi-view uploads, in both the npm package and the installed skill runtime (`skill-package.json` now carries the same client override).
+
 ## [3.49.1](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.0...v3.49.1) (2026-09-14)
 
 ### Bug Fixes

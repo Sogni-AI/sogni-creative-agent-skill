@@ -499,6 +499,11 @@ sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end l
 sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --duration 8 "<three-field H3 prompt>"   # 2K: FastH3 Two-Stage, delivered at 2x the canvas
 sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --target-resolution 1080 --duration 8 "<three-field H3 prompt>"   # 1080p: 960x544 delivered at 1920x1088
 
+# MiniMax H3 FastH3 audio-to-video: your voice or song drives the clip and is its soundtrack
+sogni-agent --video -m minimax-h3-fasth3-ia2v-turbo --ref portrait.png --ref-audio voice.m4a --duration 8 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-flfa2v-turbo --ref first.png --ref-end last.png --ref-audio song.mp3 --duration 12 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-a2v-turbo --ref-audio song.mp3 --audio-start 30 --duration 15 "<three-field H3 prompt>"
+
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
 
@@ -513,6 +518,10 @@ sogni-agent --video --ref cover.jpg --ref-audio song.mp3 \
 
 # Pixal3D textured GLB from one original image (no prompt)
 sogni-agent --image-to-3d object.png --mesh-faces 30000 -o object.glb
+
+# Pixal3D multi-view: the front plus any of the subject's own left side, back and
+# right side (left view = its own left side faces the camera, so it faces screen-left)
+sogni-agent --image-to-3d front.png --left-view left.png --back-view back.png --right-view right.png -o object.glb
 
 # BiRefNet transparent PNG (add --matte for the soft mask)
 sogni-agent --remove-background original.png -o cutout.png
@@ -627,9 +636,11 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | ACE-Step music controls; for Music 3 put tempo/key in the prompt |
 | `--music -m music3` | MiniMax Music 3, 10–300s (60s default) |
 | `--speech`, `--speech-mode` | Qwen3-TTS voice, clone, or design |
-| `--image-to-3d <image>` | Pixal3D binary GLB from one original image |
+| `--image-to-3d <image>` | Pixal3D binary GLB from one original image (the front view in multi-view) |
+| `--left-view`, `--back-view`, `--right-view <image>` | Pixal3D multi-view orbit views, any subset, named by the subject's own sides: left = its own left side toward the camera (it faces screen-left), right = its own right side (it faces screen-right). Templates that label the subject's right side "left" build a model turned 180 degrees |
 | `--remove-background <image>`, `--matte` | BiRefNet transparent PNG or soft mask |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
+| `--audio-start <sec>` | Where the `--ref-audio` window begins; on FastH3 audio-to-video the window is the clip length (no `--audio-duration`) |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio; on MiniMax H3 FastH3 Two-Stage, the delivered size `720`, `1080`, or `2K` (default 2K) |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
@@ -714,6 +725,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; FastH3 has no R2V mode |
 | MiniMax H3 1080p or 2K video (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (infers the frame mode; 2K default, `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
+| MiniMax H3 video driven by your own voice or song (FastH3 audio-to-video) | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); `minimax-h3-fasth3-turbo` with `--ref-audio` picks the mode; add `-2stage` for Two-Stage; no LoRAs |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |

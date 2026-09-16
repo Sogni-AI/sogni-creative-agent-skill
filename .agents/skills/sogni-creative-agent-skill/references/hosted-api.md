@@ -325,7 +325,7 @@ hosted workflow + chat operations route through the SDK transport; the skill's
 
 ## Original-image utilities and speech
 
-The hosted tools accept the same `arguments` in direct tool execution and workflow steps:
+Submit these media tools as durable workflow steps (`toolName` and `arguments`) to `POST /v1/creative-agent/workflows`, or use hosted chat. The synchronous `/tools/execute` endpoint supports text composition only:
 
 | Tool | Inputs and controls | Output |
 | --- | --- | --- |

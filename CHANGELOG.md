@@ -1,4 +1,6 @@
-## [3.51.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.50.0...v3.51.0) (2026-09-15)
+## [3.51.1] - 2026-09-16
+
+Includes the integration prepared as 3.51.0 (unpublished) and the shared Ref2VA prompt repair.
 
 ### Features
 
@@ -8,7 +10,7 @@
 
 ### Bug Fixes
 
-* Keep GLB outputs typed as models through durable workflow and chat records. Update the bundled runtime and exact dependencies to SDK 5.51.0, intelligence client 4.2.1, and creative agent 2.3.1.
+* Keep GLB outputs typed as models through durable workflow and chat records. Update the bundled runtime and exact dependencies to SDK 5.51.0, intelligence client 4.2.1, and creative agent 2.3.2.
 
 ## [3.50.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.1...v3.50.0) (2026-09-14)
 

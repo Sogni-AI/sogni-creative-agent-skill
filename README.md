@@ -236,10 +236,10 @@ The same command can be added permanently from `goose configure` as a Command-li
 
 ### OpenClaw plugin
 
-The skill is published on ClawHub, so the simplest install is:
+The skill is published on ClawHub under `fishmongr`. Specify the publisher because more than one listing uses this skill name:
 
 ```bash
-openclaw skills install sogni-creative-agent-skill
+npx -y clawhub@latest install @fishmongr/sogni-creative-agent-skill
 ```
 
 To install as a code plugin instead, use OpenClaw's `npm:` source prefix (the npm package is scoped, so a bare `openclaw plugins install sogni-creative-agent-skill` will not resolve it):

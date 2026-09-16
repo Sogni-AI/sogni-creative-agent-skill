@@ -587,7 +587,7 @@ sogni-agent --api-workflow --ref https://cdn.example.com/sketch.png \
 # Exact durable workflow input
 sogni-agent --api-workflow --workflow-input @workflow.json
 
-# Storyline -> GPT Image 2 storyboard sheet -> Seedance video sequence
+# Storyline -> GPT Image 2.5 Sunburst storyboard sheet -> Seedance 2.5 1080p video
 sogni-agent --api-workflow storyboard-video --storyboard-frames 6 --duration 12 -Q hq \
   "Create a 9:16 bakery launch video with a neon street-window reveal"
 
@@ -884,7 +884,7 @@ Hosted API modes require `SOGNI_API_KEY`.
 - **`--durable-chat`** starts a hosted `/v1/chat/runs` record through the SDK transport. Set `SOGNI_SKILL_USE_SDK_TRANSPORT=1` before using it. The CLI streams assistant deltas and de-duplicated per-job progress / ETA / result lines from hosted run events.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Requests carry `input.steps` plus snake_case controls such as `token_type`, `media_references`, `max_estimated_capacity_units`, and `confirm_cost`.
 - **`--workflow-input`** forwards exact durable workflow JSON (`{ title?, steps: [...] }`). Use this when you need exact multi-step behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
-- **`--api-workflow storyboard-video`** generates a storyline, creates a single GPT Image 2 storyboard sheet, then passes that artifact into Seedance as the video reference. The `-Q fast|hq|pro` preset maps to GPT Image 2 low/medium/high quality for that storyboard sheet.
+- **`--api-workflow storyboard-video`** generates a storyline, creates a single storyboard sheet with GPT Image 2.5 Sunburst, then passes that artifact into Seedance 2.5 for 1080p video generation. The `-Q fast|hq|pro` preset maps to GPT Image low/medium/high quality for that storyboard sheet; explicit model and resolution choices still win.
 - **Media references** from `-c`, `--ref`, `--ref-end`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests. API chat also attaches image refs as vision inputs. Local file references are uploaded to Sogni media storage first, then forwarded as retrievable URLs so durable executors do not depend on `data:` URI support. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Use direct CLI mode for private media that must not leave the local machine.
 - **Cost controls** use `--workflow-max-cost <n>` to reject workflow starts above a capacity-unit ceiling, and `--confirm-cost` / `--no-confirm-cost` to forward explicit billing confirmation.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, `--cancel-workflow`, and `--resume-workflow`. Use `--workflow-input` to provide exact durable workflow JSON.
@@ -955,7 +955,7 @@ Plan pricing, included features and models, usage allowances, fair-use controls,
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not subscription-covered:** external-vendor models — **GPT Image 2** (`gpt-image-2`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast / Seedance 2.5** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`, `seedance-2-5`), **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`), **Wan 3** (`wan3.0-video`), and **Wan 3.0 Enhanced** (`wan3.0-spicy-video`). They never fall back to SOGNI. Wan 3.0 Enhanced may use its separate launch-credit ledger before PAYG; that credit does not make the model subscription-covered.
+- **Not subscription-covered:** external-vendor models — **GPT Image 2 / GPT Image 2.5 Sunburst / GPT Image 2.5 Flare** (`gpt-image-2`, `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Fast / Seedance 2.5** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-fast`, `seedance-2-5`), **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`), **Wan 3** (`wan3.0-video`), and **Wan 3.0 Enhanced** (`wan3.0-spicy-video`). They never fall back to SOGNI. Wan 3.0 Enhanced may use its separate launch-credit ledger before PAYG; that credit does not make the model subscription-covered.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 By default the CLI sends no `billingMode`/coverage hint; the server decides coverage from the account's verified entitlement and the resolved model, and a subscription claim is never honored without a server-verified entitlement. `--billing-mode` makes the choice explicit when you need it: `subscription` requires Unlimited coverage (the job fails instead of spending tokens), `tokens` opts out of coverage and bills Spark/SOGNI, and `auto` states the default server behavior explicitly.
@@ -1057,3 +1057,5 @@ Issues and feature requests: [github.com/Sogni-AI/sogni-creative-agent-skill/iss
 ## License
 
 [MIT](./LICENSE) © Sogni AI
+
+Personal LoRA imports and library management: read [Personal LoRAs](./references/personal-loras.md) for account-bound discovery, asynchronous import status, consent, compatible models, and rendering with owned adapters.

@@ -1,3 +1,15 @@
+## [3.51.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.50.0...v3.51.0) (2026-09-15)
+
+### Features
+
+* Manage the same Personal LoRA library as Sogni Web: list imports and supported models, import with confirmed rights, inspect asynchronous status, remove owned entries, and include ready personal adapters in model-filtered discovery. Generations preserve ordered strengths and use catalog defaults when no strength was selected.
+* Expose hosted background removal, object segmentation, and single/multi-view Pixal3D reconstruction alongside the existing direct CLI modes. Document speech cloning, output controls, and FastH3 Two-Stage selectors.
+* Use GPT Image 2.5 Sunburst and Seedance 2.5 at 1080p for new storyboard workflows; explicit existing model selections remain supported.
+
+### Bug Fixes
+
+* Keep GLB outputs typed as models through durable workflow and chat records. Update the bundled runtime and exact dependencies to SDK 5.51.0, intelligence client 4.2.1, and creative agent 2.3.1.
+
 ## [3.50.0](https://github.com/Sogni-AI/sogni-creative-agent-skill/compare/v3.49.1...v3.50.0) (2026-09-14)
 
 ### Features

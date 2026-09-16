@@ -127,7 +127,7 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   });
   assert.equal(compiled.stage, 'scene_clip');
   assert.match(compiled.prompt, /red sneaker|Product reveal/i);
-  assert.equal(compiled.args.videoModel, 'seedance2-mini');
+  assert.equal(compiled.args.videoModel, 'seedance2');
   assert.equal(compiled.args.expandPrompt, false);
 });
 
@@ -379,6 +379,8 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
       'Scene 2 - CTA - 2s-12s. Visual: clean logo end card with text Start baking. Action: light settles. Camera: locked hero frame. Audio/SFX: final chime.',
     ].join('\n'),
     userIntentText: 'Create a 12 second 9:16 GPT Image 2 storyboard video, then render with Seedance.',
+    imageModel: 'gpt-image-2',
+    videoModel: 'seedance2',
     frameCount: 2,
     videoTargetResolution: 720
   });
@@ -394,8 +396,9 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
   assert.match(plan.input.steps[0].arguments.prompt, /Overall storyboard canvas: 2128x1888 pixels \(9:8\)/);
   assert.equal(plan.input.steps[1].toolName, 'generate_video');
   assert.equal(plan.input.steps[1].arguments.videoModel, 'seedance2');
-  assert.equal(plan.input.steps[1].arguments.width, 720);
-  assert.equal(plan.input.steps[1].arguments.height, 1280);
+  assert.equal(plan.video.width, 720);
+  assert.equal(plan.video.height, 1280);
+  assert.equal(plan.input.steps[1].arguments.targetResolution, 720);
   assert.equal(plan.input.steps[1].arguments.numberOfVariations, 1);
   assert.equal(plan.input.steps[1].arguments.generateAudio, true);
   assert.equal(plan.input.steps[1].arguments.expandPrompt, false);
@@ -415,8 +418,9 @@ test('runtime builds GPT Image 2 storyboard to Seedance hosted sequence input', 
     frameCount: 2,
     videoTargetResolution: 480
   });
-  assert.equal(plan480.input.steps[1].arguments.width, 480);
-  assert.equal(plan480.input.steps[1].arguments.height, 848);
+  assert.equal(plan480.video.width, 480);
+  assert.equal(plan480.video.height, 848);
+  assert.equal(plan480.input.steps[1].arguments.targetResolution, 480);
 });
 
 test('runtime keeps inline visible text out of no-dialogue storyboard scenes', () => {

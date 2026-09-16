@@ -321,3 +321,19 @@ Override the API origin with `--api-base-url`, `SOGNI_API_BASE_URL`, or
 hosted workflow + chat operations route through the SDK transport; the skill's
 `sogni-hosted-client.mjs` factory still validates `restEndpoint` /
 `socketEndpoint` against the SSRF guard before constructing the SDK client.
+
+
+## Original-image utilities and speech
+
+The hosted tools accept the same `arguments` in direct tool execution and workflow steps:
+
+| Tool | Inputs and controls | Output |
+| --- | --- | --- |
+| `remove_background` | `sourceImageIndex` or `source_image_url`, `applyMask` (default true) | Transparent PNG; false returns mask |
+| `image_to_3d` | Front `sourceImageIndex`/`source_image_url`; optional `leftViewImageIndex`, `backViewImageIndex`, `rightViewImageIndex` or named `*_view_image_url` URLs; `meshTargetFaces`, `textureSize`, `normalMapSize`, `ambientOcclusionSize`, `shapeResolution` | Binary GLB with media type `model` |
+| `segment_image` | Original source; `text`, `points`, or `boxes`; `threshold`, `multimask`, `maxInstances`, `applyMask` | PNG mask or original-pixel cutout |
+| `generate_speech` | Literal `prompt`; `model=voice/clone/design`; `voice`, `voiceDescription`, `voiceSourceIndex`, `voiceTranscript`, `language`, `creativity`, `outputFormat`, `seed` | Spoken audio |
+
+Negative indices address uploads (-1 first); non-negative indices address generated results. 3D views are from the subject's perspective: left means the subject's own left side faces camera (subject faces screen-left), right means screen-right. Supply original images of the same subject at consistent height and framing; any subset of the three orbit views enables multi-view reconstruction. Keep the GLB in the model artifact lane, never feed it into an image tool.
+
+For two-stage Turbo H3, use explicit `minimax-h3-fasth3-*-turbo-2stage` selectors on the relevant video tool with `targetResolution`. Audio-guided IA2V/FLFA2V/A2V selectors belong on `sound_to_video` and require the uploaded audio plus their named endpoint images. They preserve the supplied audio and reject LoRAs. Other H3 modes discover personal LoRAs through the [authenticated catalog](personal-loras.md).

@@ -25,6 +25,7 @@ const referenceFiles = [
   'models.md',
   'object-selection.md',
   'personas-memory.md',
+  'personal-loras.md',
   'private-mature-video.md',
   'seamless-tiling.md',
   'video-editing.md',

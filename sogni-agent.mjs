@@ -3219,6 +3219,12 @@ const options = {
   loraCatalogQuery: null,
   loraCatalogModel: null, // restrict to LoRAs compatible with this model id
   loraCatalogCategory: null, // restrict to one catalog category
+  includePersonalLoras: false,
+  personalLoraAction: null,
+  personalLoraValue: null,
+  personalLoraName: null,
+  personalLoraModel: null,
+  personalLoraRightsConfirmed: false,
   apiReplayAction: null, // list|get|ingest
   apiReplayId: null,
   apiReplayInput: null,
@@ -4051,6 +4057,21 @@ for (let i = 0; i < args.length; i++) {
     const raw = requireFlagValue(args, i, arg);
     i++;
     options.liveModelTags.push(raw);
+  } else if (arg === '--list-personal-loras') {
+    if (options.personalLoraAction) fatalCliError('Choose one personal LoRA action.', { code: 'INVALID_ARGUMENT' });
+    options.personalLoraAction = 'list';
+  } else if ((arg === '--get-personal-lora' || arg === '--import-lora' || arg === '--remove-personal-lora')) {
+    if (options.personalLoraAction) fatalCliError('Choose one personal LoRA action.', { code: 'INVALID_ARGUMENT' });
+    options.personalLoraAction = { '--get-personal-lora': 'get', '--import-lora': 'import', '--remove-personal-lora': 'remove' }[arg];
+    options.personalLoraValue = requireFlagValue(args, i, arg);
+    i++;
+  } else if (arg === '--personal-lora-name' || arg === '--personal-lora-model') {
+    options[arg === '--personal-lora-name' ? 'personalLoraName' : 'personalLoraModel'] = requireFlagValue(args, i, arg);
+    i++;
+  } else if (arg === '--confirm-lora-rights') {
+    options.personalLoraRightsConfirmed = true;
+  } else if (arg === '--include-personal-loras') {
+    options.includePersonalLoras = true;
   } else if (arg === '--list-loras' || arg === '--loras-catalog') {
     options.loraCatalogAction = 'list';
     const next = args[i + 1];
@@ -4608,6 +4629,14 @@ General:
   --search-loras <q>    Search LoRAs by ID, name, category, or description
   --lora-catalog-model <id>  Only LoRAs compatible with that model id
   --lora-category <c>   Filter by catalog category, e.g. character or lighting
+  --include-personal-loras  Include your ready imports in --list-loras / --search-loras
+  --list-personal-loras List all your imports, statuses, supported models and limits
+  --get-personal-lora <id>  Read one import's current status and requirements
+  --import-lora <url>   Import a public Hugging Face or Civitai LoRA
+  --personal-lora-name <name>  Name for --import-lora
+  --personal-lora-model <id>   Base model for --import-lora (see --list-personal-loras)
+  --confirm-lora-rights Confirm permission to use the imported file on Sogni
+  --remove-personal-lora <id> Remove an entry from your library
   --doctor              Health check: Node, credentials, ffmpeg, auth, plan, config, version
   --snooze-update       Snooze the pending update reminder (1 day → 2 days → 1 week)
   --whats-new [version] Show bundled CHANGELOG entries (everything after <version> if given)
@@ -4713,7 +4742,7 @@ Seedance Video Model Selectors:
   seedance2-v2v                     Video-to-video without ControlNet
   seedance2-5                       Seedance 2.5 text-to-video (alias seedance2-5-t2v): 4-30s single clips,
                                      480p/720p/1080p (no 4K), MP4/MOV and last-frame export, native audio, first/last frame via
-                                     --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (30 total)
+                                     --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (50 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
 
@@ -4816,7 +4845,7 @@ Examples:
   sogni-agent --api-chat "Create a 4-shot product video concept for a red sneaker"
   sogni-agent --api-workflow --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
   sogni-agent --api-workflow --workflow-input @workflow.json
-  sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2 and Seedance"
+  sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "Create a 12s 9:16 bakery launch video with GPT Image 2.5 Sunburst and Seedance 2.5 at 1080p"
   sogni-agent --video -m ltx25 --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
   sogni-agent --video --last-image "gentle camera pan"
@@ -5299,7 +5328,7 @@ if (options.video && options.loras.length > 0) {
     // dropped server-side and rendering as if no LoRA had been asked for.
     let videoLoraCatalog;
     try {
-      videoLoraCatalog = await fetchLoraCatalog(options.model);
+      videoLoraCatalog = await fetchLoraCatalog(options.model, options.loras.some(id => id.startsWith('personal-')));
     } catch (cause) {
       fatalCliError(
         `Could not read the LoRA catalog for "${options.model}": ${cause?.message || cause}`,
@@ -5323,7 +5352,7 @@ if (options.video && options.loras.length > 0) {
           : isUnresolvedH3Alias
             ? 'Name an explicit H3 mode (for example -m minimax-h3-i2v); LoRA availability differs per mode.'
             : 'That model loads no LoRAs.') +
-        ' Run --list-loras --lora-model <id> for the live catalog.',
+        ' Run --list-loras --include-personal-loras --lora-catalog-model <id> for the live catalog.',
         { code: 'INVALID_ARGUMENT' }
       );
     }
@@ -5346,6 +5375,20 @@ if (options.video && options.loras.length > 0) {
         return Number.isFinite(entry?.default) ? entry.default : 1;
       });
     }
+  }
+}
+
+if (!options.video && options.loras.some(id => id.startsWith('personal-'))) {
+  try {
+    const catalog = await fetchLoraCatalog(options.model, true);
+    const entries = new Map(catalog.loras.map(loraCatalogEntryFromPayload).map(entry => [entry.loraId, entry]));
+    for (const id of options.loras.filter(id => id.startsWith('personal-'))) {
+      if (!entries.has(id)) fatalCliError(`Personal LoRA "${id}" is not ready or compatible with model "${options.model}". Run --list-personal-loras and --list-loras --include-personal-loras.`, { code: 'INVALID_ARGUMENT' });
+      if (entries.get(id).nsfw && !options.noFilter) fatalCliError(`Personal LoRA "${id}" requires --no-filter.`, { code: 'INVALID_ARGUMENT' });
+    }
+    if (options.loraStrengths.length === 0) options.loraStrengths = options.loras.map(id => entries.get(id)?.default ?? 1);
+  } catch (cause) {
+    fatalCliError(`Could not read your personal LoRA catalog: ${cause?.message || cause}`, { code: cause?.code || 'LORA_CATALOG_UNAVAILABLE' });
   }
 }
 
@@ -5920,7 +5963,7 @@ const apiWorkflowStartHasExternalInput = options.apiWorkflowAction === 'start' &
 const apiWorkflowTemplate = options.apiWorkflowTemplate || 'generated_keyframe_video';
 const apiModelUtilityAction = Boolean(options.apiModelAction);
 const liveModelUtilityAction = Boolean(options.liveModelAction);
-const loraCatalogUtilityAction = Boolean(options.loraCatalogAction);
+const loraCatalogUtilityAction = Boolean(options.loraCatalogAction || options.personalLoraAction);
 const apiReplayUtilityAction = Boolean(options.apiReplayAction);
 const personaUtilityAction = Boolean(options.personaAction && options.personaAction !== 'generate');
 const contractUtilityAction = Boolean(options.contractAction);
@@ -5963,10 +6006,19 @@ if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.live
     code: 'INVALID_ARGUMENT'
   });
 }
-if (!loraCatalogUtilityAction && (options.loraCatalogModel || options.loraCatalogCategory)) {
+if (!options.loraCatalogAction && (options.loraCatalogModel || options.loraCatalogCategory || options.includePersonalLoras)) {
   fatalCliError('--lora-catalog-model and --lora-category require --list-loras or --search-loras.', {
     code: 'INVALID_ARGUMENT'
   });
+}
+if (options.personalLoraAction && (options.prompt || options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.apiChat || options.apiWorkflowAction || options.loraCatalogAction || options.loras.length)) {
+  fatalCliError('Run personal LoRA management separately from generation or catalog discovery.', { code: 'INVALID_ARGUMENT' });
+}
+if (options.personalLoraAction === 'import' && (!options.personalLoraName || !options.personalLoraModel || !options.personalLoraRightsConfirmed)) {
+  fatalCliError('--import-lora requires --personal-lora-name, --personal-lora-model and --confirm-lora-rights.', { code: 'INVALID_ARGUMENT' });
+}
+if (options.personalLoraAction !== 'import' && (options.personalLoraName || options.personalLoraModel || options.personalLoraRightsConfirmed)) {
+  fatalCliError('Personal LoRA import options require --import-lora.', { code: 'INVALID_ARGUMENT' });
 }
 // Normalize a whitespace-only prompt to empty so the guard below treats it as
 // "no prompt" rather than silently sending blank text to the server.
@@ -8504,6 +8556,31 @@ function storyboardWorkflowImageQualityFromCli() {
   return 'medium';
 }
 
+function normalizeSeedance25StoryboardPlanDimensions(plan, targetResolution) {
+  if (!plan?.video || plan.video.model !== 'seedance2-5') return plan;
+  const videoStep = plan.input?.steps?.find((step) => step?.toolName === 'generate_video');
+  const ratioParts = String(plan.storyboardProject?.targetVideoAspectRatio || '')
+    .split(':')
+    .map(Number);
+  if (!Number.isFinite(targetResolution) || targetResolution <= 0 || ratioParts.length !== 2) return plan;
+  const [ratioWidth, ratioHeight] = ratioParts;
+  if (!Number.isFinite(ratioWidth) || !Number.isFinite(ratioHeight) || ratioWidth <= 0 || ratioHeight <= 0) return plan;
+  if (videoStep?.arguments) {
+    videoStep.arguments.targetResolution = targetResolution;
+    delete videoStep.arguments.width;
+    delete videoStep.arguments.height;
+  }
+  const roundEven = (value) => Math.round(value / 2) * 2;
+  if (ratioWidth >= ratioHeight) {
+    plan.video.width = roundEven(targetResolution * ratioWidth / ratioHeight);
+    plan.video.height = targetResolution;
+  } else {
+    plan.video.width = targetResolution;
+    plan.video.height = roundEven(targetResolution * ratioHeight / ratioWidth);
+  }
+  return plan;
+}
+
 function storyboardWorkflowInputFromParsedValue(parsed) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   if (Array.isArray(parsed.steps)) return parsed;
@@ -8519,8 +8596,13 @@ function storyboardWorkflowInputFromParsedValue(parsed) {
   const explicitCliVideoModel = options.videoModel
     || (cliSet.model && isSeedanceModelSelection(options.model) ? options.model : undefined);
   const explicitCliImageModel = cliSet.model && !isSeedanceModelSelection(options.model) ? options.model : undefined;
+  const storyboardVideoTargetResolution = Number.isFinite(parsed.videoTargetResolution)
+    ? parsed.videoTargetResolution
+    : cliSet.targetResolution && Number.isFinite(options.targetResolution)
+      ? options.targetResolution
+      : 1080;
 
-  return buildStoryboardVideoHostedToolSequenceInput({
+  return normalizeSeedance25StoryboardPlanDimensions(buildStoryboardVideoHostedToolSequenceInput({
     storyline,
     userIntentText: typeof parsed.userIntentText === 'string'
       ? parsed.userIntentText
@@ -8538,12 +8620,10 @@ function storyboardWorkflowInputFromParsedValue(parsed) {
       : cliSet.duration && Number.isFinite(options.duration)
         ? options.duration
         : undefined,
-    videoTargetResolution: Number.isFinite(parsed.videoTargetResolution)
-      ? parsed.videoTargetResolution
-      : cliSet.targetResolution && Number.isFinite(options.targetResolution)
-        ? options.targetResolution
-        : undefined,
-    imageModel: typeof parsed.imageModel === 'string' ? parsed.imageModel : explicitCliImageModel,
+    videoTargetResolution: storyboardVideoTargetResolution,
+    imageModel: typeof parsed.imageModel === 'string'
+      ? parsed.imageModel
+      : explicitCliImageModel ?? 'gpt-image-2.5-sunburst',
     imageQuality: typeof parsed.imageQuality === 'string'
       ? parsed.imageQuality
       : typeof parsed.gptImageQuality === 'string'
@@ -8556,15 +8636,17 @@ function storyboardWorkflowInputFromParsedValue(parsed) {
         : cliSet.outputFormat
           ? options.outputFormat
           : undefined,
-    videoModel: typeof parsed.videoModel === 'string' ? parsed.videoModel : explicitCliVideoModel,
+    videoModel: typeof parsed.videoModel === 'string'
+      ? parsed.videoModel
+      : explicitCliVideoModel ?? 'seedance2-5',
     generateAudio: typeof parsed.generateAudio === 'boolean' ? parsed.generateAudio : options.apiGenerateAudio ?? undefined,
-  });
+  }), storyboardVideoTargetResolution);
 }
 
 function buildStoryboardStorylineMessages() {
   const durationLine = cliSet.duration && Number.isFinite(options.duration)
     ? `Target duration: ${options.duration} seconds.`
-    : 'Target duration: infer a Seedance-safe duration between 4 and 15 seconds from the request.';
+    : 'Target duration: infer a Seedance 2.5-safe duration between 4 and 30 seconds from the request.';
   const frameLine = Number.isFinite(options.storyboardFrames)
     ? `Storyboard beat count: exactly ${options.storyboardFrames}.`
     : 'Storyboard beat count: infer a compact 4-8 beat plan unless the user asks otherwise.';
@@ -8572,13 +8654,13 @@ function buildStoryboardStorylineMessages() {
     ? `Video target short-side resolution: ${options.targetResolution}p.`
     : '';
   const system = [
-    'You write production-ready video storyboard storylines for a GPT Image 2 storyboard sheet that will be rendered into a Seedance 2.0 video.',
+    'You write production-ready video storyboard storylines for a GPT Image 2.5 Sunburst storyboard sheet that will be rendered into a Seedance 2.5 video at 1080p.',
     'Return only the storyline/script. Do not call tools, do not ask follow-up questions, and do not include markdown fences.',
     'Use this exact plain-text structure so downstream compilers can parse it: Project Title, Total Duration, then one SCENE NN - Title block per beat.',
     'Each scene block must put each field on its own line: TIME, PURPOSE, VISUAL, ACTION, CAMERA, LIGHTING/STYLE, TRANSITION, DIALOGUE/VO, AUDIO/SFX, MUSIC, VISIBLE TEXT.',
     'When there is no spoken dialogue or voiceover, write DIALOGUE/VO: [no dialogue]. Do not write None, N/A, or leave it blank.',
     'If the user requires exact visible text, repeat that exact text only in the relevant VISIBLE TEXT field and preserve spelling exactly.',
-    'Keep it concise enough for one GPT Image 2 storyboard image and one Seedance video prompt, while preserving cause-and-effect story progression.',
+    'Keep it concise enough for one GPT Image 2.5 Sunburst storyboard image and one Seedance 2.5 video prompt, while preserving cause-and-effect story progression.',
   ].join(' ');
   const user = [
     'Original user request:',
@@ -8646,19 +8728,22 @@ async function buildStoryboardVideoWorkflowInput(apiKey) {
   const explicitCliVideoModel = options.videoModel
     || (cliSet.model && isSeedanceModelSelection(options.model) ? options.model : undefined);
   const explicitCliImageModel = cliSet.model && !isSeedanceModelSelection(options.model) ? options.model : undefined;
-  const plan = buildStoryboardVideoHostedToolSequenceInput({
+  const storyboardVideoTargetResolution = cliSet.targetResolution && Number.isFinite(options.targetResolution)
+    ? options.targetResolution
+    : 1080;
+  const plan = normalizeSeedance25StoryboardPlanDimensions(buildStoryboardVideoHostedToolSequenceInput({
     storyline,
     userIntentText: options.prompt,
     title: options.apiWorkflowTitle,
     frameCount: options.storyboardFrames ?? undefined,
     videoDurationSec: cliSet.duration && Number.isFinite(options.duration) ? options.duration : undefined,
-    videoTargetResolution: cliSet.targetResolution && Number.isFinite(options.targetResolution) ? options.targetResolution : undefined,
-    imageModel: explicitCliImageModel,
+    videoTargetResolution: storyboardVideoTargetResolution,
+    imageModel: explicitCliImageModel ?? 'gpt-image-2.5-sunburst',
     imageQuality: storyboardWorkflowImageQualityFromCli(),
     imageOutputFormat: cliSet.outputFormat ? options.outputFormat : undefined,
-    videoModel: explicitCliVideoModel,
+    videoModel: explicitCliVideoModel ?? 'seedance2-5',
     generateAudio: options.apiGenerateAudio ?? undefined,
-  });
+  }), storyboardVideoTargetResolution);
   return { plan, planningRaw: raw };
 }
 
@@ -8911,7 +8996,7 @@ async function runLiveModels() {
 //
 // This path is deliberately socket-free and credential-free: the catalog is
 // public, so `--list-loras` answers without connecting a worker session.
-async function fetchLoraCatalog(modelId) {
+async function fetchPublicLoraCatalog(modelId) {
   const fixtureJson = getEnv('SOGNI_AGENT_TEST_LORA_CATALOG_JSON');
   if (fixtureJson) {
     const payload = JSON.parse(fixtureJson);
@@ -8975,6 +9060,43 @@ async function fetchLoraCatalog(modelId) {
   }
 }
 
+async function personalLoraRequest(path = '', init = {}) {
+  const apiKey = requireApiKeyCredentials(loadCredentials(), 'Personal LoRAs');
+  // Video preflight can run before the module's default timeout is initialized.
+  const payload = await fetchApiJson(`/v1/loras/personal${path}`, { ...init, apiKey, timeoutMs: 30000 });
+  if (payload?.status !== 'success' || !payload.data) throw new Error('Invalid personal LoRA response.');
+  return payload.data;
+}
+
+async function fetchLoraCatalog(modelId, includePersonal = false) {
+  const catalog = await fetchPublicLoraCatalog(modelId);
+  if (!includePersonal) return catalog;
+  const personal = await personalLoraRequest('/catalog');
+  if (!Array.isArray(personal.loras)) throw new Error('Invalid personal LoRA catalog.');
+  return {
+    ...catalog,
+    loras: [...catalog.loras, ...personal.loras.filter(row => !modelId || row.modelIds?.includes(modelId))],
+    models: [...new Set([...(catalog.models || []), ...personal.loras.flatMap(row => row.modelIds || [])])].sort()
+  };
+}
+
+async function runPersonalLoras() {
+  const action = options.personalLoraAction;
+  const id = options.personalLoraValue;
+  let data;
+  if (action === 'import') {
+    data = await personalLoraRequest('', { method: 'POST', body: {
+      url: id, name: options.personalLoraName, modelId: options.personalLoraModel,
+      rightsConfirmed: options.personalLoraRightsConfirmed
+    } });
+  } else if (action === 'remove') {
+    data = await personalLoraRequest(`/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } else {
+    data = await personalLoraRequest(action === 'get' ? `/${encodeURIComponent(id)}` : '');
+  }
+  console.log(JSON.stringify({ success: true, type: 'personal-loras', action, data }, null, options.json ? undefined : 2));
+}
+
 function loraCatalogEntryFromPayload(entry) {
   const ui = entry?.ui || {};
   return {
@@ -9020,7 +9142,7 @@ async function runLoraCatalog() {
 
   // The model filter is applied server-side by the catalog endpoint; category
   // and free-text search are presentation-layer narrowing over what it returns.
-  const catalog = await fetchLoraCatalog(modelFilter || undefined);
+  const catalog = await fetchLoraCatalog(modelFilter || undefined, options.includePersonalLoras);
   let loras = catalog.loras.map(loraCatalogEntryFromPayload).filter(entry => entry.loraId);
   if (categoryFilter) loras = loras.filter(entry => normalizeLiveModelTag(entry.category) === categoryFilter);
   if (normalizedQuery) {
@@ -12727,6 +12849,11 @@ async function main() {
 
     if (options.liveModelAction) {
       await runLiveModels();
+      return;
+    }
+
+    if (options.personalLoraAction) {
+      await runPersonalLoras();
       return;
     }
 

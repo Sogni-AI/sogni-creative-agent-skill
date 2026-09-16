@@ -27,6 +27,9 @@ const GATING_POLICIES = [
                 "edit_image",
                 "restore_photo",
                 "upscale_image",
+                "image_to_3d",
+                "remove_background",
+                "segment_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -63,6 +66,9 @@ const GATING_POLICIES = [
                 "edit_image",
                 "restore_photo",
                 "upscale_image",
+                "image_to_3d",
+                "remove_background",
+                "segment_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -98,6 +104,9 @@ const GATING_POLICIES = [
                 "edit_image",
                 "restore_photo",
                 "upscale_image",
+                "image_to_3d",
+                "remove_background",
+                "segment_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -134,6 +143,9 @@ const GATING_POLICIES = [
                 "edit_image",
                 "restore_photo",
                 "upscale_image",
+                "image_to_3d",
+                "remove_background",
+                "segment_image",
                 "apply_style",
                 "refine_result",
                 "animate_photo",
@@ -461,6 +473,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
     },
     {
+        "recipeId": "image_to_3d.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
+        "recipeId": "remove_background.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
+        "recipeId": "segment_image.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
         "recipeId": "apply_style.user_input_incomplete",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -650,6 +689,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
+        "recipeId": "image_to_3d.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
+        "recipeId": "remove_background.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
+        "recipeId": "segment_image.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
         "recipeId": "apply_style.cost_limit_exceeded",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -833,6 +899,33 @@ const REPAIR_RECIPES = [
         "recipeId": "upscale_image.asset_not_found",
         "version": "1.0.0",
         "toolName": "upscale_image",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "image_to_3d.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "remove_background.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "segment_image.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "segment_image",
         "errorCode": "ASSET_NOT_FOUND",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1055,6 +1148,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
     },
     {
+        "recipeId": "image_to_3d.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
+        "recipeId": "remove_background.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
+        "recipeId": "segment_image.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
         "recipeId": "apply_style.workflow_validation_failed",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -1244,6 +1364,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
     },
     {
+        "recipeId": "image_to_3d.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
+        "recipeId": "remove_background.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
+        "recipeId": "segment_image.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
         "recipeId": "apply_style.parameter_invalid",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -1409,6 +1556,33 @@ const REPAIR_RECIPES = [
         "recipeId": "upscale_image.gpu_worker_failed",
         "version": "1.0.0",
         "toolName": "upscale_image",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "image_to_3d.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "remove_background.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "segment_image.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "segment_image",
         "errorCode": "GPU_WORKER_FAILED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1589,6 +1763,33 @@ const REPAIR_RECIPES = [
         "recipeId": "upscale_image.model_unavailable",
         "version": "1.0.0",
         "toolName": "upscale_image",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
+        "recipeId": "image_to_3d.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
+        "recipeId": "remove_background.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
+        "recipeId": "segment_image.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "segment_image",
         "errorCode": "MODEL_UNAVAILABLE",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1778,6 +1979,33 @@ const REPAIR_RECIPES = [
         "recipeId": "upscale_image.permission_required",
         "version": "1.0.0",
         "toolName": "upscale_image",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "image_to_3d.permission_required",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "remove_background.permission_required",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "segment_image.permission_required",
+        "version": "1.0.0",
+        "toolName": "segment_image",
         "errorCode": "PERMISSION_REQUIRED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -2083,6 +2311,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
     },
     {
+        "recipeId": "image_to_3d.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
+        "recipeId": "remove_background.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
+        "recipeId": "segment_image.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
         "recipeId": "apply_style.provider_timeout",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -2272,6 +2527,33 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
     },
     {
+        "recipeId": "image_to_3d.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
+        "recipeId": "remove_background.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
+        "recipeId": "segment_image.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
         "recipeId": "apply_style.user_cancelled",
         "version": "1.0.0",
         "toolName": "apply_style",
@@ -2427,6 +2709,39 @@ const REPAIR_RECIPES = [
 ];
 const PROMPT_CONTRACTS = [
     {
+        "contractId": "image_to_3d_v1",
+        "version": "1.0.0",
+        "toolName": "image_to_3d",
+        "baseDescription": "Reconstruct a downloadable GLB from an original front image, optionally with left, back and right views of the same subject at consistent height and framing. Pass each view in its named slot; never invent views or substitute screenshots. Choose mesh and texture budgets for the intended use. The output is a 3D model, so do not send it to image or video tools.",
+        "parameterDocs": {
+            "sourceImageIndex": "Front view; negative indices select uploads.",
+            "leftViewImageIndex": "Subject own left side toward camera (subject faces screen-left).",
+            "backViewImageIndex": "Subject seen from behind.",
+            "rightViewImageIndex": "Subject own right side toward camera (subject faces screen-right)."
+        }
+    },
+    {
+        "contractId": "remove_background_v1",
+        "version": "1.0.0",
+        "toolName": "remove_background",
+        "baseDescription": "Use BiRefNet to remove an existing image background while preserving the original foreground. No prompt is needed. Return a transparent PNG by default, or an alpha mask when applyMask=false.",
+        "parameterDocs": {
+            "sourceImageIndex": "Original image to isolate.",
+            "applyMask": "Default true: transparent cutout; false: mask."
+        }
+    },
+    {
+        "contractId": "segment_image_v1",
+        "version": "1.0.0",
+        "toolName": "segment_image",
+        "baseDescription": "Select objects with SAM 3 using an object description, normalized original-image points, or boxes. Text can combine with boxes. Points can combine with at most one positive box and never with text. Output a binary mask by default or an original-pixel cutout with applyMask=true; do not repaint the source.",
+        "parameterDocs": {
+            "sourceImageIndex": "Original image to select from.",
+            "maxInstances": "Keep the strongest N selections (1–16).",
+            "applyMask": "True returns a cutout; false returns a mask."
+        }
+    },
+    {
         "contractId": "restore_photo_v1",
         "version": "1.0.0",
         "toolName": "restore_photo",
@@ -2535,7 +2850,7 @@ const PROMPT_CONTRACTS = [
         "contractId": "edit_image_v1",
         "version": "1.0.0",
         "toolName": "edit_image",
-        "baseDescription": "edit_image applies instruction-based edits to uploaded or generated images. Use when\nuploaded or reference images must guide identity or likeness.\n\nImage-to-Image prompt order: [IDENTITY LOCK] → [REQUESTED EDIT] → [REFERENCE ROLE\nMAPPING] → [POSE/COMPOSITION] → [STYLE] → [LIGHTING/REALISM] → [PRESERVE ALL\nUNMENTIONED DETAILS]. GOLDEN RULE: When editing a person, state which image owns\nidentity so it is not ambiguous. Describe only the DELTA — what changes. Don't\nrewrite the entire image; the base image already contains most of the truth. Default to minimal\nchange. For multi-image edits, assign one primary role per reference image (identity, pose,\noutfit, style, environment). Do not let a style/pose/clothing reference silently override the face.\nUse positive constraints — \"preserve exact facial likeness, face structure, eye shape, nose\nshape, mouth shape, jawline, skin tone, hairline, apparent age, and overall recognizability\"\n— not vague negatives like \"don't mess up the face\".\n\nKREA IDENTITY EDIT: Use model=\"krea-identity-edit\" whenever an edit of a referenced\nperson or character must keep likeness or character identity while changing clothing,\nhair or makeup, pose or position, face/head/body, background, lighting, or visual style.\nInfer that semantic intent in any language; never route from keyword or regex matching.\nAlso use it for a non-Pro single-character sheet. An explicitly requested model always\nwins. Use model=\"dark-beast-krea2-identity-edit\" only when the user explicitly requests\nthat model, its uncensored/community variant, or dark_beast_krea2_identity_edit_v1_2.\nThese models require one reference image, accept up to two context images, and work best\nat 512-2048 px. Let the model tier and worker choose current execution defaults, and do\nnot use negative prompts. Put the primary scene/base image first and an optional\nperson/detail reference second; reference them with context_image_0 and context_image_1\nwhen model_ref tokens are needed.\n\nKREA 2 IDENTITY EDIT PROMPTING: Use a concise 1-4 sentence delta instruction instead of\nthe generic 50-200 word expansion. Name the requested change and only the details that\nmust remain fixed; do not restate the whole image or dump a facial-feature inventory.\nWith two references, assign their roles compactly: base scene/image first, then the\nperson/detail/outfit/pose/style reference. Longer structured prompts remain appropriate\nfor character sheets, grids, editorial layouts, or exact visible text.\n\nUPLOADED IMAGE VARIANT SETS: When the user supplies a photo/portrait/reference image and\nasks for N distinct generated images deriving from that source while changing paired\nper-output details, prefer one edit_image call with sourceImageIndex=-1,\nnumberOfVariations=N, and ONE Dynamic Prompt branch with N complete options. Each option\nmust be a full concrete image prompt for one output, including the uploaded subject/reference\nanchor, requested pose or placement preservation, the specific changed appearance/style/role,\nclothing or surface details when relevant, setting/background, and any requested label text or\nvisual symbol. If one option is a remade original/preserved source and the rest are themed\nvariants, the original option should explicitly say to preserve the original clothing/wardrobe/outfit\nand background/setting, plus any requested added label, flag, logo, symbol, or prop.\nDo not call generate_image, analyze_image, or multiple serial edit_image calls first.\n\nSELECTION-GATED IMAGE STAGES: If the user asks for N image options and says they will pick\none before a later dance/video/animation, prefer one edit_image call with numberOfVariations=N\nand one Dynamic Prompt branch. After images are created, stop and ask the user to choose\nunless the user explicitly asked to run the later stage immediately.\n\nMULTI-PERSONA (COMBINED): When multiple personas must appear in the SAME scene, make\none edit_image call with all persona faces in one prompt and omit personaName.\nPer-persona splits (one call each with personaName set) are RARE — only when the user\nexplicitly asks for solo images of each person individually.\n\nSTORYBOARD IMAGE BATCH RULE: When rendering scene keyframes from a screenplay/storyboard,\nnumberOfVariations is only the count; the prompt should be one Dynamic Prompt branch with one\nfull keyframe prompt per scene:\n{scene 1 full keyframe prompt|scene 2 full keyframe prompt|...|scene N full keyframe prompt}.\nDo not set numberOfVariations=N with only the first scene prompt — that creates N versions of\nscene 1. For full project requests, one edit_image batch for all scene keyframes, then one\nanimate_photo batch for all video clips in parallel.\nException: if the storyboard/shot sheet is already uploaded and the user asks to make a\ntrailer/video/movie/clip from that uploaded board, do not extract panels or redraw keyframes.\nUse generate_video with Seedance references for one continuous clip unless the user explicitly\nasks for separate image keyframes or a storyboard sheet output.\n\nDIRECT UPLOADED GPT IMAGE 2 STORYBOARD SHEETS: If the user uploaded reference images and\nasks for one finished GPT Image 2 storyboard/keyframe sheet now, call edit_image directly\nwith sourceImageIndex=-1, model=\"gpt-image-2\", numberOfVariations=1, and the requested\ncanvas/aspect settings. If the user did not explicitly specify a storyboard page/canvas/sheet\nshape, default the GPT Image 2 storyboard sheet pixel dimensions to a balanced grid that hosts\nthe target cell aspect ratio natively (e.g., 12 cells with 9:16 portrait video target -> ~3:4\nportrait sheet around 1728x2304; 12 cells with 16:9 landscape video target -> ~4:3 landscape\nsheet around 2304x1728; 6 cells with 9:16 target -> ~27:32 portrait sheet around 1840x2176). Do\nNOT default the sheet to 2560x1440 landscape when cells are portrait — a landscape sheet with\na portrait-cell grid physically forces cells to ~4:3 landscape and the model will not render\n9:16 portrait rectangles inside it. Keep individual scene-cell/frame areas at the target video\naspect ratio. Do not call map_assets_for_model, analyze_image, generate_image, or a separate\nplanning tool first. The uploaded files are already available as references; describe their\nroles plainly in the edit_image prompt and generate the sheet in that call.\n\nDO NOT USE edit_image FOR UPLOADED REFERENCE LOOPED VIDEO SEGMENTS: If the user says the\nsame uploaded image/reference should be reused as the first frame and last frame of each\nscripted segment/scene/clip before stitching, they are explicitly asking to animate the\nuploaded image, not to generate new storyboard keyframes. Do not call edit_image for that\nrequest. Call animate_photo once with repeated uploaded source indices and per-scene prompts.",
+        "baseDescription": "edit_image applies instruction-based edits to uploaded or generated images. Use when\nuploaded or reference images must guide identity or likeness.\n\nImage-to-Image prompt order: [IDENTITY LOCK] → [REQUESTED EDIT] → [REFERENCE ROLE\nMAPPING] → [POSE/COMPOSITION] → [STYLE] → [LIGHTING/REALISM] → [PRESERVE ALL\nUNMENTIONED DETAILS]. GOLDEN RULE: When editing a person, state which image owns\nidentity so it is not ambiguous. Describe only the DELTA — what changes. Don't\nrewrite the entire image; the base image already contains most of the truth. Default to minimal\nchange. For multi-image edits, assign one primary role per reference image (identity, pose,\noutfit, style, environment). Do not let a style/pose/clothing reference silently override the face.\nUse positive constraints — \"preserve exact facial likeness, face structure, eye shape, nose\nshape, mouth shape, jawline, skin tone, hairline, apparent age, and overall recognizability\"\n— not vague negatives like \"don't mess up the face\".\n\nKREA IDENTITY EDIT: Use model=\"krea-identity-edit\" whenever an edit of a referenced\nperson or character must keep likeness or character identity while changing clothing,\nhair or makeup, pose or position, face/head/body, background, lighting, or visual style.\nInfer that semantic intent in any language; never route from keyword or regex matching.\nAlso use it for a non-Pro single-character sheet. An explicitly requested model always\nwins. Use model=\"dark-beast-krea2-identity-edit\" only when the user explicitly requests\nthat model, its uncensored/community variant, or dark_beast_krea2_identity_edit_v1_2.\nThese models require one reference image, accept up to two context images, and work best\nat 512-2048 px. Let the model tier and worker choose current execution defaults, and do\nnot use negative prompts. Put the primary scene/base image first and an optional\nperson/detail reference second; reference them with context_image_0 and context_image_1\nwhen model_ref tokens are needed.\n\nKREA 2 IDENTITY EDIT PROMPTING: Use a concise 1-4 sentence delta instruction instead of\nthe generic 50-200 word expansion. Name the requested change and only the details that\nmust remain fixed; do not restate the whole image or dump a facial-feature inventory.\nWith two references, assign their roles compactly: base scene/image first, then the\nperson/detail/outfit/pose/style reference. Longer structured prompts remain appropriate\nfor character sheets, grids, editorial layouts, or exact visible text.\n\nUPLOADED IMAGE VARIANT SETS: When the user supplies a photo/portrait/reference image and\nasks for N distinct generated images deriving from that source while changing paired\nper-output details, prefer one edit_image call with sourceImageIndex=-1,\nnumberOfVariations=N, and ONE Dynamic Prompt branch with N complete options. Each option\nmust be a full concrete image prompt for one output, including the uploaded subject/reference\nanchor, requested pose or placement preservation, the specific changed appearance/style/role,\nclothing or surface details when relevant, setting/background, and any requested label text or\nvisual symbol. If one option is a remade original/preserved source and the rest are themed\nvariants, the original option should explicitly say to preserve the original clothing/wardrobe/outfit\nand background/setting, plus any requested added label, flag, logo, symbol, or prop.\nDo not call generate_image, analyze_image, or multiple serial edit_image calls first.\n\nSELECTION-GATED IMAGE STAGES: If the user asks for N image options and says they will pick\none before a later dance/video/animation, prefer one edit_image call with numberOfVariations=N\nand one Dynamic Prompt branch. After images are created, stop and ask the user to choose\nunless the user explicitly asked to run the later stage immediately.\n\nMULTI-PERSONA (COMBINED): When multiple personas must appear in the SAME scene, make\none edit_image call with all persona faces in one prompt and omit personaName.\nPer-persona splits (one call each with personaName set) are RARE — only when the user\nexplicitly asks for solo images of each person individually.\n\nSTORYBOARD IMAGE BATCH RULE: When rendering scene keyframes from a screenplay/storyboard,\nnumberOfVariations is only the count; the prompt should be one Dynamic Prompt branch with one\nfull keyframe prompt per scene:\n{scene 1 full keyframe prompt|scene 2 full keyframe prompt|...|scene N full keyframe prompt}.\nDo not set numberOfVariations=N with only the first scene prompt — that creates N versions of\nscene 1. For full project requests, one edit_image batch for all scene keyframes, then one\nanimate_photo batch for all video clips in parallel.\nException: if the storyboard/shot sheet is already uploaded and the user asks to make a\ntrailer/video/movie/clip from that uploaded board, do not extract panels or redraw keyframes.\nUse generate_video with Seedance references for one continuous clip unless the user explicitly\nasks for separate image keyframes or a storyboard sheet output.\n\nDIRECT UPLOADED GPT IMAGE STORYBOARD SHEETS: If the user uploaded reference images and\nasks for one finished GPT Image storyboard/keyframe sheet now, call edit_image directly\nwith sourceImageIndex=-1, model=\"gpt-image-2.5-sunburst\", numberOfVariations=1, and the requested\ncanvas/aspect settings. Preserve another explicit GPT Image model named by the user.\nIf the user did not explicitly specify a storyboard page/canvas/sheet\nshape, default the GPT Image 2.5 storyboard sheet pixel dimensions to a balanced grid that hosts\nthe target cell aspect ratio natively (e.g., 12 cells with 9:16 portrait video target -> ~3:4\nportrait sheet around 1728x2304; 12 cells with 16:9 landscape video target -> ~4:3 landscape\nsheet around 2304x1728; 6 cells with 9:16 target -> ~27:32 portrait sheet around 1840x2176). Do\nNOT default the sheet to 2560x1440 landscape when cells are portrait — a landscape sheet with\na portrait-cell grid physically forces cells to ~4:3 landscape and the model will not render\n9:16 portrait rectangles inside it. Keep individual scene-cell/frame areas at the target video\naspect ratio. Do not call map_assets_for_model, analyze_image, generate_image, or a separate\nplanning tool first. The uploaded files are already available as references; describe their\nroles plainly in the edit_image prompt and generate the sheet in that call.\n\nDO NOT USE edit_image FOR UPLOADED REFERENCE LOOPED VIDEO SEGMENTS: If the user says the\nsame uploaded image/reference should be reused as the first frame and last frame of each\nscripted segment/scene/clip before stitching, they are explicitly asking to animate the\nuploaded image, not to generate new storyboard keyframes. Do not call edit_image for that\nrequest. Call animate_photo once with repeated uploaded source indices and per-scene prompts.",
         "parameterDocs": {
             "sourceImageIndex": "Index of uploaded/generated image. Use -1 for the first uploaded image.",
             "numberOfVariations": "Number of output variants. When > 1, use a Dynamic Prompt branch with one complete prompt per output.",
@@ -2546,7 +2861,7 @@ const PROMPT_CONTRACTS = [
         "contractId": "generate_image_v1",
         "version": "1.1.0",
         "toolName": "generate_image",
-        "baseDescription": "generate_image creates images from text descriptions. Use for text-only image generation;\nuse edit_image when uploaded or reference images must guide identity/likeness.\nException: Z-image, Z-image Turbo, and Krea 2 Turbo image-to-image/enhancement requests\nuse generate_image with model=\"z-turbo\", model=\"z-image\", or model=\"krea-2-turbo\",\nsourceImageIndex=-1, and starting_image_strength; do not route explicit base-model\nZ-image Turbo or Krea 2 Turbo uploaded-image enhancement to edit_image because edit_image\ndoes not expose those base image-to-image models.\n\nMODEL CHOICE: If the user asks for Krea 2 Turbo, choose model=\"krea-2-turbo\". If they ask\nfor Dark Beast Krea 2, choose model=\"dark-beast-krea2\". If they ask for Dark Beast Z-Image\nTurbo, choose model=\"dark-beast-z-turbo\". If they ask for Chroma 1 HD, choose model=\"chroma1-hd\".\nIf they ask for anime or anime-style output without naming a model, choose model=\"one-obsession-v22\".\nBase Z-image and Krea 2 Turbo image-to-image/enhancement requests stay on generate_image with\nsourceImageIndex and starting_image_strength; identity-preserving Krea edits with reference\nphotos use edit_image instead.\n\nBATCH FAN-OUT DEFAULT (READ BEFORE ANYTHING ELSE BELOW):\nWhen the user explicitly asks for N images in the CURRENT turn, set numberOfVariations=N\nin one call. Avoid multiple serial generate_image calls unless the user explicitly wants\nindependent projects, isolated approvals, or per-output settings that cannot share one project.\nDo not omit numberOfVariations and try to \"generate the next one after this finishes\".\nTrigger phrasings:\n\"draw N\", \"make N\", \"give me N\", \"show me N\", \"render N\", \"create N\", \"generate N\",\n\"N more\", \"another N\", \"N as separate\", \"N separate images\", \"N different images\",\n\"N options\", \"N takes\", \"N versions\", \"N variations\", \"N pictures of\",\n\"all at the same time\", \"in parallel\", \"side by side as separate\".\n\nTHE PRIOR TURN DOES NOT ANCHOR THE CURRENT TURN. If the prior assistant turn used\nnumberOfVariations=1 with a composite \"N subjects in one image\" prompt, and the user\nnow says \"draw N more as separate images\" / \"as separate\" / \"separately\", DO NOT carry\nover numberOfVariations=1 from the prior call. The user is correcting that interpretation;\nset numberOfVariations=N for THIS call with one self-contained prompt per image via {|}\nDynamic Prompt branches. The new turn's count + separation language always wins over the\nprevious turn's pattern.\n\nWHEN BATCH FAN-OUT DOES NOT APPLY: numberOfVariations=1 with multiple subjects packed into\nONE prompt is correct only when the user clearly wants a SINGLE composite image (e.g.\n\"draw 2 goats in a meadow\" with no separation language, or explicit \"in one image\" / \"one\npicture of N\" / \"single image\" / \"composite\" / \"sheet\" / \"side-by-side composition\").\n\nIMAGE PROMPT ORDER: [SUBJECT] → [ATTRIBUTES] → [ACTION/POSE] → [CAMERA/FRAMING]\n→ [ENVIRONMENT] → [LIGHTING] → [STYLE/MEDIUM] → [MATERIALS/TEXTURES] →\n[SECONDARY DETAILS]. By default, start with the main subject and concrete observable\nattributes; use mood or atmosphere first only when the user explicitly asks for that shape.\nUse concrete nouns and observable adjectives — \"soft overcast daylight\" not \"nice lighting\".\nGood defaults when user is underspecified: medium shot for portraits, wide shot for\nenvironments, eye-level angle, soft natural light for realism.\n\nDYNAMIC PROMPTS: When numberOfVariations > 1, use Dynamic Prompt syntax to make each\nvariation meaningfully different — not just seed-different. Syntax: {a|b|c} cycles\nsequentially, {@a|b|c} picks randomly, {~a|b} paired cycling across groups. Rules: (1) Vary\nONLY what the user left unspecified — lock in everything they specified. (2) Match option\ncount to numberOfVariations so every result is unique. (3) Briefly tell the user what you're\nvarying without exposing raw {|} syntax unless the user asks to inspect the prompt.\n(4) Skip when: user wants consistency, prompt is fully\nspecified, user typed their own {|} syntax, or iterating on a specific result. (5) Do not put\nthe count or the word \"versions\"/\"variations\" inside the prompt — the prompt always describes\na single image. The multiplicity comes ONLY from numberOfVariations + the {|} syntax.\nLINKED VARIANTS: when multiple attributes must stay paired per result, use ONE top-level\nDynamic Prompt branch with one complete self-contained prompt per output. Do NOT split\nlinked fields into separate Dynamic Prompt groups. Treat every batch-wide requirement\nquantified as \"each\", \"every\", or \"all\" as a hard per-option invariant: repeat it inside\nEVERY option, including identity/pose continuity, clothing/style, the concrete setting, and\nliteral visible names, labels, captions, flags, logos, or symbols. A shared prefix or another\noption is never a substitute for a complete standalone option.\nEach option must name its actual styling, setting, accessories, and requested literal text or\nsymbol. Never emit meta-placeholders such as \"variant-specific background\", \"requested\nsymbol\", \"humorous alternate name\", or \"bake the name and symbol into the image\".\nWhen one option remakes/preserves an original and the others are themed variants, make the\noriginal option equally concrete: specify the original clothing and setting plus every\nrequested label, flag, logo, symbol, or prop; do not write only \"the original\".\n\nSELECTION-GATED IMAGE STAGES: If the user asks for N image options and says they will pick\none before a later dance/video/animation, call generate_image once with numberOfVariations=N.\nAfter images are created, stop and ask the user to choose unless the user explicitly asked\nto run the later stage immediately.\n\nIMAGE→VIDEO DIMENSION RULE: When generating an image that will feed into a video tool\n(animate_photo, sound_to_video, etc.), the image MUST be generated at the SAME aspect\nratio and dimensions as the target video. Default video aspect ratio is 16:9 landscape —\npass aspectRatio=\"16:9\" (or the user's specified/reference ratio) so the source image\nmatches the video output. Do not generate a square image for a widescreen video. Exception:\na composite GPT Image 2 storyboard/keyframe sheet for a later Seedance video is a board,\nnot a single source frame; unless the user explicitly specifies a storyboard page/canvas/sheet\nshape, default the sheet image dimensions to a balanced grid that hosts the target\nscene-cell/frame aspect natively (portrait video target -> portrait or square sheet whose\ncolumns x rows grid produces ~9:16 cells; landscape video target -> landscape sheet whose\nrows x columns grid produces ~16:9 cells). Each scene-cell/frame area preserves the target\nvideo aspect ratio.\n\nSTORYBOARD IMAGE BATCH RULE: When rendering scene keyframes from a screenplay/storyboard,\nnumberOfVariations is only the count; the prompt should be one Dynamic Prompt branch with one\nfull keyframe prompt per scene:\n{scene 1 full keyframe prompt|scene 2 full keyframe prompt|...|scene N full keyframe prompt}.\nDo not set numberOfVariations=N with only the first scene prompt — that creates N versions of\nscene 1. For full project requests, one generate_image batch for all scene keyframes, then\none animate_photo batch for all video clips in parallel.\n\nSTORYTELLING / BRAND / SOCIAL IMAGE PROMPTS: If generating a storyboard, ad concept,\ntrailer sheet, meme, creator post, or provocative social concept, make the first frame or\npanel immediately legible. Preserve the user's requested tone and audience. Use concrete\ncomposition, persona, product/brand role, caption placement, readable required text, and a\nclear visual transformation or punchline. For provocative adult social content, keep subjects\nclearly adult and consensual, PG-13/non-explicit, and avoid minor-coded styling or school-coded\nsettings while still optimizing visual magnet, persona, caption bait, and replay/comment value.\n\nGPT IMAGE 2 STORYBOARD SHEET → SEEDANCE AUTO-PROCEED: If the user asks to run the whole\nGPT Image 2 storyboard/keyframe sheet plus Seedance workflow without approval, the FIRST\ngenerate_image call must create ONE composite storyboard/keyframe sheet, not loose concept\nart and not separate keyframes. Use model=\"gpt-image-2\", numberOfVariations=1, and a\ncompiled storyboard prompt that literally includes: \"Create exactly N sequential video\nstoryboard frames as one composite storyboard image\", \"Target final video aspect ratio: X\",\na `SCENES:` section, and exactly N concrete scene entries named `SCENE_01`, `SCENE_02`,\netc. Each scene entry must include `Visual/Action:`, `Camera/Motion:`, `Dialogue/VO:`\n(use `[no dialogue]` when silent), `Audio/SFX:`, and any reference/visible-text notes\nneeded for that scene. Do not send only a source brief, storyboard concept, or generic\nlayout instructions as the prompt; malformed compiled storyboard prompts are blocked by\nquality audit instead of being repaired at runtime. If the user does not explicitly specify\na frame count, choose N with the shared storyboard density default: at least one key visual\nbeat about every 2 seconds, rounded up and clamped to 6-16 total storyboard frames\n(for example, a 60 second commercial defaults to N=16). Unless the user explicitly specifies another\nstoryboard page/canvas/sheet shape, default the GPT Image 2 storyboard sheet pixel dimensions\nto a balanced grid that hosts the target cell aspect natively: for a 9:16 portrait video,\npick a portrait-leaning sheet whose columns x rows grid produces ~9:16 cells (e.g., 12 cells\n-> ~3:4 sheet around 1728x2304, 6 cells -> ~27:32 around 1840x2176, 9 cells -> ~9:16 around\n1504x2672); for a 16:9 landscape video, pick a landscape sheet whose rows x columns grid\nproduces ~16:9 cells (e.g., 12 cells -> ~4:3 sheet around 2304x1728). Do not force landscape\n2560x1440 when cells are portrait — a landscape sheet with a portrait-cell grid cannot host\n9:16 cells without crushing them. Preserve the requested final video aspect ratio for every\nframe area. After\nthat image completes, call generate_video once using the generated storyboard board as\n@Image1/referenceImageIndices=[0], with skipPromptProcessing=false only when the user\nexplicitly wants the storyboard text rewritten; otherwise preserve the compiled shot guide\nand use skipPromptProcessing=true, expandPrompt=false.\n\nDO NOT USE generate_image FOR UPLOADED REFERENCE LOOPED VIDEO SEGMENTS: If the user says\nthe same uploaded image/reference should be reused as the first frame and last frame of each\nscripted segment/scene/clip before stitching, they are explicitly asking to animate the\nuploaded image, not to generate new storyboard keyframes. Do not call generate_image for\nthat request. Call animate_photo once with repeated uploaded source indices and per-scene\nprompts.\n\nREUSING RESULTS: When the user asks to redo, retry, or revise (e.g., \"try a new version\",\n\"redo the video with X\"), reuse the existing source images — do NOT regenerate them unless\nthe user explicitly asks for new images or describes changes to the images themselves.\nReference the existing result indices from the prior generation. If unsure whether the user\nwants new images, ask — don't regenerate by default.",
+        "baseDescription": "generate_image creates images from text descriptions. Use for text-only image generation;\nuse edit_image when uploaded or reference images must guide identity/likeness.\nException: Z-image, Z-image Turbo, and Krea 2 Turbo image-to-image/enhancement requests\nuse generate_image with model=\"z-turbo\", model=\"z-image\", or model=\"krea-2-turbo\",\nsourceImageIndex=-1, and starting_image_strength; do not route explicit base-model\nZ-image Turbo or Krea 2 Turbo uploaded-image enhancement to edit_image because edit_image\ndoes not expose those base image-to-image models.\n\nMODEL CHOICE: If the user asks for Krea 2 Turbo, choose model=\"krea-2-turbo\". If they ask\nfor Dark Beast Krea 2, choose model=\"dark-beast-krea2\". If they ask for Dark Beast Z-Image\nTurbo, choose model=\"dark-beast-z-turbo\". If they ask for Chroma 1 HD, choose model=\"chroma1-hd\".\nIf they ask for anime or anime-style output without naming a model, choose model=\"one-obsession-v22\".\nBase Z-image and Krea 2 Turbo image-to-image/enhancement requests stay on generate_image with\nsourceImageIndex and starting_image_strength; identity-preserving Krea edits with reference\nphotos use edit_image instead.\n\nBATCH FAN-OUT DEFAULT (READ BEFORE ANYTHING ELSE BELOW):\nWhen the user explicitly asks for N images in the CURRENT turn, set numberOfVariations=N\nin one call. Avoid multiple serial generate_image calls unless the user explicitly wants\nindependent projects, isolated approvals, or per-output settings that cannot share one project.\nDo not omit numberOfVariations and try to \"generate the next one after this finishes\".\nTrigger phrasings:\n\"draw N\", \"make N\", \"give me N\", \"show me N\", \"render N\", \"create N\", \"generate N\",\n\"N more\", \"another N\", \"N as separate\", \"N separate images\", \"N different images\",\n\"N options\", \"N takes\", \"N versions\", \"N variations\", \"N pictures of\",\n\"all at the same time\", \"in parallel\", \"side by side as separate\".\n\nTHE PRIOR TURN DOES NOT ANCHOR THE CURRENT TURN. If the prior assistant turn used\nnumberOfVariations=1 with a composite \"N subjects in one image\" prompt, and the user\nnow says \"draw N more as separate images\" / \"as separate\" / \"separately\", DO NOT carry\nover numberOfVariations=1 from the prior call. The user is correcting that interpretation;\nset numberOfVariations=N for THIS call with one self-contained prompt per image via {|}\nDynamic Prompt branches. The new turn's count + separation language always wins over the\nprevious turn's pattern.\n\nWHEN BATCH FAN-OUT DOES NOT APPLY: numberOfVariations=1 with multiple subjects packed into\nONE prompt is correct only when the user clearly wants a SINGLE composite image (e.g.\n\"draw 2 goats in a meadow\" with no separation language, or explicit \"in one image\" / \"one\npicture of N\" / \"single image\" / \"composite\" / \"sheet\" / \"side-by-side composition\").\n\nIMAGE PROMPT ORDER: [SUBJECT] → [ATTRIBUTES] → [ACTION/POSE] → [CAMERA/FRAMING]\n→ [ENVIRONMENT] → [LIGHTING] → [STYLE/MEDIUM] → [MATERIALS/TEXTURES] →\n[SECONDARY DETAILS]. By default, start with the main subject and concrete observable\nattributes; use mood or atmosphere first only when the user explicitly asks for that shape.\nUse concrete nouns and observable adjectives — \"soft overcast daylight\" not \"nice lighting\".\nGood defaults when user is underspecified: medium shot for portraits, wide shot for\nenvironments, eye-level angle, soft natural light for realism.\n\nDYNAMIC PROMPTS: When numberOfVariations > 1, use Dynamic Prompt syntax to make each\nvariation meaningfully different — not just seed-different. Syntax: {a|b|c} cycles\nsequentially, {@a|b|c} picks randomly, {~a|b} paired cycling across groups. Rules: (1) Vary\nONLY what the user left unspecified — lock in everything they specified. (2) Match option\ncount to numberOfVariations so every result is unique. (3) Briefly tell the user what you're\nvarying without exposing raw {|} syntax unless the user asks to inspect the prompt.\n(4) Skip when: user wants consistency, prompt is fully\nspecified, user typed their own {|} syntax, or iterating on a specific result. (5) Do not put\nthe count or the word \"versions\"/\"variations\" inside the prompt — the prompt always describes\na single image. The multiplicity comes ONLY from numberOfVariations + the {|} syntax.\nLINKED VARIANTS: when multiple attributes must stay paired per result, use ONE top-level\nDynamic Prompt branch with one complete self-contained prompt per output. Do NOT split\nlinked fields into separate Dynamic Prompt groups. Treat every batch-wide requirement\nquantified as \"each\", \"every\", or \"all\" as a hard per-option invariant: repeat it inside\nEVERY option, including identity/pose continuity, clothing/style, the concrete setting, and\nliteral visible names, labels, captions, flags, logos, or symbols. A shared prefix or another\noption is never a substitute for a complete standalone option.\nEach option must name its actual styling, setting, accessories, and requested literal text or\nsymbol. Never emit meta-placeholders such as \"variant-specific background\", \"requested\nsymbol\", \"humorous alternate name\", or \"bake the name and symbol into the image\".\nWhen one option remakes/preserves an original and the others are themed variants, make the\noriginal option equally concrete: specify the original clothing and setting plus every\nrequested label, flag, logo, symbol, or prop; do not write only \"the original\".\n\nSELECTION-GATED IMAGE STAGES: If the user asks for N image options and says they will pick\none before a later dance/video/animation, call generate_image once with numberOfVariations=N.\nAfter images are created, stop and ask the user to choose unless the user explicitly asked\nto run the later stage immediately.\n\nIMAGE→VIDEO DIMENSION RULE: When generating an image that will feed into a video tool\n(animate_photo, sound_to_video, etc.), the image MUST be generated at the SAME aspect\nratio and dimensions as the target video. Default video aspect ratio is 16:9 landscape —\npass aspectRatio=\"16:9\" (or the user's specified/reference ratio) so the source image\nmatches the video output. Do not generate a square image for a widescreen video. Exception:\na composite GPT Image 2 storyboard/keyframe sheet for a later Seedance video is a board,\nnot a single source frame; unless the user explicitly specifies a storyboard page/canvas/sheet\nshape, default the sheet image dimensions to a balanced grid that hosts the target\nscene-cell/frame aspect natively (portrait video target -> portrait or square sheet whose\ncolumns x rows grid produces ~9:16 cells; landscape video target -> landscape sheet whose\nrows x columns grid produces ~16:9 cells). Each scene-cell/frame area preserves the target\nvideo aspect ratio.\n\nSTORYBOARD IMAGE BATCH RULE: When rendering scene keyframes from a screenplay/storyboard,\nnumberOfVariations is only the count; the prompt should be one Dynamic Prompt branch with one\nfull keyframe prompt per scene:\n{scene 1 full keyframe prompt|scene 2 full keyframe prompt|...|scene N full keyframe prompt}.\nDo not set numberOfVariations=N with only the first scene prompt — that creates N versions of\nscene 1. For full project requests, one generate_image batch for all scene keyframes, then\none animate_photo batch for all video clips in parallel.\n\nSTORYTELLING / BRAND / SOCIAL IMAGE PROMPTS: If generating a storyboard, ad concept,\ntrailer sheet, meme, creator post, or provocative social concept, make the first frame or\npanel immediately legible. Preserve the user's requested tone and audience. Use concrete\ncomposition, persona, product/brand role, caption placement, readable required text, and a\nclear visual transformation or punchline. For provocative adult social content, keep subjects\nclearly adult and consensual, PG-13/non-explicit, and avoid minor-coded styling or school-coded\nsettings while still optimizing visual magnet, persona, caption bait, and replay/comment value.\n\nGPT IMAGE STORYBOARD SHEET → SEEDANCE AUTO-PROCEED: If the user asks to run the whole\nGPT Image storyboard/keyframe sheet plus Seedance workflow without approval, the FIRST\ngenerate_image call must create ONE composite storyboard/keyframe sheet, not loose concept\nart and not separate keyframes. Default to model=\"gpt-image-2.5-sunburst\" and preserve another\nexplicit GPT Image model named by the user. Use numberOfVariations=1 and a\ncompiled storyboard prompt that literally includes: \"Create exactly N sequential video\nstoryboard frames as one composite storyboard image\", \"Target final video aspect ratio: X\",\na `SCENES:` section, and exactly N concrete scene entries named `SCENE_01`, `SCENE_02`,\netc. Each scene entry must include `Visual/Action:`, `Camera/Motion:`, `Dialogue/VO:`\n(use `[no dialogue]` when silent), `Audio/SFX:`, and any reference/visible-text notes\nneeded for that scene. Do not send only a source brief, storyboard concept, or generic\nlayout instructions as the prompt; malformed compiled storyboard prompts are blocked by\nquality audit instead of being repaired at runtime. If the user does not explicitly specify\na frame count, choose N with the shared storyboard density default: at least one key visual\nbeat about every 2 seconds, rounded up and clamped to 6-16 total storyboard frames\n(for example, a 60 second commercial defaults to N=16). Unless the user explicitly specifies another\nstoryboard page/canvas/sheet shape, default the GPT Image 2 storyboard sheet pixel dimensions\nto a balanced grid that hosts the target cell aspect natively: for a 9:16 portrait video,\npick a portrait-leaning sheet whose columns x rows grid produces ~9:16 cells (e.g., 12 cells\n-> ~3:4 sheet around 1728x2304, 6 cells -> ~27:32 around 1840x2176, 9 cells -> ~9:16 around\n1504x2672); for a 16:9 landscape video, pick a landscape sheet whose rows x columns grid\nproduces ~16:9 cells (e.g., 12 cells -> ~4:3 sheet around 2304x1728). Do not force landscape\n2560x1440 when cells are portrait — a landscape sheet with a portrait-cell grid cannot host\n9:16 cells without crushing them. Preserve the requested final video aspect ratio for every\nframe area. After\nthat image completes, call generate_video once using the generated storyboard board as\n@Image1/referenceImageIndices=[0], with skipPromptProcessing=false only when the user\nexplicitly wants the storyboard text rewritten; otherwise preserve the compiled shot guide\nand use skipPromptProcessing=true, expandPrompt=false.\n\nDO NOT USE generate_image FOR UPLOADED REFERENCE LOOPED VIDEO SEGMENTS: If the user says\nthe same uploaded image/reference should be reused as the first frame and last frame of each\nscripted segment/scene/clip before stitching, they are explicitly asking to animate the\nuploaded image, not to generate new storyboard keyframes. Do not call generate_image for\nthat request. Call animate_photo once with repeated uploaded source indices and per-scene\nprompts.\n\nREUSING RESULTS: When the user asks to redo, retry, or revise (e.g., \"try a new version\",\n\"redo the video with X\"), reuse the existing source images — do NOT regenerate them unless\nthe user explicitly asks for new images or describes changes to the images themselves.\nReference the existing result indices from the prior generation. If unsure whether the user\nwants new images, ask — don't regenerate by default.",
         "parameterDocs": {
             "prompt": "Text description. Put the subject first. Use Dynamic Prompt syntax when numberOfVariations > 1.",
             "numberOfVariations": "Number of distinct outputs. Use Dynamic Prompt {|} syntax to vary one attribute per image. Never put the count in the prompt itself.",

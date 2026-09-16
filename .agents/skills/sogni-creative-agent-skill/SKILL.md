@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.50.0"
+  version: "3.51.0"
   author: Sogni AI
   hermes:
     category: creative
@@ -160,3 +160,5 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
   eligibility and prompting rules.
 
 Where a reference says `sogni-agent`, substitute `sogni-agent-hermes`.
+
+Personal LoRA imports and library management: read [Personal LoRAs](./references/personal-loras.md) for account-bound discovery, asynchronous import status, consent, compatible models, and rendering with owned adapters.

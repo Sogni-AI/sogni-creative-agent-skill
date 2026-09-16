@@ -139,6 +139,17 @@ async function withTestApiServer(fn, { durableEvents = [] } = {}) {
 
       res.setHeader('Content-Type', 'application/json');
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
+      if (requestUrl.pathname.startsWith('/v1/loras/personal')) {
+        const row = { id: 'personal-test', name: 'My style', status: 'ready', modelId: 'minimax-h3-fl2va-fp8_t2v', modelIds: ['minimax-h3-fl2va-fp8_t2v', 'krea2_turbo_fp8_scaled'], requirements: [] };
+        const data = requestUrl.pathname.endsWith('/catalog')
+          ? { loras: [{ loraId: row.id, name: row.name, modelIds: row.modelIds, ui: { category: 'personal', min: 0, max: 0.8, default: 0.8, nsfw: true } }] }
+          : req.method === 'DELETE' ? {}
+          : req.method === 'POST' ? { ...row, status: 'queued' }
+          : requestUrl.pathname === '/v1/loras/personal' ? { loras: [row], models: row.modelIds, limits: { entries: 20, fileBytes: null } }
+          : row;
+        res.end(JSON.stringify({ status: 'success', data }));
+        return;
+      }
       if (requestUrl.pathname === '/v1/account/me' && req.method === 'GET') {
         res.end(JSON.stringify({ status: 'success', data: { username: 'test-user' } }));
         return;
@@ -5325,7 +5336,7 @@ test('--api-workflow applies workflow title to generated durable input', async (
   });
 });
 
-test('--api-workflow storyboard-video generates storyline and starts GPT Image 2 to Seedance sequence', async () => {
+test('--api-workflow storyboard-video defaults to GPT Image 2.5 Sunburst and Seedance 2.5 at 1080p', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([
       '--api-workflow', 'storyboard-video',
@@ -5336,7 +5347,7 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
       '--duration', '12',
       '--workflow-title', 'Neon bakery storyboard',
       '--workflow-idempotency-key', 'idem-storyboard-123',
-      'Create a 12 second 9:16 bakery launch video with GPT Image 2 and Seedance.'
+      'Create a 12 second 9:16 bakery launch video.'
     ], {
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
@@ -5346,11 +5357,11 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.success, true);
     assert.equal(payload.storyboardPlan.frameCount, 3);
-    assert.equal(payload.storyboardPlan.image.model, 'gpt-image-2');
+    assert.equal(payload.storyboardPlan.image.model, 'gpt-image-2.5-sunburst');
     assert.equal(payload.storyboardPlan.image.quality, 'low');
-    assert.equal(payload.storyboardPlan.video.model, 'seedance2');
-    assert.equal(payload.storyboardPlan.video.width, 720);
-    assert.equal(payload.storyboardPlan.video.height, 1280);
+    assert.equal(payload.storyboardPlan.video.model, 'seedance2-5');
+    assert.equal(payload.storyboardPlan.video.width, 1080);
+    assert.equal(payload.storyboardPlan.video.height, 1920);
     assert.equal(payload.storyboardPlan.video.duration, 12);
     assert.match(payload.storyline, /Neon Bakery Launch/);
 
@@ -5369,7 +5380,7 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
 
     const [imageStep, videoStep] = requests[1].body.input.steps;
     assert.equal(imageStep.toolName, 'generate_image');
-    assert.equal(imageStep.arguments.model, 'gpt-image-2');
+    assert.equal(imageStep.arguments.model, 'gpt-image-2.5-sunburst');
     assert.equal(imageStep.arguments.gptImageQuality, 'low');
     assert.equal(imageStep.arguments.outputFormat, 'png');
     assert.equal(imageStep.arguments.numberOfVariations, 1);
@@ -5380,7 +5391,8 @@ test('--api-workflow storyboard-video generates storyline and starts GPT Image 2
     assert.match(imageStep.arguments.prompt, /Target final video aspect ratio: 9:16/);
 
     assert.equal(videoStep.toolName, 'generate_video');
-    assert.equal(videoStep.arguments.videoModel, 'seedance2');
+    assert.equal(videoStep.arguments.videoModel, 'seedance2-5');
+    assert.equal(videoStep.arguments.targetResolution, 1080);
     assert.equal(videoStep.arguments.expandPrompt, false);
     assert.equal(videoStep.arguments.generateAudio, true);
     assert.equal(videoStep.arguments.numberOfVariations, 1);
@@ -7782,5 +7794,73 @@ test('Qwen speech batch downloads every result to a distinct local file', async 
     const paths = JSON.parse(result.stdout).localPaths;
     assert.deepEqual(paths, [output, output.replace('.wav', '-2.wav')]);
     for (const path of paths) assert.deepEqual(readFileSync(path), bytes);
+  });
+});
+
+
+test('personal LoRA management uses authenticated REST and preserves the import consent', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const env = { SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' };
+    for (const flags of [
+      ['--list-personal-loras'],
+      ['--get-personal-lora', 'personal-test'],
+      ['--import-lora', 'https://huggingface.co/author/model/resolve/main/style.safetensors', '--personal-lora-name', 'My style', '--personal-lora-model', 'krea2_turbo_fp8_scaled', '--confirm-lora-rights'],
+      ['--remove-personal-lora', 'personal-test'],
+    ]) {
+      const result = await runCliAsync([...flags, '--api-base-url', apiBaseUrl], env);
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).success, true);
+    }
+    const calls = requests.filter(r => r.url.startsWith('/v1/loras/personal'));
+    assert.deepEqual(calls.map(r => r.method), ['GET', 'GET', 'POST', 'DELETE']);
+    assert.ok(calls.every(r => r.headers.authorization === 'Bearer test-api-key' || r.headers['api-key'] === 'test-api-key'));
+    assert.deepEqual(calls[2].body, { url: 'https://huggingface.co/author/model/resolve/main/style.safetensors', name: 'My style', modelId: 'krea2_turbo_fp8_scaled', rightsConfirmed: true });
+  });
+});
+
+test('personal LoRA import requires explicit rights confirmation before sending a request', () => {
+  const result = runCli(['--import-lora', 'https://huggingface.co/author/model/resolve/main/style.safetensors', '--personal-lora-name', 'My style', '--personal-lora-model', 'krea2_turbo_fp8_scaled']);
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /confirm-lora-rights/);
+});
+
+test('personal video LoRAs use authenticated catalog compatibility and default strengths', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const env = { ...H3_LORA_ENV, SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' };
+    const result = await runCliAsync(['--video', '-m', 'minimax-h3-t2v', '--lora', 'personal-test', '--no-filter', '--api-base-url', apiBaseUrl, 'a slow push-in'], env);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(result.state.lastVideoProject.loras, ['personal-test']);
+    assert.deepEqual(result.state.lastVideoProject.loraStrengths, [0.8]);
+    assert.ok(requests.some(r => r.url === '/v1/loras/personal/catalog'));
+    const incompatible = await runCliAsync(['--video', '--ref', SCREENSHOT_FIXTURE, '-m', 'minimax-h3-i2v', '--lora', 'personal-test', '--no-filter', '--api-base-url', apiBaseUrl, 'a slow push-in'], env);
+    assert.notEqual(incompatible.exitCode, 0);
+    assert.match(incompatible.stderr, /not published for model/);
+  });
+});
+
+test('personal catalog discovery is opt-in and merges model-filtered public results', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const env = { ...H3_LORA_ENV, SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' };
+    const publicOnly = await runCliAsync(['--list-loras', '--api-base-url', apiBaseUrl], env);
+    assert.equal(publicOnly.exitCode, 0, publicOnly.stderr);
+    assert.equal(requests.filter(r => r.url.includes('/loras/personal')).length, 0);
+    const combined = await runCliAsync(['--list-loras', '--include-personal-loras', '--api-base-url', apiBaseUrl], env);
+    assert.equal(combined.exitCode, 0, combined.stderr);
+    assert.match(combined.stdout, /personal-test/);
+    assert.match(combined.stdout, /h3-realism-people/);
+  });
+});
+
+
+test('personal image LoRAs use library defaults and require the requested model', async () => {
+  await withTestApiServer(async (apiBaseUrl) => {
+    const env = { ...H3_LORA_ENV, SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' };
+    const result = await runCliAsync(['-m', 'krea2_turbo_fp8_scaled', '--lora', 'personal-test', '--no-filter', '--api-base-url', apiBaseUrl, 'a glass cube'], env);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(result.state.lastImageProject.loras, ['personal-test']);
+    assert.deepEqual(result.state.lastImageProject.loraStrengths, [0.8]);
+    const incompatible = await runCliAsync(['-m', 'z_image_turbo_bf16', '--lora', 'personal-test', '--no-filter', '--api-base-url', apiBaseUrl, 'a glass cube'], env);
+    assert.notEqual(incompatible.exitCode, 0);
+    assert.match(incompatible.stderr, /not ready or compatible/);
   });
 });

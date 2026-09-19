@@ -1,3 +1,9 @@
+## [3.52.1] - 2026-09-19
+
+### Bug Fixes
+
+* Keep an aspect ratio stated in the prompt (for example "a 9:16 portrait shot") when `--target-resolution` sets the size. It used to render landscape at that size on every video model, including the MiniMax H3 Two-Stage selectors at 720 and 1080, and square on Seedance 2.5; it now renders portrait at the requested size (FastH3 Two-Stage 1080: 544x960).
+
 ## [3.52.0] - 2026-09-19
 
 ### Features

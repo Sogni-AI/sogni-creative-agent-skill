@@ -1,1 +1,1 @@
-export const PACKAGE_VERSION = '3.52.0';
+export const PACKAGE_VERSION = '3.52.1';

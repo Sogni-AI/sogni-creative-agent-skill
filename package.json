@@ -1,6 +1,6 @@
 {
   "name": "@sogni-ai/sogni-creative-agent-skill",
-  "version": "3.51.1",
+  "version": "3.52.0",
   "description": "Sogni Creative Agent Skill: agent skill and CLI for Sogni AI image, 3D, speech, video, and music generation.",
   "type": "module",
   "main": "sogni-agent.mjs",
@@ -100,13 +100,13 @@
     "media-utilities.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "4.2.1",
+    "@sogni-ai/sogni-intelligence-client": "4.3.2",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.51.0"
+    "@sogni-ai/sogni-client": "5.53.1"
   },
   "openclaw": {
     "extensions": [

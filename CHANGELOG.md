@@ -1,3 +1,13 @@
+## [3.52.0] - 2026-09-19
+
+### Features
+
+* Add MiniMax H3 Two-Stage Reference to Video: `-m minimax-h3-r2v-2stage` (Standard, 20 steps) and `-m minimax-h3-r2v-balanced-2stage` (Balanced, 8 steps) take the same loose `--ref`/`-c` images and repeatable `--ref-video`/`--ref-audio` references as `minimax-h3-r2v` and `minimax-h3-r2v-balanced`, and deliver twice the canvas with the same length and audio. `--target-resolution` picks the delivered size like the FastH3 Two-Stage selectors: 720 (672x384 canvas), 1080 (960x544) or 2K (1344x768 canvas delivering 2688x1536, the default). 1080p and 2K render at the 768p canvas and FastH3 refines the enlargement. `--estimate-video-cost` quotes the `_2stage` id on that canvas, and `--json` reports the delivered size.
+
+### Bug Fixes
+
+* Update the bundled runtime and exact dependencies to SDK 5.53.1, intelligence client 4.3.2 and creative agent 2.4.11. Generations whose request was sent on a connection that dropped before Sogni received it are now resent once after the reconnect instead of failing with "The server has no record of this generation", and hosted agents are told when to use the Reference Two-Stage selectors.
+
 ## [3.51.1] - 2026-09-16
 
 Includes the integration prepared as 3.51.0 (unpublished) and the shared Ref2VA prompt repair.

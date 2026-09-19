@@ -8047,3 +8047,19 @@ test('personal image LoRAs use library defaults and require the requested model'
     assert.match(incompatible.stderr, /not ready or compatible/);
   });
 });
+
+test('a prompt-stated aspect keeps its orientation when --target-resolution sets the size', () => {
+  const prompt = 'A 9:16 portrait shot. A dancer spins.';
+  for (const { args, width, height } of [
+    { args: ['-m', 'minimax-h3-fasth3-t2v-turbo-2stage', '--target-resolution', '1080'], width: 544, height: 960 },
+    { args: ['-m', 'minimax-h3-fasth3-t2v-turbo-2stage', '--target-resolution', '720'], width: 384, height: 672 },
+    { args: ['-m', 'minimax-h3-r2v-2stage', '-c', SCREENSHOT_FIXTURE, '--target-resolution', '1080'], width: 544, height: 960 },
+    { args: ['-m', 'minimax-h3-fasth3-t2v-turbo', '--target-resolution', '544'], width: 544, height: 960 },
+    { args: ['-m', 'ltx25-t2v', '--target-resolution', '720'], width: 704, height: 1280 },
+  ]) {
+    const run = runCli(['--video', ...args, args.includes('-c') ? `${prompt} Use <Picture 1>.` : prompt]);
+    assert.equal(run.exitCode, 0, run.stderr);
+    const project = run.state.lastVideoProject;
+    assert.deepEqual([project.width, project.height], [width, height], args.join(' '));
+  }
+});

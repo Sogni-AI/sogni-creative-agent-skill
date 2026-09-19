@@ -1050,7 +1050,10 @@ function applyCreativeBrainPreflight() {
     widthFromPrompt = true;
     heightFromPrompt = true;
   }
-  if (plan.dimensionSource === 'aspect' && plan.aspectRatio && !cliSet.width && !cliSet.height) {
+  // The planner reports a stated aspect even when --target-resolution keeps it
+  // from sizing the canvas itself (dimensionSource stays unset then). The aspect
+  // still decides orientation at that size; only exact prompt pixels override it.
+  if (plan.dimensionSource !== 'exact' && plan.aspectRatio && !cliSet.width && !cliSet.height) {
     aspectRatioFromPrompt = plan.aspectRatio;
   }
   if (

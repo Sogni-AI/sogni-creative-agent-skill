@@ -127,7 +127,8 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   `-m minimax-h3-fasth3-turbo-2stage` (or `minimax-h3-fasth3-t2v-turbo-2stage`,
   `minimax-h3-fasth3-i2v-turbo-2stage`, `minimax-h3-fasth3-flf2v-turbo-2stage`)
   renders FastH3 on a half-size canvas and delivers the clip at exactly twice
-  it with the same length and audio; no other H3 tier delivers above 768p.
+  it with the same length and audio; apart from Ref2VA Two-Stage (below), no
+  other H3 tier delivers above 768p.
   `--target-resolution` names the delivered size: `2K` (or `1440`, the default)
   renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
   renders 672×384 → 1344×768, in the prompt's or reference's aspect; any other
@@ -137,6 +138,16 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   when the user asks for 1080p, 1440p or 2K H3 output, two-stage, or the
   sharpest H3 output; ordinary 768p stays on the regular FastH3 selectors. The
   prompt contract is FastH3's.
+- **1080p and 2K reference-to-video is Ref2VA Two-Stage.**
+  `-m minimax-h3-r2v-2stage` (Standard, 20 steps) and
+  `-m minimax-h3-r2v-balanced-2stage` (Balanced, 8 steps) take exactly the
+  references, limits, durations, LoRAs and six-field Ref2VA prompt contract of
+  `minimax-h3-r2v` / `minimax-h3-r2v-balanced`, render the half-size canvas and
+  deliver twice it. `--target-resolution` reads as above (2K default, `1080`,
+  `720`); a reference image never sets the canvas aspect. Each bills its
+  tier's reference rate plus the two-stage surcharge of the delivered class;
+  quote it with `--estimate-video-cost`. Keep ordinary 768p reference video on
+  the one-stage R2V selectors.
 - **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.

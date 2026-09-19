@@ -2372,6 +2372,8 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_i2v_balanced', 'i2v'],
   ['minimax-h3-fl2va-fp8_flf2v_balanced', 'flf2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v'],
+  ['minimax-h3-ref2va-fp8_r2v_2stage', 'r2v'],
+  ['minimax-h3-ref2va-fp8_r2v_balanced_2stage', 'r2v'],
   ['minimax-h3-fastvideo-int8_t2v_turbo', 't2v'],
   ['minimax-h3-fastvideo-int8_i2v_turbo', 'i2v'],
   ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v'],
@@ -2453,6 +2455,14 @@ const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
 const MINIMAX_H3_R2V_TURBO_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_turbo';
 const MINIMAX_H3_R2V_BALANCED_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced';
+// Ref2VA Two-Stage: the Standard (20-step) or Balanced (8-step) R2V request on
+// its own id, rendered on the FastH3 Two-Stage canvas (384, 544 or 768 px short
+// edge) and delivered at exactly twice it. Never Turbo; references, durations
+// and LoRAs are its one-stage tier's.
+const MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_2stage';
+const MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced_2stage';
+const MINIMAX_H3_R2V_SELECTOR_HINT = 'Reference-to-video is -m minimax-h3-r2v, -r2v-balanced or -r2v-turbo; '
+  + 'for 1080p or 2K use -m minimax-h3-r2v-2stage or minimax-h3-r2v-balanced-2stage.';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
   videos: 3,
@@ -2558,7 +2568,8 @@ function resolveSkillVideoModelAlias(
     if (workflow === 'r2v') {
       fatalCliError('MiniMax H3 FastH3 Turbo has no r2v workflow.', {
         code: 'INVALID_ARGUMENT',
-        details: { model: modelId, workflow }
+        details: { model: modelId, workflow },
+        hint: MINIMAX_H3_R2V_SELECTOR_HINT
       });
     }
     if (workflow === 'i2v') {
@@ -2590,7 +2601,8 @@ function resolveSkillVideoModelAlias(
     if (workflow === 'r2v') {
       fatalCliError('MiniMax H3 FastH3 Two-Stage has no r2v workflow.', {
         code: 'INVALID_ARGUMENT',
-        details: { model: modelId, workflow }
+        details: { model: modelId, workflow },
+        hint: MINIMAX_H3_R2V_SELECTOR_HINT
       });
     }
     if (workflow === 'i2v') {
@@ -2638,6 +2650,8 @@ function resolveSkillVideoModelAlias(
   if (normalized === 'minimax-h3-r2v-balanced') {
     return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
   }
+  if (normalized === 'minimax-h3-r2v-2stage') return MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID;
+  if (normalized === 'minimax-h3-r2v-balanced-2stage') return MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
@@ -2672,7 +2686,10 @@ const MINIMAX_H3_TWO_STAGE_CANVAS_MODE = Object.freeze({ ia2v: 'i2v', flfa2v: 'f
  */
 function miniMaxH3TwoStageCanvas(modelId, deliveredClass, sourceWidth, sourceHeight, aspectRatio) {
   const mode = miniMaxH3ModeFromModelId(modelId);
-  const selector = `minimax-h3-fasth3-${MINIMAX_H3_TWO_STAGE_CANVAS_MODE[mode] || mode}-turbo-2stage`;
+  // Ref2VA Two-Stage has its own size table entries with the same 384/544/768 canvases.
+  const selector = mode === 'r2v'
+    ? miniMaxH3R2vTwoStageSelector(modelId)
+    : `minimax-h3-fasth3-${MINIMAX_H3_TWO_STAGE_CANVAS_MODE[mode] || mode}-turbo-2stage`;
   return calculateSharedVideoDimensions(sourceWidth, sourceHeight, deliveredClass, selector, aspectRatio || undefined);
 }
 
@@ -2692,7 +2709,17 @@ function isMiniMaxH3R2vModel(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
   return normalized === MINIMAX_H3_R2V_MODEL_ID
     || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
-    || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID;
+    || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
+}
+
+// The Intelligence Client selector for a Ref2VA Two-Stage selector or id.
+function miniMaxH3R2vTwoStageSelector(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === 'minimax-h3-r2v-balanced-2stage' || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
+    ? 'minimax-h3-r2v-balanced-2stage'
+    : 'minimax-h3-r2v-2stage';
 }
 
 function isMiniMaxH3R2vTurboSelectionLocal(modelId, workflow = null) {
@@ -2754,6 +2781,8 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-i2v-balanced'
     || normalized === 'minimax-h3-flf2v-balanced'
     || normalized === 'minimax-h3-r2v-balanced'
+    || normalized === 'minimax-h3-r2v-2stage'
+    || normalized === 'minimax-h3-r2v-balanced-2stage'
     || isMiniMaxH3Model(normalized);
 }
 
@@ -2796,6 +2825,8 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-i2v-balanced') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
   if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
+  if (normalized === 'minimax-h3-r2v-2stage') return 'r2v';
+  if (normalized === 'minimax-h3-r2v-balanced-2stage') return 'r2v';
   if (MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)) {
     return MINIMAX_H3_MODEL_MODES.get(MINIMAX_H3_AUDIO_GUIDE_SELECTORS.get(normalized));
   }
@@ -4508,7 +4539,7 @@ Video Options:
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
   --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080).
-                         MiniMax H3 FastH3 Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
+                         MiniMax H3 FastH3 and Ref2VA Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
                          rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
@@ -4768,6 +4799,10 @@ state negatives in the structured prompt.):
   minimax-h3-i2v-balanced           Balanced I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-balanced         Balanced first-frame -> last-frame (--ref plus --ref-end)
   minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references
+  minimax-h3-r2v-2stage             Ref2VA Two-Stage: the minimax-h3-r2v request (20 steps), delivered at twice the
+                                     canvas, 2K by default (1344x768 -> 2688x1536); --target-resolution 1080 or 720
+  minimax-h3-r2v-balanced-2stage    Balanced Ref2VA Two-Stage: the minimax-h3-r2v-balanced request (8 steps),
+                                     delivered at twice the canvas like minimax-h3-r2v-2stage
   minimax-h3-turbo                  4-step LightX2V Turbo; --ref selects I2VA, --ref-end L2VA, and both FL2VA
   minimax-h3-t2v-turbo              4-step LightX2V Turbo text-to-video
   minimax-h3-i2v-turbo              4-step LightX2V Turbo I2VA (--ref) or L2VA (--ref-end)
@@ -5511,7 +5546,9 @@ if (options.video) {
   }
 
   // Standard, Balanced, and LightX2V Turbo each have four concrete worker
-  // selectors; FastH3 has three and deliberately has no r2v. The FL2VA and
+  // selectors (Standard and Balanced r2v also have a two-stage id, picked only
+  // by its own minimax-h3-r2v[-balanced]-2stage selector); FastH3 has three and
+  // deliberately has no r2v. The FL2VA and
   // FastVideo checkpoints cover t2v, first-frame i2v, last-frame-only
   // l2v, and first/last-frame (represented by the CLI's i2v workflow); Ref2VA
   // is a separate r2v checkpoint and is never inferred from loose references.
@@ -5780,15 +5817,18 @@ if (options.music) {
       options.steps = videoQuality.steps;
     }
   }
-  // MiniMax H3 FastH3 Two-Stage: --target-resolution names the delivered class
-  // (720, 1080, or 1440/2K; omitted is 2K) and the canvas is half of it, from the
-  // Intelligence Client's size table. Anything else is refused, never guessed.
+  // MiniMax H3 Two-Stage (FastH3 and Ref2VA): --target-resolution names the
+  // delivered class (720, 1080, or 1440/2K; omitted is 2K) and the canvas is half
+  // of it, from the Intelligence Client's size table. Anything else is refused,
+  // never guessed.
   const isTwoStageVideo = isMiniMaxH3TwoStageModel(options.model);
   if (cliSet.targetResolution2K && !isTwoStageVideo) {
-    fatalCliError(`--target-resolution 2K is the MiniMax H3 FastH3 Two-Stage delivered size; ${options.model} takes a short side in pixels.`, {
+    fatalCliError(`--target-resolution 2K is the MiniMax H3 Two-Stage delivered size; ${options.model} takes a short side in pixels.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--target-resolution', value: '2K', model: options.model },
-      hint: 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
+      hint: isMiniMaxH3R2vModel(options.model)
+        ? 'Use -m minimax-h3-r2v-2stage (or minimax-h3-r2v-balanced-2stage) for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
+        : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
     });
   }
   const hasExplicitVideoCanvas = cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt;
@@ -5800,7 +5840,7 @@ if (options.music) {
       fatalCliError(`${error.message}.`, {
         code: 'INVALID_ARGUMENT',
         details: { flag: '--target-resolution', value: requestedClass, model: options.model },
-        hint: 'MiniMax H3 FastH3 Two-Stage --target-resolution is the delivered size: 720, 1080, or 2K (1440). Omit it for 2K.'
+        hint: 'MiniMax H3 Two-Stage --target-resolution is the delivered size: 720, 1080, or 2K (1440). Omit it for 2K.'
       });
     }
     options._miniMaxH3TwoStageClass = requestedClass;
@@ -13934,8 +13974,9 @@ async function main() {
       if (isMiniMaxH3TwoStageModel(options.model) && !options.quiet) {
         // Two-stage renders this canvas and delivers twice it: same frames and audio.
         const delivered = minimaxH3TwoStageDeliveredSize(projectConfig.width, projectConfig.height);
+        const twoStageLabel = isMiniMaxH3R2vModel(options.model) ? 'Ref2VA Two-Stage' : 'FastH3 Two-Stage';
         console.error(
-          `MiniMax H3 FastH3 Two-Stage: delivered at ${delivered.width}x${delivered.height} ` +
+          `MiniMax H3 ${twoStageLabel}: delivered at ${delivered.width}x${delivered.height} ` +
           `(twice the ${projectConfig.width}x${projectConfig.height} canvas), same length and audio.`
         );
       }

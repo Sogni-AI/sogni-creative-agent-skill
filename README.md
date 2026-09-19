@@ -482,7 +482,7 @@ sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
 sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png \
   -c wardrobe.png "Keep the endpoint frames and use Image 1 for wardrobe detail"
 
-# MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, FastH3 Turbo, and FastH3 Two-Stage (1080p/2K) video
+# MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, FastH3 Turbo, and FastH3 and Ref2VA Two-Stage (1080p/2K) video
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png \
@@ -498,6 +498,8 @@ sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --duration 8 "<three-field H3 prompt>"   # 2K: FastH3 Two-Stage, delivered at 2x the canvas
 sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --target-resolution 1080 --duration 8 "<three-field H3 prompt>"   # 1080p: 960x544 delivered at 1920x1088
+sogni-agent --video -m minimax-h3-r2v-2stage --ref identity.png -c wardrobe.png "<six-field Ref2VA prompt>"   # 2K Ref2VA Two-Stage (20 steps)
+sogni-agent --video -m minimax-h3-r2v-balanced-2stage --target-resolution 1080 --ref identity.png "<six-field Ref2VA prompt>"   # 1080p Balanced Ref2VA Two-Stage (8 steps)
 
 # MiniMax H3 FastH3 audio-to-video: your voice or song drives the clip and is its soundtrack
 sogni-agent --video -m minimax-h3-fasth3-ia2v-turbo --ref portrait.png --ref-audio voice.m4a --duration 8 "<I2V preamble plus three-field H3 prompt>"
@@ -641,7 +643,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--remove-background <image>`, `--matte` | BiRefNet transparent PNG or soft mask |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
 | `--audio-start <sec>` | Where the `--ref-audio` window begins; on FastH3 audio-to-video the window is the clip length (no `--audio-duration`) |
-| `--target-resolution <px>` | Target the short side, preserving aspect ratio; on MiniMax H3 FastH3 Two-Stage, the delivered size `720`, `1080`, or `2K` (default 2K) |
+| `--target-resolution <px>` | Target the short side, preserving aspect ratio; on MiniMax H3 FastH3 and Ref2VA Two-Stage, the delivered size `720`, `1080`, or `2K` (default 2K) |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
 | `--expand-prompt`, `--no-expand-prompt` | Enable provider prompt expansion for direct Wan 3 video, or preserve the exact submitted prompt |
@@ -725,6 +727,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; FastH3 has no R2V mode |
 | MiniMax H3 1080p or 2K video (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (infers the frame mode; 2K default, `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-2stage` (Standard, 20 steps) or `minimax-h3-r2v-balanced-2stage` (Balanced, 8 steps): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by your own voice or song (FastH3 audio-to-video) | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); `minimax-h3-fasth3-turbo` with `--ref-audio` picks the mode; add `-2stage` for Two-Stage; no LoRAs |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |

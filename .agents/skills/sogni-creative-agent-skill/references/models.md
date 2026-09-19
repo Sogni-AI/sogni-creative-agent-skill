@@ -737,10 +737,11 @@ output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
 
 ## MiniMax H3 models
 
-MiniMax H3 is a Sogni-hosted video family with **eighteen current selectors**:
+MiniMax H3 is a Sogni-hosted video family with **twenty current selectors**:
 four Standard workflows, four 8-step Balanced workflows, four 4-step
-LightX2V Turbo workflows, three FastVideo VSA FastH3 Turbo workflows, and
-three FastH3 Two-Stage (720p/1080p/2K) workflows. Every one of those modes
+LightX2V Turbo workflows, three FastVideo VSA FastH3 Turbo workflows,
+three FastH3 Two-Stage (720p/1080p/2K) workflows, and two Ref2VA Two-Stage
+(Standard and Balanced) workflows. Every one of those modes
 generates picture and **native 32 kHz stereo audio jointly**. FastH3 also has
 three audio-to-video modes, each with a Two-Stage form, that take the user's
 own audio instead; see [FastH3 audio-to-video](#fasth3-audio-to-video).
@@ -752,7 +753,10 @@ from your references. The Standard, Balanced, and LightX2V Turbo families accept
 an explicit `--workflow r2v`; FastH3 and FastH3 Two-Stage reject it.
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
 be asked for by name. Its Balanced and Turbo counterparts are
-`minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`.
+`minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`, and Standard and Balanced
+each have a two-stage form, `minimax-h3-r2v-2stage` and
+`minimax-h3-r2v-balanced-2stage` (see "Ref2VA Two-Stage" below); those are
+never inferred either.
 FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selector.
 
 | Model | Mode | Use Case |
@@ -765,6 +769,8 @@ FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selecto
 | `minimax-h3-i2v-balanced` | Balanced image-to-video | Fixed 8-step animation from one first frame |
 | `minimax-h3-flf2v-balanced` | Balanced first → last frame | Fixed 8-step interpolation between `--ref` and `--ref-end` |
 | `minimax-h3-r2v-balanced` | Balanced reference-to-video | Fixed 8-step Euler/simple Ref2VA from a labelled reference set |
+| `minimax-h3-r2v-2stage` | Ref2VA Two-Stage | The `minimax-h3-r2v` request (20 steps) on a half-size canvas, delivered at twice it (2K default, 1080p or 720p) |
+| `minimax-h3-r2v-balanced-2stage` | Balanced Ref2VA Two-Stage | The `minimax-h3-r2v-balanced` request (8 steps), delivered at twice the canvas |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | Turbo text-to-video | 4-step prompt-only path; generic `minimax-h3-turbo` infers the frame workflow |
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
@@ -805,7 +811,9 @@ FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2s
 `minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
 with the FastH3 request shape on a half-size canvas. Every output class (720p,
 1080p and 2K) uses the same `_2stage` id; `--target-resolution 720` sends it
-with the 384 px canvas.
+with the 384 px canvas. Ref2VA Two-Stage likewise has one id per tier,
+`minimax-h3-ref2va-fp8_r2v_2stage` (Standard) and
+`minimax-h3-ref2va-fp8_r2v_balanced_2stage` (Balanced).
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -858,17 +866,33 @@ video-conditioned R2V requires a worker above 40 GB.
   still delivered at twice. Any other value, 768 included, is refused. Other
   canvases up to a 544 px short edge add 6 Spark/s, and larger ones 12. Prices
   follow measured GPU time. Ordinary 768p output stays on the regular
-  FastH3 selectors, and the other H3 tiers have no two-stage path. The summary
+  FastH3 selectors; of the other H3 tiers only Standard and Balanced Ref2VA have
+  a two-stage path (next item). The summary
   line and `--json` (`deliveredWidth`, `deliveredHeight`) report the delivered
   size. If the server is not serving two-stage, it refuses before charging and
   the CLI prints its message unchanged. This is Sogni's own path; MiniMax's
   hosted 2K stage is still not part of the open release. The retired
   `outputScale` request option is refused.
+- **1080p and 2K reference-to-video is Ref2VA Two-Stage.** `-m minimax-h3-r2v-2stage` (Standard, 20 steps, worker id
+  `minimax-h3-ref2va-fp8_r2v_2stage`) and `-m minimax-h3-r2v-balanced-2stage`
+  (Balanced, 8 steps, `minimax-h3-ref2va-fp8_r2v_balanced_2stage`) send exactly
+  the request of `minimax-h3-r2v` / `minimax-h3-r2v-balanced` — the same loose
+  `--ref`/`-c` images, repeatable `--ref-video`/`--ref-audio`, reference limits,
+  durations, LoRAs and six-field prompt contract — on the half-size canvas, and
+  the platform delivers exactly twice it. They are never Turbo (no `--sampler`)
+  and never inferred. `--target-resolution` reads exactly as in the table above
+  (2K default renders 1344×768 → 2688×1536, `1080` renders 960×544 →
+  1920×1088, `720` renders 672×384 → 1344×768); a reference image never sets the
+  canvas aspect, and explicit `-w`/`-h` are used as given. Each bills its
+  tier's reference rate plus the two-stage surcharge of the delivered class;
+  `--estimate-video-cost` quotes the `_2stage` id on the canvas it renders, and
+  the summary line and `--json` report the delivered size.
 
 ```bash
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-turbo-2stage --duration 8 -o ./video-2k.mp4 "<three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-turbo-2stage --target-resolution 1080 --duration 8 -o ./video-1080p.mp4 "<three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-r2v-2stage --ref identity.png -c wardrobe.png --ref-video motion.mp4 -o ./ref-2k.mp4 "<six-field Ref2VA prompt>"
 sogni-agent -q --video -m minimax-h3-i2v --ref first.png --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-flf2v --ref first.png --ref-end last.png --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --ref-video motion.mp4 --ref-audio voice.m4a -o ./video.mp4 "<six-field Ref2VA prompt>"
@@ -1160,6 +1184,7 @@ model recommendations.
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
 | MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-2stage` (Standard) or `minimax-h3-r2v-balanced-2stage` (Balanced) with the same references as `minimax-h3-r2v`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by the user's own voice or song | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); add `-2stage` for Two-Stage |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
@@ -1174,7 +1199,7 @@ model recommendations.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.
-- Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio. On FastH3 Two-Stage it names the delivered size instead: `720`, `1080`, or `2K`/`1440` (the default).
+- Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio. On FastH3 and Ref2VA Two-Stage it names the delivered size instead: `720`, `1080`, or `2K`/`1440` (the default).
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but the ref becomes `1024×1535`). The CLI detects this for local refs and auto-adjusts to a nearby safe size.
 - Pass `--strict-size` to fail instead — the CLI prints a suggested size.

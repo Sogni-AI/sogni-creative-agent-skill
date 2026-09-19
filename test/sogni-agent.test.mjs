@@ -6821,6 +6821,8 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
   assert.ok(stdout.includes('minimax-h3-t2v-balanced'), 'Help should include the MiniMax H3 Balanced selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-balanced'), 'Help should include the MiniMax H3 Ref2VA Balanced selector');
+  assert.ok(stdout.includes('minimax-h3-r2v-2stage'), 'Help should include the MiniMax H3 Ref2VA Two-Stage selector');
+  assert.ok(stdout.includes('minimax-h3-r2v-balanced-2stage'), 'Help should include the MiniMax H3 Balanced Ref2VA Two-Stage selector');
   assert.ok(stdout.includes('minimax-h3-t2v-turbo'), 'Help should include the MiniMax H3 Turbo selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-turbo'), 'Help should include the MiniMax H3 Ref2VA Turbo selector');
   assert.ok(stdout.includes('minimax-h3-fasth3-t2v-turbo'), 'Help should include the MiniMax H3 FastH3 selectors');
@@ -7281,7 +7283,7 @@ test('FastH3 Two-Stage refuses a delivered class it cannot render, and 2K on oth
   for (const model of ['minimax-h3-fasth3-turbo', 'ltx25']) {
     const { exitCode, state, stderr } = runCli(['--video', '-m', model, '--target-resolution', '2K', 'A prompt.']);
     assert.equal(exitCode, 1, model);
-    assert.match(stderr, /--target-resolution 2K is the MiniMax H3 FastH3 Two-Stage delivered size/, model);
+    assert.match(stderr, /--target-resolution 2K is the MiniMax H3 Two-Stage delivered size/, model);
     assert.equal(state?.lastVideoProject ?? null, null, model);
   }
   // Ordinary 768p FastH3 stays on its base id.
@@ -7342,6 +7344,187 @@ test('retired --2k and --output-scale fail hard and point at the FastH3 Two-Stag
     assert.equal(state?.lastVideoProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastImageProject ?? null, null, JSON.stringify(args));
     assert.equal(state?.lastEstimateVideoCost ?? null, null, JSON.stringify(args));
+  }
+});
+
+test('MiniMax H3 Ref2VA Two-Stage selectors send the R2V request on the 2stage ids', () => {
+  const cases = [
+    { model: 'minimax-h3-r2v-2stage', expected: 'minimax-h3-ref2va-fp8_r2v_2stage' },
+    { model: 'minimax-h3-r2v-balanced-2stage', expected: 'minimax-h3-ref2va-fp8_r2v_balanced_2stage' },
+    { model: 'minimax-h3-ref2va-fp8_r2v_2stage', expected: 'minimax-h3-ref2va-fp8_r2v_2stage' },
+    { model: 'minimax-h3-ref2va-fp8_r2v_balanced_2stage', expected: 'minimax-h3-ref2va-fp8_r2v_balanced_2stage' }
+  ];
+  for (const { model, expected } of cases) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--duration', '5', '--ref', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE,
+      '<Picture 1> controls identity. <Picture 2> controls wardrobe.'
+    ]);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    const project = state.lastVideoProject;
+    assert.equal(project.modelId, expected, model);
+    assert.ok(project.referenceImage, model);
+    assert.equal(project.contextImages.length, 1, model);
+    assert.equal(project.width, 1344, model);
+    assert.equal(project.height, 768, model);
+    assert.equal(project.frames, 124, model);
+    assert.equal(project.fps, 24, model);
+    assert.equal(project.steps, undefined, model);
+    assert.equal(project.guidance, undefined, model);
+    assert.equal('outputScale' in project, false, model);
+    assert.match(stderr, /Generating video \(r2v\)/, model);
+    assert.match(stderr, /MiniMax H3 Ref2VA Two-Stage: delivered at 2688x1536 \(twice the 1344x768 canvas\)/, model);
+  }
+
+  // The same request as the one-stage tier: only the id differs (the prompt-hash
+  // seed and per-run attribution vary with it).
+  const oneStage = runCli(['--video', '-m', 'minimax-h3-r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+  const twoStage = runCli(['--video', '-m', 'minimax-h3-r2v-2stage', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+  assert.equal(oneStage.exitCode, 0, oneStage.stderr);
+  assert.equal(twoStage.exitCode, 0, twoStage.stderr);
+  const { modelId: oneStageId, attribution: _a, seed: _c, ...oneStageRest } = oneStage.state.lastVideoProject;
+  const { modelId: twoStageId, attribution: _b, seed: _d, ...twoStageRest } = twoStage.state.lastVideoProject;
+  assert.equal(oneStageId, 'minimax-h3-ref2va-fp8_r2v');
+  assert.equal(twoStageId, 'minimax-h3-ref2va-fp8_r2v_2stage');
+  assert.deepEqual(twoStageRest, oneStageRest);
+  assert.doesNotMatch(oneStage.stderr, /Two-Stage/);
+
+  // Never Turbo: no sampler override; never a frame workflow.
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-balanced-2stage', '--sampler', 'euler', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo.'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-2stage', '--workflow', 'i2v', '--ref', SCREENSHOT_FIXTURE, 'The clerk speaks.'],
+    'Workflow "i2v" does not match model'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-2stage', '--ref-audio', 'voice.m4a', 'Use <Audio 1> for the voice.'],
+    'needs at least one visual reference'
+  );
+  // FastH3 still has no r2v, and its refusal names the Ref2VA Two-Stage selectors.
+  const fastH3 = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ]);
+  assert.equal(fastH3.exitCode, 1);
+  assert.match(fastH3.stderr, /MiniMax H3 FastH3 Two-Stage has no r2v workflow/);
+  assert.match(fastH3.stderr, /-m minimax-h3-r2v-2stage or minimax-h3-r2v-balanced-2stage/);
+});
+
+test('MiniMax H3 Ref2VA Two-Stage accepts reference videos and audio like its one-stage tier', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-r2v-2stage-'));
+  const video = join(tempDir, 'motion.mp4');
+  const audio = join(tempDir, 'voice.m4a');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('reference video'));
+  writeFileSync(audio, Buffer.from('reference audio'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+console.log(args.includes('format=duration') ? '8' : '24/1');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+
+  const { exitCode, state, stderr } = runCli(
+    [
+      '--video', '-m', 'minimax-h3-r2v-balanced-2stage', '--target-resolution', '1080',
+      '--ref-video', video, '--ref-audio', audio, '--duration', '10',
+      '<Video 1> controls motion. <Audio 1> controls voice.'
+    ],
+    { FFPROBE_PATH: fakeFfprobe },
+  );
+  assert.equal(exitCode, 0, stderr);
+  const project = state.lastVideoProject;
+  assert.equal(project.modelId, 'minimax-h3-ref2va-fp8_r2v_balanced_2stage');
+  assert.equal(project.referenceImage, undefined);
+  assert.ok(project.referenceVideo);
+  assert.deepEqual(project.referenceVideoDurations, [8]);
+  assert.ok(project.referenceAudio);
+  assert.equal(project.frames, 243);
+  assert.deepEqual([project.width, project.height], [960, 544]);
+  assert.match(stderr, /delivered at 1920x1088 \(twice the 960x544 canvas\)/);
+});
+
+test('--target-resolution picks the Ref2VA Two-Stage delivered class, and estimates quote the 2stage id', () => {
+  for (const [value, canvas, delivered] of [
+    ['720', [672, 384], [1344, 768]],
+    ['1080p', [960, 544], [1920, 1088]],
+    ['2K', [1344, 768], [2688, 1536]],
+    ['1440', [1344, 768], [2688, 1536]]
+  ]) {
+    const render = runCli([
+      '--json', '--video', '-m', 'minimax-h3-r2v-2stage', '--target-resolution', value,
+      '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+    ]);
+    assert.equal(render.exitCode, 0, `${value}: ${render.stderr}`);
+    const project = render.state.lastVideoProject;
+    assert.equal(project.modelId, 'minimax-h3-ref2va-fp8_r2v_2stage', value);
+    assert.deepEqual([project.width, project.height], canvas, value);
+    const output = JSON.parse(render.stdout.trim().split('\n').pop());
+    assert.equal(output.workflow, 'r2v', value);
+    assert.deepEqual([output.width, output.height], canvas, value);
+    assert.deepEqual([output.deliveredWidth, output.deliveredHeight], delivered, value);
+  }
+
+  const estimate = runCli([
+    '--json', '--video', '-m', 'minimax-h3-r2v-2stage', '--target-resolution', '1080', '--duration', '8',
+    '--estimate-video-cost', '--ref', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ]);
+  assert.equal(estimate.exitCode, 0, estimate.stderr);
+  const params = estimate.state.lastEstimateVideoCost;
+  assert.equal(params.modelId, 'minimax-h3-ref2va-fp8_r2v_2stage');
+  assert.deepEqual([params.width, params.height], [960, 544]);
+  assert.equal(params.steps, 20);
+  assert.equal(params.referenceImageCount, 2);
+  const report = JSON.parse(estimate.stdout.trim().split('\n').pop());
+  assert.equal(report.model, 'minimax-h3-ref2va-fp8_r2v_2stage');
+  assert.deepEqual([report.deliveredWidth, report.deliveredHeight], [1920, 1088]);
+
+  // Balanced quotes its own 8 steps from the live catalog card for its id.
+  const balanced = runCli([
+    '--json', '--video', '-m', 'minimax-h3-r2v-balanced-2stage', '--estimate-video-cost',
+    '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      data: {
+        model: {
+          id: 'minimax-h3-ref2va-fp8_r2v_balanced_2stage',
+          parameters: {
+            steps: { min: 8, max: 8, default: 8 },
+            width: { min: 384, max: 1344, step: 32, default: 1344 },
+            height: { min: 384, max: 1344, step: 32, default: 768 },
+            defaultSize: '1344x768'
+          }
+        }
+      }
+    })
+  });
+  assert.equal(balanced.exitCode, 0, balanced.stderr);
+  const balancedParams = balanced.state.lastEstimateVideoCost;
+  assert.equal(balancedParams.modelId, 'minimax-h3-ref2va-fp8_r2v_balanced_2stage');
+  assert.deepEqual([balancedParams.width, balancedParams.height], [1344, 768]);
+  assert.equal(balancedParams.steps, 8);
+  const balancedReport = JSON.parse(balanced.stdout.trim().split('\n').pop());
+  assert.deepEqual([balancedReport.deliveredWidth, balancedReport.deliveredHeight], [2688, 1536]);
+});
+
+test('Ref2VA Two-Stage refuses a delivered class it cannot render, and one-stage R2V points 2K at it', () => {
+  for (const value of ['768', '480']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', 'minimax-h3-r2v-balanced-2stage', '--target-resolution', value,
+      '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+    ]);
+    assert.equal(exitCode, 1, value);
+    assert.match(stderr, /targetResolution must be 720, 1080, or 1440/, value);
+    assert.match(stderr, /--target-resolution is the delivered size: 720, 1080, or 2K \(1440\)/, value);
+    assert.equal(state?.lastVideoProject ?? null, null, value);
+  }
+  for (const model of ['minimax-h3-r2v', 'minimax-h3-r2v-balanced']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--target-resolution', '2K', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+    ]);
+    assert.equal(exitCode, 1, model);
+    assert.match(stderr, /--target-resolution 2K is the MiniMax H3 Two-Stage delivered size/, model);
+    assert.match(stderr, /-m minimax-h3-r2v-2stage \(or minimax-h3-r2v-balanced-2stage\)/, model);
+    assert.equal(state?.lastVideoProject ?? null, null, model);
   }
 });
 

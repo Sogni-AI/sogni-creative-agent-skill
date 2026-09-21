@@ -1929,6 +1929,8 @@ function nextSemanticWorkloadAttribution(options = {}) {
 function withBillingMode(config, attributionOptions = {}) {
   return {
     ...config,
+    ...(!options.video && !options.upscaleVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
+      ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
     attribution: nextSemanticWorkloadAttribution(attributionOptions),
   };
@@ -3459,6 +3461,8 @@ for (let i = 0; i < args.length; i++) {
     cliSet.guidance = true;
   } else if (arg === '--return-last-frame') {
     options.returnLastFrame = true;
+  } else if (arg === '--no-prompt-metadata') {
+    options.embedPromptMetadata = false;
   } else if (arg === '--output-format' || arg === '--format') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -4459,7 +4463,8 @@ Image Options:
   --distance <key>      close-up|medium|wide
   --angle-strength <n>  LoRA strength for multiple_angles (default: 0.9)
   --angle-description <text>  Optional subject description
-  --output-format <f>   Images: png|jpg (webp for GPT Image); video: mp4|mov (MOV: Seedance 2.5)
+  --output-format <f>   Images: png|jpg|webp; video: mp4|mov (MOV: Seedance 2.5)
+  --no-prompt-metadata  Omit prompt/settings metadata from worker image outputs
   --return-last-frame   Export the final video frame as an image (Seedance 2.5)
   --image-quality <q>   GPT Image: low|medium|high; 2.5 also xhigh|max
   --image-background <b>  auto|opaque; 2.5 also transparent (PNG/WebP)
@@ -5250,8 +5255,8 @@ if (options.outputFormat) {
         details: { outputFormat: options.outputFormat }
       });
     }
-  } else if (!['png', 'jpg', ...(isGptImage2ModelSelection(options.model) ? ['webp'] : [])].includes(options.outputFormat)) {
-    fatalCliError(isGptImage2ModelSelection(options.model) ? 'GPT Image 2 output format must be "png", "jpg", or "webp".' : 'Image output format must be "png" or "jpg".', {
+  } else if (!['png', 'jpg', 'webp'].includes(options.outputFormat)) {
+    fatalCliError('Image output format must be "png", "jpg", or "webp".', {
       code: 'INVALID_ARGUMENT',
       details: { outputFormat: options.outputFormat }
     });
@@ -13364,7 +13369,9 @@ async function main() {
           lastFrameUrl: data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
-          projectId: data.projectId
+          projectId: data.projectId,
+          nsfwDetected: data.job?.nsfwDetected ?? jobData.nsfwDetected ?? false,
+          nsfwSources: data.job?.nsfwSources ?? jobData.nsfwSources ?? []
         });
         completedJobs++;
         log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
@@ -14457,6 +14464,9 @@ async function main() {
         seeds,
         projectId: firstResult.projectId,
         urls: urls,
+        results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources }) => ({
+          url: resultUrl, seed, jobIndex, nsfwDetected, nsfwSources
+        })),
         localPath: options.output || null,
         tokenType: options.tokenType || 'spark',
         quality: options.quality || null
@@ -14727,6 +14737,7 @@ async function main() {
           seedStrategy: options.seedStrategy || null,
           seeds,
           urls: urls,
+          results: renderInfo.results,
           localPath: options.output || null,
           tokenType: options.tokenType || 'spark'
         };

@@ -435,6 +435,11 @@ $sogni-creative-agent:loop-maker ./images start=cover.jpg music="subtle tropical
 
 The skill visually removes repeated concepts from the active sequence, renders one direct LTX first-frame/last-frame clip per image pair, closes the loop, generates a soundtrack longer than the picture, and verifies anchors, interior motion, streams, and full-file decoding before delivery. Original source images are preserved. The default stack is Sogni plus the bundled FFmpeg wrappers; HyperFrames and Remotion are optional only for explicitly requested text, overlays, or compositor effects. True 360 novel-view synthesis is deliberately excluded from this workflow because a direct single-image LTX prompt does not reliably create camera orbit geometry.
 
+Image output supports `--output-format png`, `jpg`, or `webp`. For worker images,
+`--no-prompt-metadata` omits embedded prompt and generation settings. JSON output
+includes per-image `results` with `nsfwDetected` and `nsfwSources`; a label alone
+does not mean the optional content filter withheld the image.
+
 ```bash
 # Image generation
 sogni-agent -Q hq -o dragon.png "a dragon eating tacos"

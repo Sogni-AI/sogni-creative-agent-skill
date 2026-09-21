@@ -1382,7 +1382,7 @@ test('invalid seed strategy returns a validation error', () => {
 });
 
 test('invalid image output format returns a validation error', () => {
-  expectCliError(['--output-format', 'webp', 'a cat'], 'Image output format must be "png" or "jpg".');
+  expectCliError(['--output-format', 'tiff', 'a cat'], 'Image output format must be "png", "jpg", or "webp".');
 });
 
 test('invalid video output format returns a validation error', () => {
@@ -7008,6 +7008,25 @@ test('--snooze-update with no pending update is a friendly no-op', () => {
   const { exitCode, stderr } = runCli(['--snooze-update']);
   assert.equal(exitCode, 0);
   assert.ok(stderr.includes('No pending update to snooze.'), `got: ${stderr}`);
+});
+
+test('worker images support WebP with prompt metadata disabled', () => {
+  const { exitCode, state, stderr } = runCli(['-m', 'z-turbo', '--output-format', 'webp', '--no-prompt-metadata', '--json', 'A ceramic mug']);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastImageProject.outputFormat, 'webp');
+  assert.equal(state.lastImageProject.embedPromptMetadata, false);
+});
+
+test('JSON image results retain non-blocking NSFW labels', () => {
+  const { exitCode, stdout, stderr } = runCli(['--json', 'A gallery painting'], {
+    SOGNI_AGENT_TEST_JOB_LABELS_JSON: JSON.stringify({ nsfwDetected: true, nsfwSources: ['prompt'] })
+  });
+  assert.equal(exitCode, 0, stderr);
+  const output = JSON.parse(stdout.trim());
+  assert.equal(output.success, true);
+  assert.equal(output.results[0].nsfwDetected, true);
+  assert.deepEqual(output.results[0].nsfwSources, ['prompt']);
+  assert.equal(output.results[0].url, output.urls[0]);
 });
 
 test('GPT Image CLI never accepts provider-chosen auto quality', () => {

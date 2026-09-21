@@ -269,7 +269,11 @@ class SogniClientWrapper extends EventEmitter {
         state.emittedJobs = this.emittedJobs;
         this.emit(ClientEvent.JOB_COMPLETED, {
           [urlField]: process.env.SOGNI_AGENT_TEST_RESULT_URL || `https://example.com/${urlField}-${i + 1}.${ext}`,
-          job: { data: { seed: seed ?? 123 } },
+          job: {
+            data: { seed: seed ?? 123 },
+            ...(process.env.SOGNI_AGENT_TEST_JOB_LABELS_JSON
+              ? JSON.parse(process.env.SOGNI_AGENT_TEST_JOB_LABELS_JSON) : {})
+          },
           jobIndex: i,
           projectId: 'proj-1'
         });

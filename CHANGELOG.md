@@ -1,3 +1,9 @@
+## [3.52.3] - 2026-09-23
+
+### Bug Fixes
+
+* Update the generation clients to preserve authoritative queue reasons across reconnects, partial batches, and recovered projects.
+
 ## [3.52.2] - 2026-09-23
 
 ### Bug Fixes

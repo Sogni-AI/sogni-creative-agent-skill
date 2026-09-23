@@ -1,3 +1,10 @@
+## [3.52.2] - 2026-09-23
+
+### Bug Fixes
+
+* Keep pending generation uploads, reconnect recovery, and chat requests attached to the account that started them. Routine credential refresh continues without interrupting work.
+* Support WebP worker image exports and `--no-prompt-metadata`. Preserve non-blocking content labels on individual JSON results.
+
 ## [3.52.1] - 2026-09-19
 
 ### Bug Fixes

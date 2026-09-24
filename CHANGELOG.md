@@ -1,3 +1,9 @@
+## [3.52.4] - 2026-09-23
+
+### Features
+
+* Pass `--lora` on the MiniMax H3 FastH3 audio-to-video modes (`-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo` and their `-2stage` forms). Catalog and Personal H3 LoRAs resolve against the selected audio mode exactly as on the frame modes, on the released generation clients.
+
 ## [3.52.3] - 2026-09-23
 
 ### Bug Fixes

@@ -100,13 +100,13 @@
     "media-utilities.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "4.3.8",
+    "@sogni-ai/sogni-intelligence-client": "4.4.0",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.4"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.55.0"
+    "@sogni-ai/sogni-client": "5.56.0"
   },
   "openclaw": {
     "extensions": [

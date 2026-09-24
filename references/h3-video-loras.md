@@ -36,10 +36,10 @@ require 23 GB, while jobs with an H3 LoRA require 32 GB. FastH3 has no R2V
 mode. Always check the exact FastVideo model id's live catalog before relying
 on a particular adapter.
 The FastH3 audio-to-video modes (`minimax-h3-fasth3-ia2v-turbo`,
-`-flfa2v-turbo`, `-a2v-turbo` and their `-2stage` forms) load no LoRAs: the
-CLI refuses `--lora` on them before reading the catalog, and Sogni refuses the
-request too. To combine a LoRA with a character's voice, render a FastH3
-frame mode with its generated audio instead.
+`-flfa2v-turbo`, `-a2v-turbo` and their `-2stage` forms) take the same catalog
+and Personal H3 LoRAs as the frame modes (as of 2026-09-23): pass `--lora` with
+`--ref-audio`, and the CLI resolves them against the selected audio mode's live
+catalog exactly as it does for every other H3 selector.
 
 ## Published adapters
 

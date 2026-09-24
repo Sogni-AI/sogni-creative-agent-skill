@@ -140,7 +140,7 @@ async function withTestApiServer(fn, { durableEvents = [] } = {}) {
       res.setHeader('Content-Type', 'application/json');
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
       if (requestUrl.pathname.startsWith('/v1/loras/personal')) {
-        const row = { id: 'personal-test', name: 'My style', status: 'ready', modelId: 'minimax-h3-fl2va-fp8_t2v', modelIds: ['minimax-h3-fl2va-fp8_t2v', 'krea2_turbo_fp8_scaled'], requirements: [] };
+        const row = { id: 'personal-test', name: 'My style', status: 'ready', modelId: 'minimax-h3-fl2va-fp8_t2v', modelIds: ['minimax-h3-fl2va-fp8_t2v', 'krea2_turbo_fp8_scaled', ...['a2v', 'ia2v', 'flfa2v'].flatMap(mode => ['', '_2stage'].map(stage => `minimax-h3-fastvideo-int8_${mode}_turbo${stage}`))], requirements: [] };
         const data = requestUrl.pathname.endsWith('/catalog')
           ? { loras: [{ loraId: row.id, name: row.name, modelIds: row.modelIds, ui: { category: 'personal', min: 0, max: 0.8, default: 0.8, nsfw: true } }] }
           : req.method === 'DELETE' ? {}
@@ -7667,8 +7667,6 @@ test('FastH3 audio guide refuses missing and extra uploads and unsupported contr
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--ref-audio', audio], 'remove a second --ref-audio'],
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--no-generate-audio'], 'always keeps the uploaded audio. Omit --no-generate-audio.'],
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--audio-duration', '4'], 'has no --audio-duration'],
-    [['-m', 'minimax-h3-fasth3-ia2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio, '--lora', 'any-h3-lora'], 'does not support LoRAs'],
-    [['-m', 'minimax-h3-fasth3-turbo', '--ref-audio', audio, '--lora', 'any-h3-lora'], 'does not support LoRAs'],
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--sampler', 'er_sde'], 'MiniMax H3 FastH3 Turbo --sampler must be euler'],
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--frames', '130'], 'MiniMax H3 frames must be 124 + n×17'],
     [['-m', 'minimax-h3-fasth3-a2v-turbo', '--ref-audio', audio, '--workflow', 'ia2v'], 'does not match model'],
@@ -8064,6 +8062,29 @@ test('personal image LoRAs use library defaults and require the requested model'
     const incompatible = await runCliAsync(['-m', 'z_image_turbo_bf16', '--lora', 'personal-test', '--no-filter', '--api-base-url', apiBaseUrl, 'a glass cube'], env);
     assert.notEqual(incompatible.exitCode, 0);
     assert.match(incompatible.stderr, /not ready or compatible/);
+  });
+});
+
+test('personal MiniMax LoRAs reach every audio workflow with their requested strength', async () => {
+  await withTestApiServer(async (apiBaseUrl) => {
+    const env = { ...H3_LORA_ENV, SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' };
+    const audio = h3AudioFixture();
+    for (const stage of ['', '-2stage']) {
+      for (const [mode, frames] of [
+        ['a2v', []],
+        ['ia2v', ['--ref', SCREENSHOT_FIXTURE]],
+        ['flfa2v', ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE]],
+      ]) {
+        const result = await runCliAsync([
+          '--video', '-m', `minimax-h3-fasth3-${mode}-turbo${stage}`, ...frames,
+          '--ref-audio', audio, '--lora', 'personal-test', '--lora-strength', '0.6',
+          '--no-filter', '--api-base-url', apiBaseUrl, 'A dancer follows the beat.',
+        ], env);
+        assert.equal(result.exitCode, 0, result.stderr);
+        assert.deepEqual(result.state.lastVideoProject.loras, ['personal-test']);
+        assert.deepEqual(result.state.lastVideoProject.loraStrengths, [0.6]);
+      }
+    }
   });
 });
 

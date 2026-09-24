@@ -4833,7 +4833,7 @@ state negatives in the structured prompt.):
                                      motion from frame 0 and is the clip's soundtrack
   minimax-h3-fasth3-flfa2v-turbo    FastH3 first + last frame plus audio (--ref, --ref-end, --ref-audio)
   minimax-h3-fasth3-a2v-turbo       FastH3 audio only (--ref-audio). Audio modes: --audio-start picks the window,
-                                     --duration/--frames set its length; no LoRAs, --audio-duration or
+                                     --duration/--frames set its length; LoRAs supported; no --audio-duration or
                                      --no-generate-audio. minimax-h3-fasth3-turbo with --ref-audio picks one of these.
   minimax-h3-fasth3-ia2v-turbo-2stage / -flfa2v-turbo-2stage / -a2v-turbo-2stage
                                     FastH3 Two-Stage audio-to-video; minimax-h3-fasth3-turbo-2stage with --ref-audio
@@ -5319,14 +5319,6 @@ if (options.music && options.loras.length > 0) {
 }
 
 if (options.video && options.loras.length > 0) {
-  // No LoRA has been qualified on the FastH3 audio-guide graphs; Sogni refuses
-  // them, so stop before reading the catalog or uploading anything.
-  if (isMiniMaxH3AudioGuideSelectionLocal(options.model, options.refAudio)) {
-    fatalCliError('MiniMax H3 FastH3 audio-to-video does not support LoRAs. Remove --lora/--loras.', {
-      code: 'INVALID_ARGUMENT',
-      details: { model: options.model, loras: options.loras }
-    });
-  }
   if (options.loras.length > 8) {
     fatalCliError('Video generation supports at most 8 LoRAs per render.', {
       code: 'INVALID_ARGUMENT',

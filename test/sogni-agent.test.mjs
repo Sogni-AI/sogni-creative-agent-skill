@@ -5615,9 +5615,9 @@ test('i2v infers a 16-multiple video size from non-square reference when width/h
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   // screenshot.jpg is 2314x1200. Default requested size is 512x512, but i2v would resize it to 512x266.
   // An exact-aspect bounding box tops out at 1296x672 here, so the CLI instead pre-resizes the
-  // reference to the model cap: 1536x800 keeps 41% more pixels for 0.43% of aspect drift.
-  assert.equal(state.lastVideoProject.width, 1536);
-  assert.equal(state.lastVideoProject.height, 800);
+  // reference to the model cap: Wan 2.2's 1,048,576-pixel budget gives 1408x736, 19% more pixels.
+  assert.equal(state.lastVideoProject.width, 1408);
+  assert.equal(state.lastVideoProject.height, 736);
 });
 
 test('video dims are normalized to 16-multiples instead of hard failing', () => {
@@ -6173,7 +6173,8 @@ test('i2v keeps the model pixel budget when the reference aspect has no large di
   const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-ref-'));
   const refPath = join(tmp, 'ref-1600x896.png');
   // 1600x896 is 25:14. On a /16 model the largest box where BOTH the box and the resized
-  // reference stay divisor-valid is 1200x672 — only 78% of the 1536x864 the model can reach.
+  // reference stay divisor-valid is 1200x672 — only 77% of the 1360x768 Wan 2.2 can reach
+  // inside its 1,048,576-pixel budget.
   await sharp({
     create: { width: 1600, height: 896, channels: 3, background: { r: 0, g: 0, b: 0 } }
   }).png().toFile(refPath);
@@ -6183,14 +6184,14 @@ test('i2v keeps the model pixel budget when the reference aspect has no large di
     '--workflow', 'i2v',
     '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', refPath,
-    '--width', '1536',
-    '--height', '864',
+    '--width', '1360',
+    '--height', '768',
     '--duration', '1',
     'gentle motion'
   ]);
   assert.equal(exitCode, 0);
-  assert.equal(state.lastVideoProject.width, 1536);
-  assert.equal(state.lastVideoProject.height, 864);
+  assert.equal(state.lastVideoProject.width, 1360);
+  assert.equal(state.lastVideoProject.height, 768);
 });
 
 test('i2v reports pre-resized effective dims in --json rather than the fit-inside prediction', async () => {
@@ -6207,8 +6208,8 @@ test('i2v reports pre-resized effective dims in --json rather than the fit-insid
     '--workflow', 'i2v',
     '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', refPath,
-    '--width', '1536',
-    '--height', '864',
+    '--width', '1360',
+    '--height', '768',
     '--duration', '1',
     'gentle motion'
   ]);
@@ -6216,11 +6217,11 @@ test('i2v reports pre-resized effective dims in --json rather than the fit-insid
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.success, true);
   assert.equal(payload.adjustedVideoDims.reason, 'i2v-ref-pre-resize');
-  assert.deepEqual(payload.adjustedVideoDims.resizedTo, { width: 1536, height: 864 });
+  assert.deepEqual(payload.adjustedVideoDims.resizedTo, { width: 1360, height: 768 });
   // The old behaviour would have silently shrunk the video to this instead.
   assert.deepEqual(payload.adjustedVideoDims.insteadOf, { width: 1200, height: 672 });
-  assert.equal(payload.effectiveWidth, 1536);
-  assert.equal(payload.effectiveHeight, 864);
+  assert.equal(payload.effectiveWidth, 1360);
+  assert.equal(payload.effectiveHeight, 768);
 });
 
 test('i2v keeps the exact-aspect box when pre-resizing would distort the aspect too far', async () => {
@@ -6413,8 +6414,8 @@ test('json error: i2v explicit size that rounds to non-16 suggests a compatible 
     '--workflow', 'i2v',
     '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--ref', refPath,
-    '--width', '1024',
-    '--height', '1536',
+    '--width', '832',
+    '--height', '1248',
     '--duration', '1',
     'gentle camera pan'
   ]);
@@ -6422,7 +6423,60 @@ test('json error: i2v explicit size that rounds to non-16 suggests a compatible 
   const payload = JSON.parse(stdout.trim());
   assert.equal(payload.success, false);
   assert.equal(payload.errorCode, 'INVALID_VIDEO_SIZE');
-  assert.ok(String(payload.hint || '').includes('--width 1024 --height 1296'));
+  assert.match(payload.error, /would resize to 832x1247/);
+  assert.ok(String(payload.hint || '').includes('--width 832 --height 1200'));
+});
+
+// Wan 2.2 renders at most 1,048,576 pixels per frame (1024x1024); since
+// sogni-socket 94a217e1 (2026-09-25) the network refuses larger sizes (4101).
+test('json error: WAN 2.2 refuses an explicit size over 1,048,576 pixels instead of shrinking it', () => {
+  const { exitCode, stdout, state } = runCli([
+    '--json',
+    '--video',
+    '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v',
+    '--width', '1536',
+    '--height', '864',
+    'ocean waves'
+  ]);
+  assert.equal(exitCode, 1);
+  assert.equal(state?.lastVideoProject, undefined);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorCode, 'INVALID_VIDEO_SIZE');
+  assert.equal(
+    payload.error,
+    'Wan 2.2 cannot render this video size. 1536×864 is 1,327,104 pixels; Wan 2.2 renders at most 1,048,576 pixels per frame (1024×1024). Choose 1024×1024, 1280×720, 720×1280, or any other size of at most 1,048,576 pixels, with each side between 480 and 1536.'
+  );
+  assert.ok(String(payload.hint || '').includes('--width 1360 --height 768'));
+});
+
+test('json error: WAN 2.2 refuses --target-resolution above 1024', () => {
+  const { exitCode, stdout } = runCli([
+    '--json',
+    '--video',
+    '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v',
+    '--target-resolution', '1080',
+    'ocean waves'
+  ]);
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.match(payload.error, /^Wan 2\.2 cannot render 1080p\./);
+});
+
+test('WAN 2.2 keeps explicit 1280x720 and fits a size it chooses inside 1,048,576 pixels', () => {
+  const exact = runCli(['--video', '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v', '-w', '1280', '-h', '720', 'ocean waves']);
+  assert.equal(exact.exitCode, 0);
+  assert.equal(exact.state.lastVideoProject.width, 1280);
+  assert.equal(exact.state.lastVideoProject.height, 720);
+
+  // Pro quality asks for a 1920 short side; Wan 2.2 gets the largest size its budget allows.
+  const pro = runCli(['--video', '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v', '--quality', 'pro', 'ocean waves']);
+  assert.equal(pro.exitCode, 0);
+  const { width, height } = pro.state.lastVideoProject;
+  assert.ok(width * height <= 1_048_576, `${width}x${height}`);
+  assert.equal(width % 16, 0);
+  assert.equal(height % 16, 0);
 });
 
 // --- v2v workflow tests ---

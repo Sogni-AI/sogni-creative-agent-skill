@@ -113,3 +113,14 @@ test('--reel-plan-only --json emits a machine-readable plan', async () => {
   assert.equal(plan.clips.length, 2);
   assert.equal(plan.transitions.length, 2);
 });
+
+test('Wan 2.2 reels refuse a --reel-target-resolution above 1024', async () => {
+  // Wan 2.2 renders at most 1,048,576 pixels per frame (1024x1024), so its short
+  // side can never exceed 1024; the reel refuses rather than rendering smaller.
+  const dir = reelDir(2);
+  const r = runCli(['--source-reel', dir, '--reel-plan-only', '--reel-target-resolution', '1080', '--no-update-check']);
+  assert.notEqual(r.exitCode, 0);
+  assert.match(r.stderr + r.stdout, /Wan 2\.2 cannot render 1080p/);
+  const ok = runCli(['--source-reel', dir, '--reel-plan-only', '--reel-target-resolution', '1024', '--no-update-check']);
+  assert.equal(ok.exitCode, 0, `stderr: ${ok.stderr}`);
+});

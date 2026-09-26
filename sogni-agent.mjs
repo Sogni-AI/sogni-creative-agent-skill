@@ -104,7 +104,9 @@ import {
   isMinimaxH3TwoStageModelId,
   minimaxH3TwoStageCanvasShortEdge,
   minimaxH3TwoStageDeliveredSize,
-  prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo
+  prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo,
+  getWan22VideoSizeRefusal,
+  WAN22_MAX_VIDEO_PIXELS
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
   HAPPYHORSE_REFERENCE_LIMITS,
@@ -1049,6 +1051,7 @@ function applyCreativeBrainPreflight() {
     options.height = plan.height;
     widthFromPrompt = true;
     heightFromPrompt = true;
+    exactPixelsFromPrompt = true;
   }
   // The planner reports a stated aspect even when --target-resolution keeps it
   // from sizing the canvas itself (dimensionSource stays unset then). The aspect
@@ -4966,6 +4969,7 @@ let fpsFromConfig = false;
 let widthFromPrompt = false;
 let heightFromPrompt = false;
 let targetResolutionFromPrompt = false;
+let exactPixelsFromPrompt = false;
 let durationFromPrompt = false;
 let aspectRatioFromPrompt = null;
 let configuredDefaultVideoWorkflow = null;
@@ -6378,6 +6382,24 @@ if (options.video) {
       details: { targetResolution: options.targetResolution }
     });
   }
+  // Wan 2.2 renders at most 1,048,576 pixels per frame (1024x1024), so its
+  // short side can never exceed 1024: 1080p, 1440p and 4K cannot fit. Refuse the
+  // named resolution instead of rendering it smaller without saying so.
+  if (
+    isWanVideoModelId(options.model) &&
+    (cliSet.targetResolution || targetResolutionFromPrompt) &&
+    Number(options.targetResolution) > 1024
+  ) {
+    fatalCliError(
+      `Wan 2.2 cannot render ${options.targetResolution}p. It renders at most 1,048,576 pixels per frame (1024×1024), ` +
+      'so its short side is at most 1024 pixels.',
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, targetResolution: options.targetResolution, maxPixels: WAN22_MAX_VIDEO_PIXELS },
+        hint: `Use --target-resolution 720 (or 768), -w 1024 -h 1024, or -m ltx25 for ${options.targetResolution}p.`
+      }
+    );
+  }
   if (isWan3Video && cliSet.targetResolution && !WAN3_SUPPORTED_RESOLUTIONS.has(options.targetResolution)) {
     fatalCliError('Wan 3 --target-resolution must be 480, 720, or 1080.', {
       code: 'INVALID_ARGUMENT',
@@ -7073,6 +7095,25 @@ if (options.video) {
   const originalVideoWidth = options.width;
   const originalVideoHeight = options.height;
   const normalizedVideoDims = normalizeVideoDimensionsLikeWrapper(options.width, options.height, videoDimensionRules);
+  // Wan 2.2 renders at most 1,048,576 pixels per frame, with each side between
+  // 480 and 1536, and the network refuses any other size (error 4101). A size the
+  // user asked for (-w/-h or exact pixels in the prompt) is refused in the
+  // network's own words instead of being auto-adjusted down; sizes the CLI
+  // chooses itself are fitted by the rules above.
+  if (isWanVideoModelId(options.model) && (cliSet.width || cliSet.height || exactPixelsFromPrompt)) {
+    const refusal = getWan22VideoSizeRefusal(originalVideoWidth, originalVideoHeight);
+    if (refusal) {
+      fatalCliError(refusal, {
+        code: 'INVALID_VIDEO_SIZE',
+        details: {
+          model: options.model,
+          requested: { width: originalVideoWidth, height: originalVideoHeight },
+          maxPixels: WAN22_MAX_VIDEO_PIXELS
+        },
+        hint: `Try: --width ${normalizedVideoDims.width} --height ${normalizedVideoDims.height}, or -m ltx25 for a larger size.`
+      });
+    }
+  }
   options.width = normalizedVideoDims.width;
   options.height = normalizedVideoDims.height;
   if (isMiniMaxH3Model(options.model) && options.width * options.height > 1344 * 768) {
@@ -11506,7 +11547,7 @@ function roundToMultiple(value, multiple) {
   return Math.max(multiple, Math.round(value / multiple) * multiple);
 }
 
-function inferSourceReelDimensions(metadata, targetShortSide) {
+function inferSourceReelDimensions(metadata, targetShortSide, model = SOURCE_REEL_DEFAULT_MODEL) {
   const rawWidth = Number(metadata?.width) || targetShortSide;
   const rawHeight = Number(metadata?.height) || targetShortSide;
   const aspect = rawWidth > 0 && rawHeight > 0 ? rawWidth / rawHeight : 1;
@@ -11533,10 +11574,16 @@ function inferSourceReelDimensions(metadata, targetShortSide) {
     height *= scale;
   }
 
-  return {
-    width: roundToMultiple(width, 16),
-    height: roundToMultiple(height, 16)
-  };
+  let roundedWidth = roundToMultiple(width, 16);
+  let roundedHeight = roundToMultiple(height, 16);
+  // Wan 2.2 (the default reel model) refuses any frame over 1,048,576 pixels
+  // (error 4101), so a size chosen for it is fitted inside that budget.
+  if (isWanVideoModelId(model) && roundedWidth * roundedHeight > WAN22_MAX_VIDEO_PIXELS) {
+    const scale = Math.sqrt(WAN22_MAX_VIDEO_PIXELS / (roundedWidth * roundedHeight));
+    roundedWidth = Math.max(480, Math.floor((roundedWidth * scale) / 16) * 16);
+    roundedHeight = Math.max(480, Math.floor((roundedHeight * scale) / 16) * 16);
+  }
+  return { width: roundedWidth, height: roundedHeight };
 }
 
 function uniqueSourceReelWorkdir(sourceDir) {
@@ -11647,6 +11694,18 @@ function buildSourceReelPlan() {
   const transitionBasePrompt = options.sourceReelTransitionPrompt || SOURCE_REEL_DEFAULT_TRANSITION_PROMPT;
   const promptOverrides = loadSourceReelTransitionPromptOverrides(options.sourceReelTransitionPrompts);
   const model = options.sourceReelModel || (cliSet.model ? options.model : null) || SOURCE_REEL_DEFAULT_MODEL;
+  // Wan 2.2's short side can never exceed 1024 inside its 1,048,576-pixel budget.
+  if (isWanVideoModelId(model) && Number(options.sourceReelTargetResolution) > 1024) {
+    fatalCliError(
+      `Wan 2.2 cannot render ${options.sourceReelTargetResolution}p. It renders at most 1,048,576 pixels per frame ` +
+      '(1024×1024), so its short side is at most 1024 pixels.',
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { model, sourceReelTargetResolution: options.sourceReelTargetResolution, maxPixels: WAN22_MAX_VIDEO_PIXELS },
+        hint: 'Use --reel-target-resolution 768 (the default) or pick another --reel-model.'
+      }
+    );
+  }
   const fps = cliSet.fps ? options.fps : 32;
   const concurrency = options.sourceReelConcurrency || 2;
 
@@ -11748,7 +11807,7 @@ async function prepareSourceReelReferenceImages(plan, log) {
   let dimensions = plan.dimensions;
   if (!dimensions) {
     const metadata = await sharp(plan.clips[0].path).rotate().metadata();
-    dimensions = inferSourceReelDimensions(metadata, plan.targetResolution);
+    dimensions = inferSourceReelDimensions(metadata, plan.targetResolution, plan.model);
     plan.dimensions = dimensions;
   }
 

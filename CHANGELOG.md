@@ -1,3 +1,18 @@
+## [3.53.0] - 2026-09-25
+
+### Features
+
+* **A timeout no longer cancels the project.** When `-t` runs out, the project keeps rendering on Sogni and the run exits with `errorCode: "PROJECT_TIMEOUT_STILL_RUNNING"`. `details.resultCommands` holds the `sogni-agent --result <id>` commands that fetch it later, and `details.waitingReason` says why it was still waiting. `--cancel-on-timeout` restores the old behavior. The clock now starts at submission (uploads excluded). Time the account's own plan limit holds a project is not counted, because that wait ends by itself.
+* Follow a project by its id. Every run prints each project id as soon as it is submitted. `--detach` (`--no-wait`) submits and returns with the id. `--status <id>` shows the project's state and, while it is queued, why. `--result <id>` fetches its finished media (`-o` saves it, with `-2`, `-3` suffixes for several renders). `--recent [hours]` lists this account's completed projects, newest first (default 24 hours, max 168). Projects that finished while no agent was connected are included; the server holds a result for a disconnected client for one hour only, but `--recent` and `--result` read the account's history. `--detach` refuses flows that submit a second project after the first (`--looping`, `--multi-angle`, source reels, hosted workflows and `--api-chat`).
+* Say why a project is queued, in the same words as Sogni Web. A plan limit reads "you've reached your Unlimited plan limit for simultaneous MiniMax H3 videos": the account's own limit, which starts the project when one of its running jobs finishes. It is not a shortage of workers, and resubmitting only lengthens the line. Confirming payment and waiting for an available worker are reported separately.
+* Before a video is submitted, note how many of the account's other video projects are already queued or rendering from other runs, apps or devices, since those may run first.
+* Agent guidance in SKILL.md and the new `references/long-jobs-and-queues.md`: check `--recent` at the start of a session and offer unseen results; never resubmit or cancel a queued project; a batch of standard MiniMax H3 videos on Unlimited runs one after another, so estimate the wait for the whole batch; on hosts that cap a single tool call, submit long videos with `--detach` and collect them with `--result`.
+
+### Bug Fixes
+
+* Document the actual default video timeout, 1800 seconds (the skill said 300), and the 600-second music default.
+* Update the generation clients to SDK 5.57.0 and intelligence client 4.4.2. The SDK now chooses a result's download endpoint from the model's media kind, the result's content type and the project's type instead of assuming an image, and recognizes Wan 2.2 sound-to-video and Qwen3-TTS results as media. `--status`, `--result` and `--recent` need SDK 5.57.0; an older installation says so and asks for a skill update.
+
 ## [3.52.4] - 2026-09-23
 
 ### Features

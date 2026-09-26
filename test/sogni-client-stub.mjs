@@ -41,11 +41,45 @@ function persistState() {
       lastEditProject: state.lastEditProject ?? null,
       lastEstimateVideoCost: state.lastEstimateVideoCost ?? null,
       canceledProjectIds: state.canceledProjectIds ?? null,
-      emittedJobs: state.emittedJobs ?? null
+      emittedJobs: state.emittedJobs ?? null,
+      projectLookups: state.projectLookups ?? null
     }, replacer));
   } catch (err) {
     // Ignore persistence errors in tests.
   }
+}
+
+const envJson = (name) => (process.env[name] ? JSON.parse(process.env[name]) : undefined);
+
+function recordLookup(entry) {
+  const state = getState();
+  state.projectLookups = state.projectLookups || [];
+  state.projectLookups.push(entry);
+  persistState();
+}
+
+/**
+ * The raw @sogni-ai/sogni-client `projects` API the skill reaches through
+ * `wrapper.client`: queue explanations (queueChanged), results by id, recent
+ * projects and the account's other in-flight projects.
+ * SOGNI_AGENT_TEST_SDK_WITHOUT_RESULTS simulates an SDK older than 5.57.0.
+ */
+function makeSdkProjects() {
+  const projects = new EventEmitter();
+  if (!process.env.SOGNI_AGENT_TEST_SDK_WITHOUT_RESULTS) {
+    projects.getResult = async (projectId, options) => {
+      recordLookup({ method: 'getResult', projectId, options: options ?? null });
+      const result = envJson('SOGNI_AGENT_TEST_GET_RESULT_JSON');
+      if (!result) throw Object.assign(new Error('Not Found'), { status: 404 });
+      return result;
+    };
+    projects.listRecent = async (options) => {
+      recordLookup({ method: 'listRecent', options });
+      return envJson('SOGNI_AGENT_TEST_LIST_RECENT_JSON') ?? [];
+    };
+  }
+  projects.listProjectsElsewhere = async () => envJson('SOGNI_AGENT_TEST_ELSEWHERE_JSON') ?? [];
+  return projects;
 }
 
 class SogniClientWrapper extends EventEmitter {
@@ -59,6 +93,7 @@ class SogniClientWrapper extends EventEmitter {
     this.lastEditProject = null;
     this.emittedJobs = 0;
     this.client = {
+      projects: makeSdkProjects(),
       setSocketEventSubscriptions: async (socketEventSubscriptions) => {
         const currentState = getState();
         currentState.socketEventSubscriptionUpdates = currentState.socketEventSubscriptionUpdates || [];
@@ -163,6 +198,7 @@ class SogniClientWrapper extends EventEmitter {
       return JSON.parse(process.env.SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON);
     }
     this._emitJobs('resultUrl', config.numberOfMedia ?? 1, config.seed);
+    this._scheduleQueueEvents();
     return { project: this._makeProject('proj-1'), videoUrls: ['https://example.com/video.mp4'] };
   }
 
@@ -280,6 +316,19 @@ class SogniClientWrapper extends EventEmitter {
       }
       persistState();
     });
+  }
+
+  /** SOGNI_AGENT_TEST_QUEUE_EVENTS_JSON: [{ afterMs, projectId, waitingReason }] as queueChanged events. */
+  _scheduleQueueEvents() {
+    for (const event of envJson('SOGNI_AGENT_TEST_QUEUE_EVENTS_JSON') ?? []) {
+      setTimeout(() => {
+        this.client.projects.emit('queueChanged', {
+          projectId: event.projectId ?? 'proj-1',
+          waitingReason: event.waitingReason ?? null,
+          jobWaitingReasons: []
+        });
+      }, event.afterMs ?? 0);
+    }
   }
 
   _makeProject(id) {

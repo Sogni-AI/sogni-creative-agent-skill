@@ -1395,22 +1395,157 @@ test('help advertises a 30 minute default video timeout', () => {
   assert.match(stdout, /video: 1800/);
 });
 
-test('video timeout explicitly cancels the Sogni project before exiting', () => {
-  const { exitCode, state, stderr } = runCli([
-    '--video',
-    '--workflow', 't2v',
-    '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v',
-    '--duration', '1',
-    '--steps', '4',
-    '--timeout', '1',
-    'timeout cancellation regression'
-  ], {
+const VIDEO_ARGS = ['--video', '--workflow', 't2v', '-m', 'wan_v2.2-14b-fp8_t2v_lightx2v', '--duration', '1', '--steps', '4'];
+const H3_PLAN_LIMIT = {
+  reason: 'model_concurrency_limit',
+  message: 'Waiting for one of your MiniMax H3 videos to finish',
+  paymentModel: 'subscription',
+  subscriptionTier: 'unlimited',
+  modelFamily: 'minimax_h3'
+};
+
+test('a video timeout leaves the Sogni project running and says how to fetch it', () => {
+  const { exitCode, state, stderr } = runCli([...VIDEO_ARGS, '--timeout', '1', 'timeout keeps the project'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(state?.canceledProjectIds ?? null, null, 'nothing is cancelled');
+  assert.match(stderr, /Submitted Sogni project proj-1\./);
+  assert.match(stderr, /proj-1 is still running and was not cancelled/);
+  assert.match(stderr, /sogni-agent --result proj-1/);
+});
+
+test('--cancel-on-timeout still cancels the Sogni project before exiting', () => {
+  const { exitCode, state, stderr } = runCli([...VIDEO_ARGS, '--timeout', '1', '--cancel-on-timeout', 'timeout cancellation'], {
     SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1'
   });
 
   assert.equal(exitCode, 1);
   assert.deepEqual(state?.canceledProjectIds, ['proj-1']);
   assert.match(stderr, /Timeout after 1s; canceled Sogni project proj-1\./);
+});
+
+test('--detach submits, reports the project and exits without waiting or cancelling', () => {
+  const { exitCode, state, stdout } = runCli([...VIDEO_ARGS, '--detach', '--json', 'detached render'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1'
+  });
+
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.success, true);
+  assert.equal(output.detached, true);
+  assert.deepEqual(output.projectIds, ['proj-1']);
+  assert.equal(output.projects[0].resultCommand, 'sogni-agent --result proj-1');
+  assert.equal(output.projects[0].statusCommand, 'sogni-agent --status proj-1');
+  assert.equal(state?.canceledProjectIds ?? null, null);
+});
+
+test('--detach refuses flows that submit a second project later', () => {
+  expectCliError(['--video', '--looping', '--detach', 'a loop'], '--detach cannot be combined with --looping');
+});
+
+test('a plan-limit queue is explained and does not count toward --timeout', async () => {
+  const startedAt = Date.now();
+  const { exitCode, stderr } = await runCliAsync([...VIDEO_ARGS, '--timeout', '1', 'held by the plan'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1',
+    SOGNI_AGENT_TEST_QUEUE_EVENTS_JSON: JSON.stringify([
+      { afterMs: 0, waitingReason: H3_PLAN_LIMIT },
+      { afterMs: 1500, waitingReason: null }
+    ])
+  });
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /you've reached your Unlimited plan limit for simultaneous MiniMax H3 videos/);
+  assert.match(stderr, /not a shortage of workers/);
+  assert.match(stderr, /still running and was not cancelled/);
+  // 1.5 s held by the plan, then the 1 s timeout counted from its release.
+  assert.ok(elapsedMs >= 2300, `waited ${elapsedMs} ms; the plan hold must not count toward the timeout`);
+});
+
+test('--status reports a queued project and why it is waiting', () => {
+  const { exitCode, state, stdout } = runCli(['--status', 'proj-9', '--json'], {
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+      id: 'proj-9', status: 'queued', finished: false, waitingReason: H3_PLAN_LIMIT,
+      jobs: [{ id: 'IMG-1', status: 'queued' }]
+    })
+  });
+
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.success, true);
+  assert.equal(output.projectId, 'proj-9');
+  assert.equal(output.finished, false);
+  assert.equal(output.waitingReason.reason, 'model_concurrency_limit');
+  assert.match(output.message, /Unlimited plan limit for simultaneous MiniMax H3 videos/);
+  assert.deepEqual(state?.projectLookups, [{ method: 'getResult', projectId: 'proj-9', options: null }]);
+});
+
+test('--result returns a finished project\'s media URLs', () => {
+  const { exitCode, stdout } = runCli(['--result', 'proj-9', '--json'], {
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+      id: 'proj-9', status: 'completed', finished: true, modelId: 'minimax-h3-ref2va-fp8_r2v',
+      jobs: [
+        { id: 'IMG-1', status: 'completed', kind: 'video', url: 'https://cdn.test/IMG-1.mp4' },
+        { id: 'IMG-2', status: 'completed', urlUnavailable: 'sensitiveContent' }
+      ]
+    })
+  });
+
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.finished, true);
+  assert.deepEqual(output.urls, ['https://cdn.test/IMG-1.mp4']);
+  assert.equal(output.jobs[1].urlUnavailable, 'sensitiveContent');
+});
+
+test('--result on an unfinished project says it is still running', () => {
+  const { exitCode, stdout } = runCli(['--result', 'proj-9'], {
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({ id: 'proj-9', status: 'processing', finished: false, jobs: [] })
+  });
+
+  assert.equal(exitCode, 0);
+  assert.match(stdout, /Project proj-9 is not finished yet \(processing\); it is still running on Sogni\./);
+});
+
+test('--recent lists recent completed projects from the account history', () => {
+  const { exitCode, state, stdout } = runCli(['--recent', '6', '--json'], {
+    SOGNI_AGENT_TEST_LIST_RECENT_JSON: JSON.stringify([
+      { id: 'proj-a', modelName: 'MiniMax H3', finishedAt: 1790000000000, jobs: [{ id: 'IMG-A', status: 'completed', sensitiveContentWithheld: false }] }
+    ])
+  });
+
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.sinceHours, 6);
+  assert.equal(output.projects[0].id, 'proj-a');
+  const lookup = state?.projectLookups?.[0];
+  assert.equal(lookup.method, 'listRecent');
+  assert.equal(lookup.options.limit, 100);
+  assert.ok(Math.abs(Date.now() - 6 * 3600 * 1000 - lookup.options.since) < 60 * 1000);
+});
+
+test('project lookups explain an SDK that is too old', () => {
+  const { exitCode, stderr, stdout } = runCli(['--result', 'proj-9', '--json'], {
+    SOGNI_AGENT_TEST_SDK_WITHOUT_RESULTS: '1'
+  });
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stdout + stderr, /needs @sogni-ai\/sogni-client 5\.57\.0 or later/);
+});
+
+test('a video submission notes the account\'s other in-flight video projects', () => {
+  const { stderr } = runCli([...VIDEO_ARGS, 'in-flight note'], {
+    SOGNI_AGENT_TEST_ELSEWHERE_JSON: JSON.stringify([
+      { id: 'other-1', status: 'queued', model: { id: 'minimax-h3-ref2va-fp8_r2v', type: 'video' } },
+      { id: 'other-2', status: 'processing', model: { id: 'minimax-h3-ref2va-fp8_r2v', type: 'video' } },
+      { id: 'other-3', status: 'processing', model: { id: 'flux1-schnell-fp8', type: 'image' } }
+    ])
+  });
+
+  assert.match(stderr, /Note: 2 other video projects are already queued or rendering on this account/);
+  assert.match(stderr, /do not resubmit it/);
 });
 
 test('default music generation uses ACE-Step turbo defaults and prompt', () => {

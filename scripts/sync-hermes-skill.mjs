@@ -21,6 +21,7 @@ const referenceFiles = [
   'image-prompting.md',
   'interactive-worlds.md',
   'krea2-loras.md',
+  'long-jobs-and-queues.md',
   'loop-maker.md',
   'models.md',
   'object-selection.md',

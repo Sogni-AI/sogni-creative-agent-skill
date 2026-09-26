@@ -3077,6 +3077,12 @@ const options = {
   json: false,
   quiet: false,
   timeout: 30000,
+  // Stop waiting without cancelling: --detach returns right after submission;
+  // a timeout leaves the project running unless --cancel-on-timeout is set.
+  detach: false,
+  cancelOnTimeout: false,
+  // --status <id> | --result <id> | --recent [hours]
+  projectLookup: null,
   strictSize: false,
   quality: null, // Quality tier: fast|hq|pro — auto-selects model, steps, dimensions
   tokenType: null,
@@ -4395,6 +4401,29 @@ for (let i = 0; i < args.length; i++) {
         options._lastImagePath = lastImagePath;
       }
     }
+  } else if (arg === '--detach' || arg === '--no-wait') {
+    options.detach = true;
+  } else if (arg === '--cancel-on-timeout') {
+    options.cancelOnTimeout = true;
+  } else if (arg === '--status' || arg === '--result') {
+    const projectId = requireFlagValue(args, i, arg);
+    i++;
+    options.projectLookup = { action: arg.slice(2), projectId };
+  } else if (arg === '--recent') {
+    // Optional look-back in hours: `--recent` or `--recent 6`.
+    const next = args[i + 1];
+    let hours = 24;
+    if (next !== undefined && /^\d+(\.\d+)?$/.test(next)) {
+      hours = Number(next);
+      i++;
+      if (!(hours > 0) || hours > 168) {
+        fatalCliError('--recent hours must be between 0 and 168 (7 days).', {
+          code: 'INVALID_ARGUMENT',
+          details: { flag: '--recent', value: next }
+        });
+      }
+    }
+    options.projectLookup = { action: 'recent', hours };
   } else if (arg === '--last') {
     // Show last render info. Use CLI_WANTS_JSON (precomputed from raw argv)
     // because --json may appear after --last in the argument list.
@@ -4652,7 +4681,18 @@ Hosted API Modes:
   --api-base-url <url>  Sogni API base URL (default: ${DEFAULT_API_BASE_URL})
 
 General:
-  -t, --timeout <sec>   Timeout in seconds (default: 30, video: 1800, music: 600)
+  -t, --timeout <sec>   Stop waiting after this many seconds (default: 30, video: 1800, music: 600).
+                        Counted from submission; time the account's own plan concurrency limit
+                        holds the project is not counted. The project is NOT cancelled; fetch it
+                        later with --result
+  --cancel-on-timeout   Cancel the project when --timeout runs out (the pre-3.53 behavior)
+  --detach, --no-wait   Submit, print the project id, and exit without waiting. The project keeps
+                        running; use --status / --result to follow it
+  --status <projectId>  Show a project's state and, while queued, why it is waiting
+  --result <projectId>  Fetch a finished project's media (saved to -o when given), including one
+                        that finished after an earlier run stopped waiting
+  --recent [hours]      List this account's completed projects from the last N hours
+                        (default 24, max 168); fetch one with --result
   --steps <num>         Override steps (model-dependent)
   --guidance <num>      Override guidance (model-dependent)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
@@ -6079,8 +6119,26 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.projectLookup && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
+}
+
+// --detach returns after the first submission, so it only fits a run that
+// submits one project up front; these flows submit more after the first ends.
+if (options.detach) {
+  const multiStage = [
+    ['--looping', options.looping],
+    ['--multi-angle', options.multiAngle],
+    ['--source-reel', options.sourceReelDir],
+    ['--api-chat', options.apiChat],
+    ['hosted workflows', options.apiWorkflowAction]
+  ].find(([, enabled]) => enabled);
+  if (multiStage) {
+    fatalCliError(`--detach cannot be combined with ${multiStage[0]}, which submits more than one project in sequence.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--detach', conflictsWith: multiStage[0] }
+    });
+  }
 }
 
 if (contractUtilityAction && options.contractAction === 'dispatch' && !options.contractToolName) {
@@ -11929,13 +11987,373 @@ async function runSourceReel(log) {
   }
 }
 
+// Reasons the server gives for queued work that is held by the account's own
+// plan (or payment tier) concurrency limit, not by a shortage of workers.
+const PLAN_LIMIT_WAITING_REASONS = new Set(['concurrency_limit', 'model_concurrency_limit']);
+
+/** The @sogni-ai/sogni-client instance behind the intelligence-client wrapper. */
+function sdkClientOf(wrapper) {
+  return wrapper?.client || null;
+}
+
+/** Which plan or payment tier a concurrency limit belongs to (same wording as sogni-web). */
+function waitingLimitScope(waitingReason) {
+  if (waitingReason.paymentModel === 'subscription' || waitingReason.reason === 'model_concurrency_limit') {
+    if (waitingReason.subscriptionTier === 'unlimited_pro') return 'Unlimited Pro plan';
+    if (waitingReason.subscriptionTier === 'unlimited') return 'Unlimited plan';
+    return 'plan';
+  }
+  if (waitingReason.paymentModel === 'paid_spark') return 'Premium Spark';
+  if (waitingReason.paymentModel === 'free_spark') return 'Free Spark';
+  return 'account';
+}
+
+/**
+ * Why a project is waiting, as one line for the agent and its user. Mirrors
+ * sogni-web: a plan limit is named as the account's own limit (the project
+ * starts by itself when one of the account's running jobs finishes), never as
+ * a shortage of workers. Returns null for no reason.
+ */
+function describeWaitingReason(waitingReason) {
+  if (!waitingReason || typeof waitingReason !== 'object') return null;
+  switch (waitingReason.reason) {
+    case 'concurrency_limit':
+    case 'model_concurrency_limit': {
+      const modelLimit = waitingReason.reason === 'model_concurrency_limit';
+      const media = modelLimit
+        ? (waitingReason.modelFamily === 'minimax_h3' ? 'MiniMax H3 videos' : 'videos using this model')
+        : (waitingReason.mediaType === 'video' ? 'videos' : 'generations');
+      return `Queued: you've reached your ${waitingLimitScope(waitingReason)} limit for simultaneous ${media}. ` +
+        'It will start automatically when one of your running jobs finishes. This is your plan\'s limit, ' +
+        'not a shortage of workers, so do not resubmit it.';
+    }
+    case 'payment_pending':
+      return 'Confirming payment before this project can start.';
+    case 'no_workers':
+      return 'Waiting for an available worker to take this project.';
+    case 'queued':
+      return typeof waitingReason.message === 'string' && waitingReason.message ? `Queued: ${waitingReason.message}` : 'Queued.';
+    default:
+      return typeof waitingReason.message === 'string' && waitingReason.message ? waitingReason.message : null;
+  }
+}
+
+function isPlanLimitWait(waitingReason) {
+  return PLAN_LIMIT_WAITING_REASONS.has(waitingReason?.reason);
+}
+
+/** The shell command that fetches a project's results later. */
+function resultCommandFor(projectId) {
+  return `sogni-agent --result ${projectId}`;
+}
+
+/**
+ * Wait bookkeeping for one run's projects. It announces each project id as
+ * soon as the project is submitted, reports why a project is queued in the
+ * server's own terms, and runs the --timeout clock only for time that is the
+ * run's to count: from submission (uploads excluded), minus any time the
+ * account's own plan concurrency limit held a project, since such a project
+ * starts by itself when one of the account's running jobs finishes. A guard
+ * still ends a run whose submission never completes.
+ */
+function createProjectWaitTracker(client, log, timeoutMs = options.timeout) {
+  const projects = new Map();
+  const reasons = new Map();
+  const described = new Map();
+  const sdkProjects = sdkClientOf(client)?.projects;
+  let onTimeout = () => {};
+  let timer = null;
+  let stopped = false;
+  let startedAt = null;
+  let heldMs = 0;
+  let heldSince = null;
+
+  const reasonFor = (projectId) => reasons.get(projectId) ?? projects.get(projectId)?.waitingReason ?? null;
+  const updateHold = () => {
+    const now = Date.now();
+    const held = [...projects.keys()].some((projectId) => isPlanLimitWait(reasonFor(projectId)));
+    if (held && heldSince === null) heldSince = now;
+    if (!held && heldSince !== null) {
+      heldMs += now - heldSince;
+      heldSince = null;
+    }
+  };
+  const countedMs = () => {
+    const now = Date.now();
+    return now - startedAt - heldMs - (heldSince === null ? 0 : now - heldSince);
+  };
+  const cleanup = () => {
+    clearTimeout(timer);
+    if (typeof sdkProjects?.off === 'function') sdkProjects.off('queueChanged', onQueueChanged);
+  };
+  const schedule = (ms) => {
+    clearTimeout(timer);
+    timer = setTimeout(fire, Math.max(0, ms));
+  };
+  function fire() {
+    if (stopped) return;
+    if (startedAt !== null) {
+      updateHold();
+      const remaining = timeoutMs - countedMs();
+      if (remaining > 0) {
+        schedule(remaining);
+        return;
+      }
+    }
+    stopped = true;
+    cleanup();
+    onTimeout();
+  }
+  const report = (projectId) => {
+    const text = describeWaitingReason(reasonFor(projectId));
+    if (!text || described.get(projectId) === text) return;
+    described.set(projectId, text);
+    log(text);
+  };
+  function onQueueChanged(event) {
+    if (!event?.projectId || !projects.has(event.projectId)) return;
+    reasons.set(event.projectId, event.waitingReason ?? null);
+    updateHold();
+    report(event.projectId);
+  }
+  if (typeof sdkProjects?.on === 'function') sdkProjects.on('queueChanged', onQueueChanged);
+  // Submission guard: uploads can be slow, but a run that never gets a project
+  // submitted still ends.
+  schedule(Math.max(timeoutMs, 30 * 60 * 1000));
+
+  return {
+    track(project) {
+      if (stopped || !project?.id || projects.has(project.id)) return;
+      projects.set(project.id, project);
+      log(`Submitted Sogni project ${project.id}. If this run stops before it finishes, the project keeps going; fetch it with: ${resultCommandFor(project.id)}`);
+      updateHold();
+      report(project.id);
+      if (startedAt === null) {
+        startedAt = Date.now();
+        schedule(timeoutMs);
+      }
+    },
+    onTimeout(fn) {
+      onTimeout = fn;
+    },
+    stop() {
+      stopped = true;
+      cleanup();
+    },
+    waitingReasonFor: reasonFor,
+    projectIds() {
+      return [...projects.keys()];
+    }
+  };
+}
+
+/**
+ * Report projects submitted with --detach: they keep running on Sogni, and
+ * --status / --result fetch them later, including after the socket has stopped
+ * holding a finished project for this client (one hour).
+ */
+function reportDetachedProjects(projects, projectWait) {
+  const projectIds = [...new Set(projects.map((project) => project?.id).filter(Boolean))];
+  const entries = projectIds.map((projectId) => {
+    const waitingReason = projectWait.waitingReasonFor(projectId);
+    return {
+      projectId,
+      waitingReason,
+      message: describeWaitingReason(waitingReason),
+      statusCommand: `sogni-agent --status ${projectId}`,
+      resultCommand: resultCommandFor(projectId)
+    };
+  });
+  if (options.json) {
+    console.log(JSON.stringify({
+      success: true,
+      detached: true,
+      projectIds,
+      projects: entries,
+      note: 'Submitted and still running on Sogni. Nothing was cancelled. Check it with the statusCommand and fetch it with the resultCommand when it finishes; do not resubmit it.'
+    }));
+    return;
+  }
+  for (const entry of entries) {
+    console.log(`Submitted Sogni project ${entry.projectId}; it keeps running on Sogni.`);
+    if (entry.message) console.log(entry.message);
+    console.log(`Check it: ${entry.statusCommand}`);
+    console.log(`Fetch the result when it finishes: ${entry.resultCommand}`);
+  }
+}
+
+function projectLookupSummary(result) {
+  const message = describeWaitingReason(result.waitingReason);
+  return {
+    projectId: result.id,
+    status: result.status,
+    finished: result.finished,
+    ...(result.modelId ? { model: result.modelId } : {}),
+    waitingReason: result.waitingReason ?? null,
+    ...(message ? { message } : {}),
+    jobs: (result.jobs || []).map((job) => ({
+      id: job.id,
+      status: job.status,
+      ...(job.reason ? { reason: job.reason } : {}),
+      ...(job.kind ? { kind: job.kind } : {}),
+      ...(job.url ? { url: job.url } : {}),
+      ...(job.urlUnavailable ? { urlUnavailable: job.urlUnavailable } : {})
+    }))
+  };
+}
+
+function printProjectStatus(result) {
+  const summary = projectLookupSummary(result);
+  if (options.json) {
+    console.log(JSON.stringify({ success: true, ...summary }));
+    return;
+  }
+  const done = summary.jobs.filter((job) => job.status === 'completed').length;
+  console.log(`Project ${summary.projectId}: ${summary.status}${summary.finished ? ` (${done}/${summary.jobs.length} render(s) completed)` : ''}`);
+  if (summary.message) console.log(summary.message);
+  for (const job of summary.jobs) {
+    if (job.status !== 'completed') console.log(`  ${job.id}: ${job.status}${job.reason ? ` (${job.reason})` : ''}`);
+  }
+  if (summary.finished && done > 0) console.log(`Fetch the media with: ${resultCommandFor(summary.projectId)}`);
+}
+
+/** --result: the project's media, saved to -o like a normal run when given. */
+async function saveProjectResult(result) {
+  const summary = projectLookupSummary(result);
+  if (!summary.finished) {
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, ...summary, note: 'Not finished yet; it is still running on Sogni. Check again later; do not resubmit it.' }));
+    } else {
+      console.log(`Project ${summary.projectId} is not finished yet (${summary.status}); it is still running on Sogni.`);
+      if (summary.message) console.log(summary.message);
+      console.log(`Check again later with: ${resultCommandFor(summary.projectId)}`);
+    }
+    return;
+  }
+  const urls = summary.jobs.map((job) => job.url).filter(Boolean);
+  const localPaths = [];
+  if (options.output) {
+    const extension = extname(options.output);
+    for (const [index, url] of urls.entries()) {
+      const path = index === 0
+        ? options.output
+        : options.output.slice(0, options.output.length - extension.length) + `-${index + 1}` + extension;
+      await downloadUrlToFile(url, path);
+      localPaths.push(path);
+    }
+  }
+  if (options.json) {
+    console.log(JSON.stringify({ success: true, ...summary, urls, ...(localPaths.length ? { localPaths } : {}) }));
+    return;
+  }
+  console.log(`Project ${summary.projectId}: ${summary.status}`);
+  if (localPaths.length) {
+    for (const path of localPaths) console.log(`Saved to ${path}`);
+  } else {
+    for (const url of urls) console.log(url);
+  }
+  for (const job of summary.jobs) {
+    if (job.urlUnavailable === 'sensitiveContent') console.log(`  ${job.id}: withheld by the Sensitive Content Filter`);
+    else if (job.status !== 'completed') console.log(`  ${job.id}: ${job.status}${job.reason ? ` (${job.reason})` : ''}`);
+  }
+}
+
+function printRecentProjects(projects, hours) {
+  if (options.json) {
+    console.log(JSON.stringify({ success: true, sinceHours: hours, projects }));
+    return;
+  }
+  if (!projects.length) {
+    console.log(`No completed Sogni projects in the last ${hours} hour(s).`);
+    return;
+  }
+  console.log(`Completed Sogni projects in the last ${hours} hour(s), newest first:`);
+  for (const project of projects) {
+    const when = project.finishedAt ? new Date(project.finishedAt).toISOString() : 'unknown time';
+    const ready = project.jobs.filter((job) => job.status === 'completed' && !job.sensitiveContentWithheld).length;
+    console.log(`  ${when}  ${project.id}  ${project.modelName || project.modelId || 'unknown model'}  ${ready} result(s)${project.appSource ? `  [${project.appSource}]` : ''}`);
+  }
+  console.log('Fetch one with: sogni-agent --result <projectId>');
+}
+
+/**
+ * Before a video is submitted, say how many of this account's other video
+ * projects are already queued or rendering (other runs, apps or devices).
+ * Plans run a limited number at once -- the Unlimited plan runs one standard
+ * MiniMax H3 video at a time -- so the new one may wait for them. Best effort:
+ * it never blocks the run.
+ */
+async function warnAboutInFlightProjects(client, log) {
+  const projectsApi = sdkClientOf(client)?.projects;
+  if (typeof projectsApi?.listProjectsElsewhere !== 'function') return;
+  let inFlight;
+  try {
+    inFlight = await projectsApi.listProjectsElsewhere();
+  } catch {
+    return;
+  }
+  const videos = (inFlight || []).filter((project) => !project?.model?.type || project.model.type === 'video');
+  if (!videos.length) return;
+  const count = videos.length === 1 ? '1 other video project is' : `${videos.length} other video projects are`;
+  log(`Note: ${count} already queued or rendering on this account (from other runs, apps or devices). ` +
+    'Plans run a limited number of videos at once (the Unlimited plan runs one standard MiniMax H3 video at a time), ' +
+    'so this one may wait for them. If it does, it starts by itself; do not resubmit it.');
+}
+
+/** --status <id>, --result <id>, --recent [hours]. */
+async function runProjectLookup(client, lookup) {
+  const projectsApi = sdkClientOf(client)?.projects;
+  const method = lookup.action === 'recent' ? 'listRecent' : 'getResult';
+  if (typeof projectsApi?.[method] !== 'function') {
+    const error = new Error(`--${lookup.action} needs @sogni-ai/sogni-client 5.57.0 or later (projects.${method}). Update the Sogni skill.`);
+    error.code = 'SDK_UPDATE_REQUIRED';
+    throw error;
+  }
+  if (lookup.action === 'recent') {
+    const projects = await projectsApi.listRecent({ since: Date.now() - lookup.hours * 3600 * 1000, limit: 100 });
+    printRecentProjects(projects, lookup.hours);
+    return;
+  }
+  const result = await projectsApi.getResult(lookup.projectId);
+  if (lookup.action === 'status') printProjectStatus(result);
+  else await saveProjectResult(result);
+}
+
+/**
+ * What to do when a run stops waiting before its projects finish. By default
+ * nothing is cancelled: the projects keep going on Sogni and their results can
+ * be fetched later with --result (or found with --recent). Before 3.53, a
+ * timeout cancelled them, which threw away work that was only queued behind the
+ * account's own plan limit. --cancel-on-timeout keeps that behaviour.
+ */
 async function buildProjectTimeoutError(projects, timeoutMs, label = 'Project') {
   const timeoutSeconds = timeoutMs / 1000;
-  const cancellableProjects = [...new Set((projects || []).filter(Boolean))]
-    .filter((project) => typeof project.cancel === 'function');
-  const projectIds = cancellableProjects
-    .map((project) => project.id)
-    .filter(Boolean);
+  const trackedProjects = [...new Set((projects || []).filter(Boolean))];
+  const cancellableProjects = trackedProjects.filter((project) => typeof project.cancel === 'function');
+  const projectIds = [...new Set(trackedProjects.map((project) => project.id).filter(Boolean))];
+
+  if (!options.cancelOnTimeout) {
+    const waiting = trackedProjects.map((project) => project.waitingReason).find(Boolean) || null;
+    const waitingText = describeWaitingReason(waiting);
+    const resultCommands = projectIds.map(resultCommandFor);
+    const error = new Error(
+      `Stopped waiting after ${timeoutSeconds}s; Sogni ${label.toLowerCase()} ` +
+      `${projectIds.join(', ') || '(unknown id)'} is still running and was not cancelled. ` +
+      (waitingText ? `${waitingText} ` : '') +
+      (resultCommands.length
+        ? `Fetch the result when it finishes with: ${resultCommands.join('; ')}`
+        : 'Find it when it finishes with: sogni-agent --recent')
+    );
+    error.code = 'PROJECT_TIMEOUT_STILL_RUNNING';
+    error.details = {
+      timeoutSeconds,
+      projectIds,
+      canceled: false,
+      waitingReason: waiting,
+      resultCommands
+    };
+    return error;
+  }
 
   if (cancellableProjects.length === 0) {
     const error = new Error(
@@ -13229,6 +13647,11 @@ async function main() {
     await disableLiveModelAvailabilityEvents(client);
     log('Connected.');
 
+    if (options.projectLookup) {
+      await runProjectLookup(client, options.projectLookup);
+      return;
+    }
+
     if (options.showBalance) {
       const balance = await client.getBalance();
       const spark = Number.parseFloat(balance?.spark);
@@ -13343,16 +13766,20 @@ async function main() {
     let completedJobs = 0;
     let loopingStartImageBuffer;
     const activeProjects = new Set();
+    const projectWait = createProjectWaitTracker(client, log);
     const trackProjectResult = (projectResult) => {
-      if (projectResult?.project) activeProjects.add(projectResult.project);
+      if (projectResult?.project) {
+        activeProjects.add(projectResult.project);
+        projectWait.track(projectResult.project);
+      }
       return projectResult;
     };
     
     const completionPromise = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      projectWait.onTimeout(() => {
         void buildProjectTimeoutError([...activeProjects], options.timeout)
           .then(reject);
-      }, options.timeout);
+      });
       
       client.on(ClientEvent.JOB_COMPLETED, (data) => {
         const jobData = data.job?.data || {};
@@ -13369,30 +13796,30 @@ async function main() {
         log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
         
         if (completedJobs >= options.count) {
-          clearTimeout(timeout);
+          projectWait.stop();
           resolve();
         }
       });
       
       client.on(ClientEvent.JOB_FAILED, (data) => {
-        clearTimeout(timeout);
+        projectWait.stop();
         reject(buildProjectResultError(data, 'Job failed'));
       });
 
       client.on(ClientEvent.PROJECT_FAILED, (data) => {
-        clearTimeout(timeout);
+        projectWait.stop();
         reject(buildProjectResultError(data));
       });
 
       client.on(ClientEvent.PROJECT_EVENT, (event) => {
         if (event?.type !== 'error') return;
-        clearTimeout(timeout);
+        projectWait.stop();
         reject(buildProjectResultError(event));
       });
 
       client.on(ClientEvent.JOB_EVENT, (event) => {
         if (event?.type !== 'error') return;
-        clearTimeout(timeout);
+        projectWait.stop();
         reject(buildProjectResultError(event, 'Job failed'));
       });
       
@@ -14037,6 +14464,7 @@ async function main() {
         projectConfig.loraStrengths = options.loraStrengths;
       }
 
+      await warnAboutInFlightProjects(client, log);
       const videoResult = trackProjectResult(
         await client.createVideoProject(withBillingMode(projectConfig))
       );
@@ -14435,6 +14863,12 @@ async function main() {
       }
     }
     
+    if (options.detach) {
+      projectWait.stop();
+      reportDetachedProjects([...activeProjects], projectWait);
+      return;
+    }
+
     // Wait for completion via events
     await completionPromise;
     

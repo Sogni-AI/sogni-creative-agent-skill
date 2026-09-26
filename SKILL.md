@@ -310,7 +310,7 @@ sogni-agent doctor --json
 | `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching | - |
 | `--json` | Machine-parseable stdout (progress goes to stderr) | false |
 | `-q, --quiet` | Suppress progress output | false |
-| `-t <sec>` | Timeout | 30 image / 300 video |
+| `-t <sec>` | Stop waiting (from submission; plan-limit queue time not counted); never cancels. Also `--detach`, `--status <id>`, `--result <id>`, `--recent [h]` | 30 image / 1800 video / 600 music |
 | `--strict-size` | Fail instead of auto-adjusting video size | false |
 | `doctor`, `self-update`, `--whats-new`, `--snooze-update` | Health check / upgrade / changelog / snooze reminder | - |
 
@@ -417,7 +417,7 @@ On a **Sogni Unlimited** subscription, Sogni-hosted (Supernet) image, video, and
 
 **Do not infer a Spark charge from `tokenType: "spark"`.** `tokenType` is the quote/accounting denomination and may remain `spark` on a covered Unlimited job. Billing is decided separately by the server's `paymentModel`: `subscription` means the artist Spark/SOGNI debit was skipped; `paid_spark`, `free_spark`, or `sogni` means token billing. If a result does not expose `paymentModel`, treat the payment source as unknown rather than warning that Spark was spent. Check the structured subscription state or transaction history when available. A successful request made with `--billing-mode subscription` is covered: if the server cannot use Unlimited, it rejects the request with `4078` or `4080` instead of silently falling back to Spark.
 
-Unlimited is fair-use, not unmetered. Describe only the concurrency and queue limits shown in the current plan catalog; actual throughput can vary with demand, available Supernet capacity, and fair-use controls. If generation is temporarily at capacity, ask the user to wait for active jobs to finish or try again later, or offer Premium Spark for fastest priority. Do not speculate about unpublished scheduling mechanics or availability windows, and never describe the plan as "relaxed."
+Unlimited is fair-use, not unmetered. Describe only the concurrency and queue limits shown in the current plan catalog; actual throughput can vary with demand, available Supernet capacity, and fair-use controls. If generation is temporarily at capacity, ask the user to wait for active jobs to finish or try again later, or offer Premium Spark for fastest priority. Do not speculate about unpublished scheduling mechanics or availability windows, and never describe the plan as "relaxed." **Queued work, long jobs, and results after a session.** Start each session with `sogni-agent --recent --json` and offer results the user has not seen; projects finish on Sogni even when no agent is connected. A queued project is not lost: never resubmit or cancel it. `--status <id>` says whether the account's own plan limit holds it (Unlimited runs one standard MiniMax H3 video at a time; it starts by itself when one of the account's jobs finishes, and it is not a worker shortage) or it is waiting for a worker. A batch of standard H3 videos on Unlimited runs one after another; say so and estimate the whole wait. On hosts that cap a tool call, submit long videos with `--detach` and collect them with `--result <id> -o <file>`. A timeout exits with `PROJECT_TIMEOUT_STILL_RUNNING` and never cancels. Details: [`references/long-jobs-and-queues.md`](./references/long-jobs-and-queues.md).
 
 When a generation cannot bill to the subscription, the CLI returns a structured error (`errorCategory: "subscription_billing"`). Respond by the `errorCode`, and **do not** collect payment details or simulate a purchase:
 
@@ -476,8 +476,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 - **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. An existing block may require waiting before retrying after upgrading.
 - **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.
 - **Video size errors:** sizes are model-specific (WAN 2.2 ÷16 min 480 max 1536; Wan 3 uses its exact 480P/720P/1080P ratio buckets; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
-- **Timeouts:** try a faster model or raise `-t`.
-- **No workers:** check https://sogni.ai for network status.
+- **Timeouts / no workers:** a timeout never cancels; the project finishes on Sogni and `sogni-agent --result <id>` fetches it (`details.resultCommands`). For long videos use `--detach`, not a large `-t`. `--status <id>` says whether it waits on the plan limit or on workers; for network status see https://sogni.ai.
 
 ## Reference Index (read before acting)
 
@@ -496,4 +495,5 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 | [`references/h3-video-loras.md`](./references/h3-video-loras.md) | MiniMax H3 video LoRAs: per-mode availability, trigger words, positive-only strength bands, live catalog discovery |
 | [`references/personas-memory.md`](./references/personas-memory.md) | Persona CRUD/voice cloning, multi-persona scenes, memories, personality, style transfer, photo restoration |
 | [`references/openclaw-config.md`](./references/openclaw-config.md) | OpenClaw plugin config defaults and overrides |
+| [`references/long-jobs-and-queues.md`](./references/long-jobs-and-queues.md) | Long videos and batches, `--detach` / `--status` / `--result` / `--recent`, why a project is queued (plan limit vs workers), timeouts that no longer cancel |
 | [`skills/README.md`](./skills/README.md) | Hosted per-skill tool surface (for hosts that load focused capability subsets) |

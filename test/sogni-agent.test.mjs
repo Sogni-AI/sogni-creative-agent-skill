@@ -7828,13 +7828,13 @@ test('FastH3 audio guide Two-Stage keeps the requested delivered class on its ca
   assert.deepEqual([output.deliveredWidth, output.deliveredHeight], [1920, 1088]);
 });
 
-async function keyframeImageSize(serialized) {
-  const sharp = createRequire(import.meta.url)('sharp');
-  const { width, height } = await sharp(Buffer.from(serialized.data)).metadata();
-  return [width, height];
+// The Intelligence Client wrapper frames keyframes onto the canvas, so the CLI
+// hands the SDK the image bytes it was given.
+function isFixtureImage(serialized) {
+  return serialized?.type === 'Buffer' && Buffer.from(serialized.data).equals(readFileSync(SCREENSHOT_FIXTURE));
 }
 
-test('--keyframe pins MiniMax H3 keyframes in time order at round(seconds x 24), framed onto the canvas', async () => {
+test('--keyframe pins MiniMax H3 keyframes in time order at round(seconds x 24)', () => {
   const { exitCode, state, stderr, stdout } = runCli([
     '--json', '--video', '-m', 'minimax-h3-fasth3-flf2v-turbo',
     '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE,
@@ -7846,10 +7846,7 @@ test('--keyframe pins MiniMax H3 keyframes in time order at round(seconds x 24),
   assert.equal(project.modelId, 'minimax-h3-fastvideo-int8_flf2v_turbo');
   assert.equal(project.frames, 192);
   assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [60, 144]);
-  for (const keyframe of project.keyframes) {
-    assert.equal(keyframe.image.type, 'Buffer');
-    assert.deepEqual(await keyframeImageSize(keyframe.image), [project.width, project.height]);
-  }
+  assert.ok(project.keyframes.every(({ image }) => isFixtureImage(image)));
   assert.ok(project.referenceImage && project.referenceImageEnd, 'keyframes never replace the first/last frame');
   assert.match(stderr, /Keyframe at 00:02\.500 \(frame 60\)/);
   assert.match(stderr, /Keyframe at 00:06\.000 \(frame 144\)/);
@@ -7860,20 +7857,10 @@ test('--keyframe pins MiniMax H3 keyframes in time order at round(seconds x 24),
   ]);
 });
 
-test('--keyframe frames stills at twice the canvas on two-stage models', async () => {
-  const { exitCode, state, stderr } = runCli([
-    '--video', '-m', 'minimax-h3-fasth3-i2v-turbo-2stage', '--ref', SCREENSHOT_FIXTURE,
-    '--keyframe', `${SCREENSHOT_FIXTURE}@3`, '--duration', '8', 'A cyclist crosses the bridge.'
-  ]);
-  assert.equal(exitCode, 0, stderr);
-  const project = state.lastVideoProject;
-  assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [72]);
-  assert.deepEqual(await keyframeImageSize(project.keyframes[0].image), [project.width * 2, project.height * 2]);
-});
-
-test('--keyframe works on MiniMax H3 Sound to Video and Reference to Video models', async () => {
+test('--keyframe works on two-stage, Sound to Video and Reference to Video models', () => {
   const audio = h3AudioFixture();
   const cases = [
+    ['minimax-h3-fasth3-i2v-turbo-2stage', ['--ref', SCREENSHOT_FIXTURE]],
     ['minimax-h3-fasth3-ia2v-turbo', ['--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio]],
     ['minimax-h3-fasth3-a2v-turbo-2stage', ['--ref-audio', audio]],
     ['minimax-h3-r2v', ['-c', SCREENSHOT_FIXTURE]],
@@ -7887,8 +7874,7 @@ test('--keyframe works on MiniMax H3 Sound to Video and Reference to Video model
     assert.equal(exitCode, 0, `${model}: ${stderr}`);
     const project = state.lastVideoProject;
     assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [96], model);
-    const scale = model.includes('2stage') ? 2 : 1;
-    assert.deepEqual(await keyframeImageSize(project.keyframes[0].image), [project.width * scale, project.height * scale], model);
+    assert.ok(isFixtureImage(project.keyframes[0].image), model);
     if (model.includes('r2v')) {
       // The -c reference only: a keyframe never becomes a <Picture N> reference.
       assert.equal(project.contextImages.length, 1, `${model}: keyframes are not reference images`);
@@ -7929,7 +7915,10 @@ test('--keyframe changes the prompt-hash seed only when keyframes are present', 
 test('--keyframe fails loudly with a fix for every invalid request, before anything is submitted', () => {
   const i2v = ['--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--duration', '8'];
   const keyframe = (seconds) => ['--keyframe', `${SCREENSHOT_FIXTURE}@${seconds}`];
+  const notAnImage = join(mkdtempSync(join(tmpdir(), 'sogni-keyframe-')), 'notes.png');
+  writeFileSync(notAnImage, 'not an image');
   const cases = [
+    [[...i2v, '--keyframe', `${notAnImage}@3`], /Keyframe image .*notes\.png is not a readable image/],
     [['--video', '-m', 'minimax-h3-fasth3-t2v-turbo', '--duration', '8', ...keyframe(3)],
       /is MiniMax H3 text-to-video, which cannot pin keyframes/],
     [['--video', '-m', 'ltx25-i2v', '--ref', SCREENSHOT_FIXTURE, ...keyframe(3)],

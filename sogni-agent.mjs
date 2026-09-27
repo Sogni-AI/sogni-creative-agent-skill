@@ -13107,31 +13107,6 @@ function videoWorkflowHasFrameAnchors() {
     || (options.videoWorkflow === 'ia2v' && isMiniMaxH3AudioGuideModel(options.model));
 }
 
-// The canvas SogniClientWrapper.prepareProjectConfig renders a video project on:
-// the requested size normalized to the model's grid, then refitted inside that
-// box to the first frame (or a lone last frame) when a frame defines the canvas.
-// Two-stage models fit the frame at twice the canvas. Loose references (H3
-// Ref2VA) never define it, and autoResizeVideoAssets=false keeps the size sent.
-async function predictWrapperVideoCanvas(projectConfig) {
-  const { modelId, width, height } = projectConfig;
-  if (projectConfig.autoResizeVideoAssets === false) return { width, height };
-  const rules = typeof getWrapperVideoDimensionRules === 'function'
-    ? getWrapperVideoDimensionRules(modelId)
-    : videoDimensionRulesFromDefaults(null, modelId);
-  let canvas = normalizeVideoDimensionsLikeWrapper(width, height, rules);
-  const framesDefineCanvas = !isMiniMaxH3R2vModel(modelId) && projectConfig.seedanceTaskType !== 'reference';
-  const frame = framesDefineCanvas ? (projectConfig.referenceImage || projectConfig.referenceImageEnd) : null;
-  if (Buffer.isBuffer(frame)) {
-    const dims = await getVideoImageDimensionsFromBuffer(frame);
-    const scale = isMiniMaxH3TwoStageModel(modelId) ? 2 : 1;
-    const fitted = dims
-      ? predictSharpInsideResizeDims(dims.width, dims.height, canvas.width * scale, canvas.height * scale)
-      : null;
-    if (fitted) canvas = normalizeVideoDimensionsLikeWrapper(fitted.width / scale, fitted.height / scale, rules);
-  }
-  return { width: canvas.width, height: canvas.height };
-}
-
 // The keyframes a render pinned, for --json output and render info.
 function describeKeyframesForOutput() {
   return options.keyframes.map(({ image, seconds, frameIndex }) => ({
@@ -13142,33 +13117,20 @@ function describeKeyframesForOutput() {
   }));
 }
 
-// Load each --keyframe image and cover-crop it (centered) onto the canvas the job
-// renders, at twice the canvas on two-stage models: the framing the wrapper gives
-// a last frame beside a first frame. Returns SDK keyframes in time order.
-async function prepareMiniMaxH3Keyframes(projectConfig) {
-  const canvas = await predictWrapperVideoCanvas(projectConfig);
-  const scale = isMiniMaxH3TwoStageModel(projectConfig.modelId) ? 2 : 1;
-  const target = { width: canvas.width * scale, height: canvas.height * scale };
+// Load each --keyframe image as SDK keyframes, in time order. The Intelligence
+// Client wrapper cover-crops each one onto the canvas the job renders exactly
+// like the last frame (twice the canvas on two-stage models); with asset
+// auto-resize off, the worker makes the same centred crop.
+async function prepareMiniMaxH3Keyframes() {
   return Promise.all(options.keyframes.map(async (keyframe) => {
-    const source = await fetchMediaBuffer(keyframe.image);
-    const dims = await getVideoImageDimensionsFromBuffer(source);
+    const image = await fetchMediaBuffer(keyframe.image);
+    const dims = await getVideoImageDimensionsFromBuffer(image);
     if (!dims?.width || !dims?.height) {
       const err = new Error(`Keyframe image ${keyframe.image} is not a readable image.`);
       err.code = 'INVALID_ARGUMENT';
       err.hint = 'Pass a PNG, JPEG or WebP still for each --keyframe.';
       err.details = { flag: '--keyframe', image: keyframe.image, seconds: keyframe.seconds };
       throw err;
-    }
-    const image = dims.width === target.width && dims.height === target.height
-      ? source
-      : await sharp(source)
-        .resize(target.width, target.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
-        .toBuffer();
-    if (image !== source && !options.quiet) {
-      console.error(
-        `Framed keyframe ${keyframe.image} from ${dims.width}x${dims.height} to ${target.width}x${target.height} ` +
-        `(centered crop onto the ${canvas.width}x${canvas.height} canvas${scale > 1 ? ', at twice it for two-stage' : ''}).`
-      );
     }
     return { image, frameIndex: keyframe.frameIndex };
   }));
@@ -14708,10 +14670,9 @@ async function main() {
       if (contextImageBuffers.length > 0) {
         projectConfig.contextImages = contextImageBuffers;
       }
-      // MiniMax H3 intermediate keyframes, in time order, each framed onto the
-      // canvas the job renders exactly as the last frame is.
+      // MiniMax H3 intermediate keyframes, in time order.
       if (options.keyframes.length > 0) {
-        projectConfig.keyframes = await prepareMiniMaxH3Keyframes(projectConfig);
+        projectConfig.keyframes = await prepareMiniMaxH3Keyframes();
       }
       applyLtxTransitionLora(
         projectConfig,

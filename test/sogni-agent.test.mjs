@@ -7828,6 +7828,189 @@ test('FastH3 audio guide Two-Stage keeps the requested delivered class on its ca
   assert.deepEqual([output.deliveredWidth, output.deliveredHeight], [1920, 1088]);
 });
 
+async function keyframeImageSize(serialized) {
+  const sharp = createRequire(import.meta.url)('sharp');
+  const { width, height } = await sharp(Buffer.from(serialized.data)).metadata();
+  return [width, height];
+}
+
+test('--keyframe pins MiniMax H3 keyframes in time order at round(seconds x 24), framed onto the canvas', async () => {
+  const { exitCode, state, stderr, stdout } = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-flf2v-turbo',
+    '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE,
+    '--keyframe', `${SCREENSHOT_FIXTURE}@6`, '--keyframe', `${SCREENSHOT_FIXTURE}@2.5s`,
+    '--duration', '8', 'A cyclist crosses the bridge.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  const project = state.lastVideoProject;
+  assert.equal(project.modelId, 'minimax-h3-fastvideo-int8_flf2v_turbo');
+  assert.equal(project.frames, 192);
+  assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [60, 144]);
+  for (const keyframe of project.keyframes) {
+    assert.equal(keyframe.image.type, 'Buffer');
+    assert.deepEqual(await keyframeImageSize(keyframe.image), [project.width, project.height]);
+  }
+  assert.ok(project.referenceImage && project.referenceImageEnd, 'keyframes never replace the first/last frame');
+  assert.match(stderr, /Keyframe at 00:02\.500 \(frame 60\)/);
+  assert.match(stderr, /Keyframe at 00:06\.000 \(frame 144\)/);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.deepEqual(output.keyframes.map(({ seconds, frameIndex, clock }) => [seconds, frameIndex, clock]), [
+    [2.5, 60, '00:02.500'],
+    [6, 144, '00:06.000']
+  ]);
+});
+
+test('--keyframe frames stills at twice the canvas on two-stage models', async () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'minimax-h3-fasth3-i2v-turbo-2stage', '--ref', SCREENSHOT_FIXTURE,
+    '--keyframe', `${SCREENSHOT_FIXTURE}@3`, '--duration', '8', 'A cyclist crosses the bridge.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  const project = state.lastVideoProject;
+  assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [72]);
+  assert.deepEqual(await keyframeImageSize(project.keyframes[0].image), [project.width * 2, project.height * 2]);
+});
+
+test('--keyframe works on MiniMax H3 Sound to Video and Reference to Video models', async () => {
+  const audio = h3AudioFixture();
+  const cases = [
+    ['minimax-h3-fasth3-ia2v-turbo', ['--ref', SCREENSHOT_FIXTURE, '--ref-audio', audio]],
+    ['minimax-h3-fasth3-a2v-turbo-2stage', ['--ref-audio', audio]],
+    ['minimax-h3-r2v', ['-c', SCREENSHOT_FIXTURE]],
+    ['minimax-h3-r2v-balanced-2stage', ['-c', SCREENSHOT_FIXTURE]]
+  ];
+  for (const [model, inputs] of cases) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, ...inputs, '--keyframe', `${SCREENSHOT_FIXTURE}@4`, '--duration', '8',
+      'A singer performs on a small stage.'
+    ]);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    const project = state.lastVideoProject;
+    assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [96], model);
+    const scale = model.includes('2stage') ? 2 : 1;
+    assert.deepEqual(await keyframeImageSize(project.keyframes[0].image), [project.width * scale, project.height * scale], model);
+    if (model.includes('r2v')) {
+      // The -c reference only: a keyframe never becomes a <Picture N> reference.
+      assert.equal(project.contextImages.length, 1, `${model}: keyframes are not reference images`);
+    }
+  }
+});
+
+test('--keyframe quotes pass keyframeCount to the video estimate', () => {
+  const withKeyframes = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE,
+    '--keyframe', `${SCREENSHOT_FIXTURE}@2`, '--keyframe', `${SCREENSHOT_FIXTURE}@4`, '--keyframe', `${SCREENSHOT_FIXTURE}@6`,
+    '--duration', '8', '--estimate-video-cost', 'A cyclist crosses the bridge.'
+  ]);
+  assert.equal(withKeyframes.exitCode, 0, withKeyframes.stderr);
+  assert.equal(withKeyframes.state.lastEstimateVideoCost.keyframeCount, 3);
+  assert.equal(JSON.parse(withKeyframes.stdout.trim()).keyframeCount, 3);
+
+  const without = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE,
+    '--duration', '8', '--estimate-video-cost', 'A cyclist crosses the bridge.'
+  ]);
+  assert.equal(without.exitCode, 0, without.stderr);
+  assert.equal('keyframeCount' in without.state.lastEstimateVideoCost, false);
+  assert.equal('keyframeCount' in JSON.parse(without.stdout.trim()), false);
+});
+
+test('--keyframe changes the prompt-hash seed only when keyframes are present', () => {
+  const args = ['--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--duration', '8', 'A cyclist.'];
+  const plain = runCli(args);
+  const again = runCli(args);
+  const pinned = runCli([...args.slice(0, -1), '--keyframe', `${SCREENSHOT_FIXTURE}@3`, 'A cyclist.']);
+  assert.equal(plain.exitCode, 0, plain.stderr);
+  assert.equal(pinned.exitCode, 0, pinned.stderr);
+  assert.equal(plain.state.lastVideoProject.seed, again.state.lastVideoProject.seed);
+  assert.notEqual(plain.state.lastVideoProject.seed, pinned.state.lastVideoProject.seed);
+});
+
+test('--keyframe fails loudly with a fix for every invalid request, before anything is submitted', () => {
+  const i2v = ['--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--duration', '8'];
+  const keyframe = (seconds) => ['--keyframe', `${SCREENSHOT_FIXTURE}@${seconds}`];
+  const cases = [
+    [['--video', '-m', 'minimax-h3-fasth3-t2v-turbo', '--duration', '8', ...keyframe(3)],
+      /is MiniMax H3 text-to-video, which cannot pin keyframes/],
+    [['--video', '-m', 'ltx25-i2v', '--ref', SCREENSHOT_FIXTURE, ...keyframe(3)],
+      /--keyframe is MiniMax H3 only; ltx25-22b-int8_i2v_distilled does not take keyframes/],
+    [[...i2v, ...keyframe(9.2)],
+      /Keyframe at 9\.2 s is past the end of the 8 s clip \(192 frames\); keep keyframes between 0\.1 s and 7\.9 s/],
+    [[...i2v, ...keyframe(7.97)],
+      /Keyframe at 7\.97 s lands on the last frame of the 8 s clip[\s\S]*set with --ref and --ref-end/],
+    [[...i2v, ...keyframe(0)], /Keyframe at 0 s lands on the first frame/],
+    [[...i2v, ...keyframe(3), ...keyframe(3.01)],
+      /Keyframes at 3 s and 3\.01 s land on the same frame \(72\)/],
+    [[...i2v, ...[1, 2, 3, 4, 5, 6, 7, 7.5, 7.8].flatMap(keyframe)], /MiniMax H3 pins at most 8 keyframes \(got 9\)/],
+    [[...i2v, '--keyframe', SCREENSHOT_FIXTURE], /--keyframe takes <image>@<seconds>/],
+    [[...i2v, '--keyframe', `${SCREENSHOT_FIXTURE}@soon`], /--keyframe takes <image>@<seconds>/],
+    [[...i2v, '--keyframe', '/nonexistent/turn.png@3'], /Keyframe image not found: \/nonexistent\/turn\.png/],
+    [[...keyframe(3)], /--keyframe requires --video with a MiniMax H3 model/],
+    [['--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE, '--looping', ...keyframe(3)],
+      /--keyframe cannot be combined with --looping/]
+  ];
+  for (const [args, expected] of cases) {
+    const { exitCode, state, stderr } = runCli([...args, 'A cyclist crosses the bridge.']);
+    assert.equal(exitCode, 1, `${args.join(' ')}: expected a refusal`);
+    assert.match(stderr, expected, args.join(' '));
+    assert.equal(state?.lastVideoProject ?? null, null, args.join(' '));
+  }
+});
+
+test('socket refusal 4100 (no worker can pin keyframes yet) is a retryable availability error', () => {
+  const { exitCode, stdout } = runCli([
+    '--json', '--video', '-m', 'minimax-h3-fasth3-i2v-turbo', '--ref', SCREENSHOT_FIXTURE,
+    '--keyframe', `${SCREENSHOT_FIXTURE}@3`, '--duration', '8', 'A cyclist crosses the bridge.'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({ error: 'Job failed', code: 4100 })
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorType, 'MODEL_UNAVAILABLE');
+  assert.equal(payload.errorCategory, 'model_unavailable');
+  assert.equal(payload.retryable, true);
+  assert.match(payload.error, /No worker that can pin MiniMax H3 keyframes is online for this model right now/);
+});
+
+test('--api-chat uploads --keyframe images after the frames and names them by upload index', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout, stderr } = await runCliAsync([
+      '--api-chat', '--api-base-url', apiBaseUrl, '--json',
+      '-c', SCREENSHOT_FIXTURE,
+      '--ref', SCREENSHOT_FIXTURE,
+      '--keyframe', `${SCREENSHOT_FIXTURE}@6`,
+      '--keyframe', `${SCREENSHOT_FIXTURE}@3.5`,
+      'animate the photo and land on each keyframe'
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(JSON.parse(stdout.trim()).success, true);
+
+    const request = requests.find(item => item.url === '/v1/chat/completions');
+    const refs = request.body.media_references;
+    assert.deepEqual(refs.map(ref => ref.flag), ['-c/--context', '--ref', '--keyframe', '--keyframe']);
+    assert.match(refs[2].url, /\/test-upload\/keyframeImage1\//);
+    assert.match(refs[3].url, /\/test-upload\/keyframeImage2\//);
+    const content = request.body.messages[1].content;
+    assert.equal(content.filter(part => part.type === 'image_url').length, 4);
+    const text = content[0].text;
+    assert.match(text, /with the keyframes argument \[\{"imageIndex":-3,"atSeconds":3\.5\},\{"imageIndex":-4,"atSeconds":6\}\]/);
+    assert.match(text, /at its time \(00:03\.500, 00:06\.000\)/);
+  });
+});
+
+test('hosted keyframes are checked for what holds on every clip; --api-workflow points at step arguments', () => {
+  const firstFrame = runCli(['--api-chat', '--keyframe', `${SCREENSHOT_FIXTURE}@0`, 'animate']);
+  assert.equal(firstFrame.exitCode, 1);
+  assert.match(firstFrame.stderr, /Keyframe at 0 s lands on the first frame/);
+
+  const workflow = runCli(['--api-workflow', '--keyframe', `${SCREENSHOT_FIXTURE}@3`, 'animate']);
+  assert.equal(workflow.exitCode, 1);
+  assert.match(workflow.stderr, /--keyframe does not apply to --api-workflow[\s\S]*step arguments of --workflow-input/);
+});
+
 test('FastH3 audio guide Two-Stage relays the socket hold notice word for word', () => {
   const audio = h3AudioFixture();
   const created = runCli(

@@ -823,7 +823,30 @@ function classifyCliError(error, context = {}) {
     if (happyhorseClassified) return happyhorseClassified;
   }
 
+  // Socket 4100: no online worker serving this model can pin MiniMax H3
+  // keyframes yet. That is capacity, not a defect in the request: retryable.
+  if (isMiniMaxH3KeyframesUnavailableError(error)) {
+    const socketMessage = /keyframe/i.test(rawMessage) ? rawMessage : null;
+    return {
+      error_type: 'MODEL_UNAVAILABLE',
+      category: 'model_unavailable',
+      message: socketMessage || MINIMAX_H3_KEYFRAMES_UNAVAILABLE_MESSAGE,
+      retryable: true,
+      ...(!socketMessage && rawMessage ? { technicalError: rawMessage } : {})
+    };
+  }
+
   return classifySkillError(error);
+}
+
+const MINIMAX_H3_KEYFRAMES_UNAVAILABLE_CODE = '4100';
+const MINIMAX_H3_KEYFRAMES_UNAVAILABLE_MESSAGE = 'No worker that can pin MiniMax H3 keyframes is online for this model right now. '
+  + 'Try again shortly, or render without --keyframe.';
+
+function isMiniMaxH3KeyframesUnavailableError(error) {
+  if (!error || typeof error !== 'object') return false;
+  return [error.code, error.errorCode, error.error_code, error.originalCode, error.payload?.errorCode, error.payload?.error_code]
+    .some((code) => code !== undefined && code !== null && String(code) === MINIMAX_H3_KEYFRAMES_UNAVAILABLE_CODE);
 }
 
 function addCanonicalErrorFields(payload, error, context = {}) {
@@ -1231,6 +1254,8 @@ function computePromptHashSeed(opts) {
     loraStrengths: opts.loraStrengths || [],
     refImage: opts.refImage || '',
     refImageEnd: opts.refImageEnd || '',
+    // Only when present, so seeds of requests without keyframes never change.
+    ...(opts.keyframes?.length ? { keyframes: opts.keyframes.map(({ image, seconds }) => [image, seconds]) } : {}),
     refAudio: opts.refAudio || '',
     audioStart: opts.audioStart ?? null,
     audioDuration: opts.audioDuration ?? null,
@@ -2504,6 +2529,58 @@ function miniMaxH3FramesForDuration(durationSeconds) {
   return Math.max(min, Math.min(max, min + Math.round((desiredFrames - min) / step) * step));
 }
 
+// MiniMax H3 intermediate keyframes: still images the worker pins at chosen
+// frames strictly between the first and the last frame (repeatable
+// --keyframe <image>@<seconds>). They are in addition to --ref/--ref-end, never
+// a replacement. The image-to-video, first/last-frame, Sound to Video (FastH3
+// audio guide) and Reference to Video ids take them; text-to-video never does.
+const MINIMAX_H3_MAX_KEYFRAMES = 8;
+const MINIMAX_H3_KEYFRAME_MODELS_HINT = 'Keyframes work on the MiniMax H3 image-to-video and first/last-frame models '
+  + '(minimax-h3-i2v, minimax-h3-flf2v and their -balanced, -turbo, -fasth3 and two-stage forms), '
+  + 'the FastH3 Sound to Video models (minimax-h3-fasth3-ia2v-turbo, -flfa2v-turbo, -a2v-turbo and their -2stage forms) '
+  + 'and Reference to Video (minimax-h3-r2v and its -balanced, -turbo and two-stage forms).';
+
+function isMiniMaxH3KeyframeModel(modelId) {
+  if (!isMiniMaxH3Model(modelId)) return false;
+  const mode = miniMaxH3ModeFromModelId(modelId);
+  return mode === 'i2v' || mode === 'flf2v' || mode === 'r2v' || isMiniMaxH3AudioGuideModel(modelId);
+}
+
+// The frame a keyframe time lands on: H3 renders at a fixed 24fps, so
+// seconds x 24 rounded (frameIndex / 24 round-trips to the same frame).
+function miniMaxH3KeyframeFrameIndex(seconds) {
+  return Math.round(seconds * MINIMAX_H3_FRAME_GRID.fps);
+}
+
+// A pinned frame's time as an H3 cut-marker clock (MM:SS.mmm), rounded down to
+// the millisecond so a cut written at it never lands after the keyframe.
+function formatMiniMaxH3KeyframeClock(frameIndex) {
+  const millis = Math.floor((frameIndex * 1000) / MINIMAX_H3_FRAME_GRID.fps);
+  const minutes = String(Math.floor(millis / 60000)).padStart(2, '0');
+  const seconds = String(Math.floor((millis % 60000) / 1000)).padStart(2, '0');
+  return `${minutes}:${seconds}.${String(millis % 1000).padStart(3, '0')}`;
+}
+
+// `--keyframe <image>@<seconds>`: the last "@" separates the time, so a path or
+// URL that itself contains "@" still parses. A trailing "s" is accepted.
+function parseKeyframeFlagValue(raw, flag = '--keyframe') {
+  const text = String(raw ?? '').trim();
+  const at = text.lastIndexOf('@');
+  const imagePart = at > 0 ? text.slice(0, at).trim() : '';
+  const timeMatch = at > 0 ? /^(\d+(?:\.\d+)?|\.\d+)s?$/i.exec(text.slice(at + 1).trim()) : null;
+  if (!imagePart || !timeMatch) {
+    fatalCliError(
+      `${flag} takes <image>@<seconds>: the image, then when the video lands on it (got "${text}").`,
+      {
+        code: 'INVALID_ARGUMENT',
+        details: { flag, value: text },
+        hint: `Example: ${flag} ./turn.png@3.5 pins turn.png 3.5 seconds into the clip. Repeat ${flag} for up to ${MINIMAX_H3_MAX_KEYFRAMES} keyframes.`
+      }
+    );
+  }
+  return { image: expandHomePath(imagePart), seconds: Number(timeMatch[1]) };
+}
+
 const LTX23_10EROS_FIXED_SETTINGS = Object.freeze({
   steps: 9,
   guidance: 1,
@@ -3155,6 +3232,7 @@ const options = {
   angles360Video: null,
   refImage: null, // Reference image for video (start frame)
   refImageEnd: null, // End frame for video interpolation
+  keyframes: [], // MiniMax H3 intermediate keyframes from repeatable --keyframe <image>@<seconds>: [{ image, seconds, frameIndex }]
   refAudio: null, // Uploaded/generated audio for ia2v/a2v, or s2v lip-sync (primary)
   refAudios: [], // Additional Seedance loose audio refs; first --ref-audio fills refAudio, subsequent calls append here
   audioStart: null, // Optional start offset into reference audio
@@ -3354,6 +3432,7 @@ const cliSet = {
   videoModel: false,
   refImage: false,
   refImageEnd: false,
+  keyframes: false,
   refAudio: false,
   refAudios: false,
   audioStart: false,
@@ -3722,6 +3801,11 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.refImageEnd = raw;
     cliSet.refImageEnd = true;
+  } else if (arg === '--keyframe') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.keyframes.push(parseKeyframeFlagValue(raw, arg));
+    cliSet.keyframes = true;
   } else if (arg === '--ref-audio' || arg === '--audio') {
     const raw = expandHomePath(requireFlagValue(args, i, arg));
     i++;
@@ -4588,6 +4672,11 @@ Video Options:
   --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
                          defaults to the LTX-2.5 i2v first/last-frame workflow
                          (last frame on Seedance; L2VA endpoint on MiniMax H3 i2v)
+  --keyframe <image>@<sec> MiniMax H3 only: pin an image (path or URL) at that time inside the clip,
+                         in addition to --ref/--ref-end. Repeatable, up to 8, strictly between the
+                         first and last frame. H3 i2v/flf2v, FastH3 Sound to Video and Ref2VA models.
+                         Describe what each keyframe shows in the prompt at its time. Two keyframes
+                         are included in the price; each extra one adds a little.
   --ref-audio <path|url> Audio reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance; H3 r2v uploads local/remote files.
@@ -7006,6 +7095,118 @@ if (options.video && !options.frames) {
   options.fps = h3Fps;
 }
 
+// MiniMax H3 intermediate keyframes (--keyframe <image>@<seconds>), checked once
+// the model and the frame count are final so every error names the clip it was
+// checked against. Direct renders pin each time to a frame of the job's 24fps
+// grid; hosted chat uploads the images for the agent to pin, and the hosted
+// tool checks the times against the length it picks. Nothing is clamped or dropped.
+function validateMiniMaxH3KeyframeOptions() {
+  const keyframes = options.keyframes;
+  if (keyframes.length === 0) return;
+  const fail = (message, details = {}, hint = undefined) => fatalCliError(message, {
+    code: 'INVALID_ARGUMENT',
+    details: { flag: '--keyframe', ...details },
+    ...(hint ? { hint } : {})
+  });
+  if (options.apiWorkflowAction) {
+    fail(
+      '--keyframe does not apply to --api-workflow. Put keyframes: [{ "imageIndex": -1, "atSeconds": 3.5 }] in the '
+      + 'animate_photo, sound_to_video or generate_video step arguments of --workflow-input, and attach the images with -c/--context.',
+      { apiWorkflow: true }
+    );
+  }
+  if (!options.apiChat && !options.video) {
+    fail('--keyframe requires --video with a MiniMax H3 model (or --api-chat / --durable-chat).');
+  }
+  const conflict = [
+    ['--looping', options.looping],
+    ['--angles-360-video', options.angles360Video],
+    ['--source-reel', options.sourceReelDir],
+    ['--multi-angle', options.multiAngle]
+  ].find(([, enabled]) => enabled);
+  if (conflict) {
+    fail(`--keyframe cannot be combined with ${conflict[0]}, which renders more than one clip.`, { conflictsWith: conflict[0] });
+  }
+  if (keyframes.length > MINIMAX_H3_MAX_KEYFRAMES) {
+    fail(
+      `MiniMax H3 pins at most ${MINIMAX_H3_MAX_KEYFRAMES} keyframes (got ${keyframes.length}).`,
+      { count: keyframes.length, maximum: MINIMAX_H3_MAX_KEYFRAMES }
+    );
+  }
+  for (const keyframe of keyframes) {
+    if (!isHttpUrl(keyframe.image) && !existsSync(keyframe.image)) {
+      fatalCliError(`Keyframe image not found: ${keyframe.image}`, {
+        code: 'MISSING_FILE',
+        details: { flag: '--keyframe', path: keyframe.image, seconds: keyframe.seconds },
+        hint: 'Check the path, or pass an http(s) URL.'
+      });
+    }
+  }
+
+  let frames = null;
+  let firstFrameNote = 'keyframes go strictly inside the clip';
+  let lastFrameNote = firstFrameNote;
+  if (!options.apiChat) {
+    if (!isMiniMaxH3KeyframeModel(options.model)) {
+      const textToVideo = isMiniMaxH3Model(options.model);
+      fail(
+        textToVideo
+          ? `${options.model} is MiniMax H3 text-to-video, which cannot pin keyframes. Add --ref (or --ref-end) for image-to-video, or pick a Sound to Video or Reference to Video model.`
+          : `--keyframe is MiniMax H3 only; ${options.model} does not take keyframes.`,
+        { model: options.model },
+        MINIMAX_H3_KEYFRAME_MODELS_HINT
+      );
+    }
+    frames = options.frames;
+    const mode = miniMaxH3ModeFromModelId(options.model);
+    if (mode === 'i2v' || mode === 'flf2v' || mode === 'flfa2v') {
+      firstFrameNote = 'the first and last frames are set with --ref and --ref-end, not keyframes';
+      lastFrameNote = firstFrameNote;
+    } else if (mode === 'ia2v') {
+      firstFrameNote = 'the first frame is set with --ref, not a keyframe';
+      lastFrameNote = 'this model cannot pin the last frame';
+    } else {
+      firstFrameNote = 'this model cannot pin the first or last frame';
+      lastFrameNote = firstFrameNote;
+    }
+  }
+
+  const { fps } = MINIMAX_H3_FRAME_GRID;
+  const earliest = Math.ceil((1 / fps) * 10) / 10;
+  const latest = frames ? Math.floor(((frames - 2) / fps) * 10) / 10 : null;
+  const keepInside = latest === null
+    ? `keep keyframes at ${earliest} s or later`
+    : `keep keyframes between ${earliest} s and ${latest} s`;
+  const clip = frames ? `${formatDurationSeconds(frames / fps)} s clip (${frames} frames)` : null;
+  for (const keyframe of keyframes) {
+    const frameIndex = miniMaxH3KeyframeFrameIndex(keyframe.seconds);
+    const details = { seconds: keyframe.seconds, frameIndex, ...(frames ? { frames } : {}), image: keyframe.image };
+    if (frameIndex < 1) {
+      fail(`Keyframe at ${keyframe.seconds} s lands on the first frame, and ${firstFrameNote}; ${keepInside}.`, details);
+    }
+    if (frames && frameIndex === frames - 1) {
+      fail(`Keyframe at ${keyframe.seconds} s lands on the last frame of the ${clip}, and ${lastFrameNote}; ${keepInside}.`, details);
+    }
+    if (frames && frameIndex > frames - 2) {
+      fail(`Keyframe at ${keyframe.seconds} s is past the end of the ${clip}; ${keepInside}, or lengthen the clip with --duration.`, details);
+    }
+    keyframe.frameIndex = frameIndex;
+  }
+  // Time order is the order the keyframes are uploaded, pinned and described in.
+  keyframes.sort((a, b) => a.frameIndex - b.frameIndex);
+  for (let index = 1; index < keyframes.length; index += 1) {
+    const [previous, current] = [keyframes[index - 1], keyframes[index]];
+    if (previous.frameIndex === current.frameIndex) {
+      fail(
+        `Keyframes at ${previous.seconds} s and ${current.seconds} s land on the same frame (${current.frameIndex}); give each keyframe its own time, at least 1/24 s apart.`,
+        { frameIndex: current.frameIndex, seconds: [previous.seconds, current.seconds] }
+      );
+    }
+  }
+}
+
+validateMiniMaxH3KeyframeOptions();
+
 // Video dimensions:
 // - Sogni video pipelines have model-specific min/max dimensions and divisors.
 // - When using i2v (or any ref-based workflow), the Sogni client wrapper will *resize the reference image*
@@ -7733,6 +7934,16 @@ function getApiModeMediaReferences() {
   }
   if (options.refImage) refs.push({ flag: '--ref', value: options.refImage, kind: 'image' });
   if (options.refImageEnd) refs.push({ flag: '--ref-end', value: options.refImageEnd, kind: 'image' });
+  // MiniMax H3 keyframes follow the frame images, in time order, so the hosted
+  // agent can pin each one by its upload index (-1 is the first image upload).
+  for (const [index, keyframe] of options.keyframes.entries()) {
+    refs.push({
+      flag: '--keyframe',
+      value: keyframe.image,
+      kind: 'image',
+      keyframe: { slot: index + 1, seconds: keyframe.seconds, frameIndex: keyframe.frameIndex }
+    });
+  }
   if (options.refAudio) refs.push({ flag: '--ref-audio', value: options.refAudio, kind: 'audio' });
   for (const value of options.refAudios || []) {
     if (value) refs.push({ flag: '--ref-audio', value, kind: 'audio' });
@@ -7810,6 +8021,7 @@ function apiMediaReferenceUploadType(ref, index) {
   if (ref.kind === 'audio') return 'referenceAudio';
   if (ref.kind === 'video') return 'referenceVideo';
   if (ref.flag === '--ref-end') return 'referenceImageEnd';
+  if (ref.flag === '--keyframe') return `keyframeImage${ref.keyframe.slot}`;
   if (ref.flag === '--mask') return `contextImage${Math.min(index + 1, 16)}`;
   if (ref.flag === '-c/--context') return `contextImage${Math.min(index + 1, 16)}`;
   return 'referenceImage';
@@ -8080,6 +8292,29 @@ function formatApiMediaReferencesForPrompt(mediaReferences) {
   return `API media references:\n${lines.join('\n')}`;
 }
 
+// The --keyframe request in the hosted tools' own terms. Negative imageIndex
+// counts image uploads only, in media_references order (-1 is the first), so
+// each keyframe is named by its position among the image references.
+function formatApiKeyframePlanForPrompt(imageRefs) {
+  const keyframes = imageRefs
+    .map((ref, position) => (ref.keyframe ? { ref, imageIndex: -(position + 1) } : null))
+    .filter(Boolean);
+  if (keyframes.length === 0) return '';
+  const argument = JSON.stringify(keyframes.map(({ ref, imageIndex }) => ({
+    imageIndex,
+    atSeconds: ref.keyframe.seconds
+  })));
+  const clocks = keyframes
+    .map(({ ref }) => formatMiniMaxH3KeyframeClock(ref.keyframe.frameIndex ?? miniMaxH3KeyframeFrameIndex(ref.keyframe.seconds)))
+    .join(', ');
+  return [
+    'MiniMax H3 keyframes: pin these uploaded images inside the video, in addition to any first or last frame, '
+      + `with the keyframes argument ${argument}.`,
+    'Use a MiniMax H3 image-to-video, first/last-frame, Sound to Video or Reference to Video model, keep the clip '
+      + `longer than the last keyframe, and describe in the video prompt what each keyframe shows at its time (${clocks}).`
+  ].join('\n');
+}
+
 function extractApiEnvelopeData(payload) {
   return payload?.data && typeof payload.data === 'object' ? payload.data : payload;
 }
@@ -8230,7 +8465,8 @@ async function buildApiChatMessages(apiMediaRefs, apiMediaReferences) {
   const nonImageRefs = apiMediaReferences.filter(ref => ref.kind !== 'image');
   const promptText = [
     options.prompt || 'Describe the attached media.',
-    formatApiMediaReferencesForPrompt(nonImageRefs)
+    formatApiMediaReferencesForPrompt(nonImageRefs),
+    formatApiKeyframePlanForPrompt(imageRefs)
   ].filter(Boolean).join('\n\n');
 
   const messages = [{ role: 'system', content: system }];
@@ -12883,6 +13119,73 @@ function videoWorkflowHasFrameAnchors() {
     || (options.videoWorkflow === 'ia2v' && isMiniMaxH3AudioGuideModel(options.model));
 }
 
+// The canvas SogniClientWrapper.prepareProjectConfig renders a video project on:
+// the requested size normalized to the model's grid, then refitted inside that
+// box to the first frame (or a lone last frame) when a frame defines the canvas.
+// Two-stage models fit the frame at twice the canvas. Loose references (H3
+// Ref2VA) never define it, and autoResizeVideoAssets=false keeps the size sent.
+async function predictWrapperVideoCanvas(projectConfig) {
+  const { modelId, width, height } = projectConfig;
+  if (projectConfig.autoResizeVideoAssets === false) return { width, height };
+  const rules = typeof getWrapperVideoDimensionRules === 'function'
+    ? getWrapperVideoDimensionRules(modelId)
+    : videoDimensionRulesFromDefaults(null, modelId);
+  let canvas = normalizeVideoDimensionsLikeWrapper(width, height, rules);
+  const framesDefineCanvas = !isMiniMaxH3R2vModel(modelId) && projectConfig.seedanceTaskType !== 'reference';
+  const frame = framesDefineCanvas ? (projectConfig.referenceImage || projectConfig.referenceImageEnd) : null;
+  if (Buffer.isBuffer(frame)) {
+    const dims = await getVideoImageDimensionsFromBuffer(frame);
+    const scale = isMiniMaxH3TwoStageModel(modelId) ? 2 : 1;
+    const fitted = dims
+      ? predictSharpInsideResizeDims(dims.width, dims.height, canvas.width * scale, canvas.height * scale)
+      : null;
+    if (fitted) canvas = normalizeVideoDimensionsLikeWrapper(fitted.width / scale, fitted.height / scale, rules);
+  }
+  return { width: canvas.width, height: canvas.height };
+}
+
+// The keyframes a render pinned, for --json output and render info.
+function describeKeyframesForOutput() {
+  return options.keyframes.map(({ image, seconds, frameIndex }) => ({
+    image,
+    seconds,
+    frameIndex,
+    clock: formatMiniMaxH3KeyframeClock(frameIndex)
+  }));
+}
+
+// Load each --keyframe image and cover-crop it (centered) onto the canvas the job
+// renders, at twice the canvas on two-stage models: the framing the wrapper gives
+// a last frame beside a first frame. Returns SDK keyframes in time order.
+async function prepareMiniMaxH3Keyframes(projectConfig) {
+  const canvas = await predictWrapperVideoCanvas(projectConfig);
+  const scale = isMiniMaxH3TwoStageModel(projectConfig.modelId) ? 2 : 1;
+  const target = { width: canvas.width * scale, height: canvas.height * scale };
+  return Promise.all(options.keyframes.map(async (keyframe) => {
+    const source = await fetchMediaBuffer(keyframe.image);
+    const dims = await getVideoImageDimensionsFromBuffer(source);
+    if (!dims?.width || !dims?.height) {
+      const err = new Error(`Keyframe image ${keyframe.image} is not a readable image.`);
+      err.code = 'INVALID_ARGUMENT';
+      err.hint = 'Pass a PNG, JPEG or WebP still for each --keyframe.';
+      err.details = { flag: '--keyframe', image: keyframe.image, seconds: keyframe.seconds };
+      throw err;
+    }
+    const image = dims.width === target.width && dims.height === target.height
+      ? source
+      : await sharp(source)
+        .resize(target.width, target.height, { fit: 'cover', position: 'center', withoutEnlargement: false })
+        .toBuffer();
+    if (image !== source && !options.quiet) {
+      console.error(
+        `Framed keyframe ${keyframe.image} from ${dims.width}x${dims.height} to ${target.width}x${target.height} ` +
+        `(centered crop onto the ${canvas.width}x${canvas.height} canvas${scale > 1 ? ', at twice it for two-stage' : ''}).`
+      );
+    }
+    return { image, frameIndex: keyframe.frameIndex };
+  }));
+}
+
 function miniMaxH3R2vReferenceImageCount() {
   if (!isMiniMaxH3R2vModel(options.model)) return undefined;
   return (options.refImage ? 1 : 0)
@@ -12904,7 +13207,9 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
     tokenType,
     ...(Number.isFinite(steps) && steps > 0 ? { steps } : {}),
     ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
-    ...(referenceImageCount !== undefined ? { referenceImageCount } : {})
+    ...(referenceImageCount !== undefined ? { referenceImageCount } : {}),
+    // MiniMax H3 keyframes: two are included, each extra one adds output time.
+    ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {})
   };
 
   if ((isSeedanceVideo || isWan3Video || isMiniMaxH3R2v) && videoSources.length > 0) {
@@ -13805,6 +14110,7 @@ async function main() {
           tokenType: options.tokenType || 'spark',
           count: options.count,
           ...(delivered ? { deliveredWidth: delivered.width, deliveredHeight: delivered.height } : {}),
+          ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {}),
           estimate
         }));
       } else {
@@ -13897,6 +14203,9 @@ async function main() {
       log(`Generating video (${options.videoWorkflow}) with ${options.model}...`);
       if (options.refImage) log(`Reference image: ${options.refImage}`);
       if (options.refImageEnd) log(`End frame: ${options.refImageEnd}`);
+      for (const keyframe of options.keyframes) {
+        log(`Keyframe at ${formatMiniMaxH3KeyframeClock(keyframe.frameIndex)} (frame ${keyframe.frameIndex}): ${keyframe.image}`);
+      }
       if (options.refAudio) log(`Reference audio: ${options.refAudio}`);
       for (const referenceAudio of options.refAudios) log(`Additional reference audio: ${referenceAudio}`);
       if (options.referenceAudioIdentity) log(`Voice identity: ${options._voicePersonaResolvedName || options.referenceAudioIdentity}`);
@@ -14410,6 +14719,11 @@ async function main() {
       }
       if (contextImageBuffers.length > 0) {
         projectConfig.contextImages = contextImageBuffers;
+      }
+      // MiniMax H3 intermediate keyframes, in time order, each framed onto the
+      // canvas the job renders exactly as the last frame is.
+      if (options.keyframes.length > 0) {
+        projectConfig.keyframes = await prepareMiniMaxH3Keyframes(projectConfig);
       }
       applyLtxTransitionLora(
         projectConfig,
@@ -15011,6 +15325,7 @@ async function main() {
         }
         renderInfo.refImage = options.refImage;
         renderInfo.refImageEnd = options.refImageEnd;
+        if (options.keyframes.length > 0) renderInfo.keyframes = describeKeyframesForOutput();
         if (options.refAudio) {
           renderInfo.refAudio = options.refAudio;
           if (options.audioStart !== null) renderInfo.audioStart = options.audioStart;
@@ -15288,6 +15603,7 @@ async function main() {
           }
           if (options.refImage) output.refImage = options.refImage;
           if (options.refImageEnd) output.refImageEnd = options.refImageEnd;
+          if (options.keyframes.length > 0) output.keyframes = describeKeyframesForOutput();
           if (options.refAudio) {
             output.refAudio = options.refAudio;
             if (options.audioStart !== null) output.audioStart = options.audioStart;
@@ -15407,6 +15723,9 @@ async function main() {
         autoResizeVideoAssets: options.video ? (options.autoResizeVideoAssets ?? null) : null,
         refImage: options.video ? (options.refImage ?? null) : null,
         refImageEnd: options.video ? (options.refImageEnd ?? null) : null,
+        ...(options.video && options.keyframes.length > 0
+          ? { keyframes: options.keyframes.map(({ image, seconds, frameIndex }) => ({ image, seconds, frameIndex: frameIndex ?? null })) }
+          : {}),
         refAudio: options.video ? (options.refAudio ?? null) : null,
         referenceAudioIdentity: options.video ? (options.referenceAudioIdentity ?? null) : null,
         refVideo: options.video ? (options.refVideo ?? null) : null,

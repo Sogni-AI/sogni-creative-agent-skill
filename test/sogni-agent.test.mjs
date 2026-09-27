@@ -7935,12 +7935,14 @@ test('--keyframe fails loudly with a fix for every invalid request, before anyth
     [['--video', '-m', 'ltx25-i2v', '--ref', SCREENSHOT_FIXTURE, ...keyframe(3)],
       /--keyframe is MiniMax H3 only; ltx25-22b-int8_i2v_distilled does not take keyframes/],
     [[...i2v, ...keyframe(9.2)],
-      /Keyframe at 9\.2 s is past the end of the 8 s clip \(192 frames\); keep keyframes between 0\.1 s and 7\.9 s/],
+      /Keyframe 1 \([^)]*screenshot\.jpg\) at 9\.2 s is past the 8\.0 s clip \(--duration 8 renders 192 frames\); keep keyframes between 0\.1 s and 7\.9 s, or set --duration to at least 10 s\./],
     [[...i2v, ...keyframe(7.97)],
-      /Keyframe at 7\.97 s lands on the last frame of the 8 s clip[\s\S]*set with --ref and --ref-end/],
-    [[...i2v, ...keyframe(0)], /Keyframe at 0 s lands on the first frame/],
+      /at 7\.97 s lands on the last frame of the 8\.0 s clip, which is never a keyframe \(the first and last frames come from --ref and --ref-end\)/],
+    [[...i2v, ...keyframe(0)], /at 0 s lands on the first frame, which is never a keyframe/],
+    [['--video', '-m', 'minimax-h3-r2v', '-c', SCREENSHOT_FIXTURE, '--duration', '8', ...keyframe(0.02)],
+      /lands on the first frame, which is never a keyframe \(reference-to-video cannot pin its first or last frame\)/],
     [[...i2v, ...keyframe(3), ...keyframe(3.01)],
-      /Keyframes at 3 s and 3\.01 s land on the same frame \(72\)/],
+      /Keyframe 1 \([^)]*\) and keyframe 2 \([^)]*\) both land on frame 72 \(3\.0 s\); give each keyframe its own time/],
     [[...i2v, ...[1, 2, 3, 4, 5, 6, 7, 7.5, 7.8].flatMap(keyframe)], /MiniMax H3 pins at most 8 keyframes \(got 9\)/],
     [[...i2v, '--keyframe', SCREENSHOT_FIXTURE], /--keyframe takes <image>@<seconds>/],
     [[...i2v, '--keyframe', `${SCREENSHOT_FIXTURE}@soon`], /--keyframe takes <image>@<seconds>/],
@@ -8004,7 +8006,10 @@ test('--api-chat uploads --keyframe images after the frames and names them by up
 test('hosted keyframes are checked for what holds on every clip; --api-workflow points at step arguments', () => {
   const firstFrame = runCli(['--api-chat', '--keyframe', `${SCREENSHOT_FIXTURE}@0`, 'animate']);
   assert.equal(firstFrame.exitCode, 1);
-  assert.match(firstFrame.stderr, /Keyframe at 0 s lands on the first frame/);
+  assert.match(firstFrame.stderr, /at 0 s lands on the first frame, which is never a keyframe/);
+  const pastLongest = runCli(['--api-chat', '--keyframe', `${SCREENSHOT_FIXTURE}@15.1`, 'animate']);
+  assert.equal(pastLongest.exitCode, 1);
+  assert.match(pastLongest.stderr, /at or past the end of the longest MiniMax H3 clip \(15\.08 s\); keep keyframes between 0\.1 s and 15\.0 s/);
 
   const workflow = runCli(['--api-workflow', '--keyframe', `${SCREENSHOT_FIXTURE}@3`, 'animate']);
   assert.equal(workflow.exitCode, 1);

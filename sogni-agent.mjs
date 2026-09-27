@@ -106,7 +106,13 @@ import {
   minimaxH3TwoStageDeliveredSize,
   prepareSeedanceV2VSourceVideo as prepareSharedSeedanceV2VSourceVideo,
   getWan22VideoSizeRefusal,
-  WAN22_MAX_VIDEO_PIXELS
+  WAN22_MAX_VIDEO_PIXELS,
+  // MiniMax H3 intermediate keyframes: the frame math and checks every
+  // surface shares (Intelligence Client with SDK 5.58.0 keyframes support).
+  checkMinimaxH3Keyframes,
+  isMinimaxH3KeyframeModelId,
+  minimaxH3KeyframeFrameIndex,
+  MINIMAX_H3_MAX_KEYFRAMES
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
   HAPPYHORSE_REFERENCE_LIMITS,
@@ -2533,24 +2539,12 @@ function miniMaxH3FramesForDuration(durationSeconds) {
 // frames strictly between the first and the last frame (repeatable
 // --keyframe <image>@<seconds>). They are in addition to --ref/--ref-end, never
 // a replacement. The image-to-video, first/last-frame, Sound to Video (FastH3
-// audio guide) and Reference to Video ids take them; text-to-video never does.
-const MINIMAX_H3_MAX_KEYFRAMES = 8;
+// audio guide) and Reference to Video ids take them (isMinimaxH3KeyframeModelId);
+// text-to-video never does.
 const MINIMAX_H3_KEYFRAME_MODELS_HINT = 'Keyframes work on the MiniMax H3 image-to-video and first/last-frame models '
   + '(minimax-h3-i2v, minimax-h3-flf2v and their -balanced, -turbo, -fasth3 and two-stage forms), '
   + 'the FastH3 Sound to Video models (minimax-h3-fasth3-ia2v-turbo, -flfa2v-turbo, -a2v-turbo and their -2stage forms) '
   + 'and Reference to Video (minimax-h3-r2v and its -balanced, -turbo and two-stage forms).';
-
-function isMiniMaxH3KeyframeModel(modelId) {
-  if (!isMiniMaxH3Model(modelId)) return false;
-  const mode = miniMaxH3ModeFromModelId(modelId);
-  return mode === 'i2v' || mode === 'flf2v' || mode === 'r2v' || isMiniMaxH3AudioGuideModel(modelId);
-}
-
-// The frame a keyframe time lands on: H3 renders at a fixed 24fps, so
-// seconds x 24 rounded (frameIndex / 24 round-trips to the same frame).
-function miniMaxH3KeyframeFrameIndex(seconds) {
-  return Math.round(seconds * MINIMAX_H3_FRAME_GRID.fps);
-}
 
 // A pinned frame's time as an H3 cut-marker clock (MM:SS.mmm), rounded down to
 // the millisecond so a cut written at it never lands after the keyframe.
@@ -7143,11 +7137,13 @@ function validateMiniMaxH3KeyframeOptions() {
     }
   }
 
-  let frames = null;
-  let firstFrameNote = 'keyframes go strictly inside the clip';
-  let lastFrameNote = firstFrameNote;
+  // Direct renders know the model and the frame count the job renders (a Sound
+  // to Video window is always the clip length). Hosted chat does not: the agent
+  // picks both, so only what holds for every H3 clip is checked here.
+  let frames;
+  let edgeHint;
   if (!options.apiChat) {
-    if (!isMiniMaxH3KeyframeModel(options.model)) {
+    if (!isMinimaxH3KeyframeModelId(options.model)) {
       const textToVideo = isMiniMaxH3Model(options.model);
       fail(
         textToVideo
@@ -7158,51 +7154,43 @@ function validateMiniMaxH3KeyframeOptions() {
       );
     }
     frames = options.frames;
-    const mode = miniMaxH3ModeFromModelId(options.model);
-    if (mode === 'i2v' || mode === 'flf2v' || mode === 'flfa2v') {
-      firstFrameNote = 'the first and last frames are set with --ref and --ref-end, not keyframes';
-      lastFrameNote = firstFrameNote;
-    } else if (mode === 'ia2v') {
-      firstFrameNote = 'the first frame is set with --ref, not a keyframe';
-      lastFrameNote = 'this model cannot pin the last frame';
-    } else {
-      firstFrameNote = 'this model cannot pin the first or last frame';
-      lastFrameNote = firstFrameNote;
-    }
+    edgeHint = {
+      i2v: 'the first and last frames come from --ref and --ref-end',
+      flf2v: 'the first and last frames come from --ref and --ref-end',
+      flfa2v: 'the first and last frames come from --ref and --ref-end',
+      ia2v: 'the first frame comes from --ref, and the last frame cannot be pinned',
+      a2v: 'audio-only clips cannot pin their first or last frame',
+      r2v: 'reference-to-video cannot pin its first or last frame'
+    }[miniMaxH3ModeFromModelId(options.model)];
   }
 
-  const { fps } = MINIMAX_H3_FRAME_GRID;
-  const earliest = Math.ceil((1 / fps) * 10) / 10;
-  const latest = frames ? Math.floor(((frames - 2) / fps) * 10) / 10 : null;
-  const keepInside = latest === null
-    ? `keep keyframes at ${earliest} s or later`
-    : `keep keyframes between ${earliest} s and ${latest} s`;
-  const clip = frames ? `${formatDurationSeconds(frames / fps)} s clip (${frames} frames)` : null;
-  for (const keyframe of keyframes) {
-    const frameIndex = miniMaxH3KeyframeFrameIndex(keyframe.seconds);
-    const details = { seconds: keyframe.seconds, frameIndex, ...(frames ? { frames } : {}), image: keyframe.image };
-    if (frameIndex < 1) {
-      fail(`Keyframe at ${keyframe.seconds} s lands on the first frame, and ${firstFrameNote}; ${keepInside}.`, details);
+  // The shared check names entries by position; the CLI names them by the
+  // order the --keyframe flags were given.
+  const check = checkMinimaxH3Keyframes(
+    keyframes.map(({ seconds }, index) => ({ imageIndex: index, atSeconds: seconds })),
+    {
+      ...(frames ? {
+        frames,
+        framesSource: cliSet.frames ? `--frames ${frames}` : `--duration ${options.duration} renders ${frames} frames`,
+        suggestDuration: true
+      } : {}),
+      ...(edgeHint ? { edgeHint } : {})
     }
-    if (frames && frameIndex === frames - 1) {
-      fail(`Keyframe at ${keyframe.seconds} s lands on the last frame of the ${clip}, and ${lastFrameNote}; ${keepInside}.`, details);
-    }
-    if (frames && frameIndex > frames - 2) {
-      fail(`Keyframe at ${keyframe.seconds} s is past the end of the ${clip}; ${keepInside}, or lengthen the clip with --duration.`, details);
-    }
-    keyframe.frameIndex = frameIndex;
+  );
+  if (!check.ok) {
+    const message = check.errors
+      .map((error) => error
+        .replace(/keyframes\[(\d+)\]/g, (_match, index) => `keyframe ${Number(index) + 1} (${keyframes[Number(index)].image})`)
+        .replace('or set duration to', 'or set --duration to'))
+      .map((error) => `${error.charAt(0).toUpperCase()}${error.slice(1)}`)
+      .join(' ');
+    fail(message, {
+      keyframes: keyframes.map(({ image, seconds }) => ({ image, seconds })),
+      ...(frames ? { frames } : {})
+    });
   }
   // Time order is the order the keyframes are uploaded, pinned and described in.
-  keyframes.sort((a, b) => a.frameIndex - b.frameIndex);
-  for (let index = 1; index < keyframes.length; index += 1) {
-    const [previous, current] = [keyframes[index - 1], keyframes[index]];
-    if (previous.frameIndex === current.frameIndex) {
-      fail(
-        `Keyframes at ${previous.seconds} s and ${current.seconds} s land on the same frame (${current.frameIndex}); give each keyframe its own time, at least 1/24 s apart.`,
-        { frameIndex: current.frameIndex, seconds: [previous.seconds, current.seconds] }
-      );
-    }
-  }
+  options.keyframes = check.keyframes.map(({ imageIndex, frameIndex }) => ({ ...keyframes[imageIndex], frameIndex }));
 }
 
 validateMiniMaxH3KeyframeOptions();
@@ -8305,7 +8293,7 @@ function formatApiKeyframePlanForPrompt(imageRefs) {
     atSeconds: ref.keyframe.seconds
   })));
   const clocks = keyframes
-    .map(({ ref }) => formatMiniMaxH3KeyframeClock(ref.keyframe.frameIndex ?? miniMaxH3KeyframeFrameIndex(ref.keyframe.seconds)))
+    .map(({ ref }) => formatMiniMaxH3KeyframeClock(ref.keyframe.frameIndex ?? minimaxH3KeyframeFrameIndex(ref.keyframe.seconds)))
     .join(', ');
   return [
     'MiniMax H3 keyframes: pin these uploaded images inside the video, in addition to any first or last frame, '

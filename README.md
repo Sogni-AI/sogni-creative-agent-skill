@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/docs/screenshot.jpg" alt="Sogni Creative Agent Skill rendering an image from a Telegram-style chat" width="320" />
+  <img src="https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/docs/banner.jpg" alt="Sogni Creative Agent: image, video, and music generation for AI agents. A small robot on a rooftop at dusk paints the sky with a brushstroke of paintings, film, and music above a town of glowing windows." width="100%" />
 </p>
 
 <h1 align="center">Sogni Creative Agent Skill</h1>
@@ -34,6 +34,10 @@ With this skill, an agent can:
 - run hosted creative workflows including storyboard-driven video
 - save personas, preferences, and last-render state across sessions
 - check balances, list models, and refine previous results
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/docs/screenshot.jpg" alt="Sogni Creative Agent Skill rendering an image from a Telegram-style chat" width="320" />
+</p>
 
 > **Fastest install:** paste this repo's GitHub URL into your agent and ask it to "install this skill".
 

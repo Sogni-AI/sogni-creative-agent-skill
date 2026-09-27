@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const ClientEvent = {
   JOB_COMPLETED: 'JOB_COMPLETED',
@@ -354,4 +355,12 @@ function getMaxContextImages(modelId) {
   return 0;
 }
 
-export { SogniClientWrapper, ClientEvent, getMaxContextImages };
+// The CLI clamps video sizes to the pinned client's getVideoDimensionRules().
+// The stub omits it by default, which leaves the CLI on its legacy fallback
+// constants. A test that must see the real envelope (the Wan 3 1536 clamp hid
+// behind that fallback) opts in, and gets the installed client's own rules.
+const getVideoDimensionRules = process.env.SOGNI_AGENT_TEST_REAL_VIDEO_DIMENSION_RULES === '1'
+  ? createRequire(import.meta.url)('@sogni-ai/sogni-intelligence-client').getVideoDimensionRules
+  : undefined;
+
+export { SogniClientWrapper, ClientEvent, getMaxContextImages, getVideoDimensionRules };

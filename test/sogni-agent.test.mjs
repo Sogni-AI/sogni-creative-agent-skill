@@ -3549,8 +3549,9 @@ test('wan3 alias selects the unified Premium video model at fixed 30fps', () => 
   assert.equal(state.lastVideoProject.tokenType, 'spark');
   assert.equal(state.lastVideoProject.fps, 30);
   assert.equal(state.lastVideoProject.duration, 30);
-  assert.equal(state.lastVideoProject.width, 1920);
-  assert.equal(state.lastVideoProject.height, 1080);
+  // 720p by default; --target-resolution 1080 is the opt-in 1080p size.
+  assert.equal(state.lastVideoProject.width, 1280);
+  assert.equal(state.lastVideoProject.height, 720);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'steps'), false);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'guidance'), false);
 });
@@ -3660,6 +3661,102 @@ test('wan3 validates its resolution, sampling, and int31 seed contract', () => {
     ['--video', '-m', 'wan3', '--seed', '2147483648', 'Seed out of range.'],
     'must be an integer from 0 through 2147483647'
   );
+});
+
+// Wan 3 tests that must see the pinned client's real size envelope: the stub's
+// legacy fallback hid the 1536 clamp that cut every 1080p request to 720p.
+function runWan3Cli(args, envOverrides = {}) {
+  return runCli(args, { SOGNI_AGENT_TEST_REAL_VIDEO_DIMENSION_RULES: '1', ...envOverrides });
+}
+
+function canvasOf(state) {
+  return [state.lastVideoProject.width, state.lastVideoProject.height];
+}
+
+test('wan3 sends Alibaba exact sizes for each requested resolution and ratio', () => {
+  const cases = [
+    [['--target-resolution', '1080'], [1920, 1080]],
+    [['--target-resolution', '1080', '--wan3-ratio', '9:16'], [1080, 1920]],
+    [['--target-resolution', '1080', '--wan3-ratio', '4:3'], [1440, 1080]],
+    [['--target-resolution', '1080', '--wan3-ratio', '1:1'], [1080, 1080]],
+    [['--target-resolution', '720', '--wan3-ratio', '3:4'], [720, 960]],
+    [['--target-resolution', '480'], [854, 480]],
+    [['--target-resolution', '480', '--wan3-ratio', '9:16'], [480, 854]],
+    // The default stays 720p, the size CLI renders were already priced at.
+    [[], [1280, 720]],
+    [['--wan3-ratio', '9:16'], [720, 1280]],
+  ];
+  for (const model of ['wan3', 'wan3-enhanced']) {
+    for (const [flags, expected] of cases) {
+      const { exitCode, state, stderr } = runWan3Cli([
+        '--video', '-m', model, ...flags, 'A presenter walks through a detailed workshop.'
+      ]);
+      assert.equal(exitCode, 0, stderr);
+      assert.deepEqual(canvasOf(state), expected, `${model} ${flags.join(' ') || '(defaults)'}`);
+      assert.doesNotMatch(stderr, /Auto-adjusted video dimensions/);
+    }
+  }
+});
+
+test('wan3 keeps an explicit 1080p size instead of clamping it to 1536', () => {
+  const { exitCode, state, stderr } = runWan3Cli([
+    '--video', '-m', 'wan3', '-w', '1080', '-h', '1920', 'A vertical presenter clip.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.deepEqual(canvasOf(state), [1080, 1920]);
+  assert.doesNotMatch(stderr, /Auto-adjusted video dimensions/);
+});
+
+test('wan3 estimates price the exact canvas the render will send', () => {
+  const { exitCode, state, stderr } = runWan3Cli([
+    '--video', '-m', 'wan3', '--target-resolution', '1080', '--wan3-ratio', '9:16',
+    '--estimate-video-cost', '--json', 'A vertical presenter clip.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEstimateVideoCost.width, 1080);
+  assert.equal(state.lastEstimateVideoCost.height, 1920);
+  assert.equal(state.lastVideoProject, null, 'An estimate must not submit a render');
+});
+
+test('wan3 image-to-video shapes the canvas to the first frame at the requested resolution', async () => {
+  const { default: sharp } = await import('sharp');
+  const tmp = mkdtempSync(join(tmpdir(), 'sogni-agent-wan3-frame-'));
+  const portrait = join(tmp, 'portrait-832x1216.png');
+  const landscape = join(tmp, 'landscape-1280x720.png');
+  await sharp({ create: { width: 832, height: 1216, channels: 3, background: { r: 0, g: 0, b: 0 } } }).png().toFile(portrait);
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: { r: 0, g: 0, b: 0 } } }).png().toFile(landscape);
+
+  // Short side is the tier; the long side follows the frame (1216/832 x 1080 = 1578).
+  const hd = runWan3Cli(['--video', '-m', 'wan3', '--ref', portrait, '--target-resolution', '1080', 'Animate the first frame.']);
+  assert.equal(hd.exitCode, 0, hd.stderr);
+  assert.deepEqual(canvasOf(hd.state), [1080, 1578]);
+
+  const standard = runWan3Cli(['--video', '-m', 'wan3', '--ref', portrait, 'Animate the first frame.']);
+  assert.equal(standard.exitCode, 0, standard.stderr);
+  assert.deepEqual(canvasOf(standard.state), [720, 1052]);
+
+  const wide = runWan3Cli(['--video', '-m', 'wan3', '--ref', landscape, '--target-resolution', '1080', 'Animate the first frame.']);
+  assert.equal(wide.exitCode, 0, wide.stderr);
+  assert.deepEqual(canvasOf(wide.state), [1920, 1080]);
+
+  // Enhanced may anchor only the last frame; that image shapes the canvas instead.
+  const lastOnly = runWan3Cli(['--video', '-m', 'wan3-enhanced', '--ref-end', portrait, '--target-resolution', '1080', 'End on this frame.']);
+  assert.equal(lastOnly.exitCode, 0, lastOnly.stderr);
+  assert.deepEqual(canvasOf(lastOnly.state), [1080, 1578]);
+
+  // A fixed ratio cannot override the first frame's shape; say so rather than shrink the tier.
+  const mismatch = runWan3Cli(['--video', '-m', 'wan3', '--ref', portrait, '--target-resolution', '1080', '--wan3-ratio', '16:9', 'Animate the first frame.']);
+  assert.equal(mismatch.exitCode, 0, mismatch.stderr);
+  assert.deepEqual(canvasOf(mismatch.state), [1080, 1578]);
+  assert.match(mismatch.stderr, /follows the first frame/);
+
+  // A downloaded first frame is measured after download and sized the same way.
+  const remote = runWan3Cli(
+    ['--video', '-m', 'wan3', '--ref', 'https://example.com/sogni-agent-test-reference.png', '--target-resolution', '1080', 'Animate the first frame.'],
+    { SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH: portrait }
+  );
+  assert.equal(remote.exitCode, 0, remote.stderr);
+  assert.deepEqual(canvasOf(remote.state), [1080, 1578]);
 });
 
 test('happyhorse clamps duration to the 3-15s range', () => {

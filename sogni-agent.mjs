@@ -1902,6 +1902,60 @@ const WAN3_SUPPORTED_WORKFLOWS = new Set(['t2v', 'i2v', 'r2v', 'a2v', 'ia2v']);
 const WAN3_SUPPORTED_RESOLUTIONS = new Set([480, 720, 1080]);
 const WAN3_SUPPORTED_RATIOS = new Set(['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16']);
 const WAN3_MAX_SEED = 0x7fffffff;
+// Wan 3 renders Alibaba's fixed sizes: the short side is the tier (480, 720 or
+// 1080) and the ratio sets the long side. The network prices and dispatches the
+// tier from the canvas, so the CLI sends these exact sizes. Same table as
+// sogni-api WAN3_DIMENSION_BUCKETS and sogni-web's Wan 3 presets.
+const WAN3_DIMENSION_BUCKETS = Object.freeze({
+  '16:9': { 480: [854, 480], 720: [1280, 720], 1080: [1920, 1080] },
+  '4:3': { 480: [640, 480], 720: [960, 720], 1080: [1440, 1080] },
+  '1:1': { 480: [480, 480], 720: [720, 720], 1080: [1080, 1080] },
+  '3:4': { 480: [480, 640], 720: [720, 960], 1080: [1080, 1440] },
+  '9:16': { 480: [480, 854], 720: [720, 1280], 1080: [1080, 1920] },
+});
+// 720p is what CLI renders were priced and delivered at while the pinned client
+// clamped Wan 3 to 1536x864, so the default keeps that price. 1080p is
+// --target-resolution 1080 and costs twice as much per second.
+const WAN3_DEFAULT_RESOLUTION = 720;
+const WAN3_MAX_SIDE = 1920;
+
+function wan3ResolutionTier(value) {
+  const numeric = Number(value);
+  if (numeric >= 1080) return 1080;
+  if (numeric >= 720) return 720;
+  return 480;
+}
+
+function nearestWan3Ratio(width, height) {
+  const aspect = Number(width) / Number(height);
+  if (!(aspect > 0) || !Number.isFinite(aspect)) return '16:9';
+  return Object.keys(WAN3_DIMENSION_BUCKETS)
+    .map((ratio) => {
+      const [ratioW, ratioH] = ratio.split(':').map(Number);
+      return { ratio, distance: Math.abs(Math.log(aspect / (ratioW / ratioH))) };
+    })
+    .sort((left, right) => left.distance - right.distance)[0].ratio;
+}
+
+function wan3BucketCanvas(ratio, tier) {
+  const [width, height] = (WAN3_DIMENSION_BUCKETS[ratio] || WAN3_DIMENSION_BUCKETS['16:9'])[tier];
+  return { width, height };
+}
+
+// A first frame is fitted inside the canvas and the canvas then takes the fitted
+// frame's size, so a canvas in any other shape would shrink below the tier. Keep
+// the frame's shape with its short side at the tier, capping the long side.
+function wan3FrameCanvas(frameWidth, frameHeight, tier) {
+  const landscape = frameWidth >= frameHeight;
+  const aspect = Math.max(frameWidth, frameHeight) / Math.min(frameWidth, frameHeight);
+  let shortSide = tier;
+  let longSide = Math.round(tier * aspect);
+  if (longSide > WAN3_MAX_SIDE) {
+    longSide = WAN3_MAX_SIDE;
+    shortSide = Math.round(WAN3_MAX_SIDE / aspect);
+  }
+  return landscape ? { width: longSide, height: shortSide } : { width: shortSide, height: longSide };
+}
 
 function isWan3ModelSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
@@ -2079,11 +2133,13 @@ function videoModelDimensionDefaultsLikeWrapper(modelId) {
     return { defaultWidth: 1920, defaultHeight: 1080, maxDimension: 1920, dimensionMultiple: 1 };
   }
   if (isWan3ModelSelectionLocal(modelId)) {
+    // Placeholder only: the Wan 3 preflight replaces it with the exact size for
+    // the requested tier and ratio (WAN3_DIMENSION_BUCKETS).
     return {
-      defaultWidth: 1920,
-      defaultHeight: 1080,
+      defaultWidth: 1280,
+      defaultHeight: 720,
       minDimension: 480,
-      maxDimension: 1920,
+      maxDimension: WAN3_MAX_SIDE,
       dimensionMultiple: 1,
     };
   }
@@ -4656,7 +4712,7 @@ Video Options:
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080).
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080; Wan 3: 480, 720 (default) or 1080).
                          MiniMax H3 FastH3 and Ref2VA Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
                          rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
@@ -5980,7 +6036,13 @@ if (options.music) {
       options.height = canvas.height;
     }
   }
-  const videoShortSide = isTwoStageVideo
+  // Wan 3 takes Alibaba's exact sizes (applyWan3Canvas), never the generic
+  // short-side or prompt-aspect scaling below.
+  const isWan3Canvas = isWan3ModelLocal(options.model);
+  if (isWan3Canvas && !hasExplicitVideoCanvas) {
+    applyWan3Canvas();
+  }
+  const videoShortSide = (isTwoStageVideo || isWan3Canvas)
     ? null
     : ((cliSet.targetResolution || targetResolutionFromPrompt)
       ? options.targetResolution
@@ -5990,7 +6052,7 @@ if (options.music) {
     options.width = dims.width;
     options.height = dims.height;
   }
-  if (aspectRatioFromPrompt && !cliSet.width && !cliSet.height && !isTwoStageVideo) {
+  if (aspectRatioFromPrompt && !cliSet.width && !cliSet.height && !isTwoStageVideo && !isWan3Canvas) {
     const dims = dimensionsForAspectRatio(options.width, options.height, aspectRatioFromPrompt);
     if (dims) {
       options.width = dims.width;
@@ -13120,6 +13182,60 @@ async function runMultiAngleFlow(client, log) {
   }
 }
 
+// Wan 3 preflight canvas: the requested tier (480/720/1080, default 720) at the
+// requested ratio, or in the first frame's shape for image-to-video. Explicit
+// -w/-h (or exact pixels in the prompt) skip this and are sent as given.
+function applyWan3Canvas() {
+  const requestedTier = (cliSet.targetResolution || targetResolutionFromPrompt)
+    ? options.targetResolution
+    : WAN3_DEFAULT_RESOLUTION;
+  options._wan3Tier = wan3ResolutionTier(requestedTier);
+  if (options.videoWorkflow === 'i2v' && (options.refImage || options.refImageEnd)) {
+    // A URL frame is measured again once it is downloaded (see
+    // applyWan3FrameCanvas at the render), so its canvas is provisional here.
+    options._wan3CanvasFollowsFrame = true;
+    const framePath = options.refImage || options.refImageEnd;
+    if (!isHttpUrl(framePath) && existsSync(framePath)) {
+      const dims = getImageDimensionsFromBuffer(readFileSync(framePath));
+      if (dims?.width && dims?.height) {
+        applyWan3FrameCanvas(dims.width, dims.height);
+        return;
+      }
+    }
+  }
+  let ratio = wan3FixedRatio();
+  if (!ratio && aspectRatioFromPrompt) {
+    const promptShape = dimensionsForAspectRatio(1000, 1000, aspectRatioFromPrompt);
+    if (promptShape) ratio = nearestWan3Ratio(promptShape.width, promptShape.height);
+  }
+  const canvas = wan3BucketCanvas(ratio || '16:9', options._wan3Tier);
+  options.width = canvas.width;
+  options.height = canvas.height;
+}
+
+function wan3FixedRatio() {
+  return options.wan3Ratio !== 'adaptive' && Object.hasOwn(WAN3_DIMENSION_BUCKETS, options.wan3Ratio)
+    ? options.wan3Ratio
+    : null;
+}
+
+// Returns true when the canvas changed.
+function applyWan3FrameCanvas(frameWidth, frameHeight) {
+  const fixedRatio = wan3FixedRatio();
+  if (fixedRatio && nearestWan3Ratio(frameWidth, frameHeight) !== fixedRatio && !options.quiet && !options._wan3RatioNoticeShown) {
+    options._wan3RatioNoticeShown = true;
+    console.error(
+      `Wan 3 image-to-video follows the first frame's shape (${frameWidth}x${frameHeight}); ` +
+      `--wan3-ratio ${fixedRatio} does not crop it. Crop the image first for a ${fixedRatio} video.`
+    );
+  }
+  const canvas = wan3FrameCanvas(frameWidth, frameHeight, options._wan3Tier);
+  const changed = canvas.width !== options.width || canvas.height !== options.height;
+  options.width = canvas.width;
+  options.height = canvas.height;
+  return changed;
+}
+
 // The images of the MiniMax H3 FastH3 ia2v/flfa2v audio guide are first/last
 // frame anchors exactly like i2v's, so they follow i2v's canvas and
 // reference-resize rules. (Other ia2v models treat --ref as a loose reference.)
@@ -14557,6 +14673,15 @@ async function main() {
               options.height = inpaintDimensions.height;
             }
           }
+        }
+      }
+
+      // Wan 3: size the canvas from the frame actually being sent, which the
+      // preflight could not measure when --ref/--ref-end is a URL.
+      if (isWan3Video && options._wan3CanvasFollowsFrame && (imageBuffer || endImageBuffer)) {
+        const frameDims = await getVideoImageDimensionsFromBuffer(imageBuffer || endImageBuffer);
+        if (frameDims?.width && frameDims?.height && applyWan3FrameCanvas(frameDims.width, frameDims.height) && !options.quiet) {
+          console.error(`Sized the Wan 3 canvas to the first frame: ${options.width}x${options.height} (${options._wan3Tier}p).`);
         }
       }
 

@@ -702,6 +702,14 @@ so a prompt is not rewritten twice.
 - **No edit/extend task:** video references are loose conditioning for a new
   generation. Alibaba exposes no edit/extend task mode or task-type field; use
   a dedicated video-to-video model when source-preserving editing is required.
+- **Size:** `--target-resolution 480`, `720` (the default), or `1080` picks the
+  tier, and the CLI sends Alibaba's exact size for that tier and
+  `--wan3-ratio` (16:9 when adaptive): at 1080 that is 1920x1080, 1440x1080,
+  1080x1080, 1080x1440, or 1080x1920. Image-to-video keeps the first frame's
+  shape with its short side at the tier (an 832x1216 frame at 1080 becomes
+  1080x1578); a fixed `--wan3-ratio` does not crop the frame. Explicit
+  `-w`/`-h` are sent as given, 480-1920 per side. The network prices the tier
+  from the canvas, so 1080P costs twice the 720P rate per second.
 - **Cost (as of 2026-08):** platform artist pricing is $0.065/s at 480P,
   $0.13/s at 720P, and $0.26/s at 1080P; native audio does not change the rate.
 
@@ -717,7 +725,8 @@ the Sogni model `wan3.0-spicy-video`; MuleRouter's provider ID is
 `w3.0-video`. Public surfaces call it **Wan 3.0 Enhanced**. It renders fixed or
 smart 2–30 second clips at 30 fps with native audio and 480P, 720P, or 1080P
 output. Supported ratios are `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, and
-`3:4`.
+`3:4`. Sizes follow the Wan 3 rules above: 720P unless `--target-resolution`
+says otherwise.
 
 - Use t2v for prompt-only video, i2v for first/optional last frame, r2v for
   loose media references, and a2v/ia2v when audio drives the result.

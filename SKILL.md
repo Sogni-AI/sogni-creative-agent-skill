@@ -243,7 +243,7 @@ sogni-agent --video -m happyhorse --ref first-frame.png "Bring the scene to life
 sogni-agent --video -m happyhorse-1.1-r2v -c ref1.png -c ref2.png "Blend the references into one continuous shot"
 
 # Alibaba Wan 3 unified video (2-30s, fixed 30fps, native audio,
-# 480P/720P/1080P). --ref/--ref-end are frame anchors; r2v/a2v/ia2v
+# 480P/720P/1080P, 720P by default). --ref/--ref-end are frame anchors; r2v/a2v/ia2v
 # use loose Image 1 / Video 1 / Audio 1 references instead. A video reference
 # conditions a new generation; it is not an edit/extend task.
 sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 'A presenter says "Welcome." in a detailed studio'
@@ -475,7 +475,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 - **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai, account menu).
 - **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. An existing block may require waiting before retrying after upgrading.
 - **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.
-- **Video size errors:** sizes are model-specific (WAN 2.2 ÷16, sides 480–1536, at most 1,048,576 pixels, so no 1080p; Wan 3 uses its exact 480P/720P/1080P ratio buckets; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
+- **Video size errors:** sizes are model-specific (WAN 2.2 ÷16, sides 480–1536, at most 1,048,576 pixels, so no 1080p; Wan 3 uses its exact 480P/720P/1080P ratio buckets, 720P unless `--target-resolution 1080`; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).
 - **Timeouts / no workers:** a timeout never cancels; the project finishes on Sogni and `sogni-agent --result <id>` fetches it (`details.resultCommands`). For long videos use `--detach`, not a large `-t`. `--status <id>` says whether it waits on the plan limit or on workers; for network status see https://sogni.ai.
 
 ## Reference Index (read before acting)

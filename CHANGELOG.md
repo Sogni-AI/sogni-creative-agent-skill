@@ -1,3 +1,17 @@
+## [3.54.0] - 2026-09-27
+
+### Features
+
+* Pin MiniMax H3 keyframes: repeat `--keyframe <image>@<seconds>` (a local path or URL, up to 8) to make one H3 clip land on extra stills at chosen moments, in addition to `--ref` and `--ref-end`. It works on the H3 image-to-video and first/last-frame selectors (every tier, including FastH3 and the Two-Stage forms), the FastH3 Sound to Video selectors (`-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo` and their `-2stage` forms) and Ref2VA (`minimax-h3-r2v` and its Balanced, Turbo and Two-Stage forms). Text-to-video and every other model family refuse it and name the selectors that take it. Each time lands on frame `round(seconds × 24)`, which must be strictly inside the clip and on a frame of its own; anything else is refused with the range to use, and nothing is clamped or dropped. Each still is centre-cropped onto the canvas the job renders, like the last frame (at twice the canvas on Two-Stage models). Two keyframes are included in the price; each additional one adds 0.75 s of output time on FastH3 and 0.3 s on the other tiers, so an 8 s FastH3 clip costs 32 Spark with up to two keyframes and 50 with eight. `--estimate-video-cost` and the balance check include them, `--json` lists them, and a refusal because no online worker can pin keyframes yet (error 4100) is reported as a retryable `MODEL_UNAVAILABLE` error.
+* `--keyframe` also works with `--api-chat` and `--durable-chat`: the images are uploaded after any frame images and the hosted agent is asked to pass them as `keyframes: [{ imageIndex, atSeconds }]`. `--api-workflow` refuses the flag and points at the step arguments instead.
+* The desktop extension's `generate_video` MCP tool takes an optional `keyframes` array (up to 8 items of `{ image, at_seconds }`, where `image` is a path or URL, like `ref` and `ref_end`) and passes each item as `--keyframe`.
+* Agent guidance for keyframes: `references/video-prompting.md` gains an Intermediate keyframes section (timing on the 24 fps grid, saying in the prompt what each keyframe shows at its time, starting a new shot at a keyframe that changes the angle, place or light, and a worked first/last-frame example); `references/models.md` lists which selectors take keyframes, the framing and the price; `references/hosted-api.md` covers the hosted `keyframes` argument. SKILL.md, README, llm.txt, the Claude plugin and Hermes skills and the video skill views point at the flag.
+
+### Bug Fixes
+
+* Keep Wan 2.2 sizes within 1,048,576 pixels per frame (1024x1024), with each side between 480 and 1536. Sizes the CLI chooses are fitted inside that limit (a 2314x1200 image-to-video reference now renders at 1408x736 instead of 1536x800), and source reels fit their Wan 2.2 sizes inside it too. An explicit Wan 2.2 `-w`/`-h` or exact pixel size in the prompt beyond the limit is refused with `INVALID_VIDEO_SIZE` and a fitted-size hint instead of being changed, and `--target-resolution` or `--reel-target-resolution` above 1024 is refused.
+* Update the generation clients to SDK 5.58.0 and intelligence client 4.6.0, and the bundled runtime to creative agent 2.7.0, which carry MiniMax H3 keyframes. The CLI's keyframe checks and the keyframe framing now come from the intelligence client.
+
 ## [3.53.0] - 2026-09-25
 
 ### Features

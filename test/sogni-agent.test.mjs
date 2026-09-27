@@ -7219,6 +7219,49 @@ test('JSON image results retain non-blocking NSFW labels', () => {
   assert.equal(output.results[0].url, output.urls[0]);
 });
 
+// The server withholds a filtered result; the URL a withheld job still carries
+// answers 404, which the CLI used to report as "Result download failed".
+test('a result withheld by the Sensitive Content Filter is reported as such, not as a failed download', () => {
+  const output = join(mkdtempSync(join(tmpdir(), 'sogni-withheld-')), 'a.png');
+  const { exitCode, stdout, stderr } = runCli(['--json', '-o', output, 'A glowing amber figure'], {
+    SOGNI_AGENT_TEST_JOB_LABELS_JSON: JSON.stringify({ isNSFW: true, isWithheld: true })
+  });
+  assert.equal(exitCode, 1, stderr);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.error, 'The Sensitive Content Filter withheld this result, so there is nothing to download.');
+  assert.equal(payload.errorType, 'SAFETY_REJECTED');
+  assert.equal(payload.errorCode, 'SAFETY_REJECTED');
+  assert.equal(payload.hint, 'Reword the prompt, or add --no-filter to turn the filter off.');
+  assert.ok(!stderr.includes('download failed'), stderr);
+});
+
+test('a partly withheld batch delivers the rest and names the withheld results', () => {
+  const labels = JSON.stringify([{ isNSFW: true, isWithheld: true }, {}]);
+  const json = runCli(['--json', '-n', '2', 'A glowing amber figure'], { SOGNI_AGENT_TEST_JOB_LABELS_JSON: labels });
+  assert.equal(json.exitCode, 0, json.stderr);
+  const output = JSON.parse(json.stdout.trim());
+  assert.deepEqual(output.urls, ['https://example.com/resultUrl-2.png']);
+  assert.equal(output.results[0].url, null);
+  assert.equal(output.results[0].urlUnavailable, 'sensitiveContent');
+  assert.equal(output.results[1].urlUnavailable, undefined);
+
+  const text = runCli(['-n', '2', 'A glowing amber figure'], { SOGNI_AGENT_TEST_JOB_LABELS_JSON: labels });
+  assert.equal(text.exitCode, 0, text.stderr);
+  assert.deepEqual(text.stdout.trim().split('\n'), [
+    'https://example.com/resultUrl-2.png',
+    '1 of 2 results withheld by the Sensitive Content Filter'
+  ]);
+});
+
+test('multi-angle reports an angle the Sensitive Content Filter withheld', () => {
+  const { exitCode, stderr } = runCli(['--multi-angle', '-c', SCREENSHOT_FIXTURE, '--azimuth', 'front-right', 'studio portrait'], {
+    SOGNI_AGENT_TEST_JOB_LABELS_JSON: JSON.stringify({ isNSFW: true, isWithheld: true })
+  });
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes('The Sensitive Content Filter withheld this result, so there is nothing to download.'), stderr);
+});
+
 test('GPT Image CLI never accepts provider-chosen auto quality', () => {
   expectCliError(['-m', 'gpt-image-2.5-flare', '--image-quality', 'auto', 'a mug'],
     '--image-quality must be low, medium, high, xhigh, or max.');

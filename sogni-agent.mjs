@@ -11165,6 +11165,18 @@ function writeOutputFileSafe(filePath, buffer, label = 'output') {
   }
 }
 
+// With the Sensitive Content Filter on, the server withholds a flagged result:
+// the job completes with no media, and any URL it still carries answers 404.
+// Report the filter, never a failed download.
+function sensitiveContentWithheldError(totalCount = 1) {
+  const err = new Error(totalCount > 1
+    ? `The Sensitive Content Filter withheld all ${totalCount} results, so there is nothing to download.`
+    : 'The Sensitive Content Filter withheld this result, so there is nothing to download.');
+  err.code = 'SAFETY_REJECTED';
+  err.hint = 'Reword the prompt, or add --no-filter to turn the filter off.';
+  return err;
+}
+
 async function downloadUrlToFile(url, filePath) {
   const response = await fetchWithTimeout(url);
   if (!response.ok) {
@@ -12698,14 +12710,16 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
     if (projectId && data.projectId !== projectId) return;
     if (!projectId) projectId = data.projectId;
     const jobData = data.job?.data || {};
+    const withheld = data.job?.isWithheld === true;
     results.push({
-      resultUrl: data.resultUrl || data.imageUrl,
+      resultUrl: withheld ? null : data.resultUrl || data.imageUrl,
       seed: jobData.seed,
       jobIndex: data.jobIndex,
-      projectId: data.projectId
+      projectId: data.projectId,
+      ...(withheld ? { urlUnavailable: 'sensitiveContent' } : {})
     });
     completed++;
-    log(`Image ${completed}/${expectedCount}${label ? ` (${label})` : ''} completed`);
+    log(`Image ${completed}/${expectedCount}${label ? ` (${label})` : ''} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
     if (completed >= expectedCount) {
       cleanup();
       resolvePromise({ results, projectId });
@@ -12856,6 +12870,9 @@ async function runMultiAngleFlow(client, log) {
       azimuth
     );
     const urls = results.map((r) => r.resultUrl).filter(Boolean);
+    if (urls.length === 0 && results.some((r) => r.urlUnavailable === 'sensitiveContent')) {
+      throw sensitiveContentWithheldError(results.length);
+    }
     const seeds = results.map((r) => r.seed ?? options.seed);
 
     if (outputConfig) {
@@ -13047,6 +13064,9 @@ async function runMultiAngleFlow(client, log) {
         throw buildProjectResultError(clipResult);
       }
 
+      if (clipResult?.project?.jobs?.some((job) => job.isWithheld)) {
+        throw sensitiveContentWithheldError();
+      }
       const clipUrl = clipResult?.videoUrls?.[0];
       if (!clipUrl) {
         throw new Error('No video URL returned for 360 segment.');
@@ -14099,17 +14119,19 @@ async function main() {
       
       client.on(ClientEvent.JOB_COMPLETED, (data) => {
         const jobData = data.job?.data || {};
+        const withheld = data.job?.isWithheld === true;
         results.push({
-          resultUrl: data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
-          lastFrameUrl: data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
+          resultUrl: withheld ? null : data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
+          lastFrameUrl: withheld ? null : data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
           projectId: data.projectId,
           nsfwDetected: data.job?.nsfwDetected ?? jobData.nsfwDetected ?? false,
-          nsfwSources: data.job?.nsfwSources ?? jobData.nsfwSources ?? []
+          nsfwSources: data.job?.nsfwSources ?? jobData.nsfwSources ?? [],
+          ...(withheld ? { urlUnavailable: 'sensitiveContent' } : {})
         });
         completedJobs++;
-        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} completed`);
+        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
         
         if (completedJobs >= options.count) {
           projectWait.stop();
@@ -15197,6 +15219,8 @@ async function main() {
     
     if (results.length > 0) {
       const urls = results.map(r => r.resultUrl).filter(Boolean);
+      const withheldCount = results.filter(r => r.urlUnavailable === 'sensitiveContent').length;
+      if (urls.length === 0 && withheldCount > 0) throw sensitiveContentWithheldError(results.length);
       const firstResult = results[0];
       
       // Save last render info
@@ -15213,8 +15237,8 @@ async function main() {
         seeds,
         projectId: firstResult.projectId,
         urls: urls,
-        results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources }) => ({
-          url: resultUrl, seed, jobIndex, nsfwDetected, nsfwSources
+        results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, urlUnavailable }) => ({
+          url: resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, ...(urlUnavailable ? { urlUnavailable } : {})
         })),
         localPath: options.output || null,
         tokenType: options.tokenType || 'spark',
@@ -15395,6 +15419,10 @@ async function main() {
             client2.on(ClientEvent.JOB_COMPLETED, async (data) => {
               try {
                 clearTimeout(timeout);
+                if (data.job?.isWithheld === true) {
+                  reject(sensitiveContentWithheldError());
+                  return;
+                }
                 const clip2Url = data.resultUrl || data.videoUrl;
                 if (!clip2Url) {
                   reject(new Error('No video URL returned for second clip.'));
@@ -15403,6 +15431,7 @@ async function main() {
 
                 // Download second clip
                 const response2 = await fetchWithTimeout(clip2Url);
+                if (!response2.ok) throw new Error(`Second clip download failed: HTTP ${response2.status}`);
                 const buffer2 = Buffer.from(await response2.arrayBuffer());
                 writeFileSync(clip2Path, buffer2);
 
@@ -15611,6 +15640,7 @@ async function main() {
         console.log(JSON.stringify(output));
       } else {
         urls.forEach(url => console.log(url));
+        if (withheldCount > 0) console.log(`${withheldCount} of ${results.length} results withheld by the Sensitive Content Filter`);
         if (options.returnLastFrame) {
           results.forEach(result => { if (result.lastFrameUrl) console.log(`Last frame: ${result.lastFrameUrl}`); });
         }

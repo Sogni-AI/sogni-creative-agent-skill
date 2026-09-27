@@ -300,6 +300,8 @@ class SogniClientWrapper extends EventEmitter {
     queueMicrotask(() => {
       const state = getState();
       const ext = urlField === 'videoUrl' ? 'mp4' : urlField === 'audioUrl' ? 'mp3' : 'png';
+      // One labels object for every job, or an array with one per job index.
+      const labels = envJson('SOGNI_AGENT_TEST_JOB_LABELS_JSON');
       for (let i = 0; i < count; i++) {
         this.emittedJobs += 1;
         state.emittedJobs = this.emittedJobs;
@@ -307,8 +309,7 @@ class SogniClientWrapper extends EventEmitter {
           [urlField]: process.env.SOGNI_AGENT_TEST_RESULT_URL || `https://example.com/${urlField}-${i + 1}.${ext}`,
           job: {
             data: { seed: seed ?? 123 },
-            ...(process.env.SOGNI_AGENT_TEST_JOB_LABELS_JSON
-              ? JSON.parse(process.env.SOGNI_AGENT_TEST_JOB_LABELS_JSON) : {})
+            ...(Array.isArray(labels) ? labels[i] : labels)
           },
           jobIndex: i,
           projectId: 'proj-1'

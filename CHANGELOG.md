@@ -1,3 +1,10 @@
+## [3.54.3] - 2026-09-27
+
+### Bug Fixes
+
+* MiniMax H3 keyframes are now named in the prompt, the way MiniMax's own keyframe workflow does it. Each keyframe is `<Picture N>`, numbered after the first frame, last frame or references; it is listed with its time in the prompt's alignment line and tied to its shot with "the shot's keyframe corresponds to `<Picture N>`". On Reference to Video it also gets a keyframe entry, `keyframe completion` in the summary and a retention line. The guidance used to say keyframes are never named. The video prompting guide, the models reference and the hosted API notes follow.
+* Update the intelligence client to 4.6.3 and the bundled runtime to creative agent 2.7.3, which write and check keyframe prompts in that format and state Sound to Video's real length (6 seconds renders 158 frames).
+
 ## [3.54.2] - 2026-09-27
 
 ### Bug Fixes

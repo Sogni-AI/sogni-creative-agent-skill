@@ -6427,8 +6427,9 @@ test('json error: i2v explicit size that rounds to non-16 suggests a compatible 
   assert.ok(String(payload.hint || '').includes('--width 832 --height 1200'));
 });
 
-// Wan 2.2 renders at most 1,048,576 pixels per frame (1024x1024); since
-// sogni-socket 94a217e1 (2026-09-25) the network refuses larger sizes (4101).
+// Wan 2.2 renders at most 1,048,576 pixels per frame (1024x1024). The CLI
+// refuses a larger explicit size; since sogni-socket 1492bc7d (2026-09-26) the
+// network would instead scale it down to about 1 MP.
 test('json error: WAN 2.2 refuses an explicit size over 1,048,576 pixels instead of shrinking it', () => {
   const { exitCode, stdout, state } = runCli([
     '--json',

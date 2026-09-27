@@ -7285,10 +7285,11 @@ if (options.video) {
   const originalVideoHeight = options.height;
   const normalizedVideoDims = normalizeVideoDimensionsLikeWrapper(options.width, options.height, videoDimensionRules);
   // Wan 2.2 renders at most 1,048,576 pixels per frame, with each side between
-  // 480 and 1536, and the network refuses any other size (error 4101). A size the
-  // user asked for (-w/-h or exact pixels in the prompt) is refused in the
-  // network's own words instead of being auto-adjusted down; sizes the CLI
-  // chooses itself are fitted by the rules above.
+  // 480 and 1536. Since 2026-09-26 the network scales a larger request down to
+  // about 1 MP (a side below 480 is still refused, error 4101). A size the user
+  // asked for (-w/-h or exact pixels in the prompt) is refused here instead of
+  // being shrunk without asking; sizes the CLI chooses itself are fitted by the
+  // rules above.
   if (isWanVideoModelId(options.model) && (cliSet.width || cliSet.height || exactPixelsFromPrompt)) {
     const refusal = getWan22VideoSizeRefusal(originalVideoWidth, originalVideoHeight);
     if (refusal) {
@@ -11800,8 +11801,8 @@ function inferSourceReelDimensions(metadata, targetShortSide, model = SOURCE_REE
 
   let roundedWidth = roundToMultiple(width, 16);
   let roundedHeight = roundToMultiple(height, 16);
-  // Wan 2.2 (the default reel model) refuses any frame over 1,048,576 pixels
-  // (error 4101), so a size chosen for it is fitted inside that budget.
+  // Wan 2.2 (the default reel model) renders at most 1,048,576 pixels per
+  // frame, so a size chosen for it is fitted inside that budget.
   if (isWanVideoModelId(model) && roundedWidth * roundedHeight > WAN22_MAX_VIDEO_PIXELS) {
     const scale = Math.sqrt(WAN22_MAX_VIDEO_PIXELS / (roundedWidth * roundedHeight));
     roundedWidth = Math.max(480, Math.floor((roundedWidth * scale) / 16) * 16);

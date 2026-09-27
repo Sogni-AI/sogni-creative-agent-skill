@@ -207,6 +207,11 @@ submit inline `input.steps`; `--workflow-input <json|@path>` supplies the
   `dark-beast-krea2-identity-edit` for `edit_image`, and a `minimax-h3-*`
   `videoModel` for `generate_video` / `animate_photo`. Published ids and ranges
   come from `GET /v1/loras/comfy?modelId=<canonical-model-id>`.
+- MiniMax H3 keyframes in a step: add `keyframes: [{ "imageIndex": -2,
+  "atSeconds": 3.5 }]` to an `animate_photo`, `sound_to_video`, or Ref2VA
+  `generate_video` step's `arguments`, with the images attached through
+  `-c/--context` (negative indices count image uploads, -1 first). See
+  [MiniMax H3 keyframes in hosted tools](#minimax-h3-keyframes-in-hosted-tools).
 - `--api-workflow storyboard-video` generates a storyline, creates one GPT
   Image 2 storyboard sheet, then feeds that artifact into Seedance as the
   video reference. `-Q fast|hq|pro` maps to GPT Image 2 low|medium|high
@@ -235,8 +240,11 @@ sogni-agent --api-workflow --workflow-input @workflow.json \
 ## Media references in hosted modes
 
 Hosted API requests forward media references from `-c`, `--ref`, `--ref-end`,
-`--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
-`media_references` metadata. `--ref-audio` and `--ref-video` are repeatable in
+`--keyframe`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` as
+`media_references` metadata. Image references keep that order, so negative
+image indices count `-c` images first, then `--ref`, `--ref-end`, and the
+`--keyframe` images in time order (see
+[MiniMax H3 keyframes in hosted tools](#minimax-h3-keyframes-in-hosted-tools)). `--ref-audio` and `--ref-video` are repeatable in
 api-chat / durable-chat mode — each entry uploads independently and is exposed
 to the hosted LLM as `@Audio1` / `@Audio2` / `@Video1` etc. API chat also
 attaches image refs as vision inputs. Local file references are uploaded to
@@ -337,3 +345,46 @@ Submit these media tools as durable workflow steps (`toolName` and `arguments`) 
 Negative indices address uploads (-1 first); non-negative indices address generated results. 3D views are from the subject's perspective: left means the subject's own left side faces camera (subject faces screen-left), right means screen-right. Supply original images of the same subject at consistent height and framing; any subset of the three orbit views enables multi-view reconstruction. Keep the GLB in the model artifact lane, never feed it into an image tool.
 
 For two-stage Turbo H3, use explicit `minimax-h3-fasth3-*-turbo-2stage` selectors on the relevant video tool with `targetResolution`. For 1080p or 2K reference-to-video, use `minimax-h3-r2v-2stage` (Standard) or `minimax-h3-r2v-balanced-2stage` (Balanced) on `generate_video` with the same references as `minimax-h3-r2v` and `targetResolution` naming the delivered size. Audio-guided IA2V/FLFA2V/A2V selectors belong on `sound_to_video` and require the uploaded audio plus their named endpoint images. They preserve the supplied audio and reject LoRAs. Other H3 modes discover personal LoRAs through the [authenticated catalog](personal-loras.md).
+
+## MiniMax H3 keyframes in hosted tools
+
+`animate_photo`, `sound_to_video`, and `generate_video` take an optional
+`keyframes` argument that pins up to 8 images at exact moments inside one MiniMax
+H3 clip. Its schema description, identical on all three tools:
+
+> MiniMax H3 only. Pin up to 8 images at exact moments inside the video, in addition to the first/last frame. Each item is {imageIndex, atSeconds}: imageIndex uses the endImageIndex convention (negative = uploads, 0+ = generated results); atSeconds is when the video should land on that image. Keyframes must fall strictly inside the clip (not on the first or last frame) and at distinct times. Describe what each keyframe shows in the prompt at its time; a keyframe with a new angle, place or light starts a new shot. Two keyframes are included in the price; each additional keyframe adds a little.
+
+| Tool | `videoModel` selectors that take `keyframes` |
+| --- | --- |
+| `animate_photo` | Every MiniMax H3 image-to-video and first/last-frame selector, with any `frameRole` |
+| `sound_to_video` | Every MiniMax H3 audio selector (image + audio, first and last frame + audio, audio only; one- and two-stage) |
+| `generate_video` | Only the Reference to Video selectors (`minimax-h3-r2v*`); never text-to-video |
+
+- `imageIndex` follows `endImageIndex` on every tool: -1 is the first image
+  upload, -2 the second, and 0 and up are generated results. On
+  `sound_to_video` this differs from the 0-based upload numbering of
+  `sourceImageIndex`.
+- Each `atSeconds` lands on frame `round(atSeconds × 24)`, strictly inside the
+  job's real frame count (a Sound to Video clip without `duration` runs for the
+  audio window). Every other model, a time outside the clip, two keyframes on one
+  frame, or more than 8 is refused with a `PARAMETER_INVALID` error that says
+  what to change; nothing is clamped or dropped. Set `duration` so every keyframe
+  falls inside the clip.
+- Keyframes add to the first and last frame and are never `<Picture N>`
+  references; on `generate_video` they do not go in `referenceImageIndices`.
+- Price: two keyframes are included; each additional keyframe adds 0.75 s of
+  output time on FastH3 (0.3 s on other tiers) at the job's rate.
+- Error 4100 means no online worker serving that model can pin keyframes right
+  now. It is a temporary availability refusal: retry shortly, or render without
+  keyframes.
+
+From the CLI, `--keyframe <image>@<seconds>` in `--api-chat` / `--durable-chat`
+uploads each image as an image media reference after `--ref` / `--ref-end` and
+tells the hosted agent the exact argument to use, for example
+`keyframes: [{"imageIndex": -2, "atSeconds": 3.5}]` after one `--ref`. In an
+`--api-workflow --workflow-input` plan, put `keyframes` in the step's
+`arguments` and attach the images with `-c/--context` (`--api-workflow`
+refuses `--keyframe`). See [models.md § MiniMax H3 keyframes](models.md#minimax-h3-keyframes)
+for supported models and prices, and
+[video-prompting.md § Intermediate keyframes](video-prompting.md#intermediate-keyframes)
+for how to describe keyframes in the prompt.

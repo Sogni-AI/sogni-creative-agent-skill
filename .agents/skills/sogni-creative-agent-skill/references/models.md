@@ -956,6 +956,51 @@ sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo-2stage --target-resolutio
 For audio used as a loose reference rather than the soundtrack (a voice or
 rhythm the prompt assigns a job to), use H3 r2v instead.
 
+### MiniMax H3 keyframes
+
+Repeatable `--keyframe <image>@<seconds>` (a local path or URL, then the time the
+video lands on it) pins up to **8** extra stills at exact moments inside an H3
+clip, in addition to `--ref` / `--ref-end`.
+
+| Selectors | Keyframes |
+|-----------|-----------|
+| `minimax-h3-i2v`, `minimax-h3-flf2v`, and their `-balanced`, `-turbo`, `-fasth3-…-turbo`, and FastH3 Two-Stage forms (including generic selectors that resolve to them) | Yes, between the first and last frame |
+| `minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`, and their `-2stage` forms | Yes; the uploaded audio still drives the clip |
+| `minimax-h3-r2v`, `-r2v-balanced`, `-r2v-turbo`, `-r2v-2stage`, `-r2v-balanced-2stage` | Yes; keyframes travel in their own upload slots and are not references |
+| Text-to-video (`minimax-h3-t2v`, or any generic selector with no frame, audio, or reference) | No; the CLI refuses the flag |
+
+- **Times:** each keyframe lands on frame `round(seconds × 24)`, which must be
+  strictly inside the snapped clip (0.1–7.9 s on an 8 s, 192-frame clip) and
+  different from every other keyframe's frame. Anything else, or more than 8
+  keyframes, is refused with the range to use; nothing is clamped or dropped.
+- **Framing:** each still is centre-cropped onto the clip's canvas exactly like
+  the last frame (at twice the canvas on Two-Stage models). Use stills with the
+  clip's aspect ratio.
+- **Price:** two keyframes are included. Each additional keyframe adds output
+  time at the job's rate: 0.75 s on FastH3 (including Two-Stage and Sound to
+  Video) and 0.3 s on the other tiers. An 8 s FastH3 clip costs 32 Spark with up
+  to two keyframes and 50 Spark with eight. `--estimate-video-cost` and the
+  balance check include the keyframe count.
+- **Availability:** if no online worker serving the model can pin keyframes
+  yet, the network refuses the job with error 4100. The CLI reports it as a
+  retryable `MODEL_UNAVAILABLE` error: try again shortly, or render without
+  keyframes.
+- **Prompt:** H3 never sees the keyframe images in the prompt. Describe what each
+  one shows at its time, and cut to a new shot at a keyframe that changes the
+  camera angle, place, or light. Read
+  [`video-prompting.md` § Intermediate keyframes](video-prompting.md#intermediate-keyframes)
+  before writing the prompt.
+- **Hosted tools:** `animate_photo`, `sound_to_video`, and `generate_video`
+  (Ref2VA only) take the same pins as `keyframes: [{ imageIndex, atSeconds }]`;
+  see [`hosted-api.md`](hosted-api.md#minimax-h3-keyframes-in-hosted-tools).
+
+```bash
+sogni-agent -q --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --keyframe turn.png@3.5 --keyframe wave.png@6 --duration 8 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo --ref portrait.png --ref-audio song.mp3 --keyframe chorus.png@7.5 --duration 12 -o ./music-video.mp4 "<I2V preamble plus three-field H3 prompt>"
+sogni-agent -q --video -m minimax-h3-r2v --ref identity.png -c wardrobe.png --keyframe rooftop.png@5 --duration 8 -o ./ref.mp4 "<six-field Ref2VA prompt>"
+sogni-agent --json --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --keyframe turn.png@3 --keyframe wave.png@6 --duration 8 --estimate-video-cost "<prompt>"
+```
+
 ### MiniMax H3 prompting
 
 Standard, Balanced, and Turbo T2V, I2V, and FLF2V use MiniMax's exact three-field rewrite
@@ -1014,7 +1059,10 @@ Sogni Socket before the job is priced):
 At least one image or video is required; audio alone is invalid. For a prompt-only render use
 `minimax-h3-t2v`; for a locked opening frame use `minimax-h3-i2v`; to
 interpolate between two anchors use `minimax-h3-flf2v`. r2v has no frame anchors
-at all, so an end-frame parameter is rejected rather than ignored.
+at all, so an end-frame parameter is rejected rather than ignored. It can still
+pin stills strictly inside the clip with `--keyframe`; keyframes are not
+references, take no `<Picture N>` label, and use no reference slot (see
+[MiniMax H3 keyframes](#minimax-h3-keyframes)).
 
 Ref2VA uses exactly six fields in this order:
 

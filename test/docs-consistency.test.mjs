@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { QUALITY_TIERS } from '../generated/creative-agent-runtime.mjs';
 import { VIDEO_MODEL_ALIASES } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
 import { MusicModel, SPEECH_MODEL_IDS } from '@sogni-ai/sogni-intelligence-client/media';
+import { MINIMAX_H3_KEYFRAMES_DESCRIPTION } from '@sogni-ai/sogni-intelligence-client/tools';
 import { MESH_FLAGS, SPEECH_VALUE_FLAGS } from '../media-utilities.mjs';
 import { checkVersionSync } from '../scripts/check-version-sync.mjs';
 
@@ -334,6 +335,32 @@ test('Seedance 2.5 docs keep the 2.0 grammar and publish only its capability ove
   }
   assert.match(models, /4-30 s per clip/i);
   assert.match(models, /same `@Image1`[\s\S]*grammar[\s\S]*as Seedance 2\.0/i);
+});
+
+test('MiniMax H3 keyframe docs quote the shared tool wording and keep the priced facts', () => {
+  const skill = read('SKILL.md');
+  const models = read('references/models.md');
+  const prompting = read('references/video-prompting.md');
+  const hosted = read('references/hosted-api.md');
+
+  assert.ok(hosted.includes(MINIMAX_H3_KEYFRAMES_DESCRIPTION),
+    'hosted-api.md must quote the Intelligence Client keyframes argument description word for word');
+  assert.match(hosted, /`imageIndex` follows `endImageIndex`/);
+  assert.match(hosted, /Error 4100/);
+  assert.match(models, /### MiniMax H3 keyframes/);
+  assert.match(models, /0\.75 s on FastH3/);
+  assert.match(models, /0\.3 s on the other tiers/);
+  assert.match(models, /32 Spark with up\s+to two keyframes and 50 Spark with eight/);
+  assert.match(models, /error 4100/);
+  assert.match(prompting, /### Intermediate keyframes/);
+  assert.match(prompting, /`\[Shot N\] At MM:SS\.mmm, the camera cuts to …`/);
+  assert.match(prompting, /not\s+`<Picture N>` or `<Subject N>` references/);
+  assert.match(skill, /--keyframe image@seconds/);
+  for (const [name, text] of [['SKILL.md', skill], ['models.md', models], ['video-prompting.md', prompting], ['hosted-api.md', hosted]]) {
+    assert.match(text, /up to (?:\*\*)?8/, `${name}: missing the 8-keyframe limit`);
+    assert.match(text, /(?:new\s+(?:camera\s+)?|changes\s+the\s+(?:camera\s+)?)angle,\s+place,?\s+or\s+light/i,
+      `${name}: missing the new-shot rule`);
+  }
 });
 
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {

@@ -72,6 +72,9 @@ ordered-field prompt; select the Two-Stage model for higher delivered sizes.
 To drive H3 with the user's own voice or song, use FastH3 audio-to-video:
 `-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`
 (`-flfa2v-turbo` adds `--ref-end`, `-a2v-turbo` takes the audio alone).
+To make one H3 clip pass through extra images at chosen times, add repeatable
+`--keyframe image.png@3.5` (up to 8) to an H3 i2v/flf2v, Sound to Video, or
+Ref2VA command, and describe each keyframe in the prompt at its time.
 
 Pixal3D: `--image-to-3d original.png --mesh-faces 30000 -o object.glb`; add
 `--left-view`, `--back-view` and/or `--right-view` for multi-view (named by the

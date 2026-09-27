@@ -184,6 +184,12 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   fields rather than requesting different audio. `--audio-start` picks the
   window; its length is the clip length. No LoRAs; see
   [models.md § FastH3 audio-to-video](./models.md#fasth3-audio-to-video).
+- **Intermediate keyframes pin extra images at chosen times.** Repeatable
+  `--keyframe <image>@<seconds>` (up to 8) works on the image-to-video,
+  first/last-frame, Sound to Video, and Ref2VA selectors, in addition to
+  `--ref` / `--ref-end`. H3 never sees a keyframe in the prompt, so the prompt
+  must describe each one at its time; see
+  [Intermediate keyframes](#intermediate-keyframes) below.
 - **Sogni's H3 tiers render the 768p-class open-weights release.** Only FastH3
   Two-Stage delivers 1080p or 2K (Sogni's own latent enlargement); do not claim
   either for any other H3 selector. MiniMax's hosted 2K stage is not part of
@@ -535,7 +541,9 @@ video) is required. A reference video can be the only visual input; audio alone
 is invalid. r2v
 has no frame anchors at all—for
 a locked opening frame use `minimax-h3-i2v`, and for a first-to-last-frame
-transition use `minimax-h3-flf2v`.
+transition use `minimax-h3-flf2v`. Ref2VA can still pin stills strictly inside
+the clip with `--keyframe`; those are not references and take no label (see
+[Intermediate keyframes](#intermediate-keyframes)).
 
 Ref2VA does not use the three-field Standard contract. Write exactly these six
 fields, in this order:
@@ -649,6 +657,73 @@ music can cite `<Audio N>` without an invented speaker ID. Put copied ambience
 and effects in `overall_soundscape`, audience-only score in
 `non_diegetic_music`, and use both fields when the source contains both.
 
+### Intermediate keyframes
+
+`--keyframe <image>@<seconds>` pins a still image (local path or URL) at an
+exact moment inside an H3 clip, in addition to the first and last frame. Repeat
+it for up to 8 keyframes. It works on every image-to-video and first/last-frame
+selector (Standard, Balanced, Turbo, FastH3, and FastH3 Two-Stage), on the FastH3
+Sound to Video selectors (`minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`,
+`-a2v-turbo`, and their `-2stage` forms), and on every Ref2VA selector.
+Text-to-video cannot pin keyframes.
+
+- **Timing.** A keyframe lands on frame `round(seconds × 24)`, which must fall
+  strictly inside the snapped clip: from 0.1 s to one frame before the last
+  (0.1–7.9 s on an 8 s, 192-frame clip). The first and last frames belong to
+  `--ref` and `--ref-end`, never to a keyframe, and two keyframes cannot share a
+  frame. The CLI refuses anything else and names the range to use; it never
+  moves or drops a keyframe.
+- **H3 never sees the keyframe images in the prompt.** They are not
+  `<Picture N>` or `<Subject N>` references: never label one, never put one in
+  the alignment line or in Ref2VA's `subject_definitions` and
+  `retention_analysis`, and never write the words keyframe, still, or pinned
+  in the prompt. H3 knows what a keyframe shows only from your words, so describe
+  each one at its time.
+- **Compare each keyframe with the anchor before it** (the first frame or the
+  previous keyframe):
+  - **Same camera angle, place, and light; only the subjects moved.** Stay in the
+    same shot and bring the action to the pose, position, facing, expression,
+    and props the keyframe shows, ordered with words (`as she reaches the rail`),
+    never with a clock time. A tighter framing from the same angle can arrive as
+    a push-in.
+  - **New camera angle, place, or light.** Start a new shot exactly at its time,
+    `[Shot N] At MM:SS.mmm, the camera cuts to …`, and open that shot with the
+    keyframe's composition: shot size, camera angle, where each subject stands
+    and faces, the setting, and the light. An action in progress carries across
+    the cut. These cuts apply even when the request prefers one continuous shot,
+    and the alignment line's final `Shot N` counts them. If the last frame is
+    framed or lit differently from the last keyframe, the final shot cuts to it.
+- **Never put two differently framed or lit anchors in one shot.** They
+  cross-fade into each other, and a shot described differently from its keyframe
+  can flash the keyframe for a single frame.
+- **The cut clock** is the keyframe's frame ÷ 24, rounded down to the
+  millisecond: `@3.5` is frame 84, `00:03.500`; `@2.3` is frame 55, `00:02.291`.
+  The CLI prints each one before rendering (`Keyframe at 00:03.500 (frame 84)`).
+- **Sound to Video:** the uploaded audio still drives the performance; keyframes
+  pin how the clip looks at their times.
+- **Framing and price.** Each keyframe is centre-cropped onto the clip's canvas
+  like the last frame, so use stills with the clip's aspect ratio. Two keyframes
+  are included in the price; each additional keyframe adds a little output time
+  (see [models.md § MiniMax H3 keyframes](./models.md#minimax-h3-keyframes)).
+
+Worked example — the courier leaves the alley (first frame), is inside a
+stairwell at 4 s (a new place, so a cut), and reaches the top of the stairs
+(last frame, same stairwell and light, so no second cut):
+
+```bash
+sogni-agent -q --video -m minimax-h3-fasth3-flf2v-turbo --ref ./alley.png --ref-end ./stair-top.png --keyframe ./stairwell.png@4 --duration 8 -w 1344 -h 768 -o ./courier.mp4 "<prompt below>"
+```
+
+```text
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 2) aligns with the 8.00-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] Live-action, cinematic. In the position and framing established by Picture 1, a bike courier in a yellow rain jacket wheels her bike down a narrow wet alley toward a steel side door while rain drips from the fire escape above. She leans the bike against the brick, hauls the door open, and steps through as the static wide shot holds on the alley. [Shot 2] At 00:04.000, the camera cuts to a low-angle shot inside a bare concrete stairwell lit by a caged orange bulb, the courier on the bottom step with her helmet in one hand, facing up the stairs. She climbs two steps at a time, one hand sliding along the painted rail, and settles into the pose, spacing, and composition established by Picture 2 at the end of the shot.
+
+overall_soundscape: Rain patters on metal in the alley, the steel door clangs shut behind her, and her footsteps echo up the stairwell.
+
+non_diegetic_music: N/A
+```
+
 ### Agent-ready H3 command shapes
 
 ```bash
@@ -676,6 +751,9 @@ sogni-agent -q --video -m minimax-h3-fasth3-turbo --duration 8 -w 1344 -h 768 -o
 sogni-agent -q --video -m minimax-h3-fasth3-i2v-turbo --ref ./first.png --duration 8 -w 768 -h 1344 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-flf2v-turbo --ref ./first.png --ref-end ./last.png --duration 8 -w 1344 -h 768 -o ./video.mp4 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent -q --video -m minimax-h3-fasth3-ia2v-turbo --ref ./first.png --ref-audio ./voice.m4a --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt with the uploaded words in <d> tags>"
+
+# Intermediate keyframes: repeat --keyframe <image>@<seconds> (up to 8) on i2v, flf2v, Sound to Video, or Ref2VA
+sogni-agent -q --video -m minimax-h3-fasth3-i2v-turbo --ref ./first.png --keyframe ./turn.png@3.5 --keyframe ./wave.png@6 --duration 8 -o ./video.mp4 "<I2V preamble plus three-field H3 prompt that reaches each keyframe at its time>"
 
 # Reference-to-video (reference order defines the prompt ordinals)
 sogni-agent -q --video -m minimax-h3-r2v --ref ./identity.png -c ./wardrobe.png --ref-video ./motion.mp4 --ref-audio ./voice.m4a --duration 8 -w 1344 -h 768 -o ./video.mp4 "<six-field Ref2VA prompt>"

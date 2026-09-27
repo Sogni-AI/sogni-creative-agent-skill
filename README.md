@@ -511,6 +511,11 @@ sogni-agent --video -m minimax-h3-fasth3-ia2v-turbo --ref portrait.png --ref-aud
 sogni-agent --video -m minimax-h3-fasth3-flfa2v-turbo --ref first.png --ref-end last.png --ref-audio song.mp3 --duration 12 "<FLF2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-a2v-turbo --ref-audio song.mp3 --audio-start 30 --duration 15 "<three-field H3 prompt>"
 
+# MiniMax H3 keyframes: the clip passes through extra images at chosen times (repeat --keyframe, up to 8)
+sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png \
+  --keyframe turn.png@3.5 --keyframe wave.png@6 --duration 8 \
+  "<FLF2V preamble plus three-field H3 prompt that describes each keyframe at its time>"
+
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"
 
@@ -647,6 +652,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--left-view`, `--back-view`, `--right-view <image>` | Pixal3D multi-view orbit views, any subset, named by the subject's own sides: left = its own left side toward the camera (it faces screen-left), right = its own right side (it faces screen-right). Templates that label the subject's right side "left" build a model turned 180 degrees |
 | `--remove-background <image>`, `--matte` | BiRefNet transparent PNG or soft mask |
 | `--ref`, `-c`, `--ref-audio`, `--ref-video` | Frame/loose image/audio/video references; audio/video repeat for H3 r2v and Seedance loose refs |
+| `--keyframe <image>@<sec>` | MiniMax H3 keyframe: pin an image at that time strictly inside the clip, in addition to `--ref`/`--ref-end`; repeat for up to 8 (H3 i2v/flf2v, FastH3 Sound to Video, Ref2VA) |
 | `--audio-start <sec>` | Where the `--ref-audio` window begins; on FastH3 audio-to-video the window is the clip length (no `--audio-duration`) |
 | `--target-resolution <px>` | Target the short side, preserving aspect ratio; on MiniMax H3 FastH3 and Ref2VA Two-Stage, the delivered size `720`, `1080`, or `2K` (default 2K) |
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
@@ -721,6 +727,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` or `minimax-h3-t2v` |
 | MiniMax H3 image-to-video | `minimax-h3-i2v` |
 | MiniMax H3 first-frame → last-frame video | `minimax-h3-flf2v` with `--ref A --ref-end B` |
+| MiniMax H3 video that passes through extra images at chosen times | Any H3 i2v/flf2v, FastH3 Sound to Video, or Ref2VA selector with repeatable `--keyframe image@seconds` (up to 8); two are included in the price |
 | MiniMax H3 reference-to-video | `minimax-h3-r2v` with up to 9 images, 3 videos, 3 audios / 12 files total |
 | MiniMax H3 Balanced text-to-video | `minimax-h3-balanced` or `minimax-h3-t2v-balanced` |
 | MiniMax H3 Balanced image-to-video | `minimax-h3-i2v-balanced` with `--ref` |
@@ -895,7 +902,7 @@ Hosted API modes require `SOGNI_API_KEY`.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Requests carry `input.steps` plus snake_case controls such as `token_type`, `media_references`, `max_estimated_capacity_units`, and `confirm_cost`.
 - **`--workflow-input`** forwards exact durable workflow JSON (`{ title?, steps: [...] }`). Use this when you need exact multi-step behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single storyboard sheet with GPT Image 2.5 Sunburst, then passes that artifact into Seedance 2.5 for 1080p video generation. The `-Q fast|hq|pro` preset maps to GPT Image low/medium/high quality for that storyboard sheet; explicit model and resolution choices still win.
-- **Media references** from `-c`, `--ref`, `--ref-end`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests. API chat also attaches image refs as vision inputs. Local file references are uploaded to Sogni media storage first, then forwarded as retrievable URLs so durable executors do not depend on `data:` URI support. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Use direct CLI mode for private media that must not leave the local machine.
+- **Media references** from `-c`, `--ref`, `--ref-end`, `--keyframe`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests; `--api-chat` / `--durable-chat` also tell the hosted agent which upload to pin at which time as MiniMax H3 `keyframes`. API chat also attaches image refs as vision inputs. Local file references are uploaded to Sogni media storage first, then forwarded as retrievable URLs so durable executors do not depend on `data:` URI support. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Use direct CLI mode for private media that must not leave the local machine.
 - **Cost controls** use `--workflow-max-cost <n>` to reject workflow starts above a capacity-unit ceiling, and `--confirm-cost` / `--no-confirm-cost` to forward explicit billing confirmation.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, `--cancel-workflow`, and `--resume-workflow`. Use `--workflow-input` to provide exact durable workflow JSON.
 - **Replay records** use `/v1/replay/records`: `--list-replays [limit]`, `--get-replay <runId>`, and `--ingest-replay <json|@path>` expose redacted RunRecord storage for Sogni Intelligence replay/debug viewers.

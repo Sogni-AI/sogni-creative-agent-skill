@@ -212,11 +212,10 @@ sogni-agent --video -m seedance2-5 --target-resolution 1080 --seedance-task-type
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1; preserve its subject and timing"
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
 
-# MiniMax H3 (fixed 24fps, native stereo audio + dialogue; use the official
-# ordered-field prompt contract — see references/video-prompting.md).
-# Standard, 8-step Balanced, and 4-step LightX2V Turbo cover T2VA, I2VA,
-# L2VA, FL2VA, and Ref2VA. FastH3 is a separate FastVideo VSA engine with
-# T2VA/I2VA/L2VA/FL2VA only; it has no R2V mode.
+# MiniMax H3 (fixed 24fps, native stereo audio + dialogue; use the official ordered-field
+# prompt contract — see references/video-prompting.md). Standard, 8-step Balanced, and 4-step
+# LightX2V Turbo cover T2VA, I2VA, L2VA, FL2VA, and Ref2VA. FastH3 is a separate FastVideo VSA
+# engine with T2VA/I2VA/L2VA/FL2VA only; it has no R2V mode.
 sogni-agent --video -m minimax-h3 --duration 10 -w 1344 -h 768 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref-end last.png --duration 8 "<L2V preamble plus three-field H3 prompt>"
@@ -234,6 +233,7 @@ sogni-agent --video -m minimax-h3-r2v-turbo -w 960 -h 544 --ref identity.png -c 
 sogni-agent --video -m minimax-h3-fasth3-turbo --duration 8 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png --duration 8 "<FLF2V preamble plus three-field H3 prompt>"
+sogni-agent --video -m minimax-h3-fasth3-i2v-turbo --ref first.png --keyframe turn.png@3.5 --duration 8 "<I2V prompt that reaches turn.png at 00:03.500>"   # up to 8 keyframes on H3 i2v/flf2v, Sound to Video, Ref2VA
 sogni-agent --video -m minimax-h3-fasth3-turbo-2stage --duration 8 "<three-field H3 prompt>"   # 2K by default; --target-resolution 1080 or 720 for 1080p or 720p; minimax-h3-r2v-2stage for references
 
 # HappyHorse 1.1 (3-15s vendor video, fixed 24fps, native audio). t2v default;
@@ -289,7 +289,7 @@ sogni-agent doctor --json
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
 | `--video`, `--music` | Generate video / music instead of image | - |
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
-| `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v | - |
+| `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v; `--keyframe <image>@<sec>` pins an H3 keyframe (repeat, up to 8) | - |
 | `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
@@ -369,7 +369,7 @@ H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (
 
 [Personal LoRA library management](./references/personal-loras.md) covers imports, consent, status and compatible models. **MiniMax H3 is the only video family that loads LoRAs**, including its FastH3 audio-to-video modes. Attach them with the same repeatable `--lora <id> --lora-strength <n>` arguments the image models take, and name the explicit H3 mode in the same command — availability differs per mode, and bare `-m minimax-h3` cannot be validated. Video LoRAs are positive-only: a negative value is not an inverse effect and `0` is off, unlike the bipolar Krea 2 image sliders. Omit `--lora-strengths` to apply each adapter's catalog default rather than the worker's 1.0 fallback. `h3-realism-people` needs its trigger word `r34l1sm` near the FRONT of the prompt or it renders as ordinary H3 with no error. The CLI validates every id against the live catalog for the model you selected, so a wrong id fails before it costs a render instead of being dropped silently. LTX, WAN, Seedance, and HappyHorse load none. Read [`references/h3-video-loras.md`](./references/h3-video-loras.md) for per-mode availability and ranges.
 
-**H3 requires MiniMax's official ordered-field prompt contract.** Standard, Balanced, LightX2V Turbo, and FastH3 T2V/I2V/L2V/FLF2V (and the FastH3 audio modes, with the I2V or FLF2V preamble when frames are supplied) use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for endpoint-conditioned modes. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and dialogue as `<d>[Language] words</d>`. Preserve supplied dialogue exactly; author one concise line only when the user explicitly asks for speech/dialogue/lyrics without supplying words, and otherwise invent no speech. Use `<scenetrans>` at both connecting points when one line crosses a cut and `<cutoff>` only when the video ending truncates speech. Do not substitute quoted prose, bracketed timecode lists, or tokenizer-internal `<|...|>` markers. Ref2VA uses its separate six-field contract and exact task/retention vocabulary; loose video references do not promise editing or continuation. Negative direction belongs inside the structured prompt because there is no negative-prompt field. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
+**H3 requires MiniMax's official ordered-field prompt contract.** Standard, Balanced, LightX2V Turbo, and FastH3 T2V/I2V/L2V/FLF2V (and the FastH3 audio modes, with the I2V or FLF2V preamble when frames are supplied) use `integrated_multimodal_description`, `overall_soundscape`, then `non_diegetic_music`, with the mode-specific alignment preamble for endpoint-conditioned modes. Use `[Shot N]` notation, stable `(S1)` speaker IDs, and dialogue as `<d>[Language] words</d>`. Preserve supplied dialogue exactly; author one concise line only when the user explicitly asks for speech/dialogue/lyrics without supplying words, and otherwise invent no speech. Use `<scenetrans>` at both connecting points when one line crosses a cut and `<cutoff>` only when the video ending truncates speech. Do not substitute quoted prose, bracketed timecode lists, or tokenizer-internal `<|...|>` markers. Ref2VA uses its separate six-field contract and exact task/retention vocabulary; loose video references do not promise editing or continuation. Negative direction belongs inside the structured prompt because there is no negative-prompt field. **Keyframes:** when one H3 clip must pass through extra images at chosen moments, add repeatable `--keyframe image@seconds` (up to 8, strictly inside the clip; i2v/flf2v, FastH3 Sound to Video, and Ref2VA only) and make the clip long enough to hold them. H3 never sees a keyframe as a `<Picture N>` reference, so say in the prompt what each one shows at its time, and start a new shot at a keyframe that changes the angle, place, or light. Two are included in the price; each extra keyframe adds a little. Read [`references/video-prompting.md`](./references/video-prompting.md) § MiniMax H3 Prompting before writing any H3 prompt.
 
 For an H3 prompt-only request, the general prompt-authoring rule above requires returning only the applicable ordered-field contract. The fields themselves are the directly runnable deliverable; do not wrap them in commentary.
 
@@ -484,7 +484,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 |-----------|------------------------|
 | [`references/interactive-worlds.md`](./references/interactive-worlds.md) | Building an explorable world end to end: the nine-model stack in order, the prepare/render/verify/retain loop, and the measured failure modes of each stage — segmentation prompts, matte thresholds, 3D input resolution, single-keyframe clips and reverse playback, dialogue loudness spread, voice-clone transcripts, on-camera lip-sync |
 | [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX.1 Schnell, Chroma, Krea 2, Qwen, Z-Image, GPT Image, or model-specific edit operations |
-| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, and dialogue tags; high-res/4K routing; orientation/aspect mapping; camera language |
+| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, dialogue tags, and intermediate keyframes; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |

@@ -120,7 +120,10 @@ Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
 with optional `--output-format mov` and `--return-last-frame`. FastH3 Two-Stage
 delivers 720p/1080p/2K through its own model selector. FastH3 audio-to-video
 (`minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`) drives H3 with an
-uploaded `--ref-audio` track and keeps it as the soundtrack. GPT Image 2.5 Sunburst
+uploaded `--ref-audio` track and keeps it as the soundtrack. Repeatable
+`--keyframe image.png@3.5` (up to 8) pins extra images at chosen times inside an
+H3 i2v/flf2v, Sound to Video, or Ref2VA clip; describe each keyframe in the
+prompt at its time (see [video-prompting.md](references/video-prompting.md)). GPT Image 2.5 Sunburst
 and Flare support edits, masks, and transparency. For capability questions or
 model selection, read [models.md](references/models.md) for current controls
 and limits; preserve the user's requested model and resolution.

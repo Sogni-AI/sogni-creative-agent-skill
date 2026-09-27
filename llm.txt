@@ -10,7 +10,9 @@ model-selection questions. Seedance 2.5 supports 1080p with
 and optional last-frame images. Other recent additions include FastH3
 Two-Stage delivered 720p/1080p/2K, FastH3 audio-to-video from an uploaded track
 (`-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`, or
-`-flfa2v-turbo` / `-a2v-turbo`), GPT Image 2.5 Sunburst/Flare, SAM 3 object
+`-flfa2v-turbo` / `-a2v-turbo`), MiniMax H3 keyframes that pin extra images at
+chosen times (repeatable `--keyframe image.png@3.5`, up to 8, on H3 i2v/flf2v,
+Sound to Video, and Ref2VA), GPT Image 2.5 Sunburst/Flare, SAM 3 object
 masks, and promptless FlashVSR video upscaling to 1080p/1440p.
 Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb` (add
 `--left-view`, `--back-view`, `--right-view` for multi-view); BiRefNet
@@ -143,7 +145,7 @@ retrying.
   repeatable `--model-tag <tag>` filters such as `spicy` or `uncensored`, plus
   `--json`. Availability comes from `sogni-client` and tags from the official
   Sogni catalog; `--list-api-models` lists language models instead.
-- Media references from `-c`, `--ref`, `--ref-end`, `--ref-audio`,
+- Media references from `-c`, `--ref`, `--ref-end`, `--keyframe`, `--ref-audio`,
   `--reference-audio-identity`, `--ref-video`, and `--mask` are uploaded and forwarded as
   `media_references`; API chat also attaches image refs as vision inputs.
   Workflow JSON can bind refs with `sourceStepId: "$input_media"`.

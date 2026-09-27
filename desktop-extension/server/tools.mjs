@@ -80,6 +80,7 @@ export const TOOLS = [
       'MiniMax H3 FastH3 audio-to-video (model minimax-h3-fasth3-ia2v-turbo with ref + ref_audio, ' +
       'minimax-h3-fasth3-flfa2v-turbo with ref + ref_end + ref_audio, minimax-h3-fasth3-a2v-turbo with ref_audio only) ' +
       'drives the clip with the uploaded audio and keeps it as the soundtrack; no LoRAs. ' +
+      'MiniMax H3 i2v, first/last-frame, FastH3 audio-to-video and r2v also take keyframes: extra images pinned at chosen times inside the clip. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
@@ -97,6 +98,25 @@ export const TOOLS = [
         reference_images: { type: 'array', items: { type: 'string' }, description: 'Loose image reference paths/URLs (-c); repeatable for MiniMax H3 r2v' },
         reference_audios: { type: 'array', items: { type: 'string' }, description: 'Additional reference audio paths/URLs; MiniMax H3 r2v supports up to 3 total' },
         reference_videos: { type: 'array', items: { type: 'string' }, description: 'Additional reference video paths/URLs; MiniMax H3 r2v supports up to 3 total' },
+        keyframes: {
+          type: 'array',
+          maxItems: 8,
+          description:
+            'MiniMax H3 only. Pin up to 8 images at exact moments inside the video, in addition to the first/last frame (ref/ref_end). ' +
+            'Each item is {image, at_seconds}: image is an absolute path or URL; at_seconds is when the video should land on that image. ' +
+            'Keyframes must fall strictly inside the clip (not on the first or last frame) and at distinct times. ' +
+            'Describe what each keyframe shows in the prompt at its time; a keyframe with a new angle, place or light starts a new shot. ' +
+            'Two keyframes are included in the price; each additional keyframe adds a little.',
+          items: {
+            type: 'object',
+            properties: {
+              image: str('Absolute path or URL of the keyframe image'),
+              at_seconds: num('When the video lands on this image, in seconds from the start'),
+            },
+            required: ['image', 'at_seconds'],
+            additionalProperties: false,
+          },
+        },
         generate_audio: { type: 'boolean', description: 'For MiniMax H3, keep generated audio (true) or strip it from the returned video (false)' },
         persona: str('Saved persona name (reference frame)'),
         target_resolution: num('Short-side target in px, preserves aspect'),
@@ -118,6 +138,14 @@ export const TOOLS = [
       push(args, '--ref-video', input.ref_video);
       for (const refVideo of input.reference_videos ?? []) push(args, '--ref-video', refVideo);
       for (const refImage of input.reference_images ?? []) push(args, '-c', refImage);
+      for (const keyframe of input.keyframes ?? []) {
+        const image = keyframe?.image;
+        const atSeconds = keyframe?.at_seconds;
+        if (typeof image !== 'string' || !image || typeof atSeconds !== 'number' || !Number.isFinite(atSeconds)) {
+          throw new Error('keyframes items need image (a path or URL) and at_seconds (a number of seconds).');
+        }
+        args.push('--keyframe', `${image}@${atSeconds}`);
+      }
       if (input.generate_audio === true) args.push('--generate-audio');
       if (input.generate_audio === false) args.push('--no-generate-audio');
       push(args, '--persona', input.persona);

@@ -179,6 +179,41 @@ test('generate_video exposes MiniMax H3 r2v reference arrays and audio control',
   ]);
 });
 
+test('generate_video maps MiniMax H3 keyframes to repeatable --keyframe image@seconds', () => {
+  const tool = getTool('generate_video');
+  const schema = tool.inputSchema.properties.keyframes;
+  assert.equal(schema.type, 'array');
+  assert.equal(schema.maxItems, 8);
+  assert.deepEqual(schema.items.required, ['image', 'at_seconds']);
+  assert.match(schema.description, /^MiniMax H3 only\. Pin up to 8 images at exact moments inside the video/);
+  assert.match(schema.description, /strictly inside the clip \(not on the first or last frame\) and at distinct times/);
+  assert.match(schema.description, /a keyframe with a new angle, place or light starts a new shot/);
+  assert.match(schema.description, /Two keyframes are included in the price; each additional keyframe adds a little/);
+
+  const args = tool.buildArgs({
+    prompt: '<FLF2V preamble plus three-field H3 prompt>',
+    model: 'minimax-h3-fasth3-flf2v-turbo',
+    ref: '/tmp/first.png',
+    ref_end: '/tmp/last.png',
+    keyframes: [
+      { image: '/tmp/turn.png', at_seconds: 3.5 },
+      { image: 'https://cdn.example.com/wave.png', at_seconds: 6 },
+    ],
+    duration: 8,
+  });
+  assert.deepEqual(args, [
+    '--json', '-q', '--no-update-check', '--video',
+    '-m', 'minimax-h3-fasth3-flf2v-turbo', '--duration', '8',
+    '--ref', '/tmp/first.png', '--ref-end', '/tmp/last.png',
+    '--keyframe', '/tmp/turn.png@3.5', '--keyframe', 'https://cdn.example.com/wave.png@6',
+    '<FLF2V preamble plus three-field H3 prompt>',
+  ]);
+  assert.throws(
+    () => tool.buildArgs({ prompt: 'x', keyframes: [{ image: '/tmp/turn.png' }] }),
+    /keyframes items need image \(a path or URL\) and at_seconds/,
+  );
+});
+
 test('generate_music maps lyrics and format', () => {
   const args = getTool('generate_music').buildArgs({
     prompt: 'bright indie pop chorus',

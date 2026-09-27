@@ -1,3 +1,11 @@
+## [3.54.2] - 2026-09-27
+
+### Bug Fixes
+
+* Wan 3 and Wan 3.0 Enhanced can render 1080p from the CLI. Every Wan 3 size was cut to a 1536 px long side, so `--target-resolution 1080` (1920x1080) went out as 1536x864, which Sogni prices and renders as 720p. `-w 1080 -h 1920` did the same. Billing matched the 720p that was delivered, but there was no way to get 1080p. The CLI now sends Alibaba's exact size for the tier and ratio. At 1080 that is 1920x1080, 1440x1080, 1080x1080, 1080x1440 or 1080x1920; the ratio comes from `--wan3-ratio`, a ratio named in the prompt, or 16:9. Image-to-video keeps the first frame's shape with its short side at the tier (an 832x1216 frame at 1080 renders at 1080x1578), including a first frame given as a URL. A fixed `--wan3-ratio` that does not match the frame prints a notice instead of cropping it. Explicit `-w`/`-h` are sent as given, up to 1920 per side.
+* The Wan 3 default stays 720p, the size and price CLI renders already had. 1080p is `--target-resolution 1080` and costs twice as much per second (52 instead of 26 Spark per second on Wan 3, 64 instead of 32 on Enhanced, before subscription discounts). `--estimate-video-cost` quotes the size that will be sent.
+* Update the intelligence client to 4.6.2, which lets Wan 3 keep sizes up to 1920 instead of clamping them to 1536.
+
 ## [3.54.1] - 2026-09-27
 
 ### Bug Fixes

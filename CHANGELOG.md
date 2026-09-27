@@ -1,3 +1,11 @@
+## [3.54.1] - 2026-09-27
+
+### Bug Fixes
+
+* `--upscale` now renders RTX VSR output above 2048 px, up to the 15,360 px long edge the help promises. Every image size above 2048 px was refused with "Width must be between 256 and 2048" before it reached Sogni, so GPT Image up to 3840 px and Krea 2 and Qwen up to 2560 px work again too.
+* A result the Sensitive Content Filter withheld is reported as withheld instead of as "Result download failed: HTTP 404". When nothing was delivered the CLI stops with a `SAFETY_REJECTED` error that suggests rewording the prompt or `--no-filter`; a partly withheld batch saves the rest, marks each withheld result with `urlUnavailable: "sensitiveContent"` in `--json` (as `--result` does) and prints how many were withheld. Multi-angle edits, 360 segments and the looping return clip report it the same way.
+* Update the intelligence client to 4.6.1 and the bundled runtime to creative agent 2.7.1, which carry the image size fix.
+
 ## [3.54.0] - 2026-09-27
 
 ### Features

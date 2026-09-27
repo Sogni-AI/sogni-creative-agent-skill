@@ -518,7 +518,7 @@ sogni-agent --video -m minimax-h3-fasth3-a2v-turbo --ref-audio song.mp3 --audio-
 # MiniMax H3 keyframes: the clip passes through extra images at chosen times (repeat --keyframe, up to 8)
 sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end last.png \
   --keyframe turn.png@3.5 --keyframe wave.png@6 --duration 8 \
-  "<FLF2V preamble plus three-field H3 prompt that describes each keyframe at its time>"
+  "<keyframe alignment line plus three-field H3 prompt that names each keyframe <Picture N> and describes it at its time>"
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
 sogni-agent --video --ref cat.jpg "gentle camera pan"

@@ -370,8 +370,10 @@ H3 clip. Its schema description, identical on all three tools:
   frame, or more than 8 is refused with a `PARAMETER_INVALID` error that says
   what to change; nothing is clamped or dropped. Set `duration` so every keyframe
   falls inside the clip.
-- Keyframes add to the first and last frame and are never `<Picture N>`
-  references; on `generate_video` they do not go in `referenceImageIndices`.
+- Keyframes add to the first and last frame and are not references (on
+  `generate_video` they do not go in `referenceImageIndices`), but the H3
+  prompt names each one `<Picture N>`, numbered in time order after the
+  first/last-frame or reference pictures.
 - Price: two keyframes are included; each additional keyframe adds 0.75 s of
   output time on FastH3 (0.3 s on other tiers) at the job's rate.
 - Error 4100 means no online worker serving that model can pin keyframes right

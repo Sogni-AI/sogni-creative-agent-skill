@@ -353,8 +353,18 @@ test('MiniMax H3 keyframe docs quote the shared tool wording and keep the priced
   assert.match(models, /32 Spark with up\s+to two keyframes and 50 Spark with eight/);
   assert.match(models, /error 4100/);
   assert.match(prompting, /### Intermediate keyframes/);
-  assert.match(prompting, /`\[Shot N\] At MM:SS\.mmm, the camera cuts to …`/);
-  assert.match(prompting, /not\s+`<Picture N>` or `<Subject N>` references/);
+  // MiniMax's keyframe format: every keyframe is a <Picture N> the prompt names.
+  assert.match(prompting, /`\[Shot N\] At MM:SS\.mmm, the camera cuts to …, whose keyframe corresponds to\s+<Picture N>`/);
+  assert.match(prompting, /Picture 1 \(from Shot 1\) aligns with the 0\.00-second mark of the target video; Picture 2 \(from Shot 2\) aligns with the 2\.88-second mark/);
+  assert.match(prompting, /`<Picture N> is the keyframe of \[Shot M\], showing …`/);
+  assert.match(prompting, /`\[reference generation \+ keyframe completion\]`/);
+  assert.match(prompting, /`<Picture N> \(\[Shot M\] keyframe\): fully_preserved - …`/);
+  assert.match(prompting, /text encoder never sees the keyframe images/);
+  for (const [name, text] of [['SKILL.md', skill], ['models.md', models], ['video-prompting.md', prompting], ['hosted-api.md', hosted]]) {
+    assert.match(text, /names?\s+each\s+(?:keyframe|one)\s+`<Picture N>`/i, `${name}: keyframes must be named <Picture N>`);
+    assert.doesNotMatch(text, /never label one|never write the words keyframe|never `<Picture N>`|take no `<Picture N>` label/,
+      `${name}: still states the old no-label keyframe rule`);
+  }
   assert.match(skill, /--keyframe image@seconds/);
   for (const [name, text] of [['SKILL.md', skill], ['models.md', models], ['video-prompting.md', prompting], ['hosted-api.md', hosted]]) {
     assert.match(text, /up to (?:\*\*)?8/, `${name}: missing the 8-keyframe limit`);

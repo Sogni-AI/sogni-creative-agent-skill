@@ -8017,7 +8017,7 @@ test('--keyframe works on two-stage, Sound to Video and Reference to Video model
     assert.deepEqual(project.keyframes.map(({ frameIndex }) => frameIndex), [96], model);
     assert.ok(isFixtureImage(project.keyframes[0].image), model);
     if (model.includes('r2v')) {
-      // The -c reference only: a keyframe never becomes a <Picture N> reference.
+      // The -c reference only: a keyframe is never a reference image.
       assert.equal(project.contextImages.length, 1, `${model}: keyframes are not reference images`);
     }
   }

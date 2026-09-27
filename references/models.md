@@ -994,9 +994,12 @@ clip, in addition to `--ref` / `--ref-end`.
   yet, the network refuses the job with error 4100. The CLI reports it as a
   retryable `MODEL_UNAVAILABLE` error: try again shortly, or render without
   keyframes.
-- **Prompt:** H3 never sees the keyframe images in the prompt. Describe what each
-  one shows at its time, and cut to a new shot at a keyframe that changes the
-  camera angle, place, or light. Read
+- **Prompt:** name each keyframe `<Picture N>`, numbered in time order after the
+  mode's own pictures, and list it in the alignment line (Ref2VA: a keyframe
+  entry, `keyframe completion`, and a retention entry). H3's text encoder never
+  sees the keyframe images, so describe what each one shows at its time, and
+  cut to a new shot at a keyframe that changes the camera angle, place, or
+  light. Read
   [`video-prompting.md` § Intermediate keyframes](video-prompting.md#intermediate-keyframes)
   before writing the prompt.
 - **Hosted tools:** `animate_photo`, `sound_to_video`, and `generate_video`
@@ -1070,7 +1073,8 @@ At least one image or video is required; audio alone is invalid. For a prompt-on
 interpolate between two anchors use `minimax-h3-flf2v`. r2v has no frame anchors
 at all, so an end-frame parameter is rejected rather than ignored. It can still
 pin stills strictly inside the clip with `--keyframe`; keyframes are not
-references, take no `<Picture N>` label, and use no reference slot (see
+references and use no reference slot, but the prompt names each one
+`<Picture N>` after the reference pictures (see
 [MiniMax H3 keyframes](#minimax-h3-keyframes)).
 
 Ref2VA uses exactly six fields in this order:

@@ -240,11 +240,13 @@ The same command can be added permanently from `goose configure` as a Command-li
 
 ### OpenClaw plugin
 
-The skill is published on ClawHub by the `sogni-ai` publisher (through 3.54.2 it was listed under `fishmongr`). Specify the publisher because more than one listing uses this skill name:
+The skill is published on ClawHub by the `sogni-ai` publisher. Specify the publisher because more than one listing uses this skill name:
 
 ```bash
 npx -y clawhub@latest install @sogni-ai/sogni-creative-agent-skill
 ```
+
+Through 3.54.2 the listing was `@fishmongr/sogni-creative-agent-skill`. ClawHub no longer finds that name, so an install made from it does not update; install again with the command above.
 
 To install as a code plugin instead, use OpenClaw's `npm:` source prefix (the npm package is scoped, so a bare `openclaw plugins install sogni-creative-agent-skill` will not resolve it):
 

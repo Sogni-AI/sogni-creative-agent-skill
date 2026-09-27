@@ -23,12 +23,9 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPM_PACKAGE = '@sogni-ai/sogni-creative-agent-skill';
 // The sogni-ai org publisher; its members can publish. Mark's ClawHub account
-// (fishmongr) owns it.
+// (fishmongr) owns it. Through 3.54.2 the listing was @fishmongr, which
+// ClawHub no longer resolves.
 const CLAWHUB_OWNER = 'sogni-ai';
-// The listing lived under Mark's personal publisher through 3.54.2. The first
-// publish that finds it there moves it into the org, which needs an account
-// that administers both (fishmongr).
-const PREVIOUS_OWNER = 'fishmongr';
 const CLAWHUB_SLUG = 'sogni-creative-agent-skill';
 const CLAWHUB_NAME = 'Sogni Creative Agent Skill';
 const CLAWHUB_REF = `@${CLAWHUB_OWNER}/${CLAWHUB_SLUG}`;
@@ -81,25 +78,16 @@ function clawhub(args, options = {}) {
   return run('npx', ['-y', 'clawhub@latest', ...args], options);
 }
 
-function inspectListing(owner) {
+function clawhubState() {
   let out;
   try {
-    out = clawhub(['inspect', `@${owner}/${CLAWHUB_SLUG}`, '--versions', '--limit', '200', '--json']);
+    out = clawhub(['inspect', CLAWHUB_REF, '--versions', '--limit', '200', '--json']);
   } catch (error) {
-    if (/not found/i.test(String(error.stderr ?? error.message))) return null;
-    throw error;
+    fail(`clawhub inspect ${CLAWHUB_REF} failed: ${String(error.stderr ?? error.message).trim()}`);
   }
   const data = JSON.parse(out.slice(out.indexOf('{')));
   const versions = (data.versions?.items ?? data.versions ?? []).map((entry) => entry.version);
-  return { owner, latest: data.skill?.tags?.latest ?? null, versions, moderation: data.moderation ?? null };
-}
-
-// The listing under the org, or under the previous owner until the first
-// publish moves it.
-function clawhubState() {
-  const state = inspectListing(CLAWHUB_OWNER) ?? inspectListing(PREVIOUS_OWNER);
-  if (!state) fail(`ClawHub has no ${CLAWHUB_SLUG} under @${CLAWHUB_OWNER} or @${PREVIOUS_OWNER}`);
-  return state;
+  return { latest: data.skill?.tags?.latest ?? null, versions, moderation: data.moderation ?? null };
 }
 
 function npmLatest() {
@@ -108,14 +96,13 @@ function npmLatest() {
 
 function checkDrift() {
   const npm = npmLatest();
-  const { owner, latest } = clawhubState();
-  const ref = `@${owner}/${CLAWHUB_SLUG}`;
+  const { latest } = clawhubState();
   if (npm === latest) {
-    console.log(`ClawHub ${ref} matches npm: ${npm}`);
+    console.log(`ClawHub ${CLAWHUB_REF} matches npm: ${npm}`);
     return;
   }
   fail(
-    `ClawHub ${ref} is at ${latest}, npm latest is ${npm}. If ${npm} was uploaded in the last hour, `
+    `ClawHub ${CLAWHUB_REF} is at ${latest}, npm latest is ${npm}. If ${npm} was uploaded in the last hour, `
       + `it is still in ClawHub's security scans; otherwise run npm run publish:clawhub -- --version ${npm}`,
   );
 }
@@ -248,20 +235,18 @@ try {
 
 const before = clawhubState();
 if (before.versions.includes(version)) {
-  console.log(`ClawHub @${before.owner}/${CLAWHUB_SLUG} already has ${version} (latest ${before.latest}). Nothing to publish.`);
+  console.log(`ClawHub ${CLAWHUB_REF} already has ${version} (latest ${before.latest}). Nothing to publish.`);
   process.exit(0);
 }
 if (before.latest && compareVersions(version, before.latest) < 0) {
   fail(`ClawHub's latest is ${before.latest}; publishing the older ${version} would move latest back to it.`);
 }
-const migrating = before.owner !== CLAWHUB_OWNER;
 
 const { workDir, stageDir, treeDir, staged } = stageRelease(tag);
 const changelog = opts.changelog
   ?? changelogSummary(readFileSync(join(treeDir, 'CHANGELOG.md'), 'utf8'), version, before.latest);
 console.log(`Staged ${staged.length} files from ${tag} in ${stageDir}`);
 console.log(`Publishing ${CLAWHUB_REF}@${version} as ${login}, replacing latest ${before.latest}`);
-if (migrating) console.log(`This publish moves the listing from @${before.owner} to @${CLAWHUB_OWNER}.`);
 console.log(`Changelog: ${changelog}`);
 
 const publishArgs = [
@@ -271,7 +256,6 @@ const publishArgs = [
   '--name', CLAWHUB_NAME,
   '--version', version,
   '--changelog', changelog,
-  ...(migrating ? ['--migrate-owner', '--source-owner', before.owner] : []),
 ];
 if (opts.dryRun) {
   const result = spawnSync('npx', ['-y', 'clawhub@latest', ...publishArgs, '--dry-run'], { cwd: repoRoot, stdio: 'inherit' });
@@ -285,10 +269,7 @@ const result = spawnSync('npx', ['-y', 'clawhub@latest', ...publishArgs, '--json
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 if (result.status !== 0) {
-  const who = migrating
-    ? `Moving the listing needs an account that administers both @${before.owner} and @${CLAWHUB_OWNER} (fishmongr). `
-    : `Publishing needs a member of @${CLAWHUB_OWNER}. `;
-  fail(`clawhub publish exited ${result.status}. ${who}The staged files are in ${stageDir}`);
+  fail(`clawhub publish exited ${result.status}. Publishing needs a member of @${CLAWHUB_OWNER}. The staged files are in ${stageDir}`);
 }
 rmSync(workDir, { recursive: true, force: true });
 const published = JSON.parse(result.stdout.slice(result.stdout.indexOf('{')));

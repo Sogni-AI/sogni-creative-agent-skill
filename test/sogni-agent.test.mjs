@@ -166,6 +166,9 @@ async function withTestApiServer(fn, { durableEvents = [] } = {}) {
         res.end();
         return;
       }
+      // No CLI path may use these form-POST routes any more (see
+      // assertNoFormPostReferenceUploads); they stay answerable so a regression
+      // fails that assertion instead of an unrelated 404.
       if (
         (requestUrl.pathname === '/v2/media/uploadUrl' || requestUrl.pathname === '/v2/image/uploadUrl')
         && req.method === 'GET'
@@ -390,6 +393,40 @@ async function withTestApiServer(fn, { durableEvents = [] } = {}) {
       server.close(error => error ? reject(error) : resolve());
     });
   }
+}
+
+// Reference media must never use the /v2 presigned form POST: Sogni's generation
+// storage (Cloudflare R2) has no form POST, so those bytes would stay on the old
+// store. The test server still answers /v2 so a regression shows up here.
+function assertNoFormPostReferenceUploads(requests) {
+  assert.deepEqual(requests.filter(item => item.url.startsWith('/v2/')).map(item => item.url), []);
+  assert.deepEqual(
+    requests
+      .filter(item => item.url.startsWith('/test-v2-upload/') || (item.url.startsWith('/test-upload/') && item.method !== 'PUT'))
+      .map(item => `${item.method} ${item.url}`),
+    [],
+  );
+}
+
+// One reference went up the way the SDK uploads it: a /v1 upload URL requested
+// with the file's content type, a PUT of the bytes carrying exactly that
+// Content-Type and no Sogni credentials, then a /v1 download URL.
+function assertReferenceUploadedWithPresignedPut(requests, { endpoint, type, contentType }) {
+  const uploadUrlRequests = requests.filter(item => item.url.startsWith(`/v1/${endpoint}/uploadUrl`)
+    && new URL(item.url, 'http://test').searchParams.get('type') === type);
+  assert.equal(uploadUrlRequests.length, 1, `one /v1/${endpoint}/uploadUrl request for ${type}`);
+  assert.equal(new URL(uploadUrlRequests[0].url, 'http://test').searchParams.get('contentType'), contentType);
+  const puts = requests.filter(item => item.url.startsWith(`/test-upload/${type}/`));
+  assert.equal(puts.length, 1, `one presigned upload for ${type}`);
+  assert.equal(puts[0].method, 'PUT');
+  assert.equal(puts[0].headers['content-type'], contentType);
+  assert.equal(puts[0].headers.authorization, undefined);
+  assert.equal(puts[0].headers['api-key'], undefined);
+  assert.equal(Object.keys(puts[0].headers).some(name => name.startsWith('x-sogni-')), false);
+  const downloadUrlRequests = requests.filter(item => item.url.startsWith(`/v1/${endpoint}/downloadUrl`)
+    && new URL(item.url, 'http://test').searchParams.get('type') === type);
+  assert.equal(downloadUrlRequests.length, 1, `one /v1/${endpoint}/downloadUrl request for ${type}`);
+  assertNoFormPostReferenceUploads(requests);
 }
 
 function expectCliError(args, messageIncludes) {
@@ -2835,7 +2872,7 @@ test('seedance 2.5 local IA2V input is uploaded as a loose image reference', asy
   const imagePath = join(tempDir, 'presenter.png');
   writeFileSync(imagePath, readFileSync(SCREENSHOT_FIXTURE));
 
-  await withTestApiServer(async (apiBaseUrl) => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, state } = await runCliAsync([
       '--api-base-url', apiBaseUrl,
       '--video',
@@ -2854,8 +2891,10 @@ test('seedance 2.5 local IA2V input is uploaded as a loose image reference', asy
     assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
     assert.match(
       state.lastVideoProject.referenceImageUrls[0],
-      /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//
+      /^https:\/\/cdn\.sogni\.ai\/test-upload\/contextImage1\//
     );
+    assert.equal(requests.filter(item => item.url.startsWith('/v1/image/uploadUrl')).length, 1);
+    assertNoFormPostReferenceUploads(requests);
   });
 });
 
@@ -3133,7 +3172,7 @@ test('seedance multi-ref accepts seedance2-fast model identically', () => {
   assert.equal(state.lastVideoProject.referenceAudioUrls.length, 2);
 });
 
-test('seedance direct video uploads local MP3 reference audio to v2 media URLs', async () => {
+test('seedance direct video uploads local MP3 reference audio with a v1 presigned PUT', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-audio-'));
   const audioPath = join(tempDir, 'voice.mp3');
   writeFileSync(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]));
@@ -3158,15 +3197,12 @@ test('seedance direct video uploads local MP3 reference audio to v2 media URLs',
     assert.deepEqual(state.lastVideoProject.referenceImageUrls, ['https://example.com/cover.png']);
     assert.equal(state.lastVideoProject.referenceAudio, undefined);
     assert.equal(state.lastVideoProject.referenceAudioUrls.length, 1);
-    assert.match(state.lastVideoProject.referenceAudioUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceAudio\//);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/referenceAudio/')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/downloadUrl')).length, 1);
-    assert.match(requests.find(item => item.url.startsWith('/v2/media/uploadUrl')).url, /contentType=audio%2Fmpeg/);
+    assert.match(state.lastVideoProject.referenceAudioUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'media', type: 'referenceAudio', contentType: 'audio/mpeg' });
   });
 });
 
-test('seedance direct video uploads local loose-reference -c image to v2 image URLs', async () => {
+test('seedance direct video uploads a local loose-reference -c image with a v1 presigned PUT', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-image-'));
   const imagePath = join(tempDir, 'lumina.png');
   // Minimal valid PNG (signature + IHDR) so buffer mime-sniffing detects image/png.
@@ -3194,11 +3230,8 @@ test('seedance direct video uploads local loose-reference -c image to v2 image U
     assert.equal(exitCode, 0);
     assert.ok(state?.lastVideoProject, 'createVideoProject was called');
     assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
-    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/image/uploadUrl')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/contextImage1/')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/image/downloadUrl')).length, 1);
-    assert.match(requests.find(item => item.url.startsWith('/v2/image/uploadUrl')).url, /contentType=image%2Fpng/);
+    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/contextImage1\//);
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'image', type: 'contextImage1', contentType: 'image/png' });
   });
 });
 
@@ -3229,13 +3262,14 @@ test('seedance direct video uploads a local WebP loose-reference image (sniffed 
 
     assert.equal(exitCode, 0);
     assert.equal(state.lastVideoProject.referenceImageUrls.length, 1);
-    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/contextImage1\//);
-    // contentType is the sniffed WebP, not the misleading .png extension.
-    assert.match(requests.find(item => item.url.startsWith('/v2/image/uploadUrl')).url, /contentType=image%2Fwebp/);
+    assert.match(state.lastVideoProject.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/contextImage1\//);
+    // contentType is the sniffed WebP, not the misleading .png extension, and
+    // the PUT carries the same Content-Type the upload URL was signed for.
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'image', type: 'contextImage1', contentType: 'image/webp' });
   });
 });
 
-test('seedance v2v uploads local source video to v2 media URLs', async () => {
+test('seedance v2v uploads a local source video with a v1 presigned PUT', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-video-'));
   const videoPath = join(tempDir, 'source.mp4');
   writeFileSync(videoPath, Buffer.from('fake mp4 bytes'));
@@ -3258,11 +3292,8 @@ test('seedance v2v uploads local source video to v2 media URLs', async () => {
     assert.ok(state?.lastVideoProject, 'createVideoProject was called');
     assert.equal(state.lastVideoProject.referenceVideo, undefined);
     assert.equal(state.lastVideoProject.referenceVideoUrls.length, 1);
-    assert.match(state.lastVideoProject.referenceVideoUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceVideo\//);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/test-v2-upload/referenceVideo/')).length, 1);
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/downloadUrl')).length, 1);
-    assert.match(requests.find(item => item.url.startsWith('/v2/media/uploadUrl')).url, /contentType=video%2Fmp4/);
+    assert.match(state.lastVideoProject.referenceVideoUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//);
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'media', type: 'referenceVideo', contentType: 'video/mp4' });
   });
 });
 
@@ -3618,9 +3649,9 @@ console.log('5');
     assert.equal(looseReference.state.lastVideoProject.referenceVideoUrls.length, 1);
     assert.match(
       looseReference.state.lastVideoProject.referenceVideoUrls[0],
-      /^https:\/\/cdn\.sogni\.ai\/test-v2-upload\/referenceVideo\//,
+      /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//,
     );
-    assert.equal(requests.filter(item => item.url.startsWith('/v2/media/uploadUrl')).length, 1);
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'media', type: 'referenceVideo', contentType: 'video/mp4' });
     assert.equal(Object.hasOwn(looseReference.state.lastVideoProject, 'wan3TaskType'), false);
   });
 
@@ -3629,6 +3660,106 @@ console.log('5');
     '--ref-video', 'https://example.com/source.mp4',
     'Edit the source video.'
   ], 'Video inputs are loose r2v references');
+});
+
+function writeFakeFfprobe(dir, seconds = 5) {
+  const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log('${seconds}');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+  return fakeFfprobe;
+}
+
+test('vendor reference image, audio and video all upload with v1 presigned PUTs, never a v2 form POST', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-vendor-reference-put-'));
+  const imagePath = join(tempDir, 'identity.png');
+  const audioPath = join(tempDir, 'voice.mp3');
+  const videoPath = join(tempDir, 'motion.mp4');
+  writeFileSync(imagePath, readFileSync(createPngDimensionFixture(64, 64)));
+  writeFileSync(audioPath, Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]));
+  writeFileSync(videoPath, Buffer.from('test video reference'));
+  const fakeFfprobe = writeFakeFfprobe(tempDir);
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, state, stderr } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--video', '-m', 'wan3',
+      '-c', imagePath,
+      '--ref-audio', audioPath,
+      '--ref-video', videoPath,
+      'Use Image 1 for identity, Audio 1 for the voice, and Video 1 for the motion.'
+    ], {
+      FFPROBE_PATH: fakeFfprobe,
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+
+    assert.equal(exitCode, 0, stderr);
+    const project = state.lastVideoProject;
+    assert.match(project.referenceImageUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/contextImage1\//);
+    assert.match(project.referenceAudioUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
+    assert.match(project.referenceVideoUrls[0], /^https:\/\/cdn\.sogni\.ai\/test-upload\/referenceVideo\//);
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'image', type: 'contextImage1', contentType: 'image/png' });
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'media', type: 'referenceAudio', contentType: 'audio/mpeg' });
+    assertReferenceUploadedWithPresignedPut(requests, { endpoint: 'media', type: 'referenceVideo', contentType: 'video/mp4' });
+    assert.equal(requests.filter(item => item.url.startsWith('/test-upload/')).length, 3);
+  });
+});
+
+test('vendor reference uploads enforce the API upload limit before asking for an upload URL', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-vendor-reference-limit-'));
+  const videoPath = join(tempDir, 'source.mp4');
+  writeFileSync(videoPath, Buffer.from('fake mp4 bytes'));
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout, stderr } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--video',
+      '--workflow', 'v2v',
+      '-m', 'seedance2-fast',
+      '--ref-video', videoPath,
+      '--duration', '4',
+      'Make the source clip more cinematic.'
+    ], {
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      SOGNI_API_MEDIA_REFERENCE_MAX_BYTES: '4',
+    });
+
+    assert.equal(exitCode, 1, stderr);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, 'MEDIA_REFERENCE_TOO_LARGE');
+    assert.match(payload.error, /above the 4 byte API upload limit/);
+    assert.deepEqual(requests.filter(item => /\/(uploadUrl|downloadUrl)/.test(item.url)).map(item => item.url), []);
+    assert.deepEqual(requests.filter(item => item.url.startsWith('/test-upload/')).map(item => item.url), []);
+  });
+});
+
+test('vendor reference uploads refuse a content type the API does not accept before uploading', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-vendor-reference-type-'));
+  const videoPath = join(tempDir, 'motion.ogg');
+  writeFileSync(videoPath, Buffer.from('test video reference'));
+  const fakeFfprobe = writeFakeFfprobe(tempDir);
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout, stderr } = await runCliAsync([
+      '--api-base-url', apiBaseUrl,
+      '--json',
+      '--video', '-m', 'wan3',
+      '--ref-video', videoPath,
+      'Use Video 1 as loose motion guidance for a new shot.'
+    ], {
+      FFPROBE_PATH: fakeFfprobe,
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+
+    assert.equal(exitCode, 1, stderr);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, 'UNSUPPORTED_MEDIA_TYPE');
+    assert.match(payload.error, /video\/mp4, video\/quicktime, video\/webm/);
+    assert.deepEqual(requests.filter(item => /\/(uploadUrl|downloadUrl)/.test(item.url)).map(item => item.url), []);
+    assert.deepEqual(requests.filter(item => item.url.startsWith('/test-upload/')).map(item => item.url), []);
+  });
 });
 
 test('wan3 r2v forwards loose images with the unified model id', () => {

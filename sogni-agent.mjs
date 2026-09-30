@@ -316,6 +316,15 @@ const DEFAULT_PERSONALITY_PATH = join(homedir(), '.config', 'sogni', 'personalit
 const DEFAULT_PERSONAS_DIR = join(homedir(), '.config', 'sogni', 'personas');
 const DEFAULT_PERSONAS_INDEX_PATH = join(homedir(), '.config', 'sogni', 'personas', 'index.json');
 const DEFAULT_API_MEDIA_REFERENCE_MAX_BYTES = 100 * 1024 * 1024;
+// The API's ceiling on one uploaded reference (MAX_UPLOAD_SIZE_BYTES in sogni-api).
+const API_MEDIA_REFERENCE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+// Content types the API accepts per reference kind (ALLOWED_IMAGE_CONTENT_TYPES,
+// ALLOWED_AUDIO_CONTENT_TYPES and ALLOWED_VIDEO_CONTENT_TYPES in sogni-api).
+const VENDOR_REFERENCE_UPLOAD_CONTENT_TYPES = Object.freeze({
+  image: Object.freeze(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']),
+  audio: Object.freeze(['audio/mp4', 'audio/mpeg', 'audio/flac', 'audio/wav', 'audio/x-wav', 'audio/wave']),
+  video: Object.freeze(['video/mp4', 'video/quicktime', 'video/webm']),
+});
 const DEFAULT_API_BASE_URL = 'https://api.sogni.ai';
 const DEFAULT_SAFE_API_HOSTS = Object.freeze(['api.sogni.ai']);
 const LOOPBACK_API_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1']);
@@ -8084,12 +8093,6 @@ function apiMediaReferenceEndpoint(ref, action) {
     : `/v1/media/${action}Url`;
 }
 
-function apiMediaReferenceV2Endpoint(ref, action) {
-  return ref.kind === 'image'
-    ? `/v2/image/${action}Url`
-    : `/v2/media/${action}Url`;
-}
-
 function apiMediaReferenceUrlPath(ref, file, index, action, jobId) {
   const params = new URLSearchParams();
   params.set('type', apiMediaReferenceUploadType(ref, index));
@@ -8103,19 +8106,6 @@ function apiMediaReferenceUrlPath(ref, file, index, action, jobId) {
   return `${apiMediaReferenceEndpoint(ref, action)}?${params.toString()}`;
 }
 
-function apiMediaReferenceV2UrlPath(ref, file, index, action, jobId) {
-  const params = new URLSearchParams();
-  params.set('type', apiMediaReferenceUploadType(ref, index));
-  params.set('jobId', jobId);
-  params.set('contentType', file.mimeType);
-  if (ref.kind === 'image') {
-    params.set('imageId', `media_ref_${index + 1}`);
-  } else {
-    params.set('id', `media_ref_${index + 1}`);
-  }
-  return `${apiMediaReferenceV2Endpoint(ref, action)}?${params.toString()}`;
-}
-
 function apiStoredMediaUrl(payload, key) {
   const data = extractApiEnvelopeData(payload);
   const value = data?.[key] || payload?.[key];
@@ -8124,41 +8114,6 @@ function apiStoredMediaUrl(payload, key) {
   err.code = 'MEDIA_UPLOAD_FAILED';
   err.details = { payload };
   throw err;
-}
-
-function apiStoredMediaUploadPost(payload) {
-  const data = extractApiEnvelopeData(payload);
-  const url = data?.url || data?.uploadUrl;
-  if (typeof url === 'string' && url) {
-    const fields = data?.fields && typeof data.fields === 'object' ? data.fields : {};
-    return { url, fields };
-  }
-  const err = new Error('Sogni API did not return a presigned POST URL for media reference upload.');
-  err.code = 'MEDIA_UPLOAD_FAILED';
-  err.details = { payload };
-  throw err;
-}
-
-async function postApiMediaUploadForm(uploadPayload, file) {
-  const { url, fields } = apiStoredMediaUploadPost(uploadPayload);
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined || value === null) continue;
-    form.append(key, String(value));
-  }
-  const body = file.buffer || readFileSync(file.filePath);
-  form.append('file', new Blob([body], { type: file.mimeType }), file.filename);
-
-  const response = await fetchWithTimeout(url, {
-    method: 'POST',
-    body: form,
-  }, UPLOAD_HTTP_TIMEOUT_MS);
-  if (!response.ok) {
-    const err = new Error(`Failed to upload ${file.filename} (${response.status} ${response.statusText}).`);
-    err.code = 'MEDIA_UPLOAD_FAILED';
-    err.details = { uploadUrl: url, status: response.status, statusText: response.statusText };
-    throw err;
-  }
 }
 
 async function putApiMediaUpload(uploadUrl, file) {
@@ -8253,29 +8208,44 @@ async function uploadPreparedApiMediaReference(ref, index, apiKey, file) {
   };
 }
 
-async function uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file) {
+// Seedance, Wan 3 and HappyHorse reference media used to upload through the
+// /v2 presigned form POST, whose storage policy enforced the API's limits.
+// Sogni's generation storage (Cloudflare R2) has no form POST, so these now
+// take the same /v1 presigned PUT as every other reference, like the SDK. A PUT
+// URL signs only the object and its Content-Type, so the limits the policy used
+// to enforce are checked here before any bytes are sent: the API's 100 MiB
+// ceiling (MAX_UPLOAD_SIZE_BYTES in sogni-api) and a content type the API
+// accepts for that kind of reference.
+function assertVendorReferenceUploadAllowed(ref, file) {
+  const allowed = VENDOR_REFERENCE_UPLOAD_CONTENT_TYPES[ref.kind] || [];
+  const mimeType = String(file.mimeType || '').trim().toLowerCase();
+  if (!allowed.includes(mimeType)) {
+    const err = new Error(
+      `${ref.flag} ${ref.kind} reference "${file.filename}" is ${file.mimeType || 'of an unknown type'}; ` +
+      `Sogni accepts ${allowed.join(', ')} for ${ref.kind} references.`,
+    );
+    err.code = 'UNSUPPORTED_MEDIA_TYPE';
+    err.details = { flag: ref.flag, kind: ref.kind, filename: file.filename, mimeType: file.mimeType, allowed };
+    throw err;
+  }
+  const byteLength = Number(file.byteLength ?? file.buffer?.length ?? 0);
+  const maxBytes = Math.min(apiMediaReferenceMaxBytes(), API_MEDIA_REFERENCE_UPLOAD_MAX_BYTES);
+  if (byteLength > maxBytes) {
+    const err = new Error(`${ref.flag} media reference is ${byteLength} bytes, above the ${maxBytes} byte API upload limit.`);
+    err.code = 'MEDIA_REFERENCE_TOO_LARGE';
+    err.details = { flag: ref.flag, filename: file.filename, byteLength, maxBytes };
+    throw err;
+  }
+}
+
+async function uploadVendorReferenceMedia(ref, index, apiKey, file) {
   if (!apiKey) {
     const err = new Error(`${ref.flag} media references require SOGNI_API_KEY so the CLI can upload them before execution.`);
     err.code = 'MISSING_API_KEY';
     throw err;
   }
-  const jobId = `sogni-agent-${Date.now()}-${index + 1}-${randomBytes(4).toString('hex')}`;
-  const uploadPayload = await fetchApiJson(apiMediaReferenceV2UrlPath(ref, file, index, 'upload', jobId), { apiKey });
-  await postApiMediaUploadForm(uploadPayload, file);
-  const downloadPayload = await fetchApiJson(apiMediaReferenceV2UrlPath(ref, file, index, 'download', jobId), { apiKey });
-  const url = apiStoredMediaUrl(downloadPayload, 'downloadUrl');
-  return {
-    url,
-    filename: file.filename,
-    byte_length: file.byteLength,
-    mime_type: file.mimeType,
-    prompt_label: file.filename,
-    storage: {
-      jobId,
-      type: apiMediaReferenceUploadType(ref, index),
-      version: 'v2',
-    },
-  };
+  assertVendorReferenceUploadAllowed(ref, file);
+  return uploadPreparedApiMediaReference(ref, index, apiKey, file);
 }
 
 async function uploadLocalApiMediaReference(ref, index, apiKey) {
@@ -10862,7 +10832,7 @@ async function uploadSeedanceReferenceAudioUrl(pathOrUrl, apiKey, index = 0) {
   const ref = { flag: '--ref-audio', value: pathOrUrl, kind: 'audio' };
   const buffer = await fetchMediaBuffer(pathOrUrl);
   const file = await prepareSeedanceReferenceAudioUploadFile(pathOrUrl, buffer);
-  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  const uploaded = await uploadVendorReferenceMedia(ref, index, apiKey, file);
   return uploaded.url;
 }
 
@@ -10870,7 +10840,7 @@ async function uploadSeedanceReferenceVideoUrl(pathOrUrl, apiKey, index = 0) {
   const ref = { flag: '--ref-video', value: pathOrUrl, kind: 'video' };
   const buffer = await fetchMediaBuffer(pathOrUrl);
   const file = await prepareSeedanceReferenceVideoUploadFile(pathOrUrl, buffer);
-  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  const uploaded = await uploadVendorReferenceMedia(ref, index, apiKey, file);
   return uploaded.url;
 }
 
@@ -10899,7 +10869,7 @@ async function uploadWan3ReferenceAudioUrl(pathOrUrl, apiKey, index) {
           sourceFormat,
         });
   const data = Buffer.from(prepared.data);
-  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
+  const uploaded = await uploadVendorReferenceMedia(ref, index, apiKey, {
     buffer: data,
     filename: withMediaExtension(inspected.filename, 'mp3'),
     byteLength: data.length,
@@ -10922,7 +10892,7 @@ async function uploadWan3ReferenceVideoUrl(pathOrUrl, apiKey, index) {
     : { data: inspected.buffer, mimeType: mimeTypeForPath(pathOrUrl, 'video/mp4') };
   const data = Buffer.from(prepared.data);
   const outputMimeType = prepared.mimeType || 'video/mp4';
-  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, {
+  const uploaded = await uploadVendorReferenceMedia(ref, index, apiKey, {
     buffer: data,
     filename: withMediaExtension(
       inspected.filename,
@@ -10935,9 +10905,9 @@ async function uploadWan3ReferenceVideoUrl(pathOrUrl, apiKey, index) {
 }
 
 // Content types the Sogni media pipeline accepts for image references, mirroring
-// the `allowedContentTypes` the /v2/image/uploadUrl presigned-POST endpoint
-// returns. Kept as a constant so the skill validates exactly what the backend
-// will store rather than imposing a narrower client-side policy.
+// the API's image upload allowlist (ALLOWED_IMAGE_CONTENT_TYPES in sogni-api).
+// Kept as a constant so the skill validates exactly what the backend will store
+// rather than imposing a narrower client-side policy.
 const SEEDANCE_REFERENCE_IMAGE_MIME_TYPES = Object.freeze([
   'image/png', 'image/jpeg', 'image/webp', 'image/gif',
 ]);
@@ -11008,7 +10978,7 @@ async function uploadSeedanceReferenceImageUrl(pathOrUrl, apiKey, index = 0) {
   const ref = { flag: '-c/--context', value: pathOrUrl, kind: 'image' };
   const buffer = await fetchMediaBuffer(pathOrUrl);
   const file = await prepareSeedanceReferenceImageUploadFile(pathOrUrl, buffer);
-  const uploaded = await uploadPreparedApiMediaReferenceV2(ref, index, apiKey, file);
+  const uploaded = await uploadVendorReferenceMedia(ref, index, apiKey, file);
   return uploaded.url;
 }
 

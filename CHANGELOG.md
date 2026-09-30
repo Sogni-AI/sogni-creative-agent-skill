@@ -1,3 +1,10 @@
+## [3.54.4] - 2026-09-30
+
+### Bug Fixes
+
+* Local Seedance, Wan 3 and HappyHorse reference images, audio and video now upload with a presigned PUT (`/v1/image/uploadUrl` and `/v1/media/uploadUrl`), the way the SDK and `--api-chat` references already do, instead of the `/v2` form POST. Sogni's temporary generation media is moving to Cloudflare R2, which has no form POST, so the old path kept those uploads on the previous store. The results are the same: the reference reaches the model as a Sogni-hosted link that lasts 48 hours.
+* The CLI now checks the limits the form policy used to enforce before it uploads anything: 100 MiB per file and a type Sogni accepts (PNG, JPEG, WebP or GIF images; M4A, MP3, FLAC or WAV audio; MP4, QuickTime or WebM video). A file outside them fails with `MEDIA_REFERENCE_TOO_LARGE` or `UNSUPPORTED_MEDIA_TYPE` instead of an error from the server.
+
 ## [3.54.3] - 2026-09-27
 
 ### Bug Fixes

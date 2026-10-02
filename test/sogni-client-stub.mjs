@@ -43,7 +43,8 @@ function persistState() {
       lastEstimateVideoCost: state.lastEstimateVideoCost ?? null,
       canceledProjectIds: state.canceledProjectIds ?? null,
       emittedJobs: state.emittedJobs ?? null,
-      projectLookups: state.projectLookups ?? null
+      projectLookups: state.projectLookups ?? null,
+      sequence: state.sequence ?? null
     }, replacer));
   } catch (err) {
     // Ignore persistence errors in tests.
@@ -56,7 +57,37 @@ function recordLookup(entry) {
   const state = getState();
   state.projectLookups = state.projectLookups || [];
   state.projectLookups.push(entry);
+  recordSequence(`${entry.method}:${entry.projectId ?? ''}`);
+}
+
+/** Order of socket syncs, in-flight reads, completions and result reads (for --wait). */
+function recordSequence(event) {
+  const state = getState();
+  state.sequence = state.sequence || [];
+  state.sequence.push(event);
   persistState();
+}
+
+/**
+ * A tracked SDK Project rebuilt by projects.sync(): settles through its own
+ * events after `completeAfterMs` (or fails when `fail` is set), with no request.
+ */
+function makeTrackedProject(spec) {
+  const project = new EventEmitter();
+  Object.assign(project, { id: spec.id, status: spec.status ?? 'queued', waitingReason: spec.waitingReason ?? null });
+  const done = new Promise((resolve, reject) => {
+    setTimeout(() => {
+      project.status = spec.fail ? 'failed' : 'completed';
+      project.waitingReason = null;
+      recordSequence(`${project.status}:${project.id}`);
+      project.emit('updated', ['status']);
+      if (spec.fail) reject(Object.assign(new Error('Project failed'), { code: 0 }));
+      else resolve(['https://cdn.test/result']);
+    }, spec.completeAfterMs ?? 0);
+  });
+  done.catch(() => {});
+  project.waitForCompletion = () => done;
+  return project;
 }
 
 /**
@@ -65,11 +96,13 @@ function recordLookup(entry) {
  * projects and the account's other in-flight projects.
  * SOGNI_AGENT_TEST_SDK_WITHOUT_RESULTS simulates an SDK older than 5.57.0.
  */
-function makeSdkProjects() {
+function makeSdkProjects(appId) {
   const projects = new EventEmitter();
   if (!process.env.SOGNI_AGENT_TEST_SDK_WITHOUT_RESULTS) {
     projects.getResult = async (projectId, options) => {
       recordLookup({ method: 'getResult', projectId, options: options ?? null });
+      const failure = envJson('SOGNI_AGENT_TEST_GET_RESULT_ERROR_JSON');
+      if (failure) throw Object.assign(new Error(failure.message || 'Request failed'), failure);
       const result = envJson('SOGNI_AGENT_TEST_GET_RESULT_JSON');
       if (!result) throw Object.assign(new Error('Not Found'), { status: 404 });
       return result;
@@ -79,7 +112,21 @@ function makeSdkProjects() {
       return envJson('SOGNI_AGENT_TEST_LIST_RECENT_JSON') ?? [];
     };
   }
-  projects.listProjectsElsewhere = async () => envJson('SOGNI_AGENT_TEST_ELSEWHERE_JSON') ?? [];
+  // SOGNI_AGENT_TEST_ELSEWHERE_SEQUENCE_JSON: one in-flight list per call (the last repeats).
+  let elsewhereCalls = 0;
+  projects.listProjectsElsewhere = async () => {
+    const sequence = envJson('SOGNI_AGENT_TEST_ELSEWHERE_SEQUENCE_JSON');
+    if (!sequence) return envJson('SOGNI_AGENT_TEST_ELSEWHERE_JSON') ?? [];
+    recordSequence('elsewhere');
+    return sequence[Math.min(elsewhereCalls++, sequence.length - 1)];
+  };
+  // SOGNI_AGENT_TEST_TRACKED_JSON: { [appId]: [project spec] } rebuilt by sync() for that app id.
+  let tracked = null;
+  projects.sync = async () => {
+    recordSequence(`sync:${appId}`);
+    tracked = tracked ?? (envJson('SOGNI_AGENT_TEST_TRACKED_JSON')?.[appId] ?? []).map(makeTrackedProject);
+  };
+  Object.defineProperty(projects, 'trackedProjects', { get: () => (tracked ?? []).slice() });
   return projects;
 }
 
@@ -94,7 +141,7 @@ class SogniClientWrapper extends EventEmitter {
     this.lastEditProject = null;
     this.emittedJobs = 0;
     this.client = {
-      projects: makeSdkProjects(),
+      projects: makeSdkProjects(config?.appId),
       setSocketEventSubscriptions: async (socketEventSubscriptions) => {
         const currentState = getState();
         currentState.socketEventSubscriptionUpdates = currentState.socketEventSubscriptionUpdates || [];
@@ -146,6 +193,7 @@ class SogniClientWrapper extends EventEmitter {
 
   async disconnect() {
     this.connected = false;
+    recordSequence(`disconnect:${this.config?.appId}`);
   }
 
   isConnected() {

@@ -17,7 +17,7 @@ import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
 import { getEnv, hasEnv } from './env.mjs';
-import { getOrCreateSogniAppId } from './sogni-app-id.mjs';
+import { claimSogniAppIdSlot, getOrCreateSogniAppId } from './sogni-app-id.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
 import {
   SOGNI_APP_SOURCE,
@@ -774,6 +774,22 @@ function classifyCliError(error, context = {}) {
   error = unwrapGenericProjectError(error);
   const rawMessage = cliErrorMessage(error);
 
+  // HTTP 429: Sogni limits requests per network, and the browser of whoever runs
+  // this shares that budget. Say how long to wait, never "try again".
+  const rateLimit = rateLimitFromError(error);
+  if (rateLimit) {
+    const wait = rateLimit.retryAfterSeconds;
+    return {
+      error_type: 'RATE_LIMITED',
+      category: 'rate_limited',
+      message: `Sogni is limiting requests from this network (HTTP 429). Wait ${wait ?? 'at least 60'} seconds before any further Sogni request; ` +
+        'do not retry sooner and do not poll. To wait for a submitted project, run sogni-agent --result <projectId> --wait once.',
+      retryable: true,
+      metadata: { status: 429, retryAfterSeconds: wait },
+      technicalError: rawMessage
+    };
+  }
+
   // Client-side CLI rejections are the plain `{ message, code }` shape built by
   // buildCliErrorPayload (never an Error instance and never a vendor poll body).
   // They are argument-validation failures, so skip the HappyHorse terminal
@@ -852,6 +868,17 @@ function classifyCliError(error, context = {}) {
   }
 
   return classifySkillError(error);
+}
+
+/** { retryAfterSeconds } when the error is an HTTP 429 (SDK ApiError or fetchApiJson), else null. */
+function rateLimitFromError(error) {
+  if (!error || typeof error !== 'object') return null;
+  const statuses = [error.status, error.statusCode, error.details?.status, error.response?.status, error.payload?.status];
+  if (error.code !== 'RATE_LIMITED' && !statuses.some((status) => Number(status) === 429)) return null;
+  const retryAfter = [error.retryAfter, error.details?.retryAfter, error.payload?.retryAfter]
+    .map(Number)
+    .find((value) => Number.isFinite(value) && value >= 0);
+  return { retryAfterSeconds: retryAfter === undefined ? null : Math.ceil(retryAfter) };
 }
 
 const MINIMAX_H3_KEYFRAMES_UNAVAILABLE_CODE = '4100';
@@ -995,6 +1022,19 @@ process.on('unhandledRejection', reportFatalError);
 // Connect to Sogni, mapping a rejected connection into a clean auth error
 // where we can. (Detached SDK failures that never reach this await are caught
 // by the global handlers above.)
+/** The CLI's SDK client, signed in with the API key under one app ID. */
+function createSkillSogniClient(creds, appId) {
+  return new SogniClientWrapper({
+    appSource: SOGNI_APP_SOURCE,
+    appId,
+    attribution: clientAttribution(AGENT_ATTRIBUTION),
+    network: openclawConfig?.defaultNetwork || 'fast',
+    autoConnect: false,
+    apiKey: creds.SOGNI_API_KEY,
+    authType: 'apiKey'
+  });
+}
+
 async function connectSogniClient(client) {
   try {
     await client.connect();
@@ -3222,6 +3262,8 @@ const options = {
   cancelOnTimeout: false,
   // --status <id> | --result <id> | --recent [hours]
   projectLookup: null,
+  // --wait with --status/--result: follow the project over the socket until it ends.
+  projectWait: false,
   strictSize: false,
   quality: null, // Quality tier: fast|hq|pro — auto-selects model, steps, dimensions
   tokenType: null,
@@ -4551,6 +4593,8 @@ for (let i = 0; i < args.length; i++) {
     options.detach = true;
   } else if (arg === '--cancel-on-timeout') {
     options.cancelOnTimeout = true;
+  } else if (arg === '--wait') {
+    options.projectWait = true;
   } else if (arg === '--status' || arg === '--result') {
     const projectId = requireFlagValue(args, i, arg);
     i++;
@@ -4838,10 +4882,13 @@ General:
                         later with --result
   --cancel-on-timeout   Cancel the project when --timeout runs out (the pre-3.53 behavior)
   --detach, --no-wait   Submit, print the project id, and exit without waiting. The project keeps
-                        running; use --status / --result to follow it
+                        running; follow it with --result <projectId> --wait
   --status <projectId>  Show a project's state and, while queued, why it is waiting
   --result <projectId>  Fetch a finished project's media (saved to -o when given), including one
                         that finished after an earlier run stopped waiting
+  --wait                With --status/--result: wait over the live connection until the project
+                        ends, then report it (bounded by --timeout, default 1800 s). Use this
+                        instead of re-running --status in a loop
   --recent [hours]      List this account's completed projects from the last N hours
                         (default 24, max 168); fetch one with --result
   --steps <num>         Override steps (model-dependent)
@@ -6279,6 +6326,14 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
 );
 if (!options.prompt && !options.projectLookup && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
+}
+
+// --wait follows one project that already exists; it never submits anything.
+if (options.projectWait && !(options.projectLookup && options.projectLookup.action !== 'recent')) {
+  fatalCliError('--wait follows one project: use it with --status <projectId> or --result <projectId>.', {
+    code: 'INVALID_ARGUMENT',
+    details: { flag: '--wait' }
+  });
 }
 
 // --detach returns after the first submission, so it only fits a run that
@@ -7980,11 +8035,25 @@ async function fetchApiJson(path, {
   }
   if (!response.ok) {
     const err = new Error(payload?.message || payload?.error?.message || response.statusText || 'Sogni API request failed');
-    err.code = 'API_REQUEST_FAILED';
+    err.code = response.status === 429 ? 'RATE_LIMITED' : 'API_REQUEST_FAILED';
     err.details = { url, status: response.status, payload };
+    const retryAfter = parseRetryAfterSeconds(response.headers?.get?.('retry-after'));
+    if (retryAfter !== null) {
+      err.retryAfter = retryAfter;
+      err.details.retryAfter = retryAfter;
+    }
     throw err;
   }
   return payload;
+}
+
+/** A Retry-After header (seconds or an HTTP date) in whole seconds, or null. */
+function parseRetryAfterSeconds(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, Math.ceil((at - Date.now()) / 1000)) : null;
 }
 
 function getApiModeMediaReferences() {
@@ -12375,6 +12444,11 @@ function resultCommandFor(projectId) {
   return `sogni-agent --result ${projectId}`;
 }
 
+/** The shell command that waits for a project over the socket, then fetches it. */
+function waitCommandFor(projectId) {
+  return `sogni-agent --result ${projectId} --wait`;
+}
+
 /**
  * Wait bookkeeping for one run's projects. It announces each project id as
  * soon as the project is submitted, reports why a project is queued in the
@@ -12489,7 +12563,8 @@ function reportDetachedProjects(projects, projectWait) {
       waitingReason,
       message: describeWaitingReason(waitingReason),
       statusCommand: `sogni-agent --status ${projectId}`,
-      resultCommand: resultCommandFor(projectId)
+      resultCommand: resultCommandFor(projectId),
+      waitCommand: waitCommandFor(projectId)
     };
   });
   if (options.json) {
@@ -12498,15 +12573,15 @@ function reportDetachedProjects(projects, projectWait) {
       detached: true,
       projectIds,
       projects: entries,
-      note: 'Submitted and still running on Sogni. Nothing was cancelled. Check it with the statusCommand and fetch it with the resultCommand when it finishes; do not resubmit it.'
+      note: 'Submitted and still running on Sogni. Nothing was cancelled. Run the waitCommand once to wait for it and fetch it; do not re-run statusCommand in a loop (at most once a minute), and do not resubmit it.'
     }));
     return;
   }
   for (const entry of entries) {
     console.log(`Submitted Sogni project ${entry.projectId}; it keeps running on Sogni.`);
     if (entry.message) console.log(entry.message);
-    console.log(`Check it: ${entry.statusCommand}`);
-    console.log(`Fetch the result when it finishes: ${entry.resultCommand}`);
+    console.log(`Wait for it and fetch the result: ${entry.waitCommand}`);
+    console.log(`Check it without waiting (at most once a minute): ${entry.statusCommand}`);
   }
 }
 
@@ -12628,8 +12703,8 @@ async function warnAboutInFlightProjects(client, log) {
     'so this one may wait for them. If it does, it starts by itself; do not resubmit it.');
 }
 
-/** --status <id>, --result <id>, --recent [hours]. */
-async function runProjectLookup(client, lookup) {
+/** --status <id>, --result <id>, --recent [hours]; with --wait, after the project ends. */
+async function runProjectLookup(client, lookup, { log = () => {}, creds } = {}) {
   const projectsApi = sdkClientOf(client)?.projects;
   const method = lookup.action === 'recent' ? 'listRecent' : 'getResult';
   if (typeof projectsApi?.[method] !== 'function') {
@@ -12642,9 +12717,126 @@ async function runProjectLookup(client, lookup) {
     printRecentProjects(projects, lookup.hours);
     return;
   }
+  if (options.projectWait) {
+    const timeoutMs = cliSet.timeout ? options.timeout : PROJECT_WAIT_DEFAULT_TIMEOUT_MS;
+    await followProjectToEnd(client, lookup.projectId, { log, creds, timeoutMs });
+  }
   const result = await projectsApi.getResult(lookup.projectId);
   if (lookup.action === 'status') printProjectStatus(result);
   else await saveProjectResult(result);
+}
+
+const PROJECT_WAIT_DEFAULT_TIMEOUT_MS = 1800 * 1000;
+// A project whose events go to another live process or app can only be watched
+// through the socket's list of in-flight projects; never more than once a minute.
+function inFlightCheckIntervalMs() {
+  const testValue = getEnv('SOGNI_AGENT_TEST_STATE_PATH') ? Number(getEnv('SOGNI_AGENT_TEST_IN_FLIGHT_CHECK_MS')) : NaN;
+  return Number.isFinite(testValue) && testValue > 0 ? testValue : 60 * 1000;
+}
+
+/** Sync this client's projects with the socket, then return the tracked one with this id. */
+async function trackedProjectAfterSync(projectsApi, projectId) {
+  await projectsApi.sync('wait');
+  return (projectsApi.trackedProjects || []).find((project) => project?.id === projectId) || null;
+}
+
+/**
+ * --wait: follow a project to its end over the socket, never by re-reading its
+ * status. The socket delivers a project's events only to the app ID that
+ * submitted it, so one submitted from another of this installation's app-ID
+ * slots is taken back by signing in as that slot, unless a live process holds
+ * it. A project held by a live process or by another app (Sogni Web, another
+ * device) is watched through the socket's in-flight list, once a minute, until
+ * it leaves. Returns when the project ended or the socket no longer holds it;
+ * the caller then reads the result once.
+ */
+async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) {
+  const projectsApi = sdkClientOf(client)?.projects;
+  for (const required of ['sync', 'listProjectsElsewhere']) {
+    if (typeof projectsApi?.[required] !== 'function') {
+      const error = new Error(`--wait needs @sogni-ai/sogni-client 5.58.0 or later (projects.${required}). Update the Sogni skill.`);
+      error.code = 'SDK_UPDATE_REQUIRED';
+      throw error;
+    }
+  }
+  const deadline = Date.now() + timeoutMs;
+  let tracked = await trackedProjectAfterSync(projectsApi, projectId);
+  let sideClient = null;
+  let claim = null;
+  try {
+    if (!tracked) {
+      const inFlight = await projectsApi.listProjectsElsewhere();
+      const holder = (inFlight || []).find((project) => project?.id === projectId);
+      if (!holder) return;
+      claim = holder.appId ? claimSogniAppIdSlot(holder.appId) : null;
+      if (claim?.appId && creds) {
+        log(`Taking project ${projectId} back from the run that submitted it...`);
+        sideClient = createSkillSogniClient(creds, claim.appId);
+        await connectSogniClient(sideClient);
+        tracked = await trackedProjectAfterSync(sdkClientOf(sideClient).projects, projectId);
+      }
+      if (!tracked) {
+        log(claim?.heldByPid
+          ? `Project ${projectId} is being followed by another sogni-agent process (pid ${claim.heldByPid}); waiting for it to finish.`
+          : `Project ${projectId} was submitted from another app or device; waiting for it to finish.`);
+        await waitUntilNotInFlight(projectsApi, projectId, deadline, timeoutMs);
+        return;
+      }
+    }
+    await settleTrackedProject(tracked, { log, deadline, timeoutMs });
+  } finally {
+    if (sideClient) {
+      try { await sideClient.disconnect(); } catch { /* already closed */ }
+    }
+    claim?.release?.();
+  }
+}
+
+/** Wait for a tracked project's own completion or failure events (no requests). */
+async function settleTrackedProject(project, { log, deadline, timeoutMs }) {
+  let lastLine = null;
+  const report = () => {
+    const line = describeWaitingReason(project.waitingReason) || `Project ${project.id}: ${project.status}`;
+    if (line !== lastLine) {
+      lastLine = line;
+      log(line);
+    }
+  };
+  let timer = null;
+  project.on?.('updated', report);
+  report();
+  try {
+    await Promise.race([
+      // A failure is reported by the result read that follows, with its reason.
+      project.waitForCompletion().catch(() => {}),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(projectStillRunningError(project.id, timeoutMs)), Math.max(0, deadline - Date.now()));
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+    project.off?.('updated', report);
+  }
+}
+
+async function waitUntilNotInFlight(projectsApi, projectId, deadline, timeoutMs) {
+  const intervalMs = inFlightCheckIntervalMs();
+  for (;;) {
+    if (Date.now() + intervalMs > deadline) throw projectStillRunningError(projectId, timeoutMs);
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const inFlight = await projectsApi.listProjectsElsewhere();
+    if (!(inFlight || []).some((project) => project?.id === projectId)) return;
+  }
+}
+
+function projectStillRunningError(projectId, timeoutMs) {
+  const error = new Error(
+    `Stopped waiting after ${Math.round(timeoutMs / 1000)}s; Sogni project ${projectId} is still running and was not cancelled. ` +
+    `Wait for it again with: ${waitCommandFor(projectId)}`
+  );
+  error.code = 'PROJECT_TIMEOUT_STILL_RUNNING';
+  error.details = { timeoutSeconds: timeoutMs / 1000, projectIds: [projectId], canceled: false, waitCommand: waitCommandFor(projectId) };
+  return error;
 }
 
 /**
@@ -14054,22 +14246,14 @@ async function main() {
 
     const creds = loadCredentials();
     log('Connecting to Sogni...');
-    client = new SogniClientWrapper({
-      appSource: SOGNI_APP_SOURCE,
-      appId: getOrCreateSogniAppId(),
-      attribution: clientAttribution(AGENT_ATTRIBUTION),
-      network: openclawConfig?.defaultNetwork || 'fast',
-      autoConnect: false,
-      apiKey: creds.SOGNI_API_KEY,
-      authType: 'apiKey'
-    });
+    client = createSkillSogniClient(creds, getOrCreateSogniAppId());
 
     await connectSogniClient(client);
     await disableLiveModelAvailabilityEvents(client);
     log('Connected.');
 
     if (options.projectLookup) {
-      await runProjectLookup(client, options.projectLookup);
+      await runProjectLookup(client, options.projectLookup, { log, creds });
       return;
     }
 

@@ -687,7 +687,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--verify-video <path>` | Probe streams and fully decode a final video before delivery |
 | `--last`, `--last-image` | Inspect last render / reuse last image as context or video reference |
 | `-t <sec>`, `--cancel-on-timeout` | How long a run waits, from submission (default 30 image, 1800 video, 600 music). Time the account's own plan limit holds a project is not counted. A timeout leaves the project running and prints the `--result` command that fetches it; `--cancel-on-timeout` cancels instead |
-| `--detach` (`--no-wait`), `--status <id>`, `--result <id>`, `--recent [hours]` | Submit and return with the project id; check a project's state and why it is queued (plan limit or workers); fetch its finished media (`-o` saves it); list this account's completed projects (default 24 h, max 168) |
+| `--detach` (`--no-wait`), `--status <id>`, `--result <id>`, `--wait`, `--recent [hours]` | Submit and return with the project id; check a project's state and why it is queued (plan limit or workers); fetch its finished media (`-o` saves it); with `--wait`, wait for the project over the live connection first instead of polling; list this account's completed projects (default 24 h, max 168) |
 | `--strict-size` | Fail instead of auto-adjusting video size |
 | `--json` | Emit structured output for agents |
 | `-n <count>` | Multiple outputs per call (safety-capped at 16; raise deliberately with `SOGNI_MAX_COUNT`) |

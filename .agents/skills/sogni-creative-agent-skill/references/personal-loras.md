@@ -9,7 +9,7 @@ sogni-agent --get-personal-lora personal-REPLACE-WITH-RETURNED-ID
 sogni-agent --list-loras --include-personal-loras --lora-catalog-model krea2_turbo_fp8_scaled
 ```
 
-The import command starts asynchronous validation. Poll `--get-personal-lora` at a reasonable interval and show `reason`/`failureCode` on failure. Only `ready` entries can render; `queued`, `validating`, and `review` need more time. `rejected` and `revoked` cannot render. Do not re-import repeatedly to poll. `--list-personal-loras` returns supported import models and current limits; discover model IDs there.
+The import command starts asynchronous validation, which reports no live events. Check it with `--get-personal-lora` at most once a minute and show `reason`/`failureCode` on failure; on `errorType: "RATE_LIMITED"`, make no Sogni request for `metadata.retryAfterSeconds`. Only `ready` entries can render; `queued`, `validating`, and `review` need more time. `rejected` and `revoked` cannot render. Do not re-import repeatedly to poll. `--list-personal-loras` returns supported import models and current limits; discover model IDs there.
 
 Set `--confirm-lora-rights` only when the user has confirmed permission to use that file. Hugging Face safetensors links and Civitai model/version links are accepted. An import does not train a new adapter.
 

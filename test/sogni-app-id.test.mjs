@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { getOrCreateSogniAppId } from '../sogni-app-id.mjs';
+import { claimSogniAppIdSlot, getOrCreateSogniAppId } from '../sogni-app-id.mjs';
 
 test('creates one private app ID and reuses it across calls', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-'));
@@ -190,4 +190,28 @@ test('pool: describeSogniAppIdPool reports slots and lease liveness', () => {
   assert.equal(view.slots[0].lease, null);
   assert.equal(view.slots[1].lease.tool, 'codex');
   assert.equal(view.slots[1].lease.live, true);
+});
+
+test('claimSogniAppIdSlot leases a free slot so a run can sign in as it, and releases it', () => {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-claim-'));
+  writeFileSync(join(poolDir, 'slot-3'), 'sogni-agent-earlier\n');
+
+  const claim = claimSogniAppIdSlot('sogni-agent-earlier', { poolDir, ownPid: 4242, isPidAlive: () => true });
+  assert.equal(claim.appId, 'sogni-agent-earlier');
+  assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-3.lease'), 'utf8')).pid, 4242);
+  // A second claimer sees it held by the live pid and must not connect as it.
+  assert.deepEqual(claimSogniAppIdSlot('sogni-agent-earlier', { poolDir, ownPid: 5151, isPidAlive: () => true }), { heldByPid: 4242 });
+  claim.release();
+  assert.throws(() => readFileSync(join(poolDir, 'slot-3.lease'), 'utf8'), { code: 'ENOENT' });
+});
+
+test('claimSogniAppIdSlot reclaims a dead lease and ignores app IDs outside the pool', () => {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-claim-stale-'));
+  writeFileSync(join(poolDir, 'slot-0'), 'sogni-agent-earlier\n');
+  writeFileSync(join(poolDir, 'slot-0.lease'), `${JSON.stringify({ pid: 999999 })}\n`);
+
+  const claim = claimSogniAppIdSlot('sogni-agent-earlier', { poolDir, ownPid: 4242, isPidAlive: (pid) => pid !== 999999 });
+  assert.equal(claim.appId, 'sogni-agent-earlier');
+  claim.release();
+  assert.equal(claimSogniAppIdSlot('sogni-web-tab', { poolDir }), null);
 });

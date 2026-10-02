@@ -11,7 +11,11 @@ connection open for its whole life.
 # Submit and return at once; prints the project id and the follow-up commands.
 sogni-agent --video -m minimax-h3-ref2va-fp8_r2v --workflow r2v -c face.png --detach --json "A slow dolly toward the subject"
 
-# State, and while queued, why it is waiting.
+# Wait for it over the live connection, then save the media (one call; bounded by -t,
+# default 1800 s). Repeat this same call if the host cut it short.
+sogni-agent --result <projectId> --wait -o clip.mp4 --json
+
+# One look at its state and, while queued, why it is waiting (at most once a minute).
 sogni-agent --status <projectId> --json
 
 # Finished media (-o saves it; several renders get -2, -3 suffixes like a normal run).
@@ -71,9 +75,22 @@ fetch it later (`details.waitingReason` says why it was still waiting).
 `--cancel-on-timeout` restores the old behavior of cancelling on timeout.
 
 Hosts that cap a single tool call (often around 10 minutes) cannot wait out a
-long video in one call. Submit it with `--detach`, check back with `--status`,
-and collect it with `--result <id> -o <file>` in later calls, instead of
-raising `-t`.
+long video in one call. Submit it with `--detach`, then wait for it with
+`sogni-agent --result <id> --wait -o <file>` in a later call, instead of raising
+`-t`. `--wait` follows the project over the live connection and makes no
+requests while it waits; if the host cuts the call short, run the same command
+again.
+
+## Do not poll
+
+Never re-run `--status` in a loop to see whether a project finished. Each run is
+a new connection plus an API request, and Sogni limits requests per network:
+too many in a minute block that network for a while, including the user's own
+browser. Use `--wait`. When you must look without waiting, do it at most once a
+minute. An error with `errorType: "RATE_LIMITED"` (HTTP 429) says how many
+seconds to wait (`metadata.retryAfterSeconds`); make no Sogni request before
+then.
 
 `--status`, `--result` and `--recent` need `@sogni-ai/sogni-client` 5.57.0 or
-later; an older installation says so and asks for a skill update.
+later, and `--wait` needs 5.58.0; an older installation says so and asks for a
+skill update.

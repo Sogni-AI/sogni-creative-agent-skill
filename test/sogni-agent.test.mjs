@@ -1475,6 +1475,8 @@ test('--detach submits, reports the project and exits without waiting or cancell
   assert.deepEqual(output.projectIds, ['proj-1']);
   assert.equal(output.projects[0].resultCommand, 'sogni-agent --result proj-1');
   assert.equal(output.projects[0].statusCommand, 'sogni-agent --status proj-1');
+  assert.equal(output.projects[0].waitCommand, 'sogni-agent --result proj-1 --wait');
+  assert.match(output.note, /do not re-run statusCommand in a loop/);
   assert.equal(state?.canceledProjectIds ?? null, null);
 });
 
@@ -1517,6 +1519,105 @@ test('--status reports a queued project and why it is waiting', () => {
   assert.equal(output.waitingReason.reason, 'model_concurrency_limit');
   assert.match(output.message, /Unlimited plan limit for simultaneous MiniMax H3 videos/);
   assert.deepEqual(state?.projectLookups, [{ method: 'getResult', projectId: 'proj-9', options: null }]);
+});
+
+const FINISHED_RESULT = JSON.stringify({
+  id: 'proj-9', status: 'completed', finished: true,
+  jobs: [{ id: 'IMG-1', status: 'completed', kind: 'video', url: 'https://cdn.test/IMG-1.mp4' }]
+});
+
+/** An app-ID pool with an earlier run's slot (free, or leased by a live pid). */
+function poolWithEarlierSlot({ leasedByPid } = {}) {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-agent-pool-'));
+  writeFileSync(join(poolDir, 'slot-1'), 'sogni-agent-earlier\n');
+  if (leasedByPid) writeFileSync(join(poolDir, 'slot-1.lease'), `${JSON.stringify({ pid: leasedByPid })}\n`);
+  return poolDir;
+}
+
+test('--result --wait follows a project over the socket and reads its result once it ends', async () => {
+  const { exitCode, state, stdout } = await runCliAsync(['--result', 'proj-9', '--wait', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_AGENT_TEST_TRACKED_JSON: JSON.stringify({ 'main-app': [{ id: 'proj-9', status: 'processing', completeAfterMs: 300 }] }),
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: FINISHED_RESULT
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout.trim().split('\n').pop()).urls, ['https://cdn.test/IMG-1.mp4']);
+  // No status reads while it rendered: one sync, its own completion event, then one result read.
+  assert.deepEqual(state.sequence.filter((event) => !event.startsWith('disconnect:')),
+    ['sync:main-app', 'completed:proj-9', 'getResult:proj-9']);
+});
+
+test('--wait takes a project back from the free app-ID slot that submitted it', async () => {
+  const { exitCode, state } = await runCliAsync(['--status', 'proj-9', '--wait', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_APP_ID_POOL_DIR: poolWithEarlierSlot(),
+    SOGNI_AGENT_TEST_ELSEWHERE_SEQUENCE_JSON: JSON.stringify([[{ id: 'proj-9', appId: 'sogni-agent-earlier' }]]),
+    SOGNI_AGENT_TEST_TRACKED_JSON: JSON.stringify({ 'sogni-agent-earlier': [{ id: 'proj-9', completeAfterMs: 200 }] }),
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: FINISHED_RESULT
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(state.clientConfigs.map((config) => config.appId), ['main-app', 'sogni-agent-earlier']);
+  assert.deepEqual(state.sequence.filter((event) => event !== 'disconnect:main-app'),
+    ['sync:main-app', 'elsewhere', 'sync:sogni-agent-earlier', 'completed:proj-9', 'disconnect:sogni-agent-earlier', 'getResult:proj-9']);
+});
+
+test('--wait never signs in as a slot a live process holds; it watches the in-flight list instead', async () => {
+  const { exitCode, state, stderr } = await runCliAsync(['--result', 'proj-9', '--wait', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_APP_ID_POOL_DIR: poolWithEarlierSlot({ leasedByPid: process.pid }),
+    SOGNI_AGENT_TEST_IN_FLIGHT_CHECK_MS: '50',
+    SOGNI_AGENT_TEST_ELSEWHERE_SEQUENCE_JSON: JSON.stringify([[{ id: 'proj-9', appId: 'sogni-agent-earlier' }], [{ id: 'proj-9', appId: 'sogni-agent-earlier' }], []]),
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: FINISHED_RESULT
+  });
+
+  assert.equal(exitCode, 0);
+  assert.match(stderr, new RegExp(`being followed by another sogni-agent process \\(pid ${process.pid}\\)`));
+  assert.deepEqual(state.clientConfigs.map((config) => config.appId), ['main-app']);
+  assert.deepEqual(state.sequence.filter((event) => !event.startsWith('disconnect:')),
+    ['sync:main-app', 'elsewhere', 'elsewhere', 'elsewhere', 'getResult:proj-9']);
+});
+
+test('--wait reads a project that already finished once, without waiting', () => {
+  const { exitCode, state } = runCli(['--result', 'proj-9', '--wait', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_AGENT_TEST_ELSEWHERE_SEQUENCE_JSON: JSON.stringify([[]]),
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: FINISHED_RESULT
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(state.sequence.filter((event) => !event.startsWith('disconnect:')),
+    ['sync:main-app', 'elsewhere', 'getResult:proj-9']);
+});
+
+test('--wait stops at --timeout without cancelling and names the command that waits again', async () => {
+  const { exitCode, stdout } = await runCliAsync(['--result', 'proj-9', '--wait', '--timeout', '1', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_AGENT_TEST_TRACKED_JSON: JSON.stringify({ 'main-app': [{ id: 'proj-9', completeAfterMs: 60000 }] })
+  });
+
+  assert.equal(exitCode, 1);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.errorCode, 'PROJECT_TIMEOUT_STILL_RUNNING');
+  assert.match(output.error, /sogni-agent --result proj-9 --wait/);
+});
+
+test('--wait needs --status or --result', () => {
+  expectCliError(['--wait', 'a prompt'], '--wait follows one project');
+});
+
+test('a 429 is RATE_LIMITED and says how long to wait, never to retry', () => {
+  const { exitCode, stdout } = runCli(['--status', 'proj-9', '--json'], {
+    SOGNI_AGENT_TEST_GET_RESULT_ERROR_JSON: JSON.stringify({ status: 429, retryAfter: 120, message: 'Too Many Requests' })
+  });
+
+  assert.equal(exitCode, 1);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.errorType, 'RATE_LIMITED');
+  assert.equal(output.retryable, true);
+  assert.equal(output.metadata.retryAfterSeconds, 120);
+  assert.match(output.error, /Wait 120 seconds before any further Sogni request; do not retry sooner and do not poll/);
 });
 
 test('--result returns a finished project\'s media URLs', () => {
@@ -8654,6 +8755,28 @@ test('personal LoRA management uses authenticated REST and preserves the import 
     assert.ok(calls.every(r => r.headers.authorization === 'Bearer test-api-key' || r.headers['api-key'] === 'test-api-key'));
     assert.deepEqual(calls[2].body, { url: 'https://huggingface.co/author/model/resolve/main/style.safetensors', name: 'My style', modelId: 'krea2_turbo_fp8_scaled', rightsConfirmed: true });
   });
+});
+
+test('a 429 from the hosted API surfaces its Retry-After as RATE_LIMITED', async () => {
+  const server = createServer((req, res) => {
+    res.statusCode = 429;
+    res.setHeader('Retry-After', '300');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Too Many Requests' }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync(['--get-personal-lora', 'personal-test', '--api-base-url', `http://127.0.0.1:${server.address().port}`, '--json'], {
+      SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+    });
+    assert.equal(result.exitCode, 1);
+    const output = JSON.parse(result.stdout.trim().split('\n').pop());
+    assert.equal(output.errorType, 'RATE_LIMITED');
+    assert.equal(output.metadata.retryAfterSeconds, 300);
+    assert.match(output.error, /Wait 300 seconds/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test('personal LoRA import requires explicit rights confirmation before sending a request', () => {

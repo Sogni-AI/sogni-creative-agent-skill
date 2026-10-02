@@ -305,6 +305,56 @@ export function getOrCreateSogniAppId({
   return processLease.appId;
 }
 
+/**
+ * Lease the pool slot whose app ID is `appId`, so this process can sign in as
+ * that slot and take back the projects it left in flight: the socket delivers a
+ * project's events only to the app ID that submitted it. Returns
+ * `{ appId, release }` when the slot was free (or is this process's own),
+ * `{ heldByPid }` when a live process holds it (never connect as it: the socket
+ * would kick that process with SWITCH_CONNECTION), or `null` when `appId` is
+ * not one of this installation's slots.
+ */
+export function claimSogniAppIdSlot(appId, {
+  poolDir = getEnv('SOGNI_APP_ID_POOL_DIR', { trim: true }) || DEFAULT_APP_ID_POOL_DIR,
+  isPidAlive = defaultIsPidAlive,
+  ownPid = process.pid,
+} = {}) {
+  const resolvedPoolDir = expandHomePath(poolDir);
+  let names;
+  try {
+    names = readdirSync(resolvedPoolDir);
+  } catch {
+    return null;
+  }
+  for (const name of names.filter((entry) => /^slot-\d+$/.test(entry))) {
+    const slotPath = join(resolvedPoolDir, name);
+    let slotAppId;
+    try { slotAppId = readPersistedAppId(slotPath); } catch { continue; }
+    if (slotAppId !== appId) continue;
+    const leasePath = `${slotPath}.lease`;
+    if (processLease?.leasePath === leasePath) return { appId, release: () => {} };
+    if (!tryCreateLease(leasePath, ownPid)) {
+      if (!leaseIsStale(leasePath, { isPidAlive, ownPid })) {
+        let pid = null;
+        try { pid = JSON.parse(readFileSync(leasePath, 'utf8'))?.pid ?? null; } catch { /* unreadable: still held */ }
+        return { heldByPid: pid };
+      }
+      try { unlinkSync(leasePath); } catch { /* another reclaimer won */ }
+      if (!tryCreateLease(leasePath, ownPid)) return { heldByPid: null };
+    }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      process.off('exit', release);
+      try { unlinkSync(leasePath); } catch { /* best effort */ }
+    };
+    process.on('exit', release);
+    return { appId, release };
+  }
+  return null;
+}
+
 /** Diagnostic view of the pool for doctor/debug output. */
 export function describeSogniAppIdPool({
   poolDir = getEnv('SOGNI_APP_ID_POOL_DIR', { trim: true }) || DEFAULT_APP_ID_POOL_DIR,

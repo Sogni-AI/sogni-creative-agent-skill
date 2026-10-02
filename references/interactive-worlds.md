@@ -217,6 +217,9 @@ Two things to plan for:
 - **It casts a new voice every time.** The same character will sound like a
   different person in every scene. If a character recurs, clone a voice
   (below) and plan from the start for how their lines get into the clips.
+  Qwen3-TTS voice *design* has the same trap: a narrator designed from its
+  description for each place is a different man in each place. Design the
+  voice once, keep that take, and clone it for every line.
 - **Loudness varies enormously between clips.** Measured across 74 clips in one
   build: a 25.5 dB spread, −39.5 dB to −14.0 dB mean. Two clips in the same
   scene were 18 dB apart, which is roughly an eighth of the perceived loudness —

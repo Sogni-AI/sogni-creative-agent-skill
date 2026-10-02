@@ -445,6 +445,17 @@ sogni-agent --speech --speech-mode clone --voice-reference voice.wav --voice-tra
 sogni-agent --speech --speech-mode design --voice-description "A warm, low-pitched narrator with a gentle Scottish accent" -o designed.wav "The journey begins."
 ```
 
+**A designed voice is a new person on every call.** `design` invents a voice
+from the description each time, so a narrator or character designed separately
+for each line or scene sounds like a different speaker each time. When the same
+voice speaks more than once, design it once (a neutral 10–20 s passage), keep
+that take, then clone it with its exact script for every line:
+
+```bash
+sogni-agent --speech --speech-mode design --voice-description "A warm, relaxed American man in his forties" -o narrator.designed.wav "<a fixed 15-second passage>"
+sogni-agent --speech --speech-mode clone --voice-reference narrator.designed.wav --voice-transcript "<that same passage>" -o line-1.wav "First line."
+```
+
 Default mode is `voice`, default speaker `serena`, format WAV, language `auto`.
 `--speech-voice` accepts `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`,
 `ono_anna`, `sohee`, `eric`, or `dylan`. It is only valid in `voice` mode.

@@ -1480,6 +1480,32 @@ test('--detach submits, reports the project and exits without waiting or cancell
   assert.equal(state?.canceledProjectIds ?? null, null);
 });
 
+test('--detach reports a project only once the server has answered for it', () => {
+  // projects.create() resolves while the request may still be buffered in this process;
+  // exiting then dropped every detached project (2026-10-01) yet reported it as submitted.
+  const { exitCode, stdout, stderr } = runCli([...VIDEO_ARGS, '--detach', '--json', 'never reached the server'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1',
+    SOGNI_AGENT_TEST_NO_SERVER_ANSWER: '1',
+    SOGNI_AGENT_DETACH_ACK_TIMEOUT_MS: '200'
+  });
+  assert.notEqual(exitCode, 0);
+  const output = JSON.parse((stdout.trim() || stderr.trim()).split('\n').pop());
+  assert.equal(output.success, false);
+  assert.match(output.error, /did not confirm project proj-1/);
+  assert.equal(output.detached, undefined);
+});
+
+test('--detach surfaces a refusal instead of reporting the project as running', () => {
+  const { exitCode, stdout, stderr } = runCli([...VIDEO_ARGS, '--detach', '--json', 'refused at admission'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1',
+    SOGNI_AGENT_TEST_SERVER_REFUSES: 'Debit Error: Insufficient funds'
+  });
+  assert.notEqual(exitCode, 0);
+  const output = JSON.parse((stdout.trim() || stderr.trim()).split('\n').pop());
+  assert.equal(output.success, false);
+  assert.match(output.error, /Insufficient funds/);
+});
+
 test('--detach refuses flows that submit a second project later', () => {
   expectCliError(['--video', '--looping', '--detach', 'a loop'], '--detach cannot be combined with --looping');
 });

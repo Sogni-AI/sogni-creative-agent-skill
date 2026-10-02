@@ -12549,6 +12549,34 @@ function createProjectWaitTracker(client, log, timeoutMs = options.timeout) {
   };
 }
 
+// SOGNI_AGENT_DETACH_ACK_TIMEOUT_MS shortens it for tests.
+const DETACH_ACK_TIMEOUT_MS = Number(process.env.SOGNI_AGENT_DETACH_ACK_TIMEOUT_MS) > 0 ? Number(process.env.SOGNI_AGENT_DETACH_ACK_TIMEOUT_MS) : 30_000;
+
+/**
+ * Wait until the server has answered every submitted project (queued, started or refused):
+ * until then the request may only be buffered on this process's socket. Resolves the ids
+ * that got no answer within DETACH_ACK_TIMEOUT_MS.
+ */
+async function awaitServerAnswer(projects, timeoutMs = DETACH_ACK_TIMEOUT_MS) {
+  const answered = (project) => project?.status && project.status !== 'pending';
+  await Promise.all(projects.map((project) => {
+    if (!project?.id || answered(project) || typeof project.on !== 'function') return null;
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        project.off?.('updated', check);
+        project.off?.('failed', done);
+        resolve();
+      };
+      const check = () => { if (answered(project)) done(); };
+      const timer = setTimeout(done, timeoutMs);
+      project.on('updated', check);
+      project.on('failed', done);
+    });
+  }));
+  return projects.filter((project) => project?.id && !answered(project)).map((project) => project.id);
+}
+
 /**
  * Report projects submitted with --detach: they keep running on Sogni, and
  * --status / --result fetch them later, including after the socket has stopped
@@ -15489,6 +15517,18 @@ async function main() {
     
     if (options.detach) {
       projectWait.stop();
+      // projects.create() resolves once the request is handed to the socket, before the server
+      // has it, so exiting at once dropped every detached project (2026-10-01: none reached
+      // the server, yet each was reported as submitted). Report only what the server answered.
+      const unconfirmed = await awaitServerAnswer([...activeProjects]);
+      const refused = [...activeProjects].find((project) => project?.status === 'failed');
+      if (refused) throw buildProjectResultError({ error: refused.terminalError?.() ?? refused.error }, 'Sogni refused the project');
+      if (unconfirmed.length) {
+        const err = new Error(`Sogni did not confirm project ${unconfirmed.join(', ')} within ${DETACH_ACK_TIMEOUT_MS / 1000} s, so it may not have been received. Check once with --status before submitting again.`);
+        err.code = 'PROJECT_SUBMISSION_UNCONFIRMED';
+        err.details = { projectIds: unconfirmed };
+        throw err;
+      }
       reportDetachedProjects([...activeProjects], projectWait);
       return;
     }

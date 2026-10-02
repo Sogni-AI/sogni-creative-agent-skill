@@ -382,15 +382,30 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   _makeProject(id) {
-    return {
+    // A submitted SDK project starts 'pending' (the request may still be buffered in this
+    // process) until the server's first answer: queued, or a refusal.
+    // SOGNI_AGENT_TEST_NO_SERVER_ANSWER simulates a request that never reached the server.
+    const project = new EventEmitter();
+    Object.assign(project, {
       id,
+      status: 'pending',
       cancel: async () => {
         const state = getState();
         state.canceledProjectIds = state.canceledProjectIds || [];
         state.canceledProjectIds.push(id);
         persistState();
       }
-    };
+    });
+    if (!process.env.SOGNI_AGENT_TEST_NO_SERVER_ANSWER) {
+      setImmediate(() => {
+        const refusal = process.env.SOGNI_AGENT_TEST_SERVER_REFUSES;
+        project.status = refusal ? 'failed' : 'queued';
+        if (refusal) project.terminalError = () => ({ code: 4024, message: refusal });
+        project.emit('updated', ['status']);
+        if (refusal) project.emit('failed', project.terminalError());
+      });
+    }
+    return project;
   }
 }
 

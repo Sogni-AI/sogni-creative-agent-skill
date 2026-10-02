@@ -158,18 +158,24 @@ export const TOOLS = [
   {
     name: 'generate_music',
     description:
-      'Generate music/audio from a text prompt. Omit lyrics for an instrumental. ' +
-      'Duration 10-600 seconds. Prefer output_path (absolute .mp3/.wav/.flac).',
+      'Generate music/audio from a text prompt with MiniMax Music 3 by default. Omit lyrics for an instrumental. ' +
+      'Music 3 plays 10-300 seconds (default 60; the length is a ceiling, so a song may end early). ' +
+      'Put tempo and key in the prompt; with no music_model, bpm and keyscale are added to the prompt for you. ' +
+      'Prefer output_path (absolute .mp3/.wav/.flac).',
     inputSchema: {
       type: 'object',
       properties: {
-        prompt: str('Style/mood description'),
+        prompt: str('Style/mood description; include tempo and key, e.g. "warm acoustic ballad, 92 BPM, A minor"'),
         output_path: str('Absolute audio file path to save (optional)'),
-        lyrics: str('Song lyrics (optional)'),
-        duration: num('Seconds, 10-600 (default 30)'),
-        bpm: num('Beats per minute (30-300)'),
-        keyscale: str('Key/scale, e.g. "C major"'),
-        music_model: str('turbo | sft | ace_step_1.5_turbo | ace_step_1.5_sft'),
+        lyrics: str('Song lyrics (optional). Music 3: plain section tags on their own lines ([Verse], [Chorus]), no modifiers inside brackets'),
+        duration: num('Seconds. Music 3 (default): 10-300, default 60. ACE-Step turbo/sft: 10-600, default 30'),
+        bpm: num('Beats per minute (30-300). An exact control only on ACE-Step (music_model turbo or sft)'),
+        keyscale: str('Key/scale, e.g. "C major". An exact control only on ACE-Step (music_model turbo or sft)'),
+        music_model: str(
+          'music3 (default): MiniMax Music 3. turbo: ACE-Step 1.5 XL Turbo, a cheap draft with exact BPM/key and up to 600 s. ' +
+          'sft: ACE-Step 1.5 XL SFT. Full model IDs (minimax_music3, ace_step_1.5_xl_turbo, ...) also work. ' +
+          'Leave unset unless the user asks for ACE-Step, a draft, or a track over 300 s.',
+        ),
         audio_format: { type: 'string', enum: ['mp3', 'flac', 'wav'] },
         timeout_seconds: num('Generation timeout override (default 600)'),
       },

@@ -14,7 +14,7 @@ Use this workflow for one-command requests to turn a folder of still images into
 - Pin both endpoint strengths to `1` and disable SDK asset auto-resizing after choosing a valid LTX canvas.
 - Target a 768px short side unless the user requests another resolution. Choose dimensions divisible by 64, preserve the dominant source aspect ratio, and keep the long side at or below 2048px. For a 4:3 source set, use `1024x768`.
 - Normalize the stitched result to 32 fps.
-- Generate instrumental ACE-Step 1.5 XL Turbo music unless the user supplies audio or requests `music=none`.
+- Generate instrumental MiniMax Music 3 music unless the user supplies audio or requests `music=none`. Use ACE-Step 1.5 XL Turbo only when the soundtrack must be longer than Music 3's 300-second limit, and tell the user why.
 - Save the final beside the source folder as `sogni-loop-final.mp4`, choosing a non-overwriting numbered name when it already exists.
 
 The default stack is Sogni generation plus the Sogni CLI's local FFmpeg wrappers. Do not initialize or depend on HyperFrames or Remotion for generation, assembly, or validation. If either compositor is already installed, use it only when the user explicitly asks for timed text, titles, overlays, or effects that the wrappers cannot provide; preserve the approved picture track and loop anchors through that optional pass.
@@ -147,7 +147,18 @@ The opener may appear at the first and final boundary only to close the loop. No
 
 If the user supplies music, use that frozen local file. If the user requests `music=none`, keep the picture-only output. Otherwise derive a coherent instrumental style from the images. When no direction is given, use subtle melodic electronic music with eclectic tropical and futuristic accents, polished atmosphere, light rhythm, warm texture, and restrained energy.
 
-Generate ACE-Step 1.5 XL Turbo music at least 6 seconds longer than the stitched picture:
+The soundtrack must be at least 6 seconds longer than the stitched picture. Generate it with MiniMax Music 3, the default music model. Music 3 treats the duration as a ceiling and can end early on a musical resolution, so ask for about 20 seconds more than the picture (at most 300). With no `--lyrics`, the CLI sends an instrumental section skeleton (`[Intro]`, `[Verse]`, `[Chorus]`, `[Verse]`, `[Chorus]`, `[Bridge]`, `[Outro]`); for a picture over about two minutes, pass a longer skeleton with more `[Verse]`/`[Chorus]` tags so the piece fills the time. Put tempo and key in the prompt text:
+
+```bash
+sogni-agent -q --token-type auto --music \
+  --duration <video-seconds-plus-20, at most 300> \
+  -o ./working/soundtrack.mp3 \
+  "<instrumental music direction, with tempo and key>"
+```
+
+Measure the result before applying it (`ffprobe -v error -show_entries format=duration -of csv=p=0 ./working/soundtrack.mp3`). A track that ended less than 6 seconds past the picture is a failed music stage: render it again once with a longer section skeleton.
+
+Only when the picture plus 6 seconds exceeds 300 seconds, use ACE-Step 1.5 XL Turbo, which plays up to 600 seconds and keeps the requested length, and say in the handoff that the reel was too long for Music 3:
 
 ```bash
 sogni-agent -q --token-type auto --music --music-model turbo \

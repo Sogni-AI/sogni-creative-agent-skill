@@ -230,6 +230,18 @@ test('generate_music maps lyrics and format', () => {
   ]);
 });
 
+test('generate_music defaults to Music 3 and passes a named model through', () => {
+  const tool = getTool('generate_music');
+  assert.match(tool.description, /MiniMax Music 3 by default/);
+  assert.match(tool.inputSchema.properties.music_model.description, /^music3 \(default\)/);
+  const args = tool.buildArgs({ prompt: 'long ambient drone', music_model: 'turbo', duration: 420 });
+  assert.deepEqual(args, [
+    '--json', '-q', '--no-update-check', '--music',
+    '--music-model', 'turbo', '--duration', '420',
+    'long ambient drone',
+  ]);
+});
+
 test('photobooth requires ref', () => {
   assert.throws(() => getTool('photobooth').buildArgs({ prompt: 'headshot' }), /ref/);
   const args = getTool('photobooth').buildArgs({ prompt: 'headshot', ref: '/tmp/face.jpg', count: 4 });

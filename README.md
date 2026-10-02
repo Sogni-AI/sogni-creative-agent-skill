@@ -544,21 +544,24 @@ sogni-agent --image-to-3d front.png --left-view left.png --back-view back.png --
 # BiRefNet transparent PNG (add --matte for the soft mask)
 sogni-agent --remove-background original.png -o cutout.png
 
-# MiniMax Music 3 and Qwen3-TTS studio speech
-sogni-agent --music -m music3 --duration 30 -o score.mp3 "instrumental orchestral theme"
+# MiniMax Music 3 (the default music model) and Qwen3-TTS studio speech
+sogni-agent --music --duration 30 -o score.mp3 "instrumental orchestral theme, 90 BPM, D minor"
 sogni-agent --speech --speech-voice ryan -o speech.wav "Welcome to the story."
 
 # Voice cloning from a 3–30s recording, or voice design from a description
 sogni-agent --speech --speech-mode clone --voice-reference voice.wav -o clone.wav "A new line in this voice."
 sogni-agent --speech --speech-mode design --voice-description "Warm, low-pitched storyteller" -o designed.wav "The journey begins."
 
-# Direct music generation
-sogni-agent --music --duration 30 \
-  "uplifting cinematic synthwave theme for a product launch"
+# Direct music generation (MiniMax Music 3; tempo and key go in the prompt)
+sogni-agent --music --duration 60 \
+  "uplifting cinematic synthwave theme for a product launch, 110 BPM, A minor"
 
-# Song with lyrics and musical controls
-sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 \
-  --keyscale "C major" --output-format mp3 "bright indie pop chorus"
+# Song with lyrics (plain section tags, one per line)
+sogni-agent --music --lyrics $'[Verse]\nRise with the morning light\n[Chorus]\nWe run' \
+  --output-format mp3 "bright indie pop chorus, 128 BPM, C major"
+
+# ACE-Step 1.5 XL Turbo by name: a cheap draft with exact BPM/key, up to 600s
+sogni-agent --music -m turbo --bpm 128 --keyscale "C major" "bright indie pop chorus"
 
 # LTX-2.3 voice identity / persona
 sogni-agent --video --reference-audio-identity voice.webm \
@@ -650,9 +653,8 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `-o <path>` | Save output locally |
 | `-c <path>` | Provide image context for edits |
 | `--video` | Generate video instead of image |
-| `--music` | Generate music/audio instead of image |
-| `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | ACE-Step music controls; for Music 3 put tempo/key in the prompt |
-| `--music -m music3` | MiniMax Music 3, 10–300s (60s default) |
+| `--music` | Generate music instead of an image: MiniMax Music 3 by default, 10–300s (60s default, a ceiling); `-m turbo` or `-m sft` for ACE-Step (10–600s) |
+| `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | `--lyrics` for any model (Music 3: plain `[Verse]`/`[Chorus]` tags); `--bpm`/`--keyscale`/`--timesig` are exact ACE-Step controls and are written into the prompt on the default Music 3 |
 | `--speech`, `--speech-mode` | Qwen3-TTS voice, clone, or design |
 | `--image-to-3d <image>` | Pixal3D binary GLB from one original image (the front view in multi-view) |
 | `--left-view`, `--back-view`, `--right-view <image>` | Pixal3D multi-view orbit views, any subset, named by the subject's own sides: left = its own left side toward the camera (it faces screen-left), right = its own right side (it faces screen-right). Templates that label the subject's right side "left" build a model turned 180 degrees |
@@ -728,8 +730,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
-| Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
-| Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
+| Songs and instrumentals (default) | `minimax_music3` (`--music`) |
+| Quick, cheap music draft, exact BPM/key, or over 300s | `ace_step_1.5_xl_turbo` (`--music-model turbo`) |
+| ACE-Step with stronger lyric handling | `ace_step_1.5_xl_sft` (`--music-model sft`) |
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` or `minimax-h3-t2v` |
 | MiniMax H3 image-to-video | `minimax-h3-i2v` |
 | MiniMax H3 first-frame → last-frame video | `minimax-h3-flf2v` with `--ref A --ref-end B` |

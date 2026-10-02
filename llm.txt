@@ -17,7 +17,7 @@ masks, and promptless FlashVSR video upscaling to 1080p/1440p.
 Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb` (add
 `--left-view`, `--back-view`, `--right-view` for multi-view); BiRefNet
 uses `--remove-background original.png -o cutout.png` (add `--matte` for a mask).
-MiniMax Music 3 uses `--music -m music3`; Qwen3-TTS uses `--speech` with
+Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); Qwen3-TTS uses `--speech` with
 `--speech-mode voice|clone|design`. Read the model reference for required inputs,
 allowed controls, and hosted alternatives.
 

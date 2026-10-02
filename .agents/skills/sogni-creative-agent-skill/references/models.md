@@ -53,8 +53,8 @@ Availability, worker counts, media types, network coverage, and tags come from
 selected network are returned. Discovery does not require an API key.
 
 Use each model's dedicated input contract: `--image-to-3d` for Pixal3D,
-`--remove-background` for BiRefNet, `--music -m music3` for MiniMax Music 3,
-and `--speech` for Qwen3-TTS. A catalog ID alone does not supply its required
+`--remove-background` for BiRefNet, `--music` for MiniMax Music 3 (the default
+music model; `-m turbo` for ACE-Step), and `--speech` for Qwen3-TTS. A catalog ID alone does not supply its required
 inputs. Read the mode-specific commands and controls below.
 
 `--list-api-models` is different: it lists Sogni Intelligence language models
@@ -382,40 +382,56 @@ edges survive.
 
 | Model | Use Case |
 |-------|----------|
-| `ace_step_1.5_xl_turbo` | Default direct music generation model (ACE-Step 1.5 XL Turbo) |
-| `ace_step_1.5_xl_sft` | Quality variant (ACE-Step 1.5 XL SFT) with stronger lyric handling |
-| `minimax_music3` | MiniMax Music 3; direct `--music -m music3` or hosted `generate_music` with `model: "music3"` |
+| `minimax_music3` | Default music model (MiniMax Music 3): best vocals, lyric adherence and song structure, 10–300 s |
+| `ace_step_1.5_xl_turbo` | ACE-Step 1.5 XL Turbo: a cheap draft with exact BPM/key/time-signature controls, up to 600 s |
+| `ace_step_1.5_xl_sft` | ACE-Step 1.5 XL SFT, with stronger lyric handling than Turbo |
 
-The `--music-model` keys are `music3`, `turbo` (default), and `sft`. ACE selectors
+The `--music-model` keys are `music3` (default), `turbo`, and `sft`. ACE selectors
 map to the XL ids (`turbo` → `ace_step_1.5_xl_turbo`, `sft` →
-`ace_step_1.5_xl_sft`). The legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft`
-models are no longer the default.
+`ace_step_1.5_xl_sft`); the legacy `ace_step_1.5_turbo` / `ace_step_1.5_sft` ids
+still work by name. Both `--music` and hosted `generate_music` default to
+MiniMax Music 3. Name ACE-Step only when the user asks for it, for a quick or
+cheap draft, for exact BPM/key controls, or for a track longer than 300 seconds.
 
-Use `--music` for direct audio-only generation. Defaults: 30 seconds, `mp3`,
-`ace_step_1.5_xl_turbo`, 8 steps, `euler` sampler, `simple` scheduler. Keep
-`--audio` for video reference audio (`--ref-audio` alias); do not use it for
-direct music generation. Music controls: `--lyrics`, `--language`, `--bpm`
-(30-300), `--keyscale`, `--timesig` (2|3|4|6), `--composer-mode`,
-`--prompt-strength` (0-10), `--creativity` (0-2), `--music-shift` (1-6),
-`--audio-format mp3|flac|wav`.
+Use `--music` for direct audio-only generation. Keep `--audio` for video
+reference audio (`--ref-audio` alias); do not use it for direct music
+generation. Output formats are MP3 (default), FLAC, and WAV. Audio batches
+(`-n`) save all results, appending `-2`, `-3`, etc. to the requested output
+filename.
 
-Hosted `generate_music` defaults to MiniMax Music 3 (`model: "music3"`); direct
-`--music` still defaults to ACE-Step. Music 3 supports 10–300 seconds, with
-duration as a ceiling: it can finish early at a musical resolution. Put tempo
-and key in its prompt; BPM/key/time-signature controls do not apply. Use plain
-section tags in lyrics; instrumental tracks also need a section-tag skeleton
-to give the composer enough structure. The CLI preserves supplied lyrics:
+**MiniMax Music 3 (default).** 10–300 seconds, default 60; the duration is a
+ceiling, so a song can finish early at a musical resolution. Defaults: 30
+steps (10–100), guidance 1.7 (1–5), `euler`, `simple`; `--prompt-strength`
+(0–10) is available. It has no shift, BPM, key, time-signature, language, or
+composer controls: put tempo, key and language in the prompt. Write lyrics
+with plain section tags on their own lines (`[Verse]`, `[Chorus]`, no
+modifiers inside the brackets) and enough sections to fill the length. An
+instrumental needs a section skeleton or it ends early; the CLI sends
+`[Intro] [Verse] [Chorus] [Verse] [Chorus] [Bridge] [Outro]` (one per line)
+when no `--lyrics` are given, and keeps lyrics you supply.
 
 ```bash
-sogni-agent --music -m music3 --duration 60 --lyrics $'[Intro]\n[Verse]\n[Chorus]\n[Outro]' -o score.mp3 "Instrumental orchestral score, 90 BPM, D minor"
+sogni-agent --music -o score.mp3 "Instrumental orchestral score, 90 BPM, D minor, slow build to a full-string climax"
+sogni-agent --music --duration 120 --lyrics $'[Verse]\nCity lights are calling\n[Chorus]\nWe run tonight' -o song.mp3 "Synth-pop anthem, 118 BPM, F major, bright female vocal"
 ```
 
-Music 3 defaults to 60 seconds, 30 steps, guidance 1.7, `euler`, and `simple`.
-It rejects ACE-only shift, BPM, key, time-signature, language, and composer
-controls; put that direction in the prompt or lyrics. `--prompt-strength`
-(0–10), `--creativity` (0–2), `--guidance` (1–5), and `--steps` (10–100) are
-available. Output formats are MP3, FLAC, and WAV. Audio batches (`-n`) save
-all results, appending `-2`, `-3`, etc. to the requested output filename.
+Without `--music-model`, `--bpm`, `--keyscale`, `--timesig` and `--language`
+are written into the Music 3 prompt (for example `Tempo: 92 BPM. Key: A
+minor.`) with a note on stderr. A setting only ACE-Step has (`--music-shift`,
+`--composer-mode` / `--no-composer-mode`, `--creativity`, `--duration` over
+300, `--steps` under 10, `--sampler euler_ancestral`) runs that command on
+ACE-Step 1.5 XL Turbo instead and says so on stderr. With an explicit
+`-m music3`, the ACE-only controls are refused.
+
+**ACE-Step 1.5 XL (`-m turbo` or `-m sft`).** 10–600 seconds, default 30.
+Turbo: 8 steps (4–16), `euler`, `simple`, shift 3. SFT: 50 steps, guidance 5,
+`er_sde`, `linear_quadratic`. Controls: `--lyrics`, `--language`, `--bpm`
+(30-300), `--keyscale`, `--timesig` (2|3|4|6), `--composer-mode`,
+`--prompt-strength` (0-10), `--creativity` (0-2), `--music-shift` (1-6).
+
+```bash
+sogni-agent --music -m turbo --duration 420 --bpm 128 --keyscale "C major" -o draft.mp3 "long driving synthwave mix"
+```
 
 ## Speech models
 
@@ -1208,9 +1224,9 @@ model recommendations.
 | Remove a background | `--remove-background original.png` (BiRefNet); add `--matte` for a soft mask |
 | Turn one image into a textured 3D model (GLB) | `--image-to-3d original.png -o object.glb` (Pixal3D), no prompt |
 | Turn several photos of one object into a 3D model | `--image-to-3d front.png` plus `--left-view` / `--back-view` / `--right-view` (Pixal3D multi-view; views named by the subject's own sides) |
-| Direct music generation | `ace_step_1.5_xl_turbo` (or `--music-model turbo`) |
-| Music with stronger lyric handling | `ace_step_1.5_xl_sft` (or `--music-model sft`) |
-| MiniMax Music 3 songs and instrumentals | `--music -m music3` or hosted `generate_music` |
+| Songs and instrumentals (default) | `minimax_music3` (`--music`, or hosted `generate_music`) |
+| Quick, cheap music draft, exact BPM/key, or over 300 s | `ace_step_1.5_xl_turbo` (`--music-model turbo`) |
+| ACE-Step with stronger lyric handling | `ace_step_1.5_xl_sft` (`--music-model sft`) |
 | Spoken audio, voice cloning, or voice design | `--speech --speech-mode voice/clone/design` or hosted `generate_speech` |
 | Text-to-video with native dialogue/audio | `ltx25` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |

@@ -82,8 +82,8 @@ sogni-agent-hermes --image-to-3d ./object.png --mesh-faces 30000 -o ./object.glb
 sogni-agent-hermes --image-to-3d ./front.png --left-view ./left.png --back-view ./back.png --right-view ./right.png -o ./object.glb
 sogni-agent-hermes --remove-background ./source.png -o ./cutout.png
 
-# MiniMax Music 3 and Qwen3-TTS (read models.md for lyrics and voice controls)
-sogni-agent-hermes --music -m music3 --duration 30 -o ./score.mp3 "instrumental ambient score"
+# MiniMax Music 3 (default music model) and Qwen3-TTS (read models.md for lyrics and voice controls)
+sogni-agent-hermes --music --duration 30 -o ./score.mp3 "instrumental ambient score, 70 BPM, E minor"
 sogni-agent-hermes --speech --speech-voice ryan -o ./speech.wav "Welcome to the story."
 
 # Generate or edit an image
@@ -131,7 +131,7 @@ and limits; preserve the user's requested model and resolution.
 Use `--image-to-3d` for Pixal3D (add `--left-view`, `--back-view` and/or
 `--right-view` for multi-view; views are named by the subject's own sides, so
 the left view shows the subject facing screen-left), `--remove-background` for BiRefNet (add
-`--matte` for a soft mask), `--music -m music3` for MiniMax Music 3, and
+`--matte` for a soft mask), `--music` for MiniMax Music 3 (`-m turbo` for ACE-Step), and
 `--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read the model guide
 before these modes for exact scripts, studio voices, 3–30s clone references,
 and Music 3 section tags. Discover 3D with `--search-models pixal3d` or

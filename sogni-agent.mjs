@@ -411,6 +411,12 @@ for (const signal of Object.keys(SIGNAL_EXIT_CODES)) {
 const SOCKET_EVENT_SUBSCRIPTIONS = Object.freeze({
   modelAvailability: false
 });
+// MiniMax Music 3 is the default music model. ACE-Step 1.5 XL stays available
+// by name (-m turbo|sft) for exact BPM/key controls and tracks over 300 s.
+const DEFAULT_MUSIC_MODEL = 'music3';
+// Music 3 ends early on an instrumental with no lyric sheet, so a run without
+// lyrics sends this section skeleton in their place.
+const MUSIC3_INSTRUMENTAL_SECTIONS = '[Intro]\n[Verse]\n[Chorus]\n[Verse]\n[Chorus]\n[Bridge]\n[Outro]';
 const MUSIC_MODEL_IDS = {
   music3: MUSIC3_MODEL_ID,
   turbo: 'ace_step_1.5_xl_turbo',
@@ -2040,6 +2046,55 @@ function normalizeMusicModelId(value) {
 
 function getMusicModelDefaults(modelId) {
   return MUSIC_MODEL_DEFAULTS[normalizeMusicModelId(modelId)] || null;
+}
+
+/**
+ * Settings on a run that did not name a music model which only ACE-Step can
+ * honour. Such a run uses ACE-Step 1.5 XL Turbo, so commands written before
+ * Music 3 became the default keep working.
+ */
+function aceOnlyMusicSettings(opts, set) {
+  const music3 = MUSIC3_DEFAULTS;
+  const turbo = MUSIC_MODEL_DEFAULTS[MUSIC_MODEL_IDS.turbo];
+  const settings = [];
+  if (set.musicShift) settings.push('--music-shift');
+  if (set.musicComposerMode) settings.push(opts.musicComposerMode ? '--composer-mode' : '--no-composer-mode');
+  if (set.musicCreativity) settings.push('--creativity');
+  if (set.duration && Number.isFinite(opts.duration) && opts.duration > music3.duration.max) {
+    settings.push(`--duration ${opts.duration} (Music 3 plays at most ${music3.duration.max} s)`);
+  }
+  if (set.steps && Number.isFinite(opts.steps) && opts.steps < music3.steps.min && opts.steps >= turbo.steps.min) {
+    settings.push(`--steps ${opts.steps}`);
+  }
+  if (set.sampler && opts.sampler && !music3.sampler.allowed.includes(opts.sampler) && turbo.sampler.allowed.includes(opts.sampler)) {
+    settings.push(`--sampler ${opts.sampler}`);
+  }
+  return settings;
+}
+
+const MUSIC3_TIME_SIGNATURE_LABELS = { 2: '2/4', 3: '3/4', 4: '4/4', 6: '6/8' };
+
+function languageName(code) {
+  const raw = String(code || '').trim();
+  if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(raw)) return raw;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(raw) || raw;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Music 3 has no BPM, key, time-signature or language controls; it reads them
+ * from the prompt. Returns the sentence added to the prompt ('' when none).
+ */
+function music3PromptDirections(opts) {
+  const parts = [];
+  if (opts.musicBpm !== null && opts.musicBpm !== undefined) parts.push(`Tempo: ${opts.musicBpm} BPM.`);
+  if (opts.musicKeyscale) parts.push(`Key: ${opts.musicKeyscale}.`);
+  if (opts.musicTimesig) parts.push(`Time signature: ${MUSIC3_TIME_SIGNATURE_LABELS[opts.musicTimesig] || opts.musicTimesig}.`);
+  if (opts.musicLanguage) parts.push(`Sung in ${languageName(opts.musicLanguage)}.`);
+  return parts.join(' ');
 }
 
 function normalizeMusicTimeSignature(value) {
@@ -4738,19 +4793,22 @@ Speech Options:
 
 Music Options:
   --music               Generate music/audio instead of image
-  --music-model <id>    Music model: music3|turbo|sft (or full model ID)
-  --lyrics <text>       Song lyrics; Music 3 instrumentals benefit from section tags
-  --language <code>     Lyrics language code (default: en)
-  --duration <sec>      ACE: 10–600s, default 30; Music 3: 10–300s, default 60
+  --music-model <id>    Music model: music3 (default, MiniMax Music 3)|turbo|sft (ACE-Step), or full model ID
+  --lyrics <text>       Song lyrics; Music 3 uses plain section tags ([Verse], [Chorus]) and gets an
+                        [Intro]..[Outro] section skeleton when no lyrics are given
+  --language <code>     Lyrics language code (ACE-Step; Music 3 gets it in the prompt)
+  --duration <sec>      Music 3: 10–300s, default 60, a ceiling; ACE-Step: 10–600s, default 30
   --length <sec>        Alias for --duration
-  --bpm <num>           Beats per minute (30-300)
-  --keyscale <text>     Key/scale, e.g. "C major" or "A minor"
-  --timesig <n>         Time signature: 2|3|4|6 (also accepts 4/4)
-  --composer-mode       Enable AI composer mode
-  --no-composer-mode    Disable AI composer mode
+  --bpm <num>           Beats per minute (30-300; ACE-Step control, Music 3 gets it in the prompt)
+  --keyscale <text>     Key/scale, e.g. "C major" (ACE-Step control, Music 3 gets it in the prompt)
+  --timesig <n>         Time signature: 2|3|4|6 (also accepts 4/4; Music 3 gets it in the prompt)
+  --composer-mode       Enable AI composer mode (ACE-Step only)
+  --no-composer-mode    Disable AI composer mode (ACE-Step only)
   --prompt-strength <n> Prompt adherence (0-10)
-  --creativity <n>      Composition variation/temperature (0-2)
-  --music-shift <n>     Audio model shift parameter (1-6)
+  --creativity <n>      Composition variation/temperature (0-2, ACE-Step only)
+  --music-shift <n>     Audio model shift parameter (1-6, ACE-Step only)
+                        Without --music-model, an ACE-Step-only setting or a duration over 300s
+                        runs on ACE-Step 1.5 XL Turbo and says so on stderr
   --audio-format <f>    Alias for --output-format: mp3|flac|wav
 
 Video Options:
@@ -5006,8 +5064,9 @@ Video Upscale Model:
   flashvsr_v1.1_tiny_long_bf16    Promptless FlashVSR upscale to 1080p/1440p (--upscale-video)
 
 Music Models:
-  ace_step_1.5_xl_turbo           Default direct music generation
-  ace_step_1.5_xl_sft             Quality variant with stronger lyric handling
+  minimax_music3                  Default music generation (MiniMax Music 3, 10–300s)
+  ace_step_1.5_xl_turbo           ACE-Step draft model with exact BPM/key controls, up to 600s
+  ace_step_1.5_xl_sft             ACE-Step variant with stronger lyric handling
   ace_step_1.5_turbo              Legacy direct music generation
   ace_step_1.5_sft                Legacy lyric-focused music generation
 
@@ -5121,7 +5180,8 @@ Examples:
   sogni-agent --source-reel ./images --reel-plan-only
   sogni-agent --source-reel ./images --reel-image-seconds 3 --reel-transition-seconds 3 --reel-image-prompt "friendly camera-ready motion"
   sogni-agent --music --duration 30 "uplifting cinematic synthwave theme for a product launch"
-  sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale "C major" --output-format mp3 "bright indie pop chorus"
+  sogni-agent --music --lyrics $'[Verse]\\nRise with the morning light\\n[Chorus]\\nWe run' --output-format mp3 "bright indie pop chorus, 128 BPM, C major"
+  sogni-agent --music -m turbo --bpm 128 --keyscale "C major" "bright indie pop chorus"
   sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
   sogni-agent --api-chat "Create a 4-shot product video concept for a red sneaker"
   sogni-agent --api-workflow --video-prompt "slow push-in as it comes alive" "a graphite robot sketch"
@@ -5313,7 +5373,7 @@ if (options.quality) {
     });
   }
   if (options.music) {
-    fatalCliError('--quality is not used for --music. Use --music-model turbo|sft for music model selection.', {
+    fatalCliError('--quality is not used for --music. Use --music-model music3|turbo|sft for music model selection.', {
       code: 'INVALID_ARGUMENT'
     });
   }
@@ -5924,13 +5984,40 @@ if (options._lastImagePath) {
 
 // Set defaults based on type and context
 if (options.music) {
-  const configuredMusicModel = options.model || openclawConfig?.defaultMusicModel || 'turbo';
+  const configuredMusicModel = options.model || openclawConfig?.defaultMusicModel || DEFAULT_MUSIC_MODEL;
   options.model = normalizeMusicModelId(configuredMusicModel);
   if (!options.model) {
     fatalCliError(`Unknown music model "${configuredMusicModel}". Use music3, turbo, sft, minimax_music3, ace_step_1.5_xl_turbo, or ace_step_1.5_xl_sft.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: cliSet.model ? '--model' : 'defaultMusicModel', value: configuredMusicModel }
     });
+  }
+  // A run that names Music 3 with -m keeps the hard error for ACE-only
+  // controls below. A run that only inherits it as the default uses ACE-Step
+  // Turbo when it asks for an ACE-only setting, and otherwise gets its
+  // tempo, key, time signature and language written into the prompt.
+  if (options.model === MUSIC3_MODEL_ID && !cliSet.model) {
+    const aceOnly = aceOnlyMusicSettings(options, cliSet);
+    if (aceOnly.length > 0) {
+      options.model = MUSIC_MODEL_IDS.turbo;
+      console.error(`Note: ${aceOnly.join(', ')} ${aceOnly.length === 1 ? 'is an ACE-Step setting' : 'are ACE-Step settings'}, so this run uses ACE-Step 1.5 XL Turbo (-m turbo). Leave ${aceOnly.length === 1 ? 'it' : 'them'} out to use the default, MiniMax Music 3.`);
+    } else {
+      if (options.musicTimesig && !MUSIC_TIME_SIGNATURES.has(options.musicTimesig)) {
+        fatalCliError('--timesig must be one of 2, 3, 4, or 6.', {
+          code: 'INVALID_ARGUMENT',
+          details: { timesig: options.musicTimesig }
+        });
+      }
+      const directions = music3PromptDirections(options);
+      if (directions) {
+        options.prompt = `${String(options.prompt || '').trim()} ${directions}`.trim();
+        options.musicBpm = null;
+        options.musicKeyscale = null;
+        options.musicTimesig = null;
+        options.musicLanguage = null;
+        console.error(`Note: MiniMax Music 3 reads tempo, key, time signature and language from the prompt, so "${directions}" was added to it. Pass -m turbo for ACE-Step's exact controls.`);
+      }
+    }
   }
   const musicDefaults = getMusicModelDefaults(options.model);
   if (!cliSet.duration || !Number.isFinite(options.duration)) {
@@ -6178,8 +6265,11 @@ if (!options.video && !options.music && isGptImage2ModelSelection(options.model)
 if (options.music) {
   const musicDefaults = getMusicModelDefaults(options.model);
   const durationLimits = musicDefaults.duration || MUSIC_DURATION_LIMITS;
-  if (options.model === MUSIC3_MODEL_ID && (cliSet.musicShift || cliSet.musicBpm || cliSet.musicKeyscale || cliSet.musicTimesig || cliSet.musicLanguage || cliSet.musicComposerMode)) {
-    fatalCliError('Music 3 does not use shift, BPM, key, time signature, language, or composer controls. Describe musical direction in the prompt and lyrics.', { code: 'INVALID_ARGUMENT' });
+  if (options.model === MUSIC3_MODEL_ID && cliSet.model && (cliSet.musicShift || cliSet.musicBpm || cliSet.musicKeyscale || cliSet.musicTimesig || cliSet.musicLanguage || cliSet.musicComposerMode)) {
+    fatalCliError('Music 3 does not use shift, BPM, key, time signature, language, or composer controls. Describe musical direction in the prompt and lyrics, or pass -m turbo for ACE-Step.', { code: 'INVALID_ARGUMENT' });
+  }
+  if (options.model === MUSIC3_MODEL_ID && !options.musicLyrics) {
+    options.musicLyrics = MUSIC3_INSTRUMENTAL_SECTIONS;
   }
   if (options.duration < durationLimits.min || options.duration > durationLimits.max) {
     fatalCliError(`Music duration must be between ${durationLimits.min} and ${durationLimits.max} seconds.`, {

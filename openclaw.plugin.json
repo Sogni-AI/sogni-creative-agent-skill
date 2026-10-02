@@ -27,8 +27,8 @@
       },
       "defaultMusicModel": {
         "type": "string",
-        "default": "ace_step_1.5_xl_turbo",
-        "description": "Default model for direct music/audio generation."
+        "default": "minimax_music3",
+        "description": "Default model for direct music/audio generation: MiniMax Music 3 (minimax_music3). Set ace_step_1.5_xl_turbo or ace_step_1.5_xl_sft to default to ACE-Step instead."
       },
       "videoModels": {
         "type": "object",

@@ -45,7 +45,7 @@ Honor requests to wait for user input; model-specific policies still apply.
 - Wan 3.0 Enhanced through MuleRouter: `sogni-agent --video -m wan3-enhanced --target-resolution 1080 --smart-duration --wan3-ratio adaptive "a presenter says 'Welcome' in a detailed studio"`
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
 - One-click image-folder loop in Codex: `$sogni-creative-agent:loop-maker ./images`
-- Music: `sogni-agent --music "ambient drone, 30 seconds"`
+- Music (MiniMax Music 3 by default): `sogni-agent --music --duration 30 "ambient drone, 60 BPM, D minor"`
 - Hosted workflow: `sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "9:16 bakery launch video"`
 - List inbound media the user sent (Telegram etc.): `sogni-agent --json --list-media`
 - Inspect the last render: `sogni-agent --last --json`
@@ -81,7 +81,7 @@ Pixal3D: `--image-to-3d original.png --mesh-faces 30000 -o object.glb`; add
 subject's own sides: the left view shows it facing screen-left).
 BiRefNet: `--remove-background original.png -o cutout.png`; add `--matte`
 for a soft mask. Both are promptless and preserve the original input bytes.
-Music 3: `--music -m music3`; speech: `--speech --speech-mode voice|clone|design`.
+Music: `--music` uses MiniMax Music 3 (`-m turbo` for ACE-Step); speech: `--speech --speech-mode voice|clone|design`.
 Read `../../references/models.md` for exact controls, studio voices, clone
 recordings, and Music 3 section tags before generating. Discover 3D with
 `--search-models pixal3d` or `--model-media model`. For explorable worlds,

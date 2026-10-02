@@ -198,9 +198,9 @@ sogni-agent --video --ref face.jpg --ref-audio speech.m4a -m wan_v2.2-14b-fp8_s2
 sogni-agent --video --ref cover.jpg --ref-audio song.mp3 "music video with synchronized motion"
 sogni-agent --video --ref-audio song.mp3 "abstract audio-reactive visualizer"
 
-# Music (direct audio generation; mp3 by default)
-sogni-agent -q --music --duration 30 -o ./music.mp3 "uplifting cinematic synthwave theme"
-sogni-agent --music --lyrics "Rise with the morning light" --bpm 128 --keyscale "C major" "bright indie pop chorus"
+# Music: MiniMax Music 3 by default (mp3; tempo and key in the prompt); -m turbo = ACE-Step for exact --bpm/--keyscale or >300s
+sogni-agent -q --music --duration 30 -o ./music.mp3 "uplifting cinematic synthwave theme, 110 BPM, A minor"
+sogni-agent --music --lyrics $'[Verse]\nRise with the morning light\n[Chorus]\nWe run' "bright indie pop chorus, 128 BPM, C major"
 
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
@@ -297,7 +297,7 @@ sogni-agent doctor --json
 | `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |
 | `--sampler <name>` | Image/music sampler; LightX2V FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo and FastH3 Turbo: `euler` only | LightX2V FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |
-| `--duration <sec>` | Video or music length | video 5, music 30 |
+| `--duration <sec>` | Video or music length | video 5, music 60 (Music 3; ACE-Step 30) |
 | `--target-resolution <px>` | Short-side target preserving aspect ratio (use `2160` for Seedance 4K); on FastH3 and Ref2VA Two-Stage the delivered size `720`, `1080`, or `2K` | - (Two-Stage: 2K) |
 | `--photobooth` | Face transfer mode (with `--ref`) | - |
 | `--persona <name>` | Use a saved persona (photo + voice auto-attach) | - |
@@ -328,7 +328,7 @@ sogni-agent doctor --json
 - SDK callers: SAM 3 takes `sam3Prompt.applyMask: true` for a cutout; leave it off for the binary mask. If text matches too many instances, inspect `maskSelections` and refine with `maxInstances: 1` or points. BiRefNet uses top-level `applyMask` instead.
 - Pixal3D (`pixal3d_int8_i23d`) reconstructs one `startingImage` into a textured GLB. When the user has more photos of the same object, add any of `--left-view`, `--back-view` and `--right-view` to `--image-to-3d front.png`; the CLI then uses `pixal3d_multiview_int8_i23d` (SDK `leftViewImage` / `backViewImage` / `rightViewImage`) at the same options and price. Views are named by the subject's own sides, not the viewer's: left = the subject turned so its own left side faces the camera (it faces screen-left), right = its own right side (it faces screen-right), back = seen from behind. Never follow turnaround templates that label the subject's right side "left" — swapped sides build a model turned 180 degrees. Its supported graph is promptless: omit `templateVariant` or use `i23d-birefnet`; the old prompted `i23d` variant is removed. Shape resolution defaults to 1024, with 1536 available at a higher price. Set `meshTargetFaces` below the 700000 maximum for a real-time asset. Discovery supports `--search-models pixal3d` and `--model-media model`; generate with `--image-to-3d object.png --mesh-faces 30000 -o object.glb`. Save the binary result as `.glb`, never process it as an image.
 - `birefnet_image_background_removal_fp16` is available on Supernet for promptless soft-matte background removal. SDK callers pass `startingImage` and top-level `applyMask: true` for an RGBA cutout. Use `--remove-background original.png -o cutout.png`; add `--matte` for a soft mask. Preserve original bytes and dimensions.
-- SAM 3 and BiRefNet are flat-priced; Pixal3D pricing changes with `shapeResolution`. Use `--music -m music3` for MiniMax Music 3 and `--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read [`references/models.md`](./references/models.md) before these modes: it covers promptless mesh/cutout controls, Music 3 section tags, exact speech scripts, studio voices, and 3–30s clone recordings. Speech never accepts music duration or diffusion controls.
+- SAM 3 and BiRefNet are flat-priced; Pixal3D pricing changes with `shapeResolution`. `--music` uses MiniMax Music 3 by default (`-m turbo` for ACE-Step); use `--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read [`references/models.md`](./references/models.md) before these modes: it covers promptless mesh/cutout controls, Music 3 section tags, exact speech scripts, studio voices, and 3–30s clone recordings. Speech never accepts music duration or diffusion controls.
 
 ### Photobooth vs. context editing
 

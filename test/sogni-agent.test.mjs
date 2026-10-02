@@ -1712,7 +1712,9 @@ test('a video submission notes the account\'s other in-flight video projects', (
   assert.match(stderr, /do not resubmit it/);
 });
 
-test('default music generation uses ACE-Step turbo defaults and prompt', () => {
+const MUSIC3_SKELETON = '[Intro]\n[Verse]\n[Chorus]\n[Verse]\n[Chorus]\n[Bridge]\n[Outro]';
+
+test('default music generation uses MiniMax Music 3 defaults and an instrumental section skeleton', () => {
   const { exitCode, state, stdout } = runCli([
     '--music',
     '--json',
@@ -1721,11 +1723,15 @@ test('default music generation uses ACE-Step turbo defaults and prompt', () => {
 
   assert.equal(exitCode, 0);
   assert.ok(state?.lastAudioProject, 'createAudioProject was called');
-  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_turbo');
+  assert.equal(state.lastAudioProject.modelId, 'minimax_music3');
   assert.equal(state.lastAudioProject.positivePrompt, 'uplifting cinematic synthwave theme');
-  assert.equal(state.lastAudioProject.duration, 30);
-  assert.equal(state.lastAudioProject.steps, 8);
-  assert.equal(state.lastAudioProject.shift, 3);
+  assert.equal(state.lastAudioProject.duration, 60);
+  assert.equal(state.lastAudioProject.steps, 30);
+  assert.equal(state.lastAudioProject.guidance, 1.7);
+  assert.equal(state.lastAudioProject.shift, undefined);
+  assert.equal(state.lastAudioProject.bpm, undefined);
+  assert.equal(state.lastAudioProject.keyscale, undefined);
+  assert.equal(state.lastAudioProject.lyrics, MUSIC3_SKELETON);
   assert.equal(state.lastAudioProject.sampler, 'euler');
   assert.equal(state.lastAudioProject.scheduler, 'simple');
   assert.equal(state.lastAudioProject.outputFormat, 'mp3');
@@ -1733,7 +1739,78 @@ test('default music generation uses ACE-Step turbo defaults and prompt', () => {
 
   const output = JSON.parse(stdout.trim());
   assert.equal(output.type, 'music');
+  assert.equal(output.model, 'minimax_music3');
   assert.deepEqual(output.urls, ['https://example.com/audioUrl-1.mp3']);
+});
+
+test('default Music 3 writes --bpm, --keyscale, --timesig and --language into the prompt', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--music',
+    '--bpm', '92',
+    '--keyscale', 'A minor',
+    '--timesig', '3/4',
+    '--language', 'es',
+    '--lyrics', '[Verse]\nLa luna\n[Chorus]\nCanta',
+    '--json',
+    'warm acoustic ballad'
+  ]);
+
+  assert.equal(exitCode, 0, stderr);
+  const config = state.lastAudioProject;
+  assert.equal(config.modelId, 'minimax_music3');
+  assert.equal(config.positivePrompt, 'warm acoustic ballad Tempo: 92 BPM. Key: A minor. Time signature: 3/4. Sung in Spanish.');
+  assert.equal(config.bpm, undefined);
+  assert.equal(config.keyscale, undefined);
+  assert.equal(config.timesignature, undefined);
+  assert.equal(config.language, undefined);
+  assert.equal(config.lyrics, '[Verse]\nLa luna\n[Chorus]\nCanta');
+  assert.match(stderr, /Note: MiniMax Music 3 reads tempo, key, time signature and language from the prompt/);
+  assert.match(stderr, /Pass -m turbo/);
+});
+
+test('default Music 3 still rejects an invalid --timesig', () => {
+  expectCliError(['--music', '--timesig', '5', 'a waltz'], '--timesig must be one of 2, 3, 4, or 6.');
+});
+
+test('an ACE-Step-only setting without --music-model runs on ACE-Step Turbo and says so', () => {
+  for (const [args, named] of [
+    [['--music-shift', '4'], '--music-shift'],
+    [['--composer-mode'], '--composer-mode'],
+    [['--no-composer-mode'], '--no-composer-mode'],
+    [['--creativity', '1.2'], '--creativity'],
+    [['--duration', '420'], '--duration 420'],
+    [['--steps', '8'], '--steps 8'],
+    [['--sampler', 'euler_ancestral'], '--sampler euler_ancestral']
+  ]) {
+    const { exitCode, state, stderr } = runCli(['--music', ...args, '--bpm', '128', '--json', 'driving synthwave']);
+    assert.equal(exitCode, 0, `${args.join(' ')}: ${stderr}`);
+    const config = state.lastAudioProject;
+    assert.equal(config.modelId, 'ace_step_1.5_xl_turbo', args.join(' '));
+    assert.equal(config.positivePrompt, 'driving synthwave');
+    assert.equal(config.bpm, 128);
+    assert.equal(config.lyrics, undefined);
+    assert.ok(stderr.includes(`Note: ${named}`), stderr);
+    assert.match(stderr, /uses ACE-Step 1\.5 XL Turbo \(-m turbo\)\. Leave it out to use the default, MiniMax Music 3\./);
+  }
+});
+
+test('explicit ACE-Step music sends no section skeleton', () => {
+  const { exitCode, state } = runCli(['--music', '-m', 'turbo', '--json', 'lo-fi beat']);
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_turbo');
+  assert.equal(state.lastAudioProject.duration, 30);
+  assert.equal(state.lastAudioProject.steps, 8);
+  assert.equal(state.lastAudioProject.shift, 3);
+  assert.equal(state.lastAudioProject.lyrics, undefined);
+});
+
+test('an OpenClaw defaultMusicModel still picks the music model', () => {
+  const { exitCode, state } = runCli(['--music', '--json', 'lo-fi beat'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultMusicModel: 'ace_step_1.5_xl_turbo' })
+  });
+  assert.equal(exitCode, 0);
+  assert.equal(state.lastAudioProject.modelId, 'ace_step_1.5_xl_turbo');
+  assert.equal(state.lastAudioProject.lyrics, undefined);
 });
 
 test('advanced music options are forwarded to audio project generation', () => {
@@ -8724,6 +8801,7 @@ test('Music 3 rejects unsupported controls and duration above 300 seconds', () =
   }
   const result = runCli(['--music', '-m', 'music3', '--duration', '300', 'music', '--json']);
   assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.state.lastAudioProject.lyrics, MUSIC3_SKELETON);
 });
 
 test('Pixal3D saves binary GLB and rejects invalid artifacts and HTTP errors', async () => {

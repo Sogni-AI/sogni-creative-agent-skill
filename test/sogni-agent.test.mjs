@@ -8584,6 +8584,68 @@ test('Seedance 2.5 transports 1080p MOV and last-frame export', () => {
   assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 1080);
 });
 
+test('Seedance 2.5 Uncensored keeps its own model id with every Seedance 2.5 option', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'seedance2-5-spicy',
+    '--target-resolution', '1080', '--duration', '30',
+    '--output-format', 'mov', '--return-last-frame',
+    '--token-type', 'sogni',
+    'A slow dolly through a rain-soaked neon street at night.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'seedance-2-5-spicy');
+  assert.equal(state.lastVideoProject.duration, 30);
+  assert.equal(state.lastVideoProject.outputFormat, 'mov');
+  assert.equal(state.lastVideoProject.returnLastFrame, true);
+  assert.equal(state.lastVideoProject.tokenType, 'spark');
+  assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 1080);
+  assert.doesNotMatch(stderr, /Adjusted video duration/);
+});
+
+test('Seedance 2.5 Uncensored friendly names never resolve to seedance-2-5', () => {
+  for (const model of ['Seedance 2.5 Uncensored', 'Seedance Uncensored', 'Seedance 2.5 Spicy', 'seedance-spicy']) {
+    const { exitCode, state, stderr } = runCli(['--video', '-m', model, '--duration', '20', 'A quiet bookshop.']);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    assert.equal(state.lastVideoProject.modelId, 'seedance-2-5-spicy', model);
+    assert.equal(state.lastVideoProject.duration, 20, model);
+  }
+  const plain = runCli(['--video', '-m', 'seedance2-5', 'A quiet bookshop.']);
+  assert.equal(plain.state.lastVideoProject.modelId, 'seedance-2-5');
+});
+
+test('Seedance 2.5 Uncensored accepts the typed extend task', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '--workflow', 'v2v', '-m', 'seedance2-5-spicy-v2v',
+    '--seedance-task-type', 'extend',
+    '--ref-video', 'https://example.com/source.mp4',
+    '--duration', '8',
+    'Continue @Video1 after its final frame.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'seedance-2-5-spicy');
+  assert.equal(state.lastVideoProject.seedanceTaskType, 'extend');
+});
+
+test('json error: Seedance 2.5 Uncensored consent refusal (4103) is not retryable', () => {
+  const socketMessage =
+    'Seedance 2.5 Uncensored requires a one-time likeness and consent agreement. Review and accept it in the Sogni app, then try again.';
+  const { exitCode, stdout } = runCli([
+    '--json', '--video', '-m', 'seedance2-5-spicy', 'A quiet bookshop.'
+  ], {
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: `All 1 video generation jobs failed: ${socketMessage}`
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.success, false);
+  assert.equal(payload.errorType, 'PERMISSION_REQUIRED');
+  assert.equal(payload.errorCategory, 'permission_required');
+  assert.equal(payload.retryable, false);
+  assert.equal(payload.error, socketMessage);
+  assert.equal(payload.metadata.error, 'model_consent_required');
+  assert.equal(payload.metadata.errorCode, 4103);
+  assert.equal(payload.metadata.nextAction, 'wait_for_user');
+});
+
 test('Seedance export flags reject other video models', () => {
   expectCliError(['--video', '-m', 'seedance2', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
   expectCliError(['--video', '-m', 'seedance2', '--output-format', 'mov', 'A quiet bookshop.'], 'Video output format must be');

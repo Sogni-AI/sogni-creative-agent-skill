@@ -112,7 +112,10 @@ import {
   checkMinimaxH3Keyframes,
   isMinimaxH3KeyframeModelId,
   minimaxH3KeyframeFrameIndex,
-  MINIMAX_H3_MAX_KEYFRAMES
+  MINIMAX_H3_MAX_KEYFRAMES,
+  // Socket 4103: Seedance 2.5 Uncensored needs the account's one-time likeness
+  // and consent agreement, accepted in the Sogni app.
+  modelConsentRequiredPayloadFromError
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
   HAPPYHORSE_REFERENCE_LIMITS,
@@ -792,6 +795,22 @@ function classifyCliError(error, context = {}) {
         'do not retry sooner and do not poll. To wait for a submitted project, run sogni-agent --result <projectId> --wait once.',
       retryable: true,
       metadata: { status: 429, retryAfterSeconds: wait },
+      technicalError: rawMessage
+    };
+  }
+
+  // Socket 4103: Seedance 2.5 Uncensored refuses every job until the account
+  // accepts its one-time likeness and consent agreement in the Sogni app. It
+  // must win over the Seedance failure matchers below, never be retried, and
+  // never be accepted by the CLI.
+  const consentPayload = modelConsentRequiredPayloadFromError(error);
+  if (consentPayload) {
+    return {
+      error_type: 'PERMISSION_REQUIRED',
+      category: 'permission_required',
+      message: consentPayload.message,
+      retryable: false,
+      metadata: consentPayload,
       technicalError: rawMessage
     };
   }
@@ -1921,12 +1940,30 @@ function isLightningImageModelSelection(modelId) {
   return LIGHTNING_IMAGE_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
 }
 
+// Seedance 2.5 Uncensored is the same model as Seedance 2.5 on a separate
+// uncensored account. Every Seedance 2.5 rule applies to it (4-30 s, MOV, last
+// frame, --seedance-task-type), but it keeps its own model id and is never
+// rewritten to seedance-2-5. These are its CLI names, in the same normalized
+// spelling as the Wan 3.0 Enhanced names below.
+const SEEDANCE_25_UNCENSORED_MODEL_ID = 'seedance-2-5-spicy';
+const SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS = new Set([
+  SEEDANCE_25_UNCENSORED_MODEL_ID,
+  'seedance2-5-spicy',
+  'seedance2-5-spicy-t2v',
+  'seedance2-5-spicy-ia2v',
+  'seedance2-5-spicy-v2v',
+  'seedance2-5-uncensored',
+  'seedance-2-5-uncensored',
+  'seedance-uncensored',
+  'seedance-spicy',
+]);
 const SEEDANCE_25_MODEL_SELECTIONS = new Set([
   'seedance-2-5',
   'seedance2-5',
   'seedance2-5-t2v',
   'seedance2-5-ia2v',
   'seedance2-5-v2v',
+  ...SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS,
 ]);
 
 const WAN3_MODEL_ID = 'wan3.0-video';
@@ -2032,9 +2069,19 @@ function isWan3EnhancedModelLocal(modelId) {
   return String(modelId || '').trim().toLowerCase() === WAN3_ENHANCED_MODEL_ID;
 }
 
+// "Seedance 2.5 Uncensored" -> "seedance-2-5-uncensored", so the friendly names
+// typed with spaces or dots match the selector set.
+function normalizeSeedanceModelSelectionLocal(modelId) {
+  return String(modelId || '').trim().toLowerCase().replace(/[\s_.]+/g, '-').replace(/-+/g, '-');
+}
+
+function isSeedance25UncensoredModelSelectionLocal(modelId) {
+  return SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(modelId));
+}
+
 function isSeedance25ModelSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
-  return SEEDANCE_25_MODEL_SELECTIONS.has(normalized);
+  return SEEDANCE_25_MODEL_SELECTIONS.has(normalized) || isSeedance25UncensoredModelSelectionLocal(modelId);
 }
 
 function normalizeMusicModelId(value) {
@@ -2757,6 +2804,7 @@ function resolveSkillVideoModelAlias(
   hasEndFrame = false,
 ) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  if (isSeedance25UncensoredModelSelectionLocal(normalized)) return SEEDANCE_25_UNCENSORED_MODEL_ID;
   if (isWan3EnhancedModelSelectionLocal(normalized)) return WAN3_ENHANCED_MODEL_ID;
   if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
   if (normalized === 'ltx25' || normalized === 'ltx25-t2v') {
@@ -4853,7 +4901,8 @@ Video Options:
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
   --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 native audio
 
-Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5):
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5 /
+seedance2-5-spicy):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; do not attach loose
     image, video, or audio references to the same request.
@@ -4861,8 +4910,8 @@ Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / see
     --ref-video extras. Anchor frame intent in the prompt with @Image1, @Image2,
     @Video1, @Audio1 etc. (e.g. "Use @Image1 as the opening shot reference").
     Up to 9 image / 3 video / 3 audio / 12 total references per video request
-    on the 2.0 family; seedance2-5 raises the caps to 30 image / 10 video /
-    10 audio / 50 total.
+    on the 2.0 family; seedance2-5 and seedance2-5-spicy raise the caps to 30
+    image / 10 video / 10 audio / 50 total.
   - Typed IA2V exception: with --workflow ia2v, --ref is a loose @Image
     reference beside --ref-audio, not a first_frame anchor. --ref-end is invalid.
   Combining native frame anchors with any loose reference is rejected client-side.
@@ -5081,6 +5130,11 @@ Seedance Video Model Selectors:
                                      --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (50 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
+  seedance2-5-spicy                 Seedance 2.5 Uncensored (also "Seedance Uncensored", "Seedance Spicy",
+                                     seedance-2-5-spicy): every Seedance 2.5 mode, limit, and option above.
+                                     Use it only when asked for. Each account first accepts a one-time
+                                     likeness and consent agreement in the Sogni app; until then jobs fail
+                                     with error 4103 (not retryable)
 
 HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/1080P):
   happyhorse-1.1-t2v                Text-to-video (also accepts the bare "happyhorse" alias)
@@ -9112,7 +9166,7 @@ function storyboardWorkflowImageQualityFromCli() {
 }
 
 function normalizeSeedance25StoryboardPlanDimensions(plan, targetResolution) {
-  if (!plan?.video || plan.video.model !== 'seedance2-5') return plan;
+  if (!plan?.video || !isSeedance25ModelSelectionLocal(plan.video.model)) return plan;
   const videoStep = plan.input?.steps?.find((step) => step?.toolName === 'generate_video');
   const ratioParts = String(plan.storyboardProject?.targetVideoAspectRatio || '')
     .split(':')

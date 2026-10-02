@@ -69,6 +69,29 @@ test('pinned SDK transports every Seedance 2.5 R2V task and the 50-file budget',
   assert.equal(maximum.keyFrames[0].referenceAudioURLs.length, 10);
 });
 
+test('pinned SDK transports Seedance 2.5 Uncensored R2V tasks under its own model id', () => {
+  for (const seedanceTaskType of ['reference', 'edit', 'extend']) {
+    const message = request({
+      modelId: 'seedance-2-5-spicy',
+      seedanceTaskType,
+      ...(seedanceTaskType === 'reference'
+        ? { referenceAudioUrls: ['https://cdn.example.com/voice.mp3'] }
+        : { referenceVideoUrls: ['https://cdn.example.com/source.mp4'] })
+    });
+    assert.equal(message.keyFrames[0].seedanceTaskType, seedanceTaskType);
+  }
+  const maximum = request({
+    modelId: 'seedance-2-5-spicy',
+    seedanceTaskType: 'reference',
+    referenceImageUrls: urls('image', 30, 'jpg'),
+    referenceVideoUrls: urls('video', 10, 'mp4'),
+    referenceAudioUrls: urls('audio', 10, 'mp3')
+  });
+  assert.equal(maximum.keyFrames[0].referenceImageURLs.length, 30);
+  assert.equal(maximum.keyFrames[0].referenceVideoURLs.length, 10);
+  assert.equal(maximum.keyFrames[0].referenceAudioURLs.length, 10);
+});
+
 test('pinned SDK keeps frame mode separate from typed R2V operations', () => {
   const frame = request({ referenceImage: new Blob(['frame'], { type: 'image/png' }) });
   assert.equal(frame.keyFrames[0].seedanceTaskType, undefined);

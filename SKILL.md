@@ -205,7 +205,7 @@ sogni-agent --music --lyrics $'[Verse]\nRise with the morning light\n[Chorus]\nW
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
-# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p).
+# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p; same for -m seedance2-5-spicy).
 # Edit inherits @Video1's ratio and uses its source duration; extend inherits
 # the ratio but uses the requested continuation duration.
 sogni-agent --video -m seedance2-5 --target-resolution 1080 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
@@ -399,7 +399,7 @@ When the requested image is meant to **repeat edge to edge without visible joins
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / Wan 3.0 Enhanced / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / Wan 3.0 Enhanced / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules. Seedance 2.5 Uncensored (`-m seedance2-5-spicy`, also "Seedance Uncensored" or "Seedance Spicy") has every Seedance 2.5 mode and limit; use it only when the user asks for it. Error 4103 means the account has not accepted its one-time likeness and consent agreement: tell the user to accept it in the Sogni app and do not retry.
 
 `ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 

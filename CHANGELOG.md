@@ -1,7 +1,17 @@
-## [3.54.4] - 2026-09-30
+## [3.54.4] - 2026-10-02
+
+### Features
+
+* `--music` without `-m` now runs MiniMax Music 3 (60 s by default, 10 to 300 s), like every other Sogni surface; ACE-Step 1.5 XL Turbo stays available by name. Without lyrics it sends an `[Intro]`..`[Outro]` section outline, because a bare Music 3 instrumental ends early. `--bpm`, `--keyscale`, `--timesig` and `--language` are written into the prompt, since Music 3 has no such controls, and a setting only ACE-Step has (`--music-shift`, `--composer-mode`, `--creativity`, `--duration` over 300, `--steps` under 10, `--sampler euler_ancestral`) runs on ACE-Step with a note, so existing commands keep working. The OpenClaw `defaultMusicModel`, the desktop extension and the loop maker follow.
+* `--status <projectId> --wait` and `--result <projectId> --wait` wait for a detached project over the live connection and fetch it when it finishes, making no requests while it renders (bounded by `-t`, default 1800 s; on timeout nothing is cancelled and the command to wait again is printed). A project this install submitted is taken back through the same app slot, never one a live process still holds. `--detach` prints this `waitCommand`; never re-run `--status` in a loop, and check without waiting at most once a minute.
 
 ### Bug Fixes
 
+* `--detach` lost every detached project: it printed the project id and exited the moment the request was handed to the connection, before Sogni received it, so the project never ran (nothing was charged) while the CLI reported it as submitted and still running, and `--status` / `--result` answered "Project not found". It now waits up to 30 s for Sogni's answer for each project; a refusal is reported as the error it is, and no answer as `PROJECT_SUBMISSION_UNCONFIRMED` with advice to check once before submitting again.
+* A 429 from Sogni is reported as a retryable `RATE_LIMITED` error that carries the server's Retry-After (`metadata.retryAfterSeconds`) and says not to retry sooner and not to poll. Sogni rate-limits per IP, so an agent that keeps asking can lock everyone behind that IP out.
+* Personal LoRA imports have no live status event: the docs now say to check `--get-personal-lora` at most once a minute.
+* Update the intelligence client to 4.7.1, which stops connect retry storms (capped backoff, stops on authentication and rate-limit refusals, disposes failed clients) and never resubmits a project Sogni already accepted.
+* The speech reference and interactive-worlds guide say to design a recurring narrator voice once and clone that take for every later line, because voice design invents a new voice on every call.
 * Local Seedance, Wan 3 and HappyHorse reference images, audio and video now upload with a presigned PUT (`/v1/image/uploadUrl` and `/v1/media/uploadUrl`), the way the SDK and `--api-chat` references already do, instead of the `/v2` form POST. Sogni's temporary generation media is moving to Cloudflare R2, which has no form POST, so the old path kept those uploads on the previous store. The results are the same: the reference reaches the model as a Sogni-hosted link that lasts 48 hours.
 * The CLI now checks the limits the form policy used to enforce before it uploads anything: 100 MiB per file and a type Sogni accepts (PNG, JPEG, WebP or GIF images; M4A, MP3, FLAC or WAV audio; MP4, QuickTime or WebM video). A file outside them fails with `MEDIA_REFERENCE_TOO_LARGE` or `UNSUPPORTED_MEDIA_TYPE` instead of an error from the server.
 

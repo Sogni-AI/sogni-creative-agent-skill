@@ -173,14 +173,15 @@ test('runtime exposes canonical skill error classification and prompt-injection 
   assert.equal(signals[0].tool_call_id, 'call_1');
 });
 
-test('runtime batch prompt sanitizer preserves dynamic groups and aspect ratios', () => {
-  const result = sanitizeBatchPrompt(
-    'a {red|blue} robot, 4 different versions in a grid, 16:9 aspect ratio'
-  );
-  assert.match(result, /\{red\|blue\}/);
-  assert.match(result, /16:9/);
-  assert.doesNotMatch(result, /\bgrid\b/i);
-  assert.doesNotMatch(result, /\bversions?\b/i);
+test('runtime batch prompt helper sends the authored prompt as written', () => {
+  // intelligence-client 4.7.2+ no longer rewrites batch prompts: the count comes from
+  // the typed count argument, and the words in the prompt are the user's own.
+  for (const prompt of [
+    'a {red|blue} robot, 4 different versions in a grid, 16:9 aspect ratio',
+    'Keep the caption "4 different poses" exactly. A lineup of six faces.',
+  ]) {
+    assert.equal(sanitizeBatchPrompt(prompt), prompt);
+  }
 });
 
 test('runtime guardrail plan extends implicit duration for quoted dialogue', () => {

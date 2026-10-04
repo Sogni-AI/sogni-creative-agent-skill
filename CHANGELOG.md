@@ -1,3 +1,10 @@
+## [3.54.5] - 2026-10-04
+
+### Bug Fixes
+
+* A reconnect to Sogni that took longer than 15 seconds could end the CLI with an error (exit 1) while it was still waiting for a render: the SDK's keep-alive pinged the connection before it had opened, which throws. Update the Sogni SDK (`@sogni-ai/sogni-client`) from 5.58.0 to 5.60.7, which pings only an open connection. It also keeps waiting on a running project when a status lookup fails, instead of counting the failed lookup toward ending the project as timed out, and no longer reconnects about once a second to a server that keeps closing the connection before signing it in.
+* Update the intelligence client to 4.9.3 and the bundled runtime to creative agent 2.9.9. A batch image prompt (`-n` above 1 without `{a|b}` variations) is now sent as written: words such as "grid", "versions" or "4 different poses" are no longer deleted from it, so a caption or a count the user asked for reaches the model. The `generate_image` guidance for hosted agents says the same.
+
 ## [3.54.4] - 2026-10-02
 
 ### Features

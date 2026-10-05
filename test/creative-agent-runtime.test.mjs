@@ -106,7 +106,9 @@ test('runtime exposes public storyboard adapters and skill manifests', () => {
   assert.equal(storyboardAdapterRegistry.getAdapter('wan22')?.modelId, 'wan');
   assert.equal(storyboardAdapterRegistry.getAdapter('flux-schnell'), null);
   assert.match(composeAdapterPromptGuidance(), /SEEDANCE STORYBOARD REFERENCES/);
-  assert.match(composeAdapterPromptGuidance(), /GPT IMAGE 2 ROUTING: When the user asks for a ChatGPT, OpenAI/);
+  // creative-agent 2.10.0: GPT Image 2 only when named; unversioned GPT requests route to 2.5.
+  assert.match(composeAdapterPromptGuidance(), /GPT IMAGE 2 ROUTING: Use model="gpt-image-2" only when the user explicitly names GPT Image 2/);
+  assert.match(composeAdapterPromptGuidance(), /GPT Image 2 is never a default/);
   assert.equal(composeAdapterPromptGuidance().match(/GPT IMAGE 2\.5 ROUTING:/g)?.length, 1);
 
   const project = buildStoryboardProject({

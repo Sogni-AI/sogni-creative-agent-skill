@@ -115,7 +115,9 @@ import {
   MINIMAX_H3_MAX_KEYFRAMES,
   // Socket 4103: Seedance 2.5 Uncensored needs the account's one-time likeness
   // and consent agreement, accepted in the Sogni app.
-  modelConsentRequiredPayloadFromError
+  modelConsentRequiredPayloadFromError,
+  // Socket 4104: the network holds the model (not yet available there).
+  modelNotYetAvailablePayloadFromError
 } from '@sogni-ai/sogni-intelligence-client/media';
 import {
   HAPPYHORSE_REFERENCE_LIMITS,
@@ -811,6 +813,21 @@ function classifyCliError(error, context = {}) {
       message: consentPayload.message,
       retryable: false,
       metadata: consentPayload,
+      technicalError: rawMessage
+    };
+  }
+
+  // Socket 4104: the network holds this model (for example released to
+  // staging only). Report the socket's message as is; it names models to try
+  // instead, and retrying cannot succeed until the model is made available.
+  const notYetAvailablePayload = modelNotYetAvailablePayloadFromError(error);
+  if (notYetAvailablePayload) {
+    return {
+      error_type: 'MODEL_UNAVAILABLE',
+      category: 'model_unavailable',
+      message: notYetAvailablePayload.message,
+      retryable: false,
+      metadata: notYetAvailablePayload,
       technicalError: rawMessage
     };
   }

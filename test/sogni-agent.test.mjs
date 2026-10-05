@@ -8646,6 +8646,60 @@ test('json error: Seedance 2.5 Uncensored consent refusal (4103) is not retryabl
   assert.equal(payload.metadata.nextAction, 'wait_for_user');
 });
 
+test('json error: a model held on the network (4104) keeps the socket message and is not retryable', () => {
+  const socketMessage =
+    'This model is not yet available, try Wan 3 Spicy or MiniMax H3 video in the meantime.';
+  for (const failure of [
+    // The SDK ErrorData the socket's jobError becomes.
+    { projectId: 'proj-1', code: 4104, message: socketMessage },
+    // The intelligence-client SogniModelNotYetAvailableError, as PROJECT_FAILED data.
+    {
+      projectId: 'proj-1',
+      code: 'MODEL_NOT_YET_AVAILABLE',
+      message: socketMessage,
+      details: { errorCode: 4104, modelId: 'seedance-2-5-uncensored' }
+    }
+  ]) {
+    const { exitCode, stdout } = runCli([
+      '--json', '--video', '-m', 'seedance2-5-uncensored', 'A quiet bookshop.'
+    ], {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({ event: 'PROJECT_FAILED', payload: failure })
+    });
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim().split('\n').pop());
+    assert.equal(payload.success, false);
+    assert.equal(payload.error, socketMessage);
+    assert.equal(payload.errorType, 'MODEL_UNAVAILABLE');
+    assert.equal(payload.errorCategory, 'model_unavailable');
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.metadata.error, 'model_not_yet_available');
+    assert.equal(payload.metadata.errorCode, 4104);
+    assert.equal(payload.metadata.nextAction, 'wait_for_user');
+    assert.equal('consentRequired' in payload.metadata, false);
+  }
+
+  const human = runCli(['--video', '-m', 'seedance2-5-uncensored', 'A quiet bookshop.'], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+      event: 'PROJECT_FAILED',
+      payload: { projectId: 'proj-1', code: 4104, message: socketMessage }
+    })
+  });
+  assert.equal(human.exitCode, 1);
+  assert.match(human.stderr, /^Error: This model is not yet available, try Wan 3 Spicy or MiniMax H3 video in the meantime\.$/m);
+
+  // The price estimate endpoint refuses with the plain-text message only.
+  const quote = runCli(
+    ['--json', '--video', '-m', 'seedance2-5-uncensored', '--estimate-video-cost', 'A quiet bookshop.'],
+    { SOGNI_AGENT_TEST_VIDEO_COST_ERROR: socketMessage }
+  );
+  assert.equal(quote.exitCode, 1);
+  const quotePayload = JSON.parse(quote.stdout.trim().split('\n').pop());
+  assert.equal(quotePayload.error, socketMessage);
+  assert.equal(quotePayload.errorType, 'MODEL_UNAVAILABLE');
+  assert.equal(quotePayload.retryable, false);
+  assert.equal(quotePayload.metadata.error, 'model_not_yet_available');
+});
+
 test('Seedance export flags reject other video models', () => {
   expectCliError(['--video', '-m', 'seedance2', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
   expectCliError(['--video', '-m', 'seedance2', '--output-format', 'mov', 'A quiet bookshop.'], 'Video output format must be');

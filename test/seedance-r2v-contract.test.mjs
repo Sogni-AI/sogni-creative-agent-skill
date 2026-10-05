@@ -72,7 +72,7 @@ test('pinned SDK transports every Seedance 2.5 R2V task and the 50-file budget',
 test('pinned SDK transports Seedance 2.5 Uncensored R2V tasks under its own model id', () => {
   for (const seedanceTaskType of ['reference', 'edit', 'extend']) {
     const message = request({
-      modelId: 'seedance-2-5-spicy',
+      modelId: 'seedance-2-5-uncensored',
       seedanceTaskType,
       ...(seedanceTaskType === 'reference'
         ? { referenceAudioUrls: ['https://cdn.example.com/voice.mp3'] }
@@ -81,7 +81,7 @@ test('pinned SDK transports Seedance 2.5 Uncensored R2V tasks under its own mode
     assert.equal(message.keyFrames[0].seedanceTaskType, seedanceTaskType);
   }
   const maximum = request({
-    modelId: 'seedance-2-5-spicy',
+    modelId: 'seedance-2-5-uncensored',
     seedanceTaskType: 'reference',
     referenceImageUrls: urls('image', 30, 'jpg'),
     referenceVideoUrls: urls('video', 10, 'mp4'),

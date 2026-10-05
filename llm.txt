@@ -7,7 +7,7 @@ Manus AI, and other SKILL.md-aware agent runtimes.
 Current capabilities and limits: read `references/models.md` before answering
 model-selection questions. Seedance 2.5 supports 1080p with
 `--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,
-and optional last-frame images. Seedance 2.5 Uncensored (`-m seedance2-5-spicy`)
+and optional last-frame images. Seedance 2.5 Uncensored (`-m seedance2-5-uncensored`)
 has the same limits; use it only when asked, and on error 4103 tell the user to
 accept its one-time likeness and consent agreement in the Sogni app (never
 retry). Other recent additions include FastH3

@@ -1945,17 +1945,17 @@ function isLightningImageModelSelection(modelId) {
 // frame, --seedance-task-type), but it keeps its own model id and is never
 // rewritten to seedance-2-5. These are its CLI names, in the same normalized
 // spelling as the Wan 3.0 Enhanced names below.
-const SEEDANCE_25_UNCENSORED_MODEL_ID = 'seedance-2-5-spicy';
+const SEEDANCE_25_UNCENSORED_MODEL_ID = 'seedance-2-5-uncensored';
 const SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS = new Set([
   SEEDANCE_25_UNCENSORED_MODEL_ID,
-  'seedance2-5-spicy',
-  'seedance2-5-spicy-t2v',
-  'seedance2-5-spicy-ia2v',
-  'seedance2-5-spicy-v2v',
   'seedance2-5-uncensored',
-  'seedance-2-5-uncensored',
+  'seedance2-5-uncensored-t2v',
+  'seedance2-5-uncensored-ia2v',
+  'seedance2-5-uncensored-v2v',
   'seedance-uncensored',
   'seedance-spicy',
+  // The friendly name "Seedance 2.5 Spicy", normalized.
+  'seedance-2-5-spicy',
 ]);
 const SEEDANCE_25_MODEL_SELECTIONS = new Set([
   'seedance-2-5',
@@ -4902,7 +4902,7 @@ Video Options:
   --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 native audio
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5 /
-seedance2-5-spicy):
+seedance2-5-uncensored):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; do not attach loose
     image, video, or audio references to the same request.
@@ -4910,7 +4910,7 @@ seedance2-5-spicy):
     --ref-video extras. Anchor frame intent in the prompt with @Image1, @Image2,
     @Video1, @Audio1 etc. (e.g. "Use @Image1 as the opening shot reference").
     Up to 9 image / 3 video / 3 audio / 12 total references per video request
-    on the 2.0 family; seedance2-5 and seedance2-5-spicy raise the caps to 30
+    on the 2.0 family; seedance2-5 and seedance2-5-uncensored raise the caps to 30
     image / 10 video / 10 audio / 50 total.
   - Typed IA2V exception: with --workflow ia2v, --ref is a loose @Image
     reference beside --ref-audio, not a first_frame anchor. --ref-end is invalid.
@@ -5130,8 +5130,8 @@ Seedance Video Model Selectors:
                                      --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (50 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
-  seedance2-5-spicy                 Seedance 2.5 Uncensored (also "Seedance Uncensored", "Seedance Spicy",
-                                     seedance-2-5-spicy): every Seedance 2.5 mode, limit, and option above.
+  seedance2-5-uncensored            Seedance 2.5 Uncensored (also "Seedance Uncensored", "Seedance Spicy",
+                                     seedance-2-5-uncensored): every Seedance 2.5 mode, limit, and option above.
                                      Use it only when asked for. Each account first accepts a one-time
                                      likeness and consent agreement in the Sogni app; until then jobs fail
                                      with error 4103 (not retryable)

@@ -28,6 +28,9 @@ const NPM_PACKAGE = '@sogni-ai/sogni-creative-agent-skill';
 const CLAWHUB_OWNER = 'sogni-ai';
 const CLAWHUB_SLUG = 'sogni-creative-agent-skill';
 const CLAWHUB_NAME = 'Sogni Creative Agent Skill';
+// The ClawHub CLI is an exact devDependency (see package.json); run that copy,
+// never `npx clawhub@latest`, which runs whatever was last published.
+const CLAWHUB_BIN = join(repoRoot, 'node_modules', '.bin', 'clawhub');
 const CLAWHUB_REF = `@${CLAWHUB_OWNER}/${CLAWHUB_SLUG}`;
 
 // Skill documents and directories copied as they are.
@@ -75,7 +78,7 @@ function run(cmd, args, options = {}) {
 }
 
 function clawhub(args, options = {}) {
-  return run('npx', ['-y', 'clawhub@latest', ...args], options);
+  return run(CLAWHUB_BIN, args, options);
 }
 
 function clawhubState() {
@@ -230,7 +233,7 @@ let login = '';
 try {
   login = clawhub(['whoami']).trim().split('\n').pop();
 } catch (error) {
-  fail(`not logged in to ClawHub (${String(error.stderr ?? error.message).trim()}). Run npx -y clawhub@latest login with a member of @${CLAWHUB_OWNER}.`);
+  fail(`not logged in to ClawHub (${String(error.stderr ?? error.message).trim()}). Run npx --no-install clawhub login with a member of @${CLAWHUB_OWNER}.`);
 }
 
 const before = clawhubState();
@@ -258,12 +261,12 @@ const publishArgs = [
   '--changelog', changelog,
 ];
 if (opts.dryRun) {
-  const result = spawnSync('npx', ['-y', 'clawhub@latest', ...publishArgs, '--dry-run'], { cwd: repoRoot, stdio: 'inherit' });
+  const result = spawnSync(CLAWHUB_BIN, [...publishArgs, '--dry-run'], { cwd: repoRoot, stdio: 'inherit' });
   if (result.status !== 0) fail(`clawhub publish --dry-run exited ${result.status}; the staged files are in ${stageDir}`);
   console.log(`Dry run only. The staged files are in ${stageDir}`);
   process.exit(0);
 }
-const result = spawnSync('npx', ['-y', 'clawhub@latest', ...publishArgs, '--json'], {
+const result = spawnSync(CLAWHUB_BIN, [...publishArgs, '--json'], {
   cwd: repoRoot,
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'inherit'],

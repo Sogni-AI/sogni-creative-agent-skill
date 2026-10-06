@@ -645,8 +645,9 @@ Uncensored**: the same BytePlus model as `seedance2-5`, run on a separate
 uncensored account. Everything in [Seedance 2.5](#seedance-25) applies to it
 unchanged: 4-30 s at 24 fps, 480p/720p/1080p (no 4K), MP4/MOV and
 `--return-last-frame`, first/last frames, `--seedance-task-type`, audio-only
-references, the 30 / 10 / 10 / 50 reference budget, Premium Spark only, and the
-same price.
+references, the 30 / 10 / 10 / 50 reference budget and Premium Spark only. It
+costs about twice as much as Seedance 2.5 for the same settings; quote a render
+with `--estimate-video-cost`.
 
 - **Names**: `-m seedance2-5-uncensored`, or the friendly names "Seedance 2.5
   Uncensored", "Seedance Uncensored", "Seedance 2.5 Spicy" and "Seedance
@@ -661,6 +662,9 @@ same price.
   non-retryable `PERMISSION_REQUIRED` error that tells the user to accept the
   agreement in the Sogni app. Do not retry, and never try to accept it for the
   user (an API-key session cannot). Price estimates still work beforehand.
+- **Not yet released**: where Sogni has not released the model yet, jobs and
+  price estimates fail with error `4104`, reported as a non-retryable
+  `MODEL_UNAVAILABLE` error whose message names the models to use instead.
 
 ## HappyHorse 1.1 models
 

@@ -1,4 +1,9 @@
-## [3.54.6] - 2026-10-05
+## [3.55.0] - 2026-10-06
+
+### Features
+
+* Seedance 2.5 Uncensored: `-m seedance2-5-uncensored` (with `-t2v`, `-ia2v` and `-v2v` forms, or the names "Seedance 2.5 Uncensored", "Seedance Uncensored", "Seedance 2.5 Spicy" and "Seedance Spicy") runs Sogni model `seedance-2-5-uncensored`, which has every Seedance 2.5 mode and limit and costs about twice as much. It never becomes `seedance-2-5`, and plain `seedance2-5` never becomes it. Each account accepts a one-time likeness and consent agreement in the Sogni app first; until then jobs fail with error 4103, reported as a non-retryable `PERMISSION_REQUIRED` error. Where Sogni has not released the model yet, jobs and estimates fail with error 4104, reported as a non-retryable `MODEL_UNAVAILABLE` error that names the models to use instead.
+* Update the Sogni SDK (`@sogni-ai/sogni-client`) to 5.61.0 and the intelligence client to 4.11.0, which carry the new model and both errors. The intelligence client now reports a failed project's reason as the server's message instead of "[object Object]".
 
 ### Bug Fixes
 

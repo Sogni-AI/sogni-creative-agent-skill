@@ -1,3 +1,10 @@
+## [3.54.6] - 2026-10-05
+
+### Bug Fixes
+
+* An inline image, video or audio input larger than about 3 MB could fail with "Maximum call stack size exceeded" in a long-running process: the SDK checked the whole data URI with a regular expression that overflows once Node stops optimizing new ones. Update the Sogni SDK (`@sogni-ai/sogni-client`) from 5.60.7 to 5.60.8, which checks it without one; the same inputs are accepted and refused as before.
+* Update the intelligence client to 4.10.2 (creative agent 2.10.0). A ChatGPT, OpenAI, GPT or GPT Image request that names no version now runs on GPT Image 2.5; GPT Image 2 runs only when it is named.
+
 ## [3.54.5] - 2026-10-04
 
 ### Bug Fixes

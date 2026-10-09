@@ -205,7 +205,7 @@ sogni-agent --music --lyrics $'[Verse]\nRise with the morning light\n[Chorus]\nW
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "A polished product reveal with native ambient sound"
 
-# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p; same for -m seedance2-5-uncensored).
+# Seedance 2.5 loose-reference operations (fixed 24fps, 480p/720p/1080p; same for -m seedance2-5-uncensored; -m seedance2-mini-uncensored follows seedance2-mini).
 # Edit inherits @Video1's ratio and uses its source duration; extend inherits
 # the ratio but uses the requested continuation duration.
 sogni-agent --video -m seedance2-5 --target-resolution 1080 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"

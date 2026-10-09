@@ -113,8 +113,9 @@ import {
   isMinimaxH3KeyframeModelId,
   minimaxH3KeyframeFrameIndex,
   MINIMAX_H3_MAX_KEYFRAMES,
-  // Socket 4103: Seedance 2.5 Uncensored needs the account's one-time likeness
-  // and consent agreement, accepted in the Sogni app.
+  // Socket 4103: Seedance 2.5 Uncensored and Seedance 2.0 Mini Uncensored need
+  // the account's one-time likeness and consent agreement (one agreement for
+  // both), accepted in the Sogni app.
   modelConsentRequiredPayloadFromError,
   // Socket 4104: the network holds the model (not yet available there).
   modelNotYetAvailablePayloadFromError
@@ -801,8 +802,9 @@ function classifyCliError(error, context = {}) {
     };
   }
 
-  // Socket 4103: Seedance 2.5 Uncensored refuses every job until the account
-  // accepts its one-time likeness and consent agreement in the Sogni app. It
+  // Socket 4103: Seedance 2.5 Uncensored and Seedance 2.0 Mini Uncensored refuse
+  // every job until the account accepts their shared one-time likeness and
+  // consent agreement in the Sogni app. The message names the refused model. It
   // must win over the Seedance failure matchers below, never be retried, and
   // never be accepted by the CLI.
   const consentPayload = modelConsentRequiredPayloadFromError(error);
@@ -1762,7 +1764,8 @@ function buildProjectResultError(projectResult, fallback = 'Project failed') {
   const err = new Error(message);
   // SDK create responses and error events must keep the same typed failure.
   // In particular, an object-valued error must never become "[object Object]".
-  for (const key of ['code', 'originalCode', 'errorCode', 'error_code', 'details', 'hint', 'originalError', 'isNSFW']) {
+  // consentRequired is the agreement a 4103 refusal names, which --json reports.
+  for (const key of ['code', 'originalCode', 'errorCode', 'error_code', 'details', 'hint', 'originalError', 'isNSFW', 'consentRequired']) {
     const value = failure?.[key] ?? projectResult?.[key];
     if (value !== undefined) err[key] = value;
   }
@@ -1974,6 +1977,18 @@ const SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS = new Set([
   // The friendly name "Seedance 2.5 Spicy", normalized.
   'seedance-2-5-spicy',
 ]);
+// Seedance 2.0 Mini Uncensored is the same model as Seedance 2.0 Mini on the
+// uncensored account Seedance 2.5 Uncensored uses. Every Mini rule applies to it
+// (the shared runtime treats it as Mini), but it keeps its own model id and is
+// never rewritten to seedance-2-0-mini or to Seedance 2.5 Uncensored. These are
+// its exact CLI names; isSeedanceMiniUncensoredModelSelectionLocal also accepts
+// Seedance + Mini + Uncensored/Spicy in any word order.
+const SEEDANCE_MINI_UNCENSORED_MODEL_ID = 'seedance-2-0-mini-uncensored';
+const SEEDANCE_MINI_UNCENSORED_MODEL_SELECTIONS = new Set([
+  SEEDANCE_MINI_UNCENSORED_MODEL_ID,
+  'seedance2-mini-uncensored',
+  'seedance2-mini-uncensored-t2v',
+]);
 const SEEDANCE_25_MODEL_SELECTIONS = new Set([
   'seedance-2-5',
   'seedance2-5',
@@ -2094,6 +2109,21 @@ function normalizeSeedanceModelSelectionLocal(modelId) {
 
 function isSeedance25UncensoredModelSelectionLocal(modelId) {
   return SEEDANCE_25_UNCENSORED_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(modelId));
+}
+
+// "Seedance 2.0 Mini Uncensored", "Seedance Mini Spicy", "Uncensored Seedance
+// Mini", "Spicy Seedance 2.0 Mini": Seedance, Mini and Uncensored or Spicy in any
+// order, with an optional 2 / 2.0 version and nothing else.
+const SEEDANCE_MINI_UNCENSORED_NAME_WORDS = new Set(['seedance', 'seedance2', 'mini', 'uncensored', 'spicy', '2', '0']);
+
+function isSeedanceMiniUncensoredModelSelectionLocal(modelId) {
+  const normalized = normalizeSeedanceModelSelectionLocal(modelId);
+  if (SEEDANCE_MINI_UNCENSORED_MODEL_SELECTIONS.has(normalized)) return true;
+  const words = normalized.split('-').filter(Boolean);
+  return words.every((word) => SEEDANCE_MINI_UNCENSORED_NAME_WORDS.has(word))
+    && (words.includes('seedance') || words.includes('seedance2'))
+    && words.includes('mini')
+    && (words.includes('uncensored') || words.includes('spicy'));
 }
 
 function isSeedance25ModelSelectionLocal(modelId) {
@@ -2821,6 +2851,8 @@ function resolveSkillVideoModelAlias(
   hasEndFrame = false,
 ) {
   const normalized = String(modelId || '').trim().toLowerCase();
+  // Mini Uncensored first: "Uncensored Seedance Mini" must never read as 2.5 Uncensored.
+  if (isSeedanceMiniUncensoredModelSelectionLocal(normalized)) return SEEDANCE_MINI_UNCENSORED_MODEL_ID;
   if (isSeedance25UncensoredModelSelectionLocal(normalized)) return SEEDANCE_25_UNCENSORED_MODEL_ID;
   if (isWan3EnhancedModelSelectionLocal(normalized)) return WAN3_ENHANCED_MODEL_ID;
   if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
@@ -4918,8 +4950,8 @@ Video Options:
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
   --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 native audio
 
-Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-fast / seedance2-5 /
-seedance2-5-uncensored):
+Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-mini-uncensored /
+seedance2-fast / seedance2-5 / seedance2-5-uncensored):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; do not attach loose
     image, video, or audio references to the same request.
@@ -5139,6 +5171,10 @@ Music Models:
 Seedance Video Model Selectors:
   seedance2                         Seedance 2.0 text-to-video, 4-15s, native audio, HTTPS multimodal refs
   seedance2-mini                    Lower-cost 720p-capped text-to-video
+  seedance2-mini-uncensored         Seedance 2.0 Mini Uncensored (also "Seedance Mini Uncensored", "Seedance Mini Spicy",
+                                     seedance-2-0-mini-uncensored): every Seedance 2.0 Mini mode, limit, and option.
+                                     Use it only when asked for. It shares the Seedance 2.5 Uncensored likeness and
+                                     consent agreement; until the account accepts it jobs fail with error 4103 (not retryable)
   seedance2-fast                    Legacy fast 720p-capped text-to-video
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet

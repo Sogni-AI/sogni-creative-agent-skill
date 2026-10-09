@@ -42,8 +42,9 @@ Honor requests to wait for user input; model-specific policies still apply.
 - Upscale a finished video: `sogni-agent --upscale-video ./clip.mp4 --upscale-resolution 1080 -o ./clip-1080p.mp4` (promptless FlashVSR; also supports 1440p)
 - MiniMax H3 reference-to-video: `sogni-agent --video -m minimax-h3-r2v --ref <identity> -c <wardrobe> --ref-video <motion> --ref-audio <voice> "<Picture 1> controls identity; <Picture 2> controls wardrobe; <Video 1> controls motion; <Audio 1> controls voice."`
 - Alibaba Wan 3 unified video: `sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 "a presenter says 'Welcome' in a detailed studio"`
-- Wan 3.0 Enhanced through MuleRouter: `sogni-agent --video -m wan3-enhanced --target-resolution 1080 --smart-duration --wan3-ratio adaptive "a presenter says 'Welcome' in a detailed studio"`
 - Seedance 2.5 Uncensored, only when asked: `sogni-agent --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 "a slow dolly through a neon street at night"` (same limits as Seedance 2.5; error 4103 means the user must accept the one-time likeness and consent agreement in the Sogni app; do not retry)
+- Seedance 2.0 Mini Uncensored, only when asked: `sogni-agent --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 "a slow dolly through a neon street at night"` (same limits as Seedance 2.0 Mini; shares the Seedance 2.5 Uncensored agreement, so error 4103 means the user must accept it in the Sogni app; do not retry)
+- Wan 3.0 Enhanced through MuleRouter: `sogni-agent --video -m wan3-enhanced --target-resolution 1080 --smart-duration --wan3-ratio adaptive "a presenter says 'Welcome' in a detailed studio"`
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
 - One-click image-folder loop in Codex: `$sogni-creative-agent:loop-maker ./images`
 - Music (MiniMax Music 3 by default): `sogni-agent --music --duration 30 "ambient drone, 60 BPM, D minor"`

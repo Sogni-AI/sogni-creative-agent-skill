@@ -92,6 +92,25 @@ test('pinned SDK transports Seedance 2.5 Uncensored R2V tasks under its own mode
   assert.equal(maximum.keyFrames[0].referenceAudioURLs.length, 10);
 });
 
+test('pinned SDK transports Seedance 2.0 Mini Uncensored with the Mini limits under its own model id', () => {
+  const maximum = request({
+    modelId: 'seedance-2-0-mini-uncensored',
+    referenceImageUrls: urls('image', 9, 'jpg'),
+    referenceVideoUrls: urls('video', 3, 'mp4')
+  });
+  assert.equal(maximum.keyFrames[0].modelID, 'seedance-2-0-mini-uncensored');
+  assert.equal(maximum.keyFrames[0].referenceImageURLs.length, 9);
+  assert.equal(maximum.keyFrames[0].referenceVideoURLs.length, 3);
+  assert.throws(
+    () => request({ modelId: 'seedance-2-0-mini-uncensored', referenceImageUrls: urls('image', 10, 'jpg') }),
+    /at most 9 image assets/
+  );
+  assert.throws(
+    () => request({ modelId: 'seedance-2-0-mini-uncensored', seedanceTaskType: 'reference', referenceImageUrls: urls('image', 1, 'jpg') }),
+    /only by Seedance 2\.5/
+  );
+});
+
 test('pinned SDK keeps frame mode separate from typed R2V operations', () => {
   const frame = request({ referenceImage: new Blob(['frame'], { type: 'image/png' }) });
   assert.equal(frame.keyFrames[0].seedanceTaskType, undefined);

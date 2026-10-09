@@ -16,6 +16,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Video models — current selectors
 - Seedance 2.5
 - Seedance 2.5 Uncensored
+- Seedance 2.0 Mini Uncensored
 - HappyHorse 1.1 models
 - Alibaba Wan 3
 - Wan 3.0 Enhanced
@@ -503,6 +504,7 @@ Read [hosted-api.md](./hosted-api.md) for execution and
 | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast, 32GB+ Fast workers | Opt-in mature-theme image-to-video with native audio |
 | `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio, up to native 4K |
 | `seedance2-mini` | Variable | Seedance 2.0 Mini text-to-video, lower-cost 720p path |
+| `seedance2-mini-uncensored` | Variable | Seedance 2.0 Mini Uncensored: every Seedance 2.0 Mini mode and limit under its own model id; shares the Seedance 2.5 Uncensored likeness and consent agreement |
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
@@ -570,6 +572,7 @@ itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
 | `wan22-animate-replace` | `wan_v2.2-14b-fp8_animate-replace_lightx2v` |
 | `seedance2`, `seedance2-t2v`, `seedance2-ia2v`, `seedance2-v2v` | `seedance-2-0` (suffix picks the workflow) |
 | `seedance2-mini`, `seedance2-mini-t2v` | `seedance-2-0-mini` |
+| `seedance2-mini-uncensored`, `seedance2-mini-uncensored-t2v`, `seedance-mini-uncensored`, `seedance-mini-spicy` | `seedance-2-0-mini-uncensored` (Seedance 2.0 Mini Uncensored; never `seedance-2-0-mini`) |
 | `seedance2-fast`, `seedance2-fast-t2v` | `seedance-2-0-fast` |
 | `seedance2-5`, `seedance2-5-t2v`, `seedance2-5-ia2v`, `seedance2-5-v2v` | `seedance-2-5` (suffix picks the workflow) |
 | `seedance2-5-uncensored`, `seedance2-5-uncensored-t2v`, `seedance2-5-uncensored-ia2v`, `seedance2-5-uncensored-v2v`, `seedance-uncensored`, `seedance-spicy` | `seedance-2-5-uncensored` (Seedance 2.5 Uncensored; never `seedance-2-5`) |
@@ -646,16 +649,16 @@ uncensored account. Everything in [Seedance 2.5](#seedance-25) applies to it
 unchanged: 4-30 s at 24 fps, 480p/720p/1080p (no 4K), MP4/MOV and
 `--return-last-frame`, first/last frames, `--seedance-task-type`, audio-only
 references, the 30 / 10 / 10 / 50 reference budget and Premium Spark only. It
-costs about twice as much as Seedance 2.5 for the same settings; quote a render
-with `--estimate-video-cost`.
+comes at a premium rate above Seedance 2.5; quote a render with
+`--estimate-video-cost`.
 
 - **Names**: `-m seedance2-5-uncensored`, or the friendly names "Seedance 2.5
   Uncensored", "Seedance Uncensored", "Seedance 2.5 Spicy" and "Seedance
   Spicy". It is a separate model id: a request for it is never sent as
   `seedance-2-5`, and plain `seedance2-5` never becomes the uncensored model.
 - **When to use**: only when the user asks for Seedance 2.5 Uncensored or for
-  uncensored Seedance output. It is offered next to Wan 3.0 Enhanced as an
-  uncensored video option.
+  uncensored Seedance output. Among uncensored video options, list Seedance 2.5
+  Uncensored and Seedance 2.0 Mini Uncensored before Wan 3.0 Enhanced.
 - **Likeness and consent agreement**: each account must accept a one-time
   likeness and consent agreement in a Sogni app (web or chat) before its first
   render. Until then every job fails with error `4103`; the CLI reports it as a
@@ -665,6 +668,38 @@ with `--estimate-video-cost`.
 - **Not yet released**: where Sogni has not released the model yet, jobs and
   price estimates fail with error `4104`, reported as a non-retryable
   `MODEL_UNAVAILABLE` error whose message names the models to use instead.
+
+## Seedance 2.0 Mini Uncensored
+
+`seedance2-mini-uncensored` (Sogni model `seedance-2-0-mini-uncensored`) is
+**Seedance 2.0 Mini Uncensored**: the same BytePlus model as `seedance2-mini`,
+run on the uncensored account Seedance 2.5 Uncensored uses. Everything about
+`seedance2-mini` applies to it unchanged: 4-15 s at 24 fps, 480p/720p, MP4
+only, the 9 / 3 / 3 / 12 reference budget, no `--seedance-task-type`, no
+audio-only references and Premium Spark only. It comes at a premium rate above
+Seedance 2.0 Mini; quote a render with `--estimate-video-cost`.
+
+- **Names**: `-m seedance2-mini-uncensored` (or `seedance2-mini-uncensored-t2v`),
+  or a friendly name with Seedance, Mini and Uncensored or Spicy in any word
+  order: "Seedance 2.0 Mini Uncensored", "Seedance Mini Uncensored", "Seedance
+  Mini Spicy", "Uncensored Seedance Mini". It is a separate model id: a request
+  for it is never sent as `seedance-2-0-mini` or as Seedance 2.5 Uncensored, and
+  plain `seedance2-mini` never becomes the uncensored model.
+- **When to use**: only when the user asks for Seedance 2.0 Mini Uncensored or
+  for uncensored Seedance Mini output.
+- **Likeness and consent agreement**: it shares the one-time likeness and
+  consent agreement of Seedance 2.5 Uncensored; an account that accepted it in a
+  Sogni app can use both. Until then every job fails with error `4103`, which
+  the CLI reports as a non-retryable `PERMISSION_REQUIRED` error naming Seedance
+  2.0 Mini Uncensored. Do not retry, and never try to accept it for the user.
+- **Not yet released**: where Sogni has not released the model yet, jobs and
+  price estimates fail with error `4104`, reported as a non-retryable
+  `MODEL_UNAVAILABLE` error whose message names the models to use instead.
+
+A regular Seedance model's content refusal (a declined prompt or the provider's
+content policy) carries the socket's own message, which names the uncensored
+Seedance counterpart first where Sogni has released it. The CLI reports that
+message as written.
 
 ## HappyHorse 1.1 models
 
@@ -1283,6 +1318,7 @@ model recommendations.
 | Seedance 2.5 single clip up to 30s (480p/720p/1080p, MP4/MOV and last-frame export) | `seedance2-5` |
 | Seedance 2.5 video-to-video, editing, or extension | `seedance2-5-v2v` |
 | Seedance 2.5 Uncensored, only when the user asks for it | `seedance2-5-uncensored` |
+| Seedance 2.0 Mini Uncensored, only when the user asks for it | `seedance2-mini-uncensored` |
 | HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
 | HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
 | HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
@@ -1315,7 +1351,7 @@ model recommendations.
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
 - **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels. Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-mini-uncensored`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini`, `seedance2-mini-uncensored` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.

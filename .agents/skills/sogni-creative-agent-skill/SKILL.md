@@ -103,8 +103,9 @@ sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transitio
 sogni-agent-hermes --video -m minimax-h3-fasth3-ia2v-turbo --ref ./first.png --ref-audio ./voice.m4a --duration 8 -o ./talking.mp4 "<I2V preamble plus three-field H3 prompt>"
 sogni-agent-hermes --video -m seedance2-5 --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A quiet bookshop, slow camera push-in, soft room ambience"
 sogni-agent-hermes --video -m wan3 --target-resolution 1080 --duration 8 -o ./wan3.mp4 'a presenter says "Welcome" in a detailed studio'
-sogni-agent-hermes --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 -o ./wan3-enhanced.mp4 'a presenter says "Welcome" in a detailed studio'
 sogni-agent-hermes --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 -o ./seedance-uncensored.mp4 "A slow dolly through a neon street at night"
+sogni-agent-hermes --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 -o ./seedance-mini-uncensored.mp4 "A slow dolly through a neon street at night"
+sogni-agent-hermes --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 -o ./wan3-enhanced.mp4 'a presenter says "Welcome" in a detailed studio'
 
 # Generate music
 sogni-agent-hermes --music -o ./soundtrack.mp3 "30-second ambient synth theme"
@@ -119,9 +120,10 @@ sogni-agent-hermes --help
 
 Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
 with optional `--output-format mov` and `--return-last-frame`. Seedance 2.5
-Uncensored (`seedance2-5-uncensored`) has the same limits; use it only when asked,
-and on error 4103 tell the user to accept its likeness and consent agreement in
-the Sogni app instead of retrying. FastH3 Two-Stage
+Uncensored (`seedance2-5-uncensored`) has the same limits and Seedance 2.0 Mini
+Uncensored (`seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only
+when asked, and on error 4103 tell the user to accept their shared likeness and
+consent agreement in the Sogni app instead of retrying. FastH3 Two-Stage
 delivers 720p/1080p/2K through its own model selector. FastH3 audio-to-video
 (`minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`) drives H3 with an
 uploaded `--ref-audio` track and keeps it as the soundtrack. Repeatable

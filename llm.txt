@@ -8,9 +8,10 @@ Current capabilities and limits: read `references/models.md` before answering
 model-selection questions. Seedance 2.5 supports 1080p with
 `--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,
 and optional last-frame images. Seedance 2.5 Uncensored (`-m seedance2-5-uncensored`)
-has the same limits; use it only when asked, and on error 4103 tell the user to
-accept its one-time likeness and consent agreement in the Sogni app (never
-retry). Other recent additions include FastH3
+has the same limits, and Seedance 2.0 Mini Uncensored
+(`-m seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only when
+asked, and on error 4103 tell the user to accept their shared one-time likeness
+and consent agreement in the Sogni app (never retry). Other recent additions include FastH3
 Two-Stage delivered 720p/1080p/2K, FastH3 audio-to-video from an uploaded track
 (`-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`, or
 `-flfa2v-turbo` / `-a2v-turbo`), MiniMax H3 keyframes that pin extra images at

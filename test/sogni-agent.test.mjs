@@ -8700,6 +8700,95 @@ test('json error: a model held on the network (4104) keeps the socket message an
   assert.equal(quotePayload.metadata.error, 'model_not_yet_available');
 });
 
+test('Seedance 2.0 Mini Uncensored keeps its own model id with the Seedance 2.0 Mini limits', () => {
+  const { exitCode, state, stderr } = runCli([
+    '--video', '-m', 'seedance2-mini-uncensored',
+    '--target-resolution', '720', '--duration', '15',
+    '--token-type', 'sogni',
+    'A slow dolly through a rain-soaked neon street at night.'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.modelId, 'seedance-2-0-mini-uncensored');
+  assert.equal(state.lastVideoProject.duration, 15);
+  assert.equal(state.lastVideoProject.tokenType, 'spark');
+  assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 720);
+  // Seedance 2.5 options stay Seedance 2.5-only.
+  expectCliError(['--video', '-m', 'seedance2-mini-uncensored', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
+});
+
+test('Seedance 2.0 Mini Uncensored names in any word order never resolve to Mini or Seedance 2.5 Uncensored', () => {
+  for (const model of [
+    'Seedance 2.0 Mini Uncensored',
+    'Seedance Mini Uncensored',
+    'Seedance 2.0 Mini Spicy',
+    'Seedance Mini Spicy',
+    'Uncensored Seedance Mini',
+    'Spicy Seedance Mini',
+    'Uncensored Seedance 2.0 Mini',
+    'Seedance Uncensored Mini',
+    'seedance-2-0-mini-uncensored',
+    'seedance2-mini-uncensored-t2v'
+  ]) {
+    const { exitCode, state, stderr } = runCli(['--video', '-m', model, '--duration', '8', 'A quiet bookshop.']);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    assert.equal(state.lastVideoProject.modelId, 'seedance-2-0-mini-uncensored', model);
+  }
+  for (const [model, modelId] of [
+    ['seedance2-mini', 'seedance-2-0-mini'],
+    ['Seedance Uncensored', 'seedance-2-5-uncensored'],
+    ['Seedance Spicy', 'seedance-2-5-uncensored']
+  ]) {
+    const { state } = runCli(['--video', '-m', model, '--duration', '8', 'A quiet bookshop.']);
+    assert.equal(state.lastVideoProject?.modelId, modelId, model);
+  }
+});
+
+test('json error: Seedance 2.0 Mini Uncensored consent refusal (4103) names the model and is not retryable', () => {
+  const socketMessage =
+    'Seedance 2.0 Mini Uncensored requires a one-time likeness and consent agreement. Review and accept it in the Sogni app, then try again.';
+  const consentRequired = { key: 'seedance-2-5-uncensored', version: 2, modelId: 'seedance-2-0-mini-uncensored' };
+  for (const env of [
+    { SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: `All 1 video generation jobs failed: ${socketMessage}` },
+    {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+        event: 'PROJECT_FAILED',
+        payload: { projectId: 'proj-1', code: 4103, message: socketMessage, consentRequired }
+      })
+    }
+  ]) {
+    const { exitCode, stdout } = runCli(['--json', '--video', '-m', 'seedance2-mini-uncensored', 'A quiet bookshop.'], env);
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim().split('\n').pop());
+    assert.equal(payload.success, false);
+    assert.equal(payload.errorType, 'PERMISSION_REQUIRED');
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.error, socketMessage);
+    assert.equal(payload.metadata.errorCode, 4103);
+    if (env.SOGNI_AGENT_TEST_FAILURE_EVENT_JSON) assert.deepEqual(payload.metadata.consentRequired, consentRequired);
+  }
+});
+
+test('json error: a Seedance content refusal keeps the socket message and its counterpart suggestion', () => {
+  const blocked = "Seedance blocked this video because it did not pass the provider's content policy. No video was returned.";
+  for (const socketMessage of [
+    `${blocked} Try Seedance 2.0 Mini Uncensored, Wan 3 Uncensored or MiniMax H3 instead.`,
+    `${blocked} Try Wan 3 Uncensored or MiniMax H3 instead.`
+  ]) {
+    const { exitCode, stdout } = runCli(['--json', '--video', '-m', 'seedance2-mini', 'A quiet bookshop.'], {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+        event: 'PROJECT_FAILED',
+        payload: { projectId: 'proj-1', code: 5061, message: socketMessage, vendorFailureCategory: 'content_policy' }
+      })
+    });
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim().split('\n').pop());
+    assert.equal(payload.errorType, 'SAFETY_REJECTED');
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.error, socketMessage);
+    assert.equal(payload.metadata.error, 'seedance_content_policy');
+  }
+});
+
 test('Seedance export flags reject other video models', () => {
   expectCliError(['--video', '-m', 'seedance2', '--return-last-frame', 'A quiet bookshop.'], '--return-last-frame requires Seedance 2.5');
   expectCliError(['--video', '-m', 'seedance2', '--output-format', 'mov', 'A quiet bookshop.'], 'Video output format must be');

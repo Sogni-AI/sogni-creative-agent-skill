@@ -1,3 +1,10 @@
+## [3.56.1] - 2026-10-10
+
+### Bug Fixes
+
+* `--upscale-video` rejected every video with "The source video dimensions, frame count, or frame rate could not be read" whenever it could not start ffprobe, even when ffprobe worked in the user's shell. It now says so, as `MISSING_FFPROBE`: `ffprobe is required for --upscale-video, but "<path>" could not be started (ENOENT)`, with a hint to set `FFPROBE_PATH` to the full path from `command -v ffprobe`. When ffprobe runs but cannot read the file, the hint now shows ffprobe's own error, such as "Invalid data found when processing input", and an ffprobe crash names its signal.
+* `FFPROBE_PATH` and `FFMPEG_PATH` values that start with `~/`, such as a quoted `"~/.local/bin/ffprobe"`, now expand to the home directory. Before, the literal path was run and failed as if the tool were missing.
+
 ## [3.56.0] - 2026-10-08
 
 ### Features

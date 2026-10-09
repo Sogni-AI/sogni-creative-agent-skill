@@ -271,7 +271,7 @@ const {
 
 // ---------------------------------------------------------------------------
 // Path sanitization — defense-in-depth for any value that becomes a file path
-// or process argument. execaSync runs argument arrays without shell expansion,
+// or process argument. execa runs argument arrays without shell expansion,
 // so classic shell injection is not possible. These checks guard against:
 //   • null-byte injection (can truncate paths at the C level)
 //   • control-character injection
@@ -280,7 +280,8 @@ const {
 
 /**
  * Reject null bytes and control characters in a path string.
- * Returns the path unchanged when valid; throws otherwise.
+ * Returns the path with a leading `~` expanded to the home directory, so
+ * callers must use the return value; throws when invalid.
  */
 function sanitizePath(p, label) {
   if (typeof p !== 'string') {
@@ -1616,8 +1617,7 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
       details: { sizeBytes: buffer.length, maxBytes: VIDEO_UPSCALE_MAX_BYTES }
     });
   }
-  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
-  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const tempDir = createTrackedTempDir('sogni-video-upscale-probe-');
   const inputPath = mediaTempInputPath(tempDir, sourceLabel, '.mp4');
   let result;
@@ -1636,11 +1636,13 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
   }
-  if (result?.error && result.status === null) {
-    const err = new Error('ffprobe is required for --upscale-video.');
+  // A signal means ffprobe started and then crashed on this file; that is
+  // reported with the unreadable-source error below, not as a missing ffprobe.
+  if (result?.error && result.status === null && !result.error.signal) {
+    const err = new Error(`ffprobe is required for --upscale-video, but "${ffprobePath}" could not be started (${result.error.code}).`);
     err.code = 'MISSING_FFPROBE';
-    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary.';
-    err.details = { ffprobePath };
+    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary. If ffprobe runs in your shell, set FFPROBE_PATH to the full path from `command -v ffprobe`.';
+    err.details = { ffprobePath, reason: result.error.code };
     throw err;
   }
   let stream = null;
@@ -1654,9 +1656,17 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
   const frames = Number(stream?.nb_read_frames);
   const fps = parseFrameRate(stream?.avg_frame_rate);
   if (result?.status !== 0 || ![width, height, frames].every((value) => Number.isSafeInteger(value) && value > 0) || !fps) {
+    // -count_frames decodes every frame, so a damaged file can print an error
+    // per frame; keep the tail, where ffprobe names the file-level failure.
+    // ffprobe names the temporary copy, so show the user's source instead.
+    const ffprobeError = [
+      String(result?.stderr || '').split(inputPath).join(sourceLabel).trim().slice(-500),
+      result?.error?.signal ? `ffprobe was stopped by ${result.error.signal}.` : '',
+    ].filter(Boolean).join('\n');
     fatalCliError('The source video dimensions, frame count, or frame rate could not be read. Use an MP4 or MOV file of 100 MB or less.', {
       code: 'INVALID_UPSCALE_SOURCE',
-      details: { source: sourceLabel }
+      details: { source: sourceLabel, ...(ffprobeError ? { ffprobeError } : {}) },
+      ...(ffprobeError ? { hint: `ffprobe reported: ${ffprobeError.split('\n').at(-1).trim()}` } : {})
     });
   }
   if (fps < VIDEO_UPSCALE_MIN_FPS || fps > VIDEO_UPSCALE_MAX_FPS) {
@@ -10796,8 +10806,7 @@ function withMediaExtension(filename, extension) {
 
 async function probeLocalMediaDurationSeconds(pathOrUrl) {
   if (isHttpUrl(pathOrUrl)) return undefined;
-  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
-  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const result = await runCommand(ffprobePath, [
     '-v', 'error',
     '-show_entries', 'format=duration',
@@ -10810,8 +10819,7 @@ async function probeLocalMediaDurationSeconds(pathOrUrl) {
 }
 
 async function probeMediaBufferDurationSeconds(buffer, filename) {
-  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
-  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const tempDir = createTrackedTempDir('sogni-wan3-probe-');
   const inputPath = mediaTempInputPath(tempDir, filename, '.media');
   try {
@@ -11501,8 +11509,7 @@ async function loadExeca() {
 }
 
 async function ensureFfmpegAvailable(operation = 'this audio/video operation') {
-  const ffmpegPath = getEnv('FFMPEG_PATH') || 'ffmpeg';
-  sanitizePath(ffmpegPath, 'FFMPEG_PATH');
+  const ffmpegPath = sanitizePath(getEnv('FFMPEG_PATH') || 'ffmpeg', 'FFMPEG_PATH');
   const result = await runCommand(ffmpegPath, ['-version'], { captureOutput: true });
   if (result.error || result.status !== 0) {
     const err = new Error(`ffmpeg is required for ${operation}.`);
@@ -11569,9 +11576,13 @@ async function runCommand(command, args, { captureOutput = false, env = undefine
   try {
     const { execa } = await loadExeca();
     const result = await execa(command, args, options);
+    // With reject: false, execa returns (rather than throws) a command that
+    // never exited: one it could not spawn (ENOENT, EACCES) or a signal kill.
+    // Report those like the catch below, as an error with a null status.
+    const exited = Number.isInteger(result.exitCode);
     return {
-      status: result.exitCode,
-      error: null,
+      status: exited ? result.exitCode : null,
+      error: exited ? null : result,
       stdout: result.stdout || '',
       stderr: result.stderr || ''
     };
@@ -11720,8 +11731,7 @@ function parseFrameRate(raw) {
 }
 
 function probeLocalVideoFrameRate(filePath) {
-  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
-  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   try {
     const stdout = execFileSync(
       ffprobePath,
@@ -11755,8 +11765,7 @@ async function probeVideoStreamInfo(filePath) {
     videoCodec: null,
     audioCodec: null
   };
-  const ffprobePath = getEnv('FFPROBE_PATH') || 'ffprobe';
-  sanitizePath(ffprobePath, 'FFPROBE_PATH');
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const result = await runCommand(ffprobePath, [
     '-v', 'error',
     '-show_entries', 'stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   CROSS_SURFACE_PARITY_FIXTURES,
   CROSS_SURFACE_PARITY_SURFACES,
@@ -1071,6 +1071,74 @@ test('FlashVSR sets no clip-length limit and sends long sources to the server', 
     assert.equal(state.lastVideoProject.frames, frames);
     assert.equal(state.lastVideoProject.fps, 30);
   }
+});
+
+test('--upscale-video reports an ffprobe it cannot launch instead of blaming the source', () => {
+  const { video } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const missingFfprobe = join(mkdtempSync(join(tmpdir(), 'sogni-missing-ffprobe-')), 'missing', 'ffprobe');
+  const { exitCode, stdout, state } = runCli(['--json', '--upscale-video', video], { FFPROBE_PATH: missingFfprobe });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'MISSING_FFPROBE');
+  assert.equal(
+    payload.error,
+    `ffprobe is required for --upscale-video, but "${missingFfprobe}" could not be started (ENOENT).`
+  );
+  assert.equal(payload.errorDetails.reason, 'ENOENT');
+  assert.match(payload.hint, /command -v ffprobe/);
+  assert.equal(state?.lastVideoProject ?? null, null);
+});
+
+test('--upscale-video reports an ffprobe crash as an unreadable source, not a missing ffprobe', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-video-upscale-crash-'));
+  const video = join(dir, 'clip.mp4');
+  const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('source video bytes'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+process.kill(process.pid, 'SIGSEGV');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+  const { exitCode, stdout } = runCli(['--json', '--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INVALID_UPSCALE_SOURCE');
+  assert.equal(payload.hint, 'ffprobe reported: ffprobe was stopped by SIGSEGV.');
+});
+
+test('--upscale-video expands a quoted ~ in FFPROBE_PATH', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const home = dirname(fakeFfprobe);
+  const { exitCode, state, stderr } = runCli(['--upscale-video', video], {
+    HOME: home,
+    USERPROFILE: home,
+    FFPROBE_PATH: '~/fake-ffprobe.mjs'
+  });
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.frames, 158);
+});
+
+test('--upscale-video shows the ffprobe error when the source cannot be read', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-video-upscale-unreadable-'));
+  const video = join(dir, 'clip.mp4');
+  const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
+  writeFileSync(video, Buffer.from('not a video'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.error('[mov,mp4,m4a,3gp,3g2,mj2 @ 0x1] moov atom not found');
+console.error(process.argv.at(-1) + ': Invalid data found when processing input');
+process.exit(1);
+`);
+  chmodSync(fakeFfprobe, 0o755);
+  const { exitCode, stdout, state } = runCli(['--json', '--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'INVALID_UPSCALE_SOURCE');
+  assert.equal(payload.hint, `ffprobe reported: ${video}: Invalid data found when processing input`);
+  assert.match(payload.errorDetails.ffprobeError, /moov atom not found/);
+  assert.equal(state?.lastVideoProject ?? null, null);
 });
 
 test('--upscale-video relays the server refusal of a source that is too long', () => {
@@ -7261,14 +7329,9 @@ test('--trim-video validates its complete argument contract', () => {
   );
 });
 
-test('--trim-video re-encodes a frame-accurate clip and verifies the result', () => {
-  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-trim-video-'));
-  const input = join(tempDir, 'input.mp4');
-  const output = join(tempDir, 'output.mp4');
-  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
+function writeFakeTrimTools(tempDir) {
   const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
   const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
-  writeFileSync(input, Buffer.from('source video'));
   writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
 import { appendFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
@@ -7290,6 +7353,16 @@ console.log(JSON.stringify({
 `);
   chmodSync(fakeFfmpeg, 0o755);
   chmodSync(fakeFfprobe, 0o755);
+  return { fakeFfmpeg, fakeFfprobe };
+}
+
+test('--trim-video re-encodes a frame-accurate clip and verifies the result', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-trim-video-'));
+  const input = join(tempDir, 'input.mp4');
+  const output = join(tempDir, 'output.mp4');
+  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
+  writeFileSync(input, Buffer.from('source video'));
+  const { fakeFfmpeg, fakeFfprobe } = writeFakeTrimTools(tempDir);
 
   const { exitCode, stdout, stderr } = runCli(
     ['--json', '--trim-video', input, '1.25', '3', output],
@@ -7306,6 +7379,28 @@ console.log(JSON.stringify({
   assert.equal(trim[trim.indexOf('-c:v') + 1], 'libx264');
   assert.equal(trim.at(-1), output);
   assert.ok(commands.some((args) => args.at(-1) === '-'), 'expected a full-decode verification command');
+});
+
+test('--trim-video expands a quoted ~ in FFMPEG_PATH and FFPROBE_PATH', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-trim-video-home-'));
+  const input = join(tempDir, 'input.mp4');
+  const output = join(tempDir, 'output.mp4');
+  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
+  writeFileSync(input, Buffer.from('source video'));
+  writeFakeTrimTools(tempDir);
+
+  const { exitCode, stdout, stderr } = runCli(['--json', '--trim-video', input, '1.25', '3', output], {
+    HOME: tempDir,
+    USERPROFILE: tempDir,
+    FFMPEG_PATH: '~/fake-ffmpeg.mjs',
+    FFPROBE_PATH: '~/fake-ffprobe.mjs',
+    FFMPEG_TEST_LOG: commandLog
+  });
+
+  assert.equal(exitCode, 0, stderr);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.decodable, true);
+  assert.equal(payload.width, 1280);
 });
 
 test('--concat-videos omits clip audio filters when an external soundtrack replaces them', () => {

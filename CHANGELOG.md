@@ -3,7 +3,7 @@
 ### Features
 
 * Seedance 2.0 Mini Uncensored: `-m seedance2-mini-uncensored` (and `-m seedance2-mini-uncensored-t2v`, or names such as "Seedance 2.0 Mini Uncensored", "Seedance Mini Uncensored" and "Seedance Mini Spicy" in any word order) runs Sogni model `seedance-2-0-mini-uncensored`. It has every Seedance 2.0 Mini mode and limit (480p or 720p, 4 to 15 s) and never becomes `seedance-2-0-mini`; a name with "Mini" never becomes Seedance 2.5 Uncensored. Like Seedance 2.5 Uncensored, it comes at a premium rate above its standard version, shares the same one-time likeness and consent agreement (error 4103 until it is accepted in the Sogni app) and is refused with error 4104 where Sogni has not released it yet.
-* Update the Sogni SDK (`@sogni-ai/sogni-client`) to 5.63.0 and the intelligence client to 4.12.1 (creative agent 2.12.1), which carry the new model.
+* Update the Sogni SDK (`@sogni-ai/sogni-client`) to 5.63.0 and the intelligence client to 4.12.2 (creative agent 2.12.2), which carry the new model.
 
 ### Bug Fixes
 

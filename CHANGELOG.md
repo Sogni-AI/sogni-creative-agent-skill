@@ -8,6 +8,7 @@
 ### Bug Fixes
 
 * A Seedance content refusal now shows Sogni's own message, including its suggestion of which model to try instead, rather than a generic safety-filter line.
+* A Seedance refusal of a photo that may show a real person now points to the uncensored version of that Seedance model or to MiniMax H3 (MiniMax H3 alone where the uncensored models are not released), instead of offering to stylize the people in the photo or to use LTX 2.3.
 * `--json` output for a project that needs the consent agreement now includes `consentRequired` (its key and version), for both uncensored Seedance models; it was dropped before.
 
 ## [3.55.0] - 2026-10-06

@@ -6446,6 +6446,36 @@ test('missing API key is rejected', () => {
 });
 
 test('json error: seedance real-person policy cancellation is safety rejected and friendly', () => {
+  // The socket's sentence is reported as written: with the uncensored
+  // counterpart then MiniMax H3 where released, MiniMax H3 alone where held.
+  for (const socketMessage of [
+    'Seedance rejected the input image because it may contain a real person.',
+    'Seedance rejected the input image because it may contain a real person. Try Seedance 2.0 Mini Uncensored or MiniMax H3 instead.',
+    'Seedance rejected the input image because it may contain a real person. Try MiniMax H3 instead.'
+  ]) {
+    const { exitCode, stdout } = runCli([
+      '--json',
+      '--video',
+      '--workflow', 't2v',
+      '-m', 'seedance2-fast',
+      'gentle product reveal'
+    ], {
+      SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: socketMessage
+    });
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.success, false);
+    assert.equal(payload.errorType, 'SAFETY_REJECTED');
+    assert.equal(payload.errorCategory, 'content_refused');
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.metadata.error, 'seedance_input_image_privacy_policy');
+    assert.equal(payload.error, socketMessage);
+    assert.equal(payload.metadata.recovery, undefined);
+  }
+});
+
+test('json error: raw seedance real-person vendor failure names only MiniMax H3', () => {
+  const vendorError = 'Seedance rejected the request: Vendor job failed: Vendor task cgt-test ended with status=failed: {"status":"failed","error":{"code":"InputImageSensitiveContentDetected.PrivacyInformation","message":"The input image may contain real person.","request_id":"req","type":"BadRequest"}}';
   const { exitCode, stdout } = runCli([
     '--json',
     '--video',
@@ -6453,16 +6483,19 @@ test('json error: seedance real-person policy cancellation is safety rejected an
     '-m', 'seedance2-fast',
     'gentle product reveal'
   ], {
-    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: 'Seedance rejected the input image because it may contain a real person.'
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: vendorError
   });
   assert.equal(exitCode, 1);
   const payload = JSON.parse(stdout.trim());
-  assert.equal(payload.success, false);
   assert.equal(payload.errorType, 'SAFETY_REJECTED');
-  assert.equal(payload.errorCategory, 'content_refused');
   assert.equal(payload.retryable, false);
   assert.equal(payload.metadata.error, 'seedance_input_image_privacy_policy');
-  assert.doesNotMatch(payload.error, /Vendor task|status=failed|cgt-/);
+  assert.equal(
+    payload.error,
+    'Seedance rejected the input image because it may contain a real person. Try MiniMax H3 instead.'
+  );
+  assert.doesNotMatch(payload.error, /ltx|styliz|cartoon|anime|cgt-test/i);
+  assert.equal(payload.metadata.recovery, undefined);
 });
 
 test('json error: seedance generated content policy cancellation hides vendor internals', () => {

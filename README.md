@@ -129,7 +129,7 @@ Then ask your agent to do something:
 
 - **Node.js ≥ 22.11.0**
 - **Sogni API key** ([dashboard.sogni.ai](https://dashboard.sogni.ai))
-- **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery.
+- **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`; `--upscale-video` needs `ffprobe`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery (a leading `~` is expanded).
 - macOS, Linux, or Windows
 
 ---

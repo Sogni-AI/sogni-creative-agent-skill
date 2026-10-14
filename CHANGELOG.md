@@ -1,3 +1,10 @@
+## [3.56.2] - 2026-10-14
+
+### Bug Fixes
+
+* Update the Sogni SDK (`@sogni-ai/sogni-client`) to 5.63.3 and the intelligence client to 4.12.4 (creative agent 2.12.8). A FLAC, Ogg or WebM voice sample given to `--reference-audio-identity` or `--voice-reference` is now uploaded with the type its bytes say; before, it went up with no declared type, so Sogni could hand it to a worker that cannot decode that format and the job failed there. A sign-in refresh that answers without a usable token pair now signs the client out and reports it, instead of repeating the refresh on every request (and, in a long-running process, retrying it without end). Whether a prompt was expanded (`promptExpanded`) is kept with the project, so a project read back later still says so.
+* Update sharp to 0.35.5, which carries the librsvg fix for CVE-2026-96889 (a high-severity flaw in SVG decoding).
+
 ## [3.56.1] - 2026-10-10
 
 ### Bug Fixes

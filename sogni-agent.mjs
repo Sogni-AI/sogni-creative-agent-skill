@@ -495,6 +495,9 @@ function defaultsFromModelTier(card) {
   if (Number.isFinite(card?.width?.min)) defaults.minDimension = card.width.min;
   if (Number.isFinite(card?.width?.max)) defaults.maxDimension = card.width.max;
   if (Number.isFinite(card?.width?.step)) defaults.dimensionMultiple = card.width.step;
+  // The socket refuses a job above its tier's pixel cap (MiniMax H3 R2V Turbo:
+  // 522,240), which can sit below the bundled per-family budget.
+  if (Number.isFinite(card?.maxPixels)) defaults.maxPixels = card.maxPixels;
   const defaultSize = String(card?.defaultSize || '').match(/^(\d+)x(\d+)$/i);
   if (defaultSize) {
     defaults.defaultWidth = Number(defaultSize[1]);

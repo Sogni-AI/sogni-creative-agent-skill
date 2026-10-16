@@ -2133,6 +2133,45 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
   }
 });
 
+test('MiniMax H3 R2V Turbo sizes stay inside the live catalog pixel cap', () => {
+  // sogni-socket refuses R2V Turbo above 522,240 pixels (its 960x544 canvas):
+  // "Video resolution must not exceed 522240 pixels (got 1280x704)". The live
+  // catalog publishes that cap, so it must win over the bundled H3 budget.
+  const catalog = JSON.stringify({
+    status: 'success',
+    data: {
+      model: {
+        id: 'minimax-h3-ref2va-fp8_r2v_turbo',
+        tierId: 'minimax-h3-ref2va-fp8_r2v_turbo',
+        parameters: {
+          steps: { min: 4, max: 4, default: 4 },
+          guidance: { min: 1, max: 1, default: 1 },
+          width: { min: 480, max: 1344, step: 32, default: 960 },
+          height: { min: 480, max: 1344, step: 32, default: 544 },
+          maxPixels: 522240,
+          defaultSize: '960x544',
+        },
+      },
+    },
+  });
+
+  for (const [width, height] of [['1280', '704'], ['768', '1344']]) {
+    const { exitCode, state, stderr } = runCli([
+      '--video',
+      '-m', 'minimax-h3-r2v-turbo',
+      '--width', width,
+      '--height', height,
+      '--duration', '5',
+      '-c', SCREENSHOT_FIXTURE,
+      'Use <Picture 1> for the subject. A slow push-in with soft room tone.'
+    ], { SOGNI_AGENT_TEST_MODEL_TIERS_JSON: catalog });
+    assert.equal(exitCode, 0, `${width}x${height}: ${stderr}`);
+    const { width: sentWidth, height: sentHeight } = state.lastVideoProject;
+    assert.ok(sentWidth * sentHeight <= 522240, `${width}x${height} was sent as ${sentWidth}x${sentHeight}`);
+    assert.equal(sentWidth > sentHeight, Number(width) > Number(height), `${width}x${height} kept its orientation`);
+  }
+});
+
 test('MiniMax H3 FastH3 backend ids retain H3 geometry and fixed four-step settings', () => {
   const cases = [
     { model: 'minimax-h3-fastvideo-int8_t2v_turbo', args: [] },

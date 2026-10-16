@@ -87,6 +87,7 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
+| `flux3_image_klein_sd_int8_convrot` | Variable | FLUX 3 Image Klein (Black Forest Labs): text-to-image, image-to-image, and edits from up to 6 optional context images |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
 | `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
 | `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
@@ -129,6 +130,23 @@ at least 720px and 1080p at least 540px. 4K is not available. The direct CLI
 reads the exact frame count and rate with a local ffprobe. The server sets the
 maximum clip length; do not quote a fixed limit. Relay a server rejection if
 the source is too long, without trimming it or switching to a generative tool.
+
+FLUX 3 Image Klein is one model for three jobs: text-to-image from a prompt
+alone, image-to-image from a start image, and edits or compositions guided by
+1-6 context images (`-c`, repeatable). References are optional, unlike the
+Qwen and Krea identity edit models. Hosted/chat planning uses the selector
+`flux-3-klein` on both `generate_image` and `edit_image`; direct CLI `-m` uses
+`flux3_image_klein_sd_int8_convrot`. Output is 256-2048 px per side (step 16,
+default 1024x1024) at 4-16 steps (default 16). Guidance is fixed at 1, so a
+negative prompt has no effect; write a full scene caption instead, as Black
+Forest Labs recommends. It does not take LoRAs; use Krea 2 Turbo for LoRA
+stacks. Leave steps, guidance, sampler, and scheduler unset to use the live
+tier defaults.
+
+```bash
+sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg \
+  "product photo of the mug on the kitchen's oak counter, morning window light"
+```
 
 For Krea 2 Turbo, hosted/chat planning may use the creative-agent selector
 `krea-2-turbo`; direct CLI `-m` uses the worker model ID
@@ -182,8 +200,9 @@ defaults.
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through
 `8,294,400`; the API snaps dimensions to valid multiples of 16. For image
-editing with `gpt-image-2`, you can pass up to 16 context images (Qwen models
-support up to 3; Krea identity edit models support up to 2).
+editing with `gpt-image-2`, you can pass up to 16 context images (FLUX 3 Image
+Klein supports up to 6; Qwen models support up to 3; Krea identity edit models
+support up to 2).
 
 ## Utility and 3D models
 
@@ -1302,6 +1321,7 @@ model recommendations.
 | Image editing | `qwen_image_edit_2511_fp8_lightning` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
+| Text-to-image, image-to-image, or edits from up to six references in one model | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Select or cut out an object in an image | `sam3_image_segment_bf16` |

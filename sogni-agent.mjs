@@ -5190,6 +5190,7 @@ Image Models:
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
   gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
+  flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 6 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   dark_beast_krea2_fp8            Dark Beast Krea 2 text-to-image
   krea2_identity_edit_v1_2        Krea 2 Identity Edit LoRA (up to 2 context images)

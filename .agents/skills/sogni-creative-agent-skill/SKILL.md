@@ -149,8 +149,8 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
   one render: read [krea2-loras.md](references/krea2-loras.md).
 - Video prompts, reference roles, LTX, WAN 2.2, Wan 3, MiniMax, Seedance, and HappyHorse:
   read [video-prompting.md](references/video-prompting.md).
-- Prompt-only image deliverables for SD/SDXL, FLUX.1 Schnell, Chroma, Krea 2, Qwen,
-  Z-Image, GPT Image, and model-specific editing: read
+- Prompt-only image deliverables for SD/SDXL, FLUX.1 Schnell, FLUX 3 Image Klein,
+  Chroma, Krea 2, Qwen, Z-Image, GPT Image, and model-specific editing: read
   [image-prompting.md](references/image-prompting.md).
 - Local video cutting, stitching, overlays, subtitles, audio remixing, and
   verification: read [video-editing.md](references/video-editing.md).

@@ -136,8 +136,10 @@ alone, image-to-image from a start image, and edits or compositions guided by
 1-6 context images (`-c`, repeatable). References are optional, unlike the
 Qwen and Krea identity edit models. Hosted/chat planning uses the selector
 `flux-3-klein` on both `generate_image` and `edit_image`; direct CLI `-m` uses
-`flux3_image_klein_sd_int8_convrot`. Output is 256-2048 px per side (step 16,
-default 1024x1024) at 4-16 steps (default 16). Guidance is fixed at 1, so a
+`flux3_image_klein_sd_int8_convrot`. Output is 256-4096 px per side (step 16,
+default 1024x1024) at 4-16 steps (default 16), including 4K: 3840x2160,
+2160x3840 and 4096x4096. Renders above 2048x2048 pixels run on 32 GB GPUs and
+take longer. Guidance is fixed at 1, so a
 negative prompt has no effect; write a full scene caption instead, as Black
 Forest Labs recommends. It does not take LoRAs; use Krea 2 Turbo for LoRA
 stacks. Leave steps, guidance, sampler, and scheduler unset to use the live

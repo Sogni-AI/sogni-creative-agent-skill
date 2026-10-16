@@ -1462,8 +1462,8 @@ test('Krea identity edit rejects a third context image', () => {
 
 const FLUX3_KLEIN_TIER_FIXTURE = JSON.stringify({
   flux3_image_klein_sd_int8_convrot: {
-    width: { min: 256, max: 2048, step: 16, default: 1024 },
-    height: { min: 256, max: 2048, step: 16, default: 1024 },
+    width: { min: 256, max: 4096, step: 16, default: 1024 },
+    height: { min: 256, max: 4096, step: 16, default: 1024 },
     steps: { min: 4, max: 16, default: 16 },
     guidance: { min: 1, max: 1, decimals: 1, default: 1 },
     comfySampler: { allowed: ['euler', 'er_sde'], default: 'euler' },
@@ -1509,6 +1509,20 @@ test('FLUX 3 Image Klein generates from a prompt alone on its tier defaults', ()
   assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
   assert.equal(state.lastImageProject.steps, 16);
   assert.equal(state.lastImageProject.guidance, 1);
+});
+
+test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    '--width', '3840',
+    '--height', '2160',
+    'a lighthouse on a basalt cliff at blue hour, wide shot'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastImageProject.width, 3840);
+  assert.equal(state.lastImageProject.height, 2160);
 });
 
 test('FLUX 3 Image Klein rejects a seventh context image', () => {

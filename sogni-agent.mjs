@@ -5360,6 +5360,7 @@ Examples:
   sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
   sogni-agent -c person.jpg -m krea2_identity_edit_v1_2 "editorial portrait, same identity, new wardrobe"
   sogni-agent -c subject.jpg -c style.jpg "apply the style to the subject"
+  sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg "the mug from the first image on the oak counter from the second image, morning window light"
   sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
   sogni-agent --photobooth --ref face.jpg -n 4 "LinkedIn professional headshot"
   sogni-agent -Q pro "a beautiful mountain landscape at sunset"
@@ -7872,7 +7873,7 @@ if (options.contextImages.length > 0 && !options.video) {
     fatalCliError(`Model ${options.model} does not support context images.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },
-      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
+      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, flux3_image_klein_sd_int8_convrot (up to 6), krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
     });
   }
   if (options.contextImages.length > maxImages) {

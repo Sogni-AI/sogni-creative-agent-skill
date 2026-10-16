@@ -141,7 +141,8 @@ default 1024x1024) at 4-16 steps (default 16). Guidance is fixed at 1, so a
 negative prompt has no effect; write a full scene caption instead, as Black
 Forest Labs recommends. It does not take LoRAs; use Krea 2 Turbo for LoRA
 stacks. Leave steps, guidance, sampler, and scheduler unset to use the live
-tier defaults.
+tier defaults. Each reference adds render time and cost, so pass only the
+references the result needs.
 
 ```bash
 sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg \

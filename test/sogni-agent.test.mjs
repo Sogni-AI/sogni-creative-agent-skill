@@ -1460,6 +1460,77 @@ test('Krea identity edit rejects a third context image', () => {
   ], 'supports max 2 context images');
 });
 
+const FLUX3_KLEIN_TIER_FIXTURE = JSON.stringify({
+  flux3_image_klein_sd_int8_convrot: {
+    width: { min: 256, max: 2048, step: 16, default: 1024 },
+    height: { min: 256, max: 2048, step: 16, default: 1024 },
+    steps: { min: 4, max: 16, default: 16 },
+    guidance: { min: 1, max: 1, decimals: 1, default: 1 },
+    comfySampler: { allowed: ['euler', 'er_sde'], default: 'euler' },
+    comfyScheduler: { allowed: ['simple'], default: 'simple' }
+  }
+});
+
+function flux3KleinCatalogEnv() {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-flux3-klein-catalog-'));
+  return {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: join(cacheDir, 'catalog.json'),
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: FLUX3_KLEIN_TIER_FIXTURE
+  };
+}
+
+test('FLUX 3 Image Klein edits from six context images on its tier defaults', () => {
+  const contextArgs = Array.from({ length: 6 }, () => ['-c', SCREENSHOT_FIXTURE]).flat();
+  const { exitCode, state, stderr } = runCli([
+    ...contextArgs,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'the mug from the first image on the oak counter from the second image'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastEditProject, 'createImageEditProject was called');
+  assert.equal(state.lastEditProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastEditProject.contextImages.length, 6);
+  assert.equal(state.lastEditProject.steps, 16);
+  assert.equal(state.lastEditProject.guidance, 1);
+  assert.equal(state.lastEditProject.sampler, 'euler');
+  assert.equal(state.lastEditProject.scheduler, 'simple');
+});
+
+test('FLUX 3 Image Klein generates from a prompt alone on its tier defaults', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'a lighthouse on a basalt cliff at blue hour, wide shot'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastImageProject, 'createImageProject was called');
+  assert.ok(!state.lastEditProject, 'no edit project without context images');
+  assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastImageProject.steps, 16);
+  assert.equal(state.lastImageProject.guidance, 1);
+});
+
+test('FLUX 3 Image Klein rejects a seventh context image', () => {
+  expectCliError([
+    ...Array.from({ length: 7 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'compose every reference into one scene'
+  ], 'supports max 6 context images');
+});
+
+test('a context image on a prompt-only model suggests the models that take references', () => {
+  const { exitCode, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'z_image_turbo_bf16',
+    'make the background a beach'
+  ]);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /does not support context images/);
+  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(up to 6\)/);
+});
+
 test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {
   const { exitCode, stdout } = runCli([
     '--json',

@@ -1479,8 +1479,8 @@ function flux3KleinCatalogEnv() {
   };
 }
 
-test('FLUX 3 Image Klein edits from six context images on its tier defaults', () => {
-  const contextArgs = Array.from({ length: 6 }, () => ['-c', SCREENSHOT_FIXTURE]).flat();
+test('FLUX 3 Image Klein edits from ten context images on its tier defaults', () => {
+  const contextArgs = Array.from({ length: 10 }, () => ['-c', SCREENSHOT_FIXTURE]).flat();
   const { exitCode, state, stderr } = runCli([
     ...contextArgs,
     '-m', 'flux3_image_klein_sd_int8_convrot',
@@ -1490,7 +1490,7 @@ test('FLUX 3 Image Klein edits from six context images on its tier defaults', ()
   assert.equal(exitCode, 0, stderr);
   assert.ok(state?.lastEditProject, 'createImageEditProject was called');
   assert.equal(state.lastEditProject.modelId, 'flux3_image_klein_sd_int8_convrot');
-  assert.equal(state.lastEditProject.contextImages.length, 6);
+  assert.equal(state.lastEditProject.contextImages.length, 10);
   assert.equal(state.lastEditProject.steps, 16);
   assert.equal(state.lastEditProject.guidance, 1);
   assert.equal(state.lastEditProject.sampler, 'euler');
@@ -1525,12 +1525,12 @@ test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {
   assert.equal(state.lastImageProject.height, 2160);
 });
 
-test('FLUX 3 Image Klein rejects a seventh context image', () => {
+test('FLUX 3 Image Klein rejects an eleventh context image', () => {
   expectCliError([
-    ...Array.from({ length: 7 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
+    ...Array.from({ length: 11 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
     '-m', 'flux3_image_klein_sd_int8_convrot',
     'compose every reference into one scene'
-  ], 'supports max 6 context images');
+  ], 'supports max 10 context images');
 });
 
 test('a context image on a prompt-only model suggests the models that take references', () => {
@@ -1542,7 +1542,7 @@ test('a context image on a prompt-only model suggests the models that take refer
 
   assert.equal(exitCode, 1);
   assert.match(stderr, /does not support context images/);
-  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(up to 6\)/);
+  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(up to 10\)/);
 });
 
 test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {

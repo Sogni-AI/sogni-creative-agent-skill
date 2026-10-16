@@ -739,7 +739,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Object masks from points, boxes, or a description | `sam3_image_segment_bf16` via `--segment` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
-| Text-to-image, image-to-image, or edits from up to six references in one model (FLUX 3 Image Klein) | `flux3_image_klein_sd_int8_convrot` |
+| Text-to-image, image-to-image, or edits from up to ten references in one model (FLUX 3 Image Klein) | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Songs and instrumentals (default) | `minimax_music3` (`--music`) |

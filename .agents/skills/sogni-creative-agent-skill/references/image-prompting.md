@@ -42,7 +42,7 @@ Markdown fence, preamble, explanation, or render offer.
   as `flux1-schnell-fp8` or `krea-2-turbo` must not silently accept an edit
   request.
 - `flux-3-klein` (FLUX 3 Image Klein) is one selector for both operations:
-  generation with no references, a start image, or edits guided by up to six
+  generation with no references, a start image, or edits guided by up to ten
   references.
 - Use `qwen` / `qwen-lightning` as edit selectors and
   `qwen-2512` / `qwen-2512-lightning` as generation selectors.

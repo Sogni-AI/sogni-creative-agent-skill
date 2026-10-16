@@ -5190,7 +5190,7 @@ Image Models:
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
   gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
-  flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 6 context images)
+  flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 10 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   dark_beast_krea2_fp8            Dark Beast Krea 2 text-to-image
   krea2_identity_edit_v1_2        Krea 2 Identity Edit LoRA (up to 2 context images)
@@ -7873,7 +7873,7 @@ if (options.contextImages.length > 0 && !options.video) {
     fatalCliError(`Model ${options.model} does not support context images.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },
-      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, flux3_image_klein_sd_int8_convrot (up to 6), krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
+      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, flux3_image_klein_sd_int8_convrot (up to 10), krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
     });
   }
   if (options.contextImages.length > maxImages) {

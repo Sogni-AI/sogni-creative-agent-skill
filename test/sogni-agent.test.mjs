@@ -2155,20 +2155,32 @@ test('MiniMax H3 R2V Turbo sizes stay inside the live catalog pixel cap', () => 
     },
   });
 
-  for (const [width, height] of [['1280', '704'], ['768', '1344']]) {
+  const prompt = 'Use <Picture 1> for the subject. A slow push-in with soft room tone.';
+  const cases = [
+    // Two sizes production refused, landing on the 960x544 canvas itself.
+    { args: ['--width', '1280', '--height', '704'], expected: [960, 544] },
+    { args: ['--width', '768', '--height', '1344'], expected: [544, 960] },
+    // Extreme ratios: the 480 minimum side must not push the frame back over the cap.
+    { args: ['--width', '1344', '--height', '480'], expected: [1088, 480] },
+    { args: ['--width', '448', '--height', '1344'], expected: [480, 1088] },
+    // A prompt-derived 9:16 keeps the full 544x960 canvas.
+    { args: [], promptSuffix: ' Vertical 9:16.', expected: [544, 960] },
+  ];
+
+  for (const { args, promptSuffix = '', expected } of cases) {
+    const label = args.join(' ') || promptSuffix.trim();
     const { exitCode, state, stderr } = runCli([
       '--video',
       '-m', 'minimax-h3-r2v-turbo',
-      '--width', width,
-      '--height', height,
+      ...args,
       '--duration', '5',
       '-c', SCREENSHOT_FIXTURE,
-      'Use <Picture 1> for the subject. A slow push-in with soft room tone.'
+      `${prompt}${promptSuffix}`
     ], { SOGNI_AGENT_TEST_MODEL_TIERS_JSON: catalog });
-    assert.equal(exitCode, 0, `${width}x${height}: ${stderr}`);
+    assert.equal(exitCode, 0, `${label}: ${stderr}`);
     const { width: sentWidth, height: sentHeight } = state.lastVideoProject;
-    assert.ok(sentWidth * sentHeight <= 522240, `${width}x${height} was sent as ${sentWidth}x${sentHeight}`);
-    assert.equal(sentWidth > sentHeight, Number(width) > Number(height), `${width}x${height} kept its orientation`);
+    assert.deepEqual([sentWidth, sentHeight], expected, `${label} was sent as ${sentWidth}x${sentHeight}`);
+    assert.ok(sentWidth * sentHeight <= 522240, `${label} stays within the cap`);
   }
 });
 

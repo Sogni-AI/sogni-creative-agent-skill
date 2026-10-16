@@ -1927,6 +1927,8 @@ const VIDEO_DIMENSION_MULTIPLE = DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
 const VIDEO_REF_PRERESIZE_MIN_AREA_GAIN = 1.1;
 const VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT = 0.02;
 const MINIMAX_H3_MAX_VIDEO_PIXELS = 1_032_192;
+// sogni-socket caps R2V Turbo at its 960x544 canvas (live catalog maxPixels).
+const MINIMAX_H3_R2V_TURBO_MAX_VIDEO_PIXELS = 522_240;
 
 function isWanVideoModelId(modelId) {
   return getSharedModelDefaults(modelId)?.family === 'wan22';
@@ -2327,7 +2329,7 @@ function videoModelDimensionDefaultsLikeWrapper(modelId) {
       minDimension: 32,
       maxDimension: 1344,
       dimensionMultiple: 32,
-      maxPixels: MINIMAX_H3_MAX_VIDEO_PIXELS
+      maxPixels: MINIMAX_H3_R2V_TURBO_MAX_VIDEO_PIXELS
     };
   }
   if (isMiniMaxH3Model(modelId)) {
@@ -2486,7 +2488,8 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
     }
   }
 
-  if (effectiveMaxPixels && targetWidth * targetHeight > effectiveMaxPixels) {
+  const cappedByPixels = Boolean(effectiveMaxPixels && targetWidth * targetHeight > effectiveMaxPixels);
+  if (cappedByPixels) {
     const scaleFactor = Math.sqrt(effectiveMaxPixels / (targetWidth * targetHeight));
     targetWidth = Math.floor(targetWidth * scaleFactor);
     targetHeight = Math.floor(targetHeight * scaleFactor);
@@ -2510,7 +2513,50 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
     adjusted = true;
   }
 
+  // Only a cap below the minimum side times the maximum side (MiniMax H3 R2V
+  // Turbo: 522,240 < 480 x 1344) can be left exceeded by the steps above; every
+  // other capped model keeps the sizes they produce.
+  if (effectiveMaxPixels && effectiveMaxPixels < effectiveMin * effectiveMax &&
+    (cappedByPixels || targetWidth * targetHeight > effectiveMaxPixels)) {
+    const settled = settleVideoDimensionsAtPixelCap(targetWidth, targetHeight, Number(width) / Number(height), {
+      maxPixels: effectiveMaxPixels,
+      multiple: effectiveMultiple,
+      minDimension: effectiveMin,
+      maxDimension: effectiveMax,
+    });
+    if (settled.width !== targetWidth || settled.height !== targetHeight) adjusted = true;
+    targetWidth = settled.width;
+    targetHeight = settled.height;
+  }
+
   return { width: targetWidth, height: targetHeight, adjusted };
+}
+
+// A size scaled down to a pixel cap and floored to the grid can land a step
+// short of it (16:9 at MiniMax H3 R2V Turbo's 522,240 floors to 960x512, not
+// 960x544), and raising a side to the minimum can push an extreme ratio back
+// over it (32:9 there becomes 1184x480, which sogni-socket refuses). Shrink the
+// long side until the frame fits, then grow one side a grid step at a time
+// while the frame still fits and its shape moves closer to the request.
+function settleVideoDimensionsAtPixelCap(width, height, requestedAspect, { maxPixels, multiple, minDimension, maxDimension }) {
+  let w = width;
+  let h = height;
+  while (w * h > maxPixels) {
+    if (w >= h && w - multiple >= minDimension) w -= multiple;
+    else if (h - multiple >= minDimension) h -= multiple;
+    else if (w - multiple >= minDimension) w -= multiple;
+    else break;
+  }
+  const shapeError = (cw, ch) => Math.abs(Math.log(cw / ch / requestedAspect));
+  for (;;) {
+    const grown = [[w + multiple, h], [w, h + multiple]]
+      .filter(([cw, ch]) => cw <= maxDimension && ch <= maxDimension && cw * ch <= maxPixels &&
+        shapeError(cw, ch) <= shapeError(w, h))
+      .sort((a, b) => shapeError(...a) - shapeError(...b));
+    if (grown.length === 0) break;
+    [w, h] = grown[0];
+  }
+  return { width: w, height: h };
 }
 
 function videoDimensionsAreIncompatible(dimensions, rules = DEFAULT_VIDEO_DIMENSION_RULES) {

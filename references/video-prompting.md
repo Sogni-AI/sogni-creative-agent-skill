@@ -122,7 +122,9 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   i.e. **5.17 s to 15.08 s**. The CLI snaps `--duration` onto that grid; an
   off-grid explicit `--frames` is a hard error.
 - **Dimensions divisible by 32**, total pixels ≤ **1,032,192**. Use
-  `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait).
+  `-w 1344 -h 768` (landscape) or `-w 768 -h 1344` (portrait). The exception
+  is `minimax-h3-r2v-turbo`: at most **522,240** pixels, its own canvas, so use
+  `-w 960 -h 544` or `-w 544 -h 960`; larger requests are fitted inside it.
 - **1080p and 2K output is the FastH3 Two-Stage model, not a canvas.**
   `-m minimax-h3-fasth3-turbo-2stage` (or `minimax-h3-fasth3-t2v-turbo-2stage`,
   `minimax-h3-fasth3-i2v-turbo-2stage`, `minimax-h3-fasth3-flf2v-turbo-2stage`)

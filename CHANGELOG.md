@@ -1,3 +1,10 @@
+## [3.57.0] - 2026-10-16
+
+### Features
+
+* Add FLUX 3 Image Klein (`-m flux3_image_klein_sd_int8_convrot`; hosted selector `flux-3-klein`), Black Forest Labs' fast open image model: text-to-image, image-to-image, and edits from up to ten references, at up to 4096 px a side. A text-to-image with no size given renders at Klein's native 1024x1024. An edit of one photo now renders at that photo's own shape up to 4 megapixels when no size is given (larger sizes are capped, since the server refuses them), and several references size from the first at up to 1 megapixel, matching Sogni Web and the hosted agent. Personal LoRAs imported for Klein work with `--lora personal-<id> --no-filter`.
+* Update the intelligence client to 4.13.0 (creative agent 2.13.0, Sogni SDK 5.64.0, protocol 1.0.0-alpha.51) for the Klein selector, its ten-reference limit and its prompt guides.
+
 ## [3.56.2] - 2026-10-14
 
 ### Bug Fixes

@@ -415,6 +415,8 @@ function getMaxContextImages(modelId) {
     modelId === 'krea2_identity_edit_v1_2'
     || modelId === 'dark_beast_krea2_identity_edit_v1_2'
   ) return 2;
+  // Mirrors the intelligence client, which allows FLUX 3 Image Klein ten references.
+  if (modelId === 'flux3_image_klein_sd_int8_convrot') return 10;
   return 0;
 }
 

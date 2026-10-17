@@ -495,6 +495,9 @@ function defaultsFromModelTier(card) {
   if (Number.isFinite(card?.width?.min)) defaults.minDimension = card.width.min;
   if (Number.isFinite(card?.width?.max)) defaults.maxDimension = card.width.max;
   if (Number.isFinite(card?.width?.step)) defaults.dimensionMultiple = card.width.step;
+  // The socket refuses a job above its tier's pixel cap (MiniMax H3 R2V Turbo:
+  // 522,240), which can sit below the bundled per-family budget.
+  if (Number.isFinite(card?.maxPixels)) defaults.maxPixels = card.maxPixels;
   const defaultSize = String(card?.defaultSize || '').match(/^(\d+)x(\d+)$/i);
   if (defaultSize) {
     defaults.defaultWidth = Number(defaultSize[1]);
@@ -1881,6 +1884,37 @@ function getJpegDimensions(buffer) {
   return null;
 }
 
+const FLUX3_IMAGE_KLEIN_MODEL_ID = 'flux3_image_klein_sd_int8_convrot';
+const FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS = 4 * 1024 * 1024;
+
+/**
+ * FLUX 3 Image Klein's edit size from its first reference, the way Black Forest
+ * Labs' pipeline sizes references (the rule sogni-creative-agent's
+ * getFlux3ImageKleinEditOutputSize applies for web, chat and the hosted API):
+ * one photo keeps its shape at up to 4 MiB pixels and 4096 px a side, never
+ * enlarged; with several references the first sets the shape at up to 1 MiB.
+ * Sides land on the 16 px grid (256 minimum). Null beyond a 4:1 shape.
+ */
+function flux3KleinEditOutputSize(width, height, referenceCount) {
+  if (!(width > 0) || !(height > 0)) return null;
+  const grid = 16;
+  const maxPixels = referenceCount > 1 ? 1024 * 1024 : FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS;
+  let scale = Math.min(1, Math.sqrt(maxPixels / (width * height)), 4096 / Math.max(width, height));
+  if (Math.min(width, height) * scale < 256) scale = 256 / Math.min(width, height);
+  let w = Math.round((width * scale) / grid) * grid;
+  let h = Math.round((height * scale) / grid) * grid;
+  const aspect = width / height;
+  const shapeError = (a, b) => Math.abs(Math.log(a / b / aspect));
+  while (w * h > maxPixels) {
+    const narrower = shapeError(w - grid, h);
+    const shorter = shapeError(w, h - grid);
+    if (narrower < shorter - 1e-12 || (Math.abs(narrower - shorter) <= 1e-12 && w >= h)) w -= grid;
+    else h -= grid;
+  }
+  if (Math.min(w, h) < 256 || Math.max(w, h) > 4096 || Math.max(w, h) / Math.min(w, h) > 4) return null;
+  return { width: w, height: h };
+}
+
 function getImageDimensionsFromBuffer(buffer) {
   return getPngDimensions(buffer) || getJpegDimensions(buffer);
 }
@@ -1924,6 +1958,8 @@ const VIDEO_DIMENSION_MULTIPLE = DEFAULT_VIDEO_DIMENSION_RULES.dimensionMultiple
 const VIDEO_REF_PRERESIZE_MIN_AREA_GAIN = 1.1;
 const VIDEO_REF_PRERESIZE_MAX_ASPECT_DRIFT = 0.02;
 const MINIMAX_H3_MAX_VIDEO_PIXELS = 1_032_192;
+// sogni-socket caps R2V Turbo at its 960x544 canvas (live catalog maxPixels).
+const MINIMAX_H3_R2V_TURBO_MAX_VIDEO_PIXELS = 522_240;
 
 function isWanVideoModelId(modelId) {
   return getSharedModelDefaults(modelId)?.family === 'wan22';
@@ -2324,7 +2360,7 @@ function videoModelDimensionDefaultsLikeWrapper(modelId) {
       minDimension: 32,
       maxDimension: 1344,
       dimensionMultiple: 32,
-      maxPixels: MINIMAX_H3_MAX_VIDEO_PIXELS
+      maxPixels: MINIMAX_H3_R2V_TURBO_MAX_VIDEO_PIXELS
     };
   }
   if (isMiniMaxH3Model(modelId)) {
@@ -2483,7 +2519,8 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
     }
   }
 
-  if (effectiveMaxPixels && targetWidth * targetHeight > effectiveMaxPixels) {
+  const cappedByPixels = Boolean(effectiveMaxPixels && targetWidth * targetHeight > effectiveMaxPixels);
+  if (cappedByPixels) {
     const scaleFactor = Math.sqrt(effectiveMaxPixels / (targetWidth * targetHeight));
     targetWidth = Math.floor(targetWidth * scaleFactor);
     targetHeight = Math.floor(targetHeight * scaleFactor);
@@ -2507,7 +2544,50 @@ function normalizeVideoDimensionsLikeWrapper(width, height, rules = DEFAULT_VIDE
     adjusted = true;
   }
 
+  // Only a cap below the minimum side times the maximum side (MiniMax H3 R2V
+  // Turbo: 522,240 < 480 x 1344) can be left exceeded by the steps above; every
+  // other capped model keeps the sizes they produce.
+  if (effectiveMaxPixels && effectiveMaxPixels < effectiveMin * effectiveMax &&
+    (cappedByPixels || targetWidth * targetHeight > effectiveMaxPixels)) {
+    const settled = settleVideoDimensionsAtPixelCap(targetWidth, targetHeight, Number(width) / Number(height), {
+      maxPixels: effectiveMaxPixels,
+      multiple: effectiveMultiple,
+      minDimension: effectiveMin,
+      maxDimension: effectiveMax,
+    });
+    if (settled.width !== targetWidth || settled.height !== targetHeight) adjusted = true;
+    targetWidth = settled.width;
+    targetHeight = settled.height;
+  }
+
   return { width: targetWidth, height: targetHeight, adjusted };
+}
+
+// A size scaled down to a pixel cap and floored to the grid can land a step
+// short of it (16:9 at MiniMax H3 R2V Turbo's 522,240 floors to 960x512, not
+// 960x544), and raising a side to the minimum can push an extreme ratio back
+// over it (32:9 there becomes 1184x480, which sogni-socket refuses). Shrink the
+// long side until the frame fits, then grow one side a grid step at a time
+// while the frame still fits and its shape moves closer to the request.
+function settleVideoDimensionsAtPixelCap(width, height, requestedAspect, { maxPixels, multiple, minDimension, maxDimension }) {
+  let w = width;
+  let h = height;
+  while (w * h > maxPixels) {
+    if (w >= h && w - multiple >= minDimension) w -= multiple;
+    else if (h - multiple >= minDimension) h -= multiple;
+    else if (w - multiple >= minDimension) w -= multiple;
+    else break;
+  }
+  const shapeError = (cw, ch) => Math.abs(Math.log(cw / ch / requestedAspect));
+  for (;;) {
+    const grown = [[w + multiple, h], [w, h + multiple]]
+      .filter(([cw, ch]) => cw <= maxDimension && ch <= maxDimension && cw * ch <= maxPixels &&
+        shapeError(cw, ch) <= shapeError(w, h))
+      .sort((a, b) => shapeError(...a) - shapeError(...b));
+    if (grown.length === 0) break;
+    [w, h] = grown[0];
+  }
+  return { width: w, height: h };
 }
 
 function videoDimensionsAreIncompatible(dimensions, rules = DEFAULT_VIDEO_DIMENSION_RULES) {
@@ -5141,6 +5221,7 @@ Image Models:
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
   gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
+  flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 10 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   moss_image_sft_int8_convrot     MOSS-Image SFT text-to-image (50 steps, no reference editing)
   moss_image_sft_dmd8_int8_convrot MOSS-Image 8-Step text-to-image (CFG 1, Personal LoRAs)
@@ -5312,6 +5393,7 @@ Examples:
   sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
   sogni-agent -c person.jpg -m krea2_identity_edit_v1_2 "editorial portrait, same identity, new wardrobe"
   sogni-agent -c subject.jpg -c style.jpg "apply the style to the subject"
+  sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg "the mug from the first image on the oak counter from the second image, morning window light"
   sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
   sogni-agent --photobooth --ref face.jpg -n 4 "LinkedIn professional headshot"
   sogni-agent -Q pro "a beautiful mountain landscape at sunset"
@@ -7824,7 +7906,7 @@ if (options.contextImages.length > 0 && !options.video) {
     fatalCliError(`Model ${options.model} does not support context images.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },
-      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
+      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, flux3_image_klein_sd_int8_convrot (up to 10), krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
     });
   }
   if (options.contextImages.length > maxImages) {
@@ -15537,6 +15619,27 @@ async function main() {
       const contextBuffers = await Promise.all(
         options.contextImages.map(img => fetchMediaBuffer(img))
       );
+      // FLUX 3 Image Klein: an edit in another shape recomposes the photo, and the
+      // socket refuses a one-photo edit above 4 MiB pixels (larger than its photo
+      // the edit breaks). Size it from the first reference unless a size was asked for.
+      if (options.model === FLUX3_IMAGE_KLEIN_MODEL_ID) {
+        const meta = await sharp(contextBuffers[0]).metadata().catch(() => null);
+        const swapsAxes = meta?.orientation >= 5 && meta?.orientation <= 8;
+        const photo = meta?.width && meta?.height
+          ? { width: swapsAxes ? meta.height : meta.width, height: swapsAxes ? meta.width : meta.height }
+          : null;
+        const fitted = photo && flux3KleinEditOutputSize(photo.width, photo.height, contextBuffers.length);
+        const askedForSize = cliSet.width || cliSet.height || widthFromPrompt || heightFromPrompt;
+        if (fitted && !askedForSize) {
+          options.width = fitted.width;
+          options.height = fitted.height;
+          log(`Edit size ${fitted.width}x${fitted.height} from the ${contextBuffers.length > 1 ? 'first reference' : 'photo'} (${photo.width}x${photo.height})`);
+        } else if (fitted && contextBuffers.length === 1 && options.width * options.height > FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS) {
+          if (!options.quiet) console.error(`FLUX 3 Image Klein edits one photo at up to 4 megapixels; rendering at ${fitted.width}x${fitted.height} instead of ${options.width}x${options.height}.`);
+          options.width = fitted.width;
+          options.height = fitted.height;
+        }
+      }
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const steps = options.steps ?? modelDefaults?.steps ?? (isLightningImageModelSelection(options.model) ? 4 : 20);
       const guidance = options.guidance ?? modelDefaults?.guidance ?? (isLightningImageModelSelection(options.model) ? 3.5 : 7.5);
@@ -15649,6 +15752,15 @@ async function main() {
       log(`Generating with ${options.model}...`);
       if (options.seed !== null && options.seed !== undefined) log(`Using seed: ${options.seed}`);
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
+      // FLUX 3 Image Klein renders natively at its tier default (1024x1024); the CLI's
+      // generic 512x512 starting size would quarter its pixels at the same per-image price.
+      if (
+        options.model === FLUX3_IMAGE_KLEIN_MODEL_ID
+        && !(cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt)
+      ) {
+        options.width = modelDefaults?.defaultWidth ?? 1024;
+        options.height = modelDefaults?.defaultHeight ?? 1024;
+      }
       const guidance = options.guidance ?? modelDefaults?.guidance ?? 1.0;
       const steps = options.steps ?? modelDefaults?.steps;
       const gptImageQuality = isGptImage2ModelSelection(options.model)

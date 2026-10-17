@@ -1460,6 +1460,137 @@ test('Krea identity edit rejects a third context image', () => {
   ], 'supports max 2 context images');
 });
 
+const FLUX3_KLEIN_TIER_FIXTURE = JSON.stringify({
+  flux3_image_klein_sd_int8_convrot: {
+    width: { min: 256, max: 4096, step: 16, default: 1024 },
+    height: { min: 256, max: 4096, step: 16, default: 1024 },
+    steps: { min: 4, max: 16, default: 16 },
+    guidance: { min: 1, max: 1, decimals: 1, default: 1 },
+    comfySampler: { allowed: ['euler', 'er_sde'], default: 'euler' },
+    comfyScheduler: { allowed: ['simple'], default: 'simple' }
+  }
+});
+
+function flux3KleinCatalogEnv() {
+  const cacheDir = mkdtempSync(join(tmpdir(), 'sogni-flux3-klein-catalog-'));
+  return {
+    SOGNI_MODEL_CATALOG_CACHE_PATH: join(cacheDir, 'catalog.json'),
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: FLUX3_KLEIN_TIER_FIXTURE
+  };
+}
+
+test('FLUX 3 Image Klein edits from ten context images on its tier defaults', () => {
+  const contextArgs = Array.from({ length: 10 }, () => ['-c', SCREENSHOT_FIXTURE]).flat();
+  const { exitCode, state, stderr } = runCli([
+    ...contextArgs,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'the mug from the first image on the oak counter from the second image'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastEditProject, 'createImageEditProject was called');
+  assert.equal(state.lastEditProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastEditProject.contextImages.length, 10);
+  assert.equal(state.lastEditProject.steps, 16);
+  assert.equal(state.lastEditProject.guidance, 1);
+  assert.equal(state.lastEditProject.sampler, 'euler');
+  assert.equal(state.lastEditProject.scheduler, 'simple');
+});
+
+test('FLUX 3 Image Klein generates from a prompt alone on its tier defaults', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'a lighthouse on a basalt cliff at blue hour, wide shot'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.ok(state?.lastImageProject, 'createImageProject was called');
+  assert.ok(!state.lastEditProject, 'no edit project without context images');
+  assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastImageProject.steps, 16);
+  assert.equal(state.lastImageProject.guidance, 1);
+  // Its tier default, not the CLI's generic 512x512 starting size.
+  assert.equal(state.lastImageProject.width, 1024);
+  assert.equal(state.lastImageProject.height, 1024);
+});
+
+test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    '--width', '3840',
+    '--height', '2160',
+    'a lighthouse on a basalt cliff at blue hour, wide shot'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastImageProject.width, 3840);
+  assert.equal(state.lastImageProject.height, 2160);
+});
+
+test('FLUX 3 Image Klein edits one photo at its own shape when no size is given', () => {
+  // docs/screenshot.jpg is 2314x1200 (under 4 MiB): kept, on the 16 px grid.
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'add a small potted plant beside the laptop'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 2320);
+  assert.equal(state.lastEditProject.height, 1200);
+});
+
+test('FLUX 3 Image Klein sizes several references from the first at up to 1 MP', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'the laptop from the first image on the desk from the second image'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 1424);
+  assert.equal(state.lastEditProject.height, 736);
+});
+
+test('FLUX 3 Image Klein caps a one-photo edit asked above 4 MP at the photo size', () => {
+  // The socket refuses a one-photo Klein edit above 4 MiB pixels; the CLI renders
+  // at the largest allowed size instead and says so.
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    '--width', '3840',
+    '--height', '2160',
+    'add a small potted plant beside the laptop'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 2320);
+  assert.equal(state.lastEditProject.height, 1200);
+  assert.match(stderr, /edits one photo at up to 4 megapixels; rendering at 2320x1200 instead of 3840x2160/);
+});
+
+test('FLUX 3 Image Klein rejects an eleventh context image', () => {
+  expectCliError([
+    ...Array.from({ length: 11 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'compose every reference into one scene'
+  ], 'supports max 10 context images');
+});
+
+test('a context image on a prompt-only model suggests the models that take references', () => {
+  const { exitCode, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'z_image_turbo_bf16',
+    'make the background a beach'
+  ]);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /does not support context images/);
+  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(up to 10\)/);
+});
+
 test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {
   const { exitCode, stdout } = runCli([
     '--json',
@@ -2130,6 +2261,57 @@ test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', 
     assert.equal(state.lastVideoProject.guidance, undefined);
     assert.equal(state.lastVideoProject.sampler, undefined);
     assert.equal(state.lastVideoProject.scheduler, undefined);
+  }
+});
+
+test('MiniMax H3 R2V Turbo sizes stay inside the live catalog pixel cap', () => {
+  // sogni-socket refuses R2V Turbo above 522,240 pixels (its 960x544 canvas):
+  // "Video resolution must not exceed 522240 pixels (got 1280x704)". The live
+  // catalog publishes that cap, so it must win over the bundled H3 budget.
+  const catalog = JSON.stringify({
+    status: 'success',
+    data: {
+      model: {
+        id: 'minimax-h3-ref2va-fp8_r2v_turbo',
+        tierId: 'minimax-h3-ref2va-fp8_r2v_turbo',
+        parameters: {
+          steps: { min: 4, max: 4, default: 4 },
+          guidance: { min: 1, max: 1, default: 1 },
+          width: { min: 480, max: 1344, step: 32, default: 960 },
+          height: { min: 480, max: 1344, step: 32, default: 544 },
+          maxPixels: 522240,
+          defaultSize: '960x544',
+        },
+      },
+    },
+  });
+
+  const prompt = 'Use <Picture 1> for the subject. A slow push-in with soft room tone.';
+  const cases = [
+    // Two sizes production refused, landing on the 960x544 canvas itself.
+    { args: ['--width', '1280', '--height', '704'], expected: [960, 544] },
+    { args: ['--width', '768', '--height', '1344'], expected: [544, 960] },
+    // Extreme ratios: the 480 minimum side must not push the frame back over the cap.
+    { args: ['--width', '1344', '--height', '480'], expected: [1088, 480] },
+    { args: ['--width', '448', '--height', '1344'], expected: [480, 1088] },
+    // A prompt-derived 9:16 keeps the full 544x960 canvas.
+    { args: [], promptSuffix: ' Vertical 9:16.', expected: [544, 960] },
+  ];
+
+  for (const { args, promptSuffix = '', expected } of cases) {
+    const label = args.join(' ') || promptSuffix.trim();
+    const { exitCode, state, stderr } = runCli([
+      '--video',
+      '-m', 'minimax-h3-r2v-turbo',
+      ...args,
+      '--duration', '5',
+      '-c', SCREENSHOT_FIXTURE,
+      `${prompt}${promptSuffix}`
+    ], { SOGNI_AGENT_TEST_MODEL_TIERS_JSON: catalog });
+    assert.equal(exitCode, 0, `${label}: ${stderr}`);
+    const { width: sentWidth, height: sentHeight } = state.lastVideoProject;
+    assert.deepEqual([sentWidth, sentHeight], expected, `${label} was sent as ${sentWidth}x${sentHeight}`);
+    assert.ok(sentWidth * sentHeight <= 522240, `${label} stays within the cap`);
   }
 });
 

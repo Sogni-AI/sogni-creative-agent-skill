@@ -13,6 +13,7 @@ substitute another destination model's prompt contract.
 | SD 1.5 | Weighted or comma-separated tags; quality/medium, subject, environment, lighting/camera | `positive_prompt:` plus `negative_prompt:` |
 | SDXL | Hybrid natural language plus selective comma-separated style/quality terms; Pony variants start with their score tags | `positive_prompt:` plus `negative_prompt:` |
 | FLUX.1 Schnell | One concise natural-language visual description centered on the subject, composition, light, and style; no SD score/tag soup | Prompt text only |
+| FLUX 3 Image Klein | A full scene caption in plain sentences: subject, framing, setting, lighting, and style; for reference edits, what to take from each reference and how they combine; no negative prompt (guidance is fixed at 1) | Prompt text only |
 | Chroma 1 / v.46 / Detail | One coherent natural-language visual description; exact visible text in quotes; no SD score/tag soup | Prompt text only |
 | Krea 2 / Krea 2 Turbo | Dense, fluent rich caption emphasizing observable composition, palette, light, texture, and atmosphere; no SD weighting syntax | Prompt text only |
 | MOSS-Image SFT | Detailed natural-language caption, tags, or a supplied experimental JSON layout; preserve exact visible text and line breaks | Prompt text only; generation only |
@@ -50,6 +51,9 @@ Markdown fence, preamble, explanation, or render offer.
   registered generation and edit contracts. A generation-only selector such
   as `flux1-schnell-fp8` or `krea-2-turbo` must not silently accept an edit
   request.
+- `flux-3-klein` (FLUX 3 Image Klein) is one selector for both operations:
+  generation with no references, a start image, or edits guided by up to ten
+  references.
 - Use `qwen` / `qwen-lightning` as edit selectors and
   `qwen-2512` / `qwen-2512-lightning` as generation selectors.
 - Use `krea-identity-edit` or

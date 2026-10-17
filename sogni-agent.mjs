@@ -1884,6 +1884,37 @@ function getJpegDimensions(buffer) {
   return null;
 }
 
+const FLUX3_IMAGE_KLEIN_MODEL_ID = 'flux3_image_klein_sd_int8_convrot';
+const FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS = 4 * 1024 * 1024;
+
+/**
+ * FLUX 3 Image Klein's edit size from its first reference, the way Black Forest
+ * Labs' pipeline sizes references (the rule sogni-creative-agent's
+ * getFlux3ImageKleinEditOutputSize applies for web, chat and the hosted API):
+ * one photo keeps its shape at up to 4 MiB pixels and 4096 px a side, never
+ * enlarged; with several references the first sets the shape at up to 1 MiB.
+ * Sides land on the 16 px grid (256 minimum). Null beyond a 4:1 shape.
+ */
+function flux3KleinEditOutputSize(width, height, referenceCount) {
+  if (!(width > 0) || !(height > 0)) return null;
+  const grid = 16;
+  const maxPixels = referenceCount > 1 ? 1024 * 1024 : FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS;
+  let scale = Math.min(1, Math.sqrt(maxPixels / (width * height)), 4096 / Math.max(width, height));
+  if (Math.min(width, height) * scale < 256) scale = 256 / Math.min(width, height);
+  let w = Math.round((width * scale) / grid) * grid;
+  let h = Math.round((height * scale) / grid) * grid;
+  const aspect = width / height;
+  const shapeError = (a, b) => Math.abs(Math.log(a / b / aspect));
+  while (w * h > maxPixels) {
+    const narrower = shapeError(w - grid, h);
+    const shorter = shapeError(w, h - grid);
+    if (narrower < shorter - 1e-12 || (Math.abs(narrower - shorter) <= 1e-12 && w >= h)) w -= grid;
+    else h -= grid;
+  }
+  if (Math.min(w, h) < 256 || Math.max(w, h) > 4096 || Math.max(w, h) / Math.min(w, h) > 4) return null;
+  return { width: w, height: h };
+}
+
 function getImageDimensionsFromBuffer(buffer) {
   return getPngDimensions(buffer) || getJpegDimensions(buffer);
 }
@@ -15586,6 +15617,27 @@ async function main() {
       const contextBuffers = await Promise.all(
         options.contextImages.map(img => fetchMediaBuffer(img))
       );
+      // FLUX 3 Image Klein: an edit in another shape recomposes the photo, and the
+      // socket refuses a one-photo edit above 4 MiB pixels (larger than its photo
+      // the edit breaks). Size it from the first reference unless a size was asked for.
+      if (options.model === FLUX3_IMAGE_KLEIN_MODEL_ID) {
+        const meta = await sharp(contextBuffers[0]).metadata().catch(() => null);
+        const swapsAxes = meta?.orientation >= 5 && meta?.orientation <= 8;
+        const photo = meta?.width && meta?.height
+          ? { width: swapsAxes ? meta.height : meta.width, height: swapsAxes ? meta.width : meta.height }
+          : null;
+        const fitted = photo && flux3KleinEditOutputSize(photo.width, photo.height, contextBuffers.length);
+        const askedForSize = cliSet.width || cliSet.height || widthFromPrompt || heightFromPrompt;
+        if (fitted && !askedForSize) {
+          options.width = fitted.width;
+          options.height = fitted.height;
+          log(`Edit size ${fitted.width}x${fitted.height} from the ${contextBuffers.length > 1 ? 'first reference' : 'photo'} (${photo.width}x${photo.height})`);
+        } else if (fitted && contextBuffers.length === 1 && options.width * options.height > FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS) {
+          if (!options.quiet) console.error(`FLUX 3 Image Klein edits one photo at up to 4 megapixels; rendering at ${fitted.width}x${fitted.height} instead of ${options.width}x${options.height}.`);
+          options.width = fitted.width;
+          options.height = fitted.height;
+        }
+      }
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
       const steps = options.steps ?? modelDefaults?.steps ?? (isLightningImageModelSelection(options.model) ? 4 : 20);
       const guidance = options.guidance ?? modelDefaults?.guidance ?? (isLightningImageModelSelection(options.model) ? 3.5 : 7.5);

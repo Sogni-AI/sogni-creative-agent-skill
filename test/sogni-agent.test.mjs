@@ -1525,6 +1525,49 @@ test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {
   assert.equal(state.lastImageProject.height, 2160);
 });
 
+test('FLUX 3 Image Klein edits one photo at its own shape when no size is given', () => {
+  // docs/screenshot.jpg is 2314x1200 (under 4 MiB): kept, on the 16 px grid.
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'add a small potted plant beside the laptop'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 2320);
+  assert.equal(state.lastEditProject.height, 1200);
+});
+
+test('FLUX 3 Image Klein sizes several references from the first at up to 1 MP', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    'the laptop from the first image on the desk from the second image'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 1424);
+  assert.equal(state.lastEditProject.height, 736);
+});
+
+test('FLUX 3 Image Klein caps a one-photo edit asked above 4 MP at the photo size', () => {
+  // The socket refuses a one-photo Klein edit above 4 MiB pixels; the CLI renders
+  // at the largest allowed size instead and says so.
+  const { exitCode, state, stderr } = runCli([
+    '-c', SCREENSHOT_FIXTURE,
+    '-m', 'flux3_image_klein_sd_int8_convrot',
+    '--width', '3840',
+    '--height', '2160',
+    'add a small potted plant beside the laptop'
+  ], flux3KleinCatalogEnv());
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.width, 2320);
+  assert.equal(state.lastEditProject.height, 1200);
+  assert.match(stderr, /edits one photo at up to 4 megapixels; rendering at 2320x1200 instead of 3840x2160/);
+});
+
 test('FLUX 3 Image Klein rejects an eleventh context image', () => {
   expectCliError([
     ...Array.from({ length: 11 }, () => ['-c', SCREENSHOT_FIXTURE]).flat(),

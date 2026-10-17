@@ -1509,6 +1509,9 @@ test('FLUX 3 Image Klein generates from a prompt alone on its tier defaults', ()
   assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
   assert.equal(state.lastImageProject.steps, 16);
   assert.equal(state.lastImageProject.guidance, 1);
+  // Its tier default, not the CLI's generic 512x512 starting size.
+  assert.equal(state.lastImageProject.width, 1024);
+  assert.equal(state.lastImageProject.height, 1024);
 });
 
 test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {

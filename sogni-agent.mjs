@@ -15750,6 +15750,15 @@ async function main() {
       log(`Generating with ${options.model}...`);
       if (options.seed !== null && options.seed !== undefined) log(`Using seed: ${options.seed}`);
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
+      // FLUX 3 Image Klein renders natively at its tier default (1024x1024); the CLI's
+      // generic 512x512 starting size would quarter its pixels at the same per-image price.
+      if (
+        options.model === FLUX3_IMAGE_KLEIN_MODEL_ID
+        && !(cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt)
+      ) {
+        options.width = modelDefaults?.defaultWidth ?? 1024;
+        options.height = modelDefaults?.defaultHeight ?? 1024;
+      }
       const guidance = options.guidance ?? modelDefaults?.guidance ?? 1.0;
       const steps = options.steps ?? modelDefaults?.steps;
       const gptImageQuality = isGptImage2ModelSelection(options.model)

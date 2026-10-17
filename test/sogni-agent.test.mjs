@@ -1509,9 +1509,10 @@ test('FLUX 3 Image Klein generates from a prompt alone on its tier defaults', ()
   assert.equal(state.lastImageProject.modelId, 'flux3_image_klein_sd_int8_convrot');
   assert.equal(state.lastImageProject.steps, 16);
   assert.equal(state.lastImageProject.guidance, 1);
-  // Its tier default, not the CLI's generic 512x512 starting size.
-  assert.equal(state.lastImageProject.width, 1024);
-  assert.equal(state.lastImageProject.height, 1024);
+  // About 2 MP (Black Forest Labs recommends 2K), not the CLI's generic 512x512
+  // starting size or the API's 1024x1024 default.
+  assert.equal(state.lastImageProject.width, 1440);
+  assert.equal(state.lastImageProject.height, 1440);
 });
 
 test('FLUX 3 Image Klein passes a 4K size through unchanged', () => {
@@ -1541,7 +1542,7 @@ test('FLUX 3 Image Klein edits one photo at its own shape when no size is given'
   assert.equal(state.lastEditProject.height, 1200);
 });
 
-test('FLUX 3 Image Klein sizes several references from the first at up to 1 MP', () => {
+test('FLUX 3 Image Klein sizes several references from the first at up to 2 MP', () => {
   const { exitCode, state, stderr } = runCli([
     '-c', SCREENSHOT_FIXTURE,
     '-c', SCREENSHOT_FIXTURE,
@@ -1550,8 +1551,9 @@ test('FLUX 3 Image Klein sizes several references from the first at up to 1 MP',
   ], flux3KleinCatalogEnv());
 
   assert.equal(exitCode, 0, stderr);
-  assert.equal(state.lastEditProject.width, 1424);
-  assert.equal(state.lastEditProject.height, 736);
+  // 2314x1200 fitted to 2 MiB pixels on the 16 px grid.
+  assert.equal(state.lastEditProject.width, 2016);
+  assert.equal(state.lastEditProject.height, 1040);
 });
 
 test('FLUX 3 Image Klein caps a one-photo edit asked above 4 MP at the photo size', () => {

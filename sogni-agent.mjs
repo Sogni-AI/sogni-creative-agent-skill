@@ -1886,19 +1886,24 @@ function getJpegDimensions(buffer) {
 
 const FLUX3_IMAGE_KLEIN_MODEL_ID = 'flux3_image_klein_sd_int8_convrot';
 const FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS = 4 * 1024 * 1024;
+// About 2 megapixels: Black Forest Labs says Klein does best at 2K, and 2K is
+// 2 MP (Mark, 2026-10-17). The size of a text-to-image with no size given, and
+// the cap on an edit with several references.
+const FLUX3_IMAGE_KLEIN_DEFAULT_MAX_PIXELS = 2 * 1024 * 1024;
+const FLUX3_IMAGE_KLEIN_DEFAULT_SIZE = 1440;
 
 /**
  * FLUX 3 Image Klein's edit size from its first reference, the way Black Forest
  * Labs' pipeline sizes references (the rule sogni-creative-agent's
  * getFlux3ImageKleinEditOutputSize applies for web, chat and the hosted API):
  * one photo keeps its shape at up to 4 MiB pixels and 4096 px a side, never
- * enlarged; with several references the first sets the shape at up to 1 MiB.
+ * enlarged; with several references the first sets the shape at up to 2 MiB.
  * Sides land on the 16 px grid (256 minimum). Null beyond a 4:1 shape.
  */
 function flux3KleinEditOutputSize(width, height, referenceCount) {
   if (!(width > 0) || !(height > 0)) return null;
   const grid = 16;
-  const maxPixels = referenceCount > 1 ? 1024 * 1024 : FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS;
+  const maxPixels = referenceCount > 1 ? FLUX3_IMAGE_KLEIN_DEFAULT_MAX_PIXELS : FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS;
   let scale = Math.min(1, Math.sqrt(maxPixels / (width * height)), 4096 / Math.max(width, height));
   if (Math.min(width, height) * scale < 256) scale = 256 / Math.min(width, height);
   let w = Math.round((width * scale) / grid) * grid;
@@ -15750,14 +15755,15 @@ async function main() {
       log(`Generating with ${options.model}...`);
       if (options.seed !== null && options.seed !== undefined) log(`Using seed: ${options.seed}`);
       const modelDefaults = getModelDefaults(options.model, openclawConfig);
-      // FLUX 3 Image Klein renders natively at its tier default (1024x1024); the CLI's
-      // generic 512x512 starting size would quarter its pixels at the same per-image price.
+      // FLUX 3 Image Klein with no size given renders at about 2 MP (1440x1440),
+      // the 2K Black Forest Labs recommends, as web, chat and the hosted tools do;
+      // not the CLI's generic 512x512 starting size or the API's 1024x1024 default.
       if (
         options.model === FLUX3_IMAGE_KLEIN_MODEL_ID
         && !(cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt)
       ) {
-        options.width = modelDefaults?.defaultWidth ?? 1024;
-        options.height = modelDefaults?.defaultHeight ?? 1024;
+        options.width = FLUX3_IMAGE_KLEIN_DEFAULT_SIZE;
+        options.height = FLUX3_IMAGE_KLEIN_DEFAULT_SIZE;
       }
       const guidance = options.guidance ?? modelDefaults?.guidance ?? 1.0;
       const steps = options.steps ?? modelDefaults?.steps;

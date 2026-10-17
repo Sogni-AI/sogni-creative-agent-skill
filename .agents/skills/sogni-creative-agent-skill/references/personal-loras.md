@@ -20,6 +20,12 @@ sogni-agent -m krea2_turbo_fp8_scaled --lora personal-REPLACE-WITH-RETURNED-ID -
 sogni-agent --video -m minimax-h3-fasth3-t2v-turbo-2stage --target-resolution 1080p --lora personal-REPLACE-WITH-RETURNED-ID --no-filter "the user's H3 prompt"
 ```
 
+MOSS supports Personal LoRAs on `moss_image_sft_int8_convrot` and
+`moss_image_sft_dmd8_int8_convrot`. Import for either preset; compatible entries
+are shared across both. The 8-step preset keeps its built-in DMD adapter at 1.0
+and applies the personal adapter after it. Personal strength controls only the
+personal adapter. MOSS LoRAs cannot be used on Krea or FLUX.
+
 First confirm the selected model occurs in the entry's `modelIds`. Preserve the user's selected model. The CLI discovers owned entries through the authenticated catalog and uses catalog defaults when strengths are omitted; repeat `--lora-strength` to set explicit ordered strengths. Follow the entry's prompt and workflow requirements. Personal imports require `--no-filter`; explain that setting when it was not already requested. H3 audio-guided modes do not support LoRAs.
 
 `--list-loras` remains public and requires no account; add `--include-personal-loras` to merge owned ready imports. Catalog responses are account-specific. Do not share them between users.

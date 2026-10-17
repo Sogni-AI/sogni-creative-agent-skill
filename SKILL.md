@@ -483,7 +483,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 | Read this | When the task involves |
 |-----------|------------------------|
 | [`references/interactive-worlds.md`](./references/interactive-worlds.md) | Building an explorable world end to end: the nine-model stack in order, the prepare/render/verify/retain loop, and the measured failure modes of each stage — segmentation prompts, matte thresholds, 3D input resolution, single-keyframe clips and reverse playback, dialogue loudness spread, voice-clone transcripts, on-camera lip-sync |
-| [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX.1 Schnell, Chroma, Krea 2, Qwen, Z-Image, GPT Image, or model-specific edit operations |
+| [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX.1 Schnell, Chroma, Krea 2, Qwen, Z-Image, MOSS-Image, GPT Image, or model-specific edit operations |
 | [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, dialogue tags, and intermediate keyframes; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |

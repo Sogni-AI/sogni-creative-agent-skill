@@ -88,6 +88,8 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
+| `moss_image_sft_int8_convrot` | Full-step | Uncensored MOSS-Image SFT text-to-image with compatible Personal LoRAs; natural-language captions, tags and experimental JSON layouts; 50 steps, CFG 3, Euler / sgm_uniform |
+| `moss_image_sft_dmd8_int8_convrot` | 8-step | Uncensored MOSS-Image with the built-in DMD adapter; CFG 1, Euler / sgm_uniform; compatible Personal LoRAs |
 | `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
 | `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
 | `dark_beast_krea2_identity_edit_v1_2` | Fast | Dark Beast Krea 2 Identity Edit community LoRA with 1-2 references |

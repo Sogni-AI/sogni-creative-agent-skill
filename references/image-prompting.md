@@ -15,6 +15,7 @@ substitute another destination model's prompt contract.
 | FLUX.1 Schnell | One concise natural-language visual description centered on the subject, composition, light, and style; no SD score/tag soup | Prompt text only |
 | Chroma 1 / v.46 / Detail | One coherent natural-language visual description; exact visible text in quotes; no SD score/tag soup | Prompt text only |
 | Krea 2 / Krea 2 Turbo | Dense, fluent rich caption emphasizing observable composition, palette, light, texture, and atmosphere; no SD weighting syntax | Prompt text only |
+| MOSS-Image SFT | Detailed natural-language caption, tags, or a supplied experimental JSON layout; preserve exact visible text and line breaks | Prompt text only; generation only |
 | Qwen Image 2512 | Detailed natural-language description with explicit spatial relationships and exact quoted typography | `positive_prompt:` plus `negative_prompt:` |
 | Z-Image | Compact instruction-aware natural-language caption | Foundation model: positive plus negative; Turbo: prompt text only |
 | GPT Image 2 | Direct natural-language creative direction with explicit layout, hierarchy, and exact quoted copy | Prompt text only |
@@ -32,6 +33,15 @@ Prompt-only families return the directly runnable prompt with no label,
 Markdown fence, preamble, explanation, or render offer.
 
 ## Selector and operation discipline
+
+- MOSS-Image SFT uses hosted selector `moss-image` and direct CLI model ID
+  `moss_image_sft_int8_convrot`. The 8-step preset uses hosted selector
+  `moss-image-8step` or direct ID `moss_image_sft_dmd8_int8_convrot`, with exactly
+  8 steps and guidance 1. Both accept compatible Personal LoRAs. MOSS generates
+  from text and has no uploaded-photo
+  editing or reference-image input. JSON layouts use centered absolute pixel
+  boxes in `[y_min,x_min,y_max,x_max]` order, `bbox_format: "yxyx"`, and
+  `bbox_coord_space: "abs_centralized"`; match the generation canvas to the layout.
 
 - Treat a model selector as an exact capability declaration, not a name to
   fuzzy-match into a convenient family. Every selector exposed by

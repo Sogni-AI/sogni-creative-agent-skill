@@ -26,6 +26,8 @@ It ships four ways:
 
 With this skill, an agent can:
 
+- generate with MOSS-Image SFT from captions, tags, or JSON layouts (`-m moss_image_sft_int8_convrot`), or the 8-step preset (`-m moss_image_sft_dmd8_int8_convrot`); both accept compatible Personal LoRAs. See the [model recipes](./references/models.md).
+
 - generate images from prompts and edit/restyle existing images
 - select an object in an original image and return its SAM 3 mask (`--segment`; see the [object selection guide](references/object-selection.md))
 - create videos from text, images, first/last frames, audio, or source video (LTX-2.5), with LTX-2.3 retained for voice ID, transition, and 10Eros workflows

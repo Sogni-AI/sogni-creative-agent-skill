@@ -25,6 +25,10 @@ Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); Qwen
 `--speech-mode voice|clone|design`. Read the model reference for required inputs,
 allowed controls, and hosted alternatives.
 
+MOSS-Image SFT uses `-m moss_image_sft_int8_convrot`: 50 steps, guidance 3,
+Euler / sgm_uniform. It generates from text, tags or experimental JSON layouts
+and accepts no reference images. Read `references/image-prompting.md` for layouts.
+
 ## Install (pick the integration that matches your environment)
 
 ```bash

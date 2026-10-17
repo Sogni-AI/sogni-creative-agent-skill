@@ -17,6 +17,7 @@ Once ready, use the actual returned ID:
 
 ```bash
 sogni-agent -m krea2_turbo_fp8_scaled --lora personal-REPLACE-WITH-RETURNED-ID --no-filter "a glass sculpture"
+sogni-agent -m flux3_image_klein_sd_int8_convrot --lora personal-REPLACE-WITH-RETURNED-ID --no-filter "an old fisherman mending a net on a wooden dock at dawn"
 sogni-agent --video -m minimax-h3-fasth3-t2v-turbo-2stage --target-resolution 1080p --lora personal-REPLACE-WITH-RETURNED-ID --no-filter "the user's H3 prompt"
 ```
 

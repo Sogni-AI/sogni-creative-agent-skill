@@ -138,13 +138,21 @@ Qwen and Krea identity edit models. Hosted/chat planning uses the selector
 `flux-3-klein` on both `generate_image` and `edit_image`; direct CLI `-m` uses
 `flux3_image_klein_sd_int8_convrot`. Output is 256-4096 px per side (step 16,
 default 1024x1024) at 4-16 steps (default 16), including 4K: 3840x2160,
-2160x3840 and 4096x4096. Renders above 2048x2048 pixels run on 32 GB GPUs and
-take longer. Guidance is fixed at 1, so a
-negative prompt has no effect; write a full scene caption instead, as Black
-Forest Labs recommends. It does not take LoRAs; use Krea 2 Turbo for LoRA
-stacks. Leave steps, guidance, sampler, and scheduler unset to use the live
-tier defaults. Each reference adds render time and cost, so pass only the
-references the result needs.
+2160x3840 and 4096x4096 for prompts and several references. Renders above
+2048x2048 pixels run on 30 GB+ GPUs and take longer. An edit of one photo
+renders at that photo's own shape, up to 4 megapixels (for example 2352x1776 for
+a 4:3 photo; never enlarged): the CLI picks that size when you give none, and
+caps a larger one, because the server refuses one-photo edits above 4 MP (larger
+than its photo the edit breaks). With several references the first sets the
+shape at up to 1 MP. A different shape recomposes the photo. Guidance is fixed
+at 1, so a negative prompt has no effect; write a full scene caption instead,
+as Black Forest Labs recommends. It has no catalog LoRAs; personal LoRAs
+imported for FLUX 3 Image Klein work (`--lora personal-<id> --no-filter`; see
+[`personal-loras.md`](./personal-loras.md)). It does not
+render nudity: for mature requests use `dark_beast_krea2_fp8`, or with
+references `dark_beast_krea2_identity_edit_v1_2`. Leave steps, guidance,
+sampler, and scheduler unset to use the live tier defaults. Each reference adds
+render time and cost, so pass only the references the result needs.
 
 ```bash
 sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg \

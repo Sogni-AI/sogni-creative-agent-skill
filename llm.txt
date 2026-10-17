@@ -161,8 +161,11 @@ retrying.
   guidance 1.
 - FLUX 3 Image Klein: `-m flux3_image_klein_sd_int8_convrot` for text-to-image,
   or add up to ten `-c <image>` references for edits (references optional);
-  256-4096 px (4K included), 4-16 steps (default 16), guidance fixed at 1,
-  no negative prompt. Hosted selector: `flux-3-klein`.
+  256-4096 px (4K included for prompts and several references), 4-16 steps
+  (default 16), guidance fixed at 1, no negative prompt. A one-photo edit
+  renders at the photo's shape up to 4 MP (picked automatically, larger sizes
+  capped). Personal Klein LoRAs work; no nudity (use Dark Beast Krea 2).
+  Hosted selector: `flux-3-klein`.
 - Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.
 - JSON errors include canonical `errorType`, `errorCategory`, and `retryable`.
 

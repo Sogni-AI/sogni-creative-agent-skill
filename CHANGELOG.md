@@ -1,3 +1,10 @@
+## [3.57.1] - 2026-10-17
+
+### Bug Fixes
+
+* FLUX 3 Image Klein now renders at about 2 megapixels when no size is given, the 2K that Black Forest Labs recommends for its best results: a text-to-image renders at 1440x1440 (was 1024x1024), and an edit with several references sizes from the first one at up to 2 megapixels (was 1), never enlarged. An edit of one photo still keeps that photo's own shape up to 4 megapixels, and a size you give is kept. This matches Sogni Web, chat and the hosted agent.
+* Update the intelligence client to 4.14.1 (creative agent 2.15.1) and the Sogni SDK (`@sogni-ai/sogni-client`) to 5.64.0 with protocol 1.0.0-alpha.51, the versions Sogni Web, chat and the hosted API run. 3.57.0 listed SDK 5.64.0 but still installed 5.63.3; this release installs 5.64.0, which routes Klein with up to ten references at up to 4096 px a side.
+
 ## [3.57.0] - 2026-10-16
 
 ### Features

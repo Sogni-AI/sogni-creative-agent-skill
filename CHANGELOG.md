@@ -1,3 +1,13 @@
+## [3.58.0] - 2026-10-17
+
+### Added
+
+* Generate uncensored images from text with MOSS-Image and MOSS-Image 8-Step, including compatible Personal LoRAs.
+
+### Changed
+
+* Use the published MOSS contracts in intelligence client 4.15.0 and SDK 5.65.0.
+
 ## [3.57.1] - 2026-10-17
 
 ### Bug Fixes

@@ -26,7 +26,7 @@ It ships four ways:
 
 With this skill, an agent can:
 
-- generate with MOSS-Image SFT from captions, tags, or JSON layouts (`-m moss_image_sft_int8_convrot`), or the 8-step preset (`-m moss_image_sft_dmd8_int8_convrot`); both accept compatible Personal LoRAs. See the [model recipes](./references/models.md).
+- generate with MOSS-Image SFT from captions, tags, or JSON layouts (`-m moss_image_sft_int8_convrot`), or the 8-step preset (`-m moss_image_sft_dmd8_int8_convrot`); both accept compatible Personal LoRAs. Optional `--moss-rope-scale-x` and `--moss-rope-scale-y` adjust spatial composition (0–100; neutral 1) while preserving output dimensions. See the [model recipes](./references/models.md).
 
 - generate images from prompts and edit/restyle existing images
 - select an object in an original image and return its SAM 3 mask (`--segment`; see the [object selection guide](references/object-selection.md))

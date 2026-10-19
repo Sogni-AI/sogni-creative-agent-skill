@@ -451,6 +451,16 @@ test('default image generation uses 512x512 and prompt', () => {
   assert.equal(state.lastImageProject.sizePreset, 'custom');
 });
 
+test('MOSS composition scales reach image projects and preserve zero', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'moss_image_sft_int8_convrot', '--moss-rope-scale-x', '0.5',
+    '--moss-rope-scale-y', '0', 'A wide portrait'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastImageProject.mossRopeScaleX, 0.5);
+  assert.equal(state.lastImageProject.mossRopeScaleY, 0);
+});
+
 test('reuses one pooled app ID across separate CLI sessions', () => {
   const sharedHome = mkdtempSync(join(tmpdir(), 'sogni-agent-shared-home-'));
   const sharedEnv = { HOME: sharedHome, USERPROFILE: sharedHome };

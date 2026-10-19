@@ -1981,6 +1981,19 @@ function isGptImage2ModelSelection(modelId) {
 }
 
 function imageOptionsFromCli() {
+  const rope = {};
+  for (const name of ['mossRopeScaleX', 'mossRopeScaleY']) {
+    const value = options[name];
+    if (value === undefined) continue;
+    if (getSharedModelDefaults(options.model)?.family !== 'moss-image') {
+      fatalCliError(`${name} is only supported by MOSS-Image.`);
+    }
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      fatalCliError(`${name} must be a finite number between 0 and 100.`);
+    }
+    if (value !== 1) rope[name] = value;
+  }
+  if (Object.keys(rope).length) return rope;
   if (!isGptImage2ModelSelection(options.model)) return {};
   return {
     ...getGptImageRequestOptions({
@@ -3895,6 +3908,10 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.guidance = parseNumberValue(raw, arg);
     cliSet.guidance = true;
+  } else if (arg === '--moss-rope-scale-x' || arg === '--moss-rope-scale-y') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options[arg.endsWith('-x') ? 'mossRopeScaleX' : 'mossRopeScaleY'] = parseNumberValue(raw, arg);
   } else if (arg === '--return-last-frame') {
     options.returnLastFrame = true;
   } else if (arg === '--no-prompt-metadata') {
@@ -5144,6 +5161,8 @@ General:
                         (default 24, max 168); fetch one with --result
   --steps <num>         Override steps (model-dependent)
   --guidance <num>      Override guidance (model-dependent)
+  --moss-rope-scale-x <num>  MOSS horizontal composition scale (0–100; neutral 1)
+  --moss-rope-scale-y <num>  MOSS vertical composition scale (0–100; neutral 1)
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
   --billing-mode <mode> Billing: auto|subscription|tokens (default: server decides; "subscription"
                         requires Sogni Unlimited coverage, "tokens" opts out of it)

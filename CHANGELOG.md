@@ -1,3 +1,9 @@
+## [3.58.2] - 2026-10-19
+
+### Bug Fixes
+
+* FLUX 3 Image Klein edits now take up to ten references and GPT Image edits up to 16. With 7 or more `-c` images the CLI failed with "contextImages can have at most 6 images", because the intelligence client applied one limit of 6 to every model; it now checks each model's own limit. Update the intelligence client to 4.16.2 for this fix.
+
 ## [3.58.1] - 2026-10-19
 
 ### Bug Fixes

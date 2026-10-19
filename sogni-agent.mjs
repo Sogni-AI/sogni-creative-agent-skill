@@ -689,6 +689,7 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
     prompt: prompt ?? null
   };
   if (classified.metadata) payload.metadata = classified.metadata;
+  if (classified.metadata?.consentInstructions && !hint) payload.hint = classified.metadata.consentInstructions;
   if (classified.technicalError && classified.technicalError !== payload.error) {
     payload.technicalError = classified.technicalError;
   }
@@ -811,7 +812,7 @@ function classifyCliError(error, context = {}) {
   // consent agreement in the Sogni app. The message names the refused model. It
   // must win over the Seedance failure matchers below, never be retried, and
   // never be accepted by the CLI.
-  const consentPayload = modelConsentRequiredPayloadFromError(error);
+  const consentPayload = modelConsentRequiredPayloadFromError(error, context.accountUsername);
   if (consentPayload) {
     return {
       error_type: 'PERMISSION_REQUIRED',
@@ -946,6 +947,7 @@ function addCanonicalErrorFields(payload, error, context = {}) {
   payload.errorCategory = classified.category;
   payload.retryable = classified.retryable;
   if (classified.metadata) payload.metadata = classified.metadata;
+  if (classified.metadata?.consentInstructions && !payload.hint) payload.hint = classified.metadata.consentInstructions;
   if (classified.technicalError && classified.technicalError !== classified.message) {
     payload.technicalError = classified.technicalError;
   }
@@ -975,6 +977,7 @@ function printHumanError(error, context = {}) {
     console.error(`Details: ${classified.technicalError}`);
   }
   const hint = error?.hint
+    || classified?.metadata?.consentInstructions
     || (classified?.category === 'insufficient_credits' ? SPARK_PACKS_PURCHASE_HINT : null);
   if (hint) console.error(`Hint: ${hint}`);
 }
@@ -16335,6 +16338,12 @@ async function main() {
     }
     enrichAppIdLimitError(error);
 
+    const errorContext = { modelId: options.model };
+    if (modelConsentRequiredPayloadFromError(error) && client?.isConnected?.()) {
+      // Cached authenticated identity, not another network preflight. The browser
+      // may be signed in to a different account from the CLI's API key.
+      try { errorContext.accountUsername = (await client.getAccountInfo())?.username; } catch { /* preserve the original refusal */ }
+    }
     exitCode = 1;
     const shouldJson = options.json || IS_OPENCLAW_INVOCATION;
     if (shouldJson) {
@@ -16342,7 +16351,7 @@ async function main() {
         success: false,
         error: error.message,
         prompt: options.prompt ?? null
-      }, error, { modelId: options.model });
+      }, error, errorContext);
       if (error.code) payload.errorCode = error.code;
       if (error.details) payload.errorDetails = error.details;
       // Don't let a stale per-error hint overwrite the canonical
@@ -16380,10 +16389,10 @@ async function main() {
       if (IS_OPENCLAW_INVOCATION) payload.openclaw = true;
       console.log(JSON.stringify(payload));
       if (!options.json) {
-        printHumanError(error, { modelId: options.model });
+        printHumanError(error, errorContext);
       }
     } else {
-      printHumanError(error, { modelId: options.model });
+      printHumanError(error, errorContext);
     }
   } finally {
     try {

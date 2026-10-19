@@ -8966,6 +8966,10 @@ test('json error: Seedance 2.5 Uncensored consent refusal (4103) is not retryabl
   assert.equal(payload.metadata.error, 'model_consent_required');
   assert.equal(payload.metadata.errorCode, 4103);
   assert.equal(payload.metadata.nextAction, 'wait_for_user');
+  assert.equal(payload.metadata.consentUrl, 'https://app.sogni.ai/account/model-consents/seedance-2-5-uncensored?account=stub-user');
+  assert.equal(payload.metadata.accountUsername, 'stub-user');
+  assert.match(payload.hint, /same Sogni account as your agent or API key/);
+  assert.match(payload.hint, /retry your original request/);
 });
 
 test('json error: a model held on the network (4104) keeps the socket message and is not retryable', () => {
@@ -9020,6 +9024,28 @@ test('json error: a model held on the network (4104) keeps the socket message an
   assert.equal(quotePayload.errorType, 'MODEL_UNAVAILABLE');
   assert.equal(quotePayload.retryable, false);
   assert.equal(quotePayload.metadata.error, 'model_not_yet_available');
+});
+
+test('human consent refusals give a direct agreement link and account and return guidance', () => {
+  for (const [model, modelId, label] of [
+    ['seedance2-5-uncensored', 'seedance-2-5-uncensored', 'Seedance 2.5 Uncensored'],
+    ['seedance2-mini-uncensored', 'seedance-2-0-mini-uncensored', 'Seedance 2.0 Mini Uncensored']
+  ]) {
+    const result = runCli(['--video', '-m', model, 'A quiet bookshop.'], {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+        event: 'PROJECT_FAILED',
+        payload: {
+          code: 4103,
+          message: `${label} requires a one-time likeness and consent agreement.`,
+          consentRequired: { key: 'seedance-2-5-uncensored', version: 2, modelId }
+        }
+      })
+    });
+    assert.equal(result.exitCode, 1);
+    assert.ok(result.stderr.includes(`https://app.sogni.ai/account/model-consents/${modelId}`));
+    assert.match(result.stderr, /same Sogni account as your agent or API key/);
+    assert.match(result.stderr, /retry your original request/);
+  }
 });
 
 test('Seedance 2.0 Mini Uncensored keeps its own model id with the Seedance 2.0 Mini limits', () => {
@@ -9086,6 +9112,8 @@ test('json error: Seedance 2.0 Mini Uncensored consent refusal (4103) names the 
     assert.equal(payload.retryable, false);
     assert.equal(payload.error, socketMessage);
     assert.equal(payload.metadata.errorCode, 4103);
+    assert.equal(payload.metadata.consentUrl, 'https://app.sogni.ai/account/model-consents/seedance-2-0-mini-uncensored?account=stub-user');
+    assert.ok(payload.hint.includes(payload.metadata.consentUrl));
     if (env.SOGNI_AGENT_TEST_FAILURE_EVENT_JSON) assert.deepEqual(payload.metadata.consentRequired, consentRequired);
   }
 });

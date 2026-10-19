@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "CLI and agent skill for personal LoRAs, image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D single- and multi-view image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo (including audio-to-video from an uploaded track)/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.58.0"
+  version: "3.58.1"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -399,7 +399,7 @@ When the requested image is meant to **repeat edge to edge without visible joins
 
 ### Model selection
 
-Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / Wan 3.0 Enhanced / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules. Seedance 2.5 Uncensored (`-m seedance2-5-uncensored`, also "Seedance Uncensored" or "Seedance Spicy") has every Seedance 2.5 mode and limit; use it only when the user asks for it. Error 4103 means the account has not accepted its one-time likeness and consent agreement: tell the user to accept it in the Sogni app and do not retry.
+Prefer `-Q` presets and automatic workflow routing. When a specific model is needed (GPT Image 2 text rendering, Seedance / HappyHorse / Wan 3 / Wan 3.0 Enhanced / MiniMax H3 native audio and dialogue, WAN 2.2 lip-sync, LTX dialogue), **read [`references/models.md`](./references/models.md)** for the catalog, recommended selectors, and sizing/divisibility rules. Seedance 2.5 Uncensored (`-m seedance2-5-uncensored`, also "Seedance Uncensored" or "Seedance Spicy") has every Seedance 2.5 mode and limit; use it only when the user asks for it. On error 4103, show the returned `consentUrl` as a clickable link and include `consentInstructions`, with the account to use and how to return to the original request after manual acceptance. Never accept for the user or retry while acceptance is pending.
 
 `ltx23-eros` is an explicit-only uncensored LTX-2.3 image-to-video selector. Never choose it merely because a prompt appears sexual or another model rejects a request. Use it only when the user explicitly asks for 10Eros/the uncensored model and explicitly permits disabling the content filter. It requires an input image, `--no-filter`, and a 30GB+ worker; the CLI pins its required 9 steps, guidance 1, `euler_ancestral` sampler, and `manual_sigmas` scheduler.
 

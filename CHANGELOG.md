@@ -1,3 +1,9 @@
+## [3.58.1] - 2026-10-19
+
+### Bug Fixes
+
+* When a model needs its one-time account agreement, show a direct review link, the Sogni account to use, and instructions for returning to the original request after accepting. Update the intelligence client to 4.16.1 for these recovery details.
+
 ## [3.58.0] - 2026-10-18
 
 ### Added

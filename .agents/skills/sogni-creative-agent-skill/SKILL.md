@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.58.0"
+  version: "3.58.1"
   author: Sogni AI
   hermes:
     category: creative
@@ -122,8 +122,10 @@ Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
 with optional `--output-format mov` and `--return-last-frame`. Seedance 2.5
 Uncensored (`seedance2-5-uncensored`) has the same limits and Seedance 2.0 Mini
 Uncensored (`seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only
-when asked, and on error 4103 tell the user to accept their shared likeness and
-consent agreement in the Sogni app instead of retrying. FastH3 Two-Stage
+when asked. On error 4103, show the returned `consentUrl` and
+`consentInstructions`: sign in with the same account as the agent/API key,
+accept the shared agreement, then return and retry the original request.
+Never accept for the user or retry while acceptance is pending. FastH3 Two-Stage
 delivers 720p/1080p/2K through its own model selector. FastH3 audio-to-video
 (`minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`) drives H3 with an
 uploaded `--ref-audio` track and keeps it as the soundtrack. Repeatable

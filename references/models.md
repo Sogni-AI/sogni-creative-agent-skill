@@ -694,9 +694,11 @@ comes at a premium rate above Seedance 2.5; quote a render with
 - **Likeness and consent agreement**: each account must accept a one-time
   likeness and consent agreement in a Sogni app (web or chat) before its first
   render. Until then every job fails with error `4103`; the CLI reports it as a
-  non-retryable `PERMISSION_REQUIRED` error that tells the user to accept the
-  agreement in the Sogni app. Do not retry, and never try to accept it for the
-  user (an API-key session cannot). Price estimates still work beforehand.
+  non-retryable `PERMISSION_REQUIRED` error with `consentUrl` and
+  `consentInstructions`. Show the clickable link, sign in with the same account
+  as the agent/API key, accept there, then return and retry the original request.
+  Never accept for the user or retry while acceptance is pending.
+  Price estimates still work beforehand.
 - **Not yet released**: where Sogni has not released the model yet, jobs and
   price estimates fail with error `4104`, reported as a non-retryable
   `MODEL_UNAVAILABLE` error whose message names the models to use instead.
@@ -723,7 +725,9 @@ Seedance 2.0 Mini; quote a render with `--estimate-video-cost`.
   consent agreement of Seedance 2.5 Uncensored; an account that accepted it in a
   Sogni app can use both. Until then every job fails with error `4103`, which
   the CLI reports as a non-retryable `PERMISSION_REQUIRED` error naming Seedance
-  2.0 Mini Uncensored. Do not retry, and never try to accept it for the user.
+  2.0 Mini Uncensored. Show the returned clickable `consentUrl` and
+  `consentInstructions`, including the account and return guidance. Never accept
+  for the user or retry while acceptance is pending.
 - **Not yet released**: where Sogni has not released the model yet, jobs and
   price estimates fail with error `4104`, reported as a non-retryable
   `MODEL_UNAVAILABLE` error whose message names the models to use instead.

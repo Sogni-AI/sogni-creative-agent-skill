@@ -1,3 +1,9 @@
+## [3.58.3] - 2026-10-20
+
+### Bug Fixes
+
+* MiniMax H3 video tools now describe Mystic X v5 beside v4 and the Action Speed Slider, whose negative strengths give slow motion and positive strengths faster action. The H3 LoRA reference lists both and corrects Mystic X v4's catalog default to 0.5. Update the intelligence client to 4.16.3 for this guidance.
+
 ## [3.58.2] - 2026-10-19
 
 ### Bug Fixes

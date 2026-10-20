@@ -6,8 +6,10 @@ the CLI refuses the combination rather than rendering as if you had not asked.
 
 Video LoRAs are a different shape from the Krea 2 image sliders:
 
-- **Positive-only.** A negative strength is not an inverse effect, and `0` is
-  off. The bipolar convention belongs to the Krea 2 image sliders alone.
+- **Positive-only, except Action Speed.** For the fine-tunes a negative strength
+  is not an inverse effect, and `0` is off. `h3-action-speed-slider` is the one
+  bipolar H3 adapter: negative strengths slow the action, positive strengths
+  speed it up.
 - **One file per family**, not one per effect.
 - **Availability differs by H3 mode.** Read the live catalog for the exact mode
   you are rendering; the mode's canonical model id is the filter.
@@ -28,9 +30,10 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 
 Bare `-m minimax-h3` is not enough to validate a LoRA request: it resolves by
 frame arguments, and availability differs per mode. Name the explicit mode.
-The Balanced selectors do not currently publish user-selectable adapters
-(as of 2026-09); their built-in LightX2V FL2VA or Larry v4 Ref2VA acceleration
-dependency is not a custom LoRA slot. The live catalog remains authoritative if that changes.
+The Balanced text, image and first+last frame selectors take the same adapters
+as their Standard modes (as of 2026-10); their built-in LightX2V FL2VA or Larry
+v4 Ref2VA acceleration dependency is not a custom LoRA slot. The live catalog
+remains authoritative if that changes.
 FastH3 keeps the FastVideo engine when an H3 LoRA is attached. Base jobs
 require 23 GB, while jobs with an H3 LoRA require 32 GB. FastH3 has no R2V
 mode. Always check the exact FastVideo model id's live catalog before relying
@@ -57,9 +60,18 @@ you supplied a first or last frame.
 was asked instead of improvising. Range `0-1`, default `1`, usable band
 `0.7-1`. No trigger word. Opt-in mature-capable; requires `--no-filter`.
 
-`h3-mystic-xxx-v4` — an uncensored all-round adult adapter that keeps motion,
-temporal consistency, and fine detail. Range `0-1`, default `1`, usable band
-`0.2-1`. No trigger word. Requires `--no-filter`.
+`h3-mystic-xxx-v5` — an uncensored all-round adult adapter that keeps motion,
+temporal consistency, and fine detail; stronger than v4 at the same strength.
+Range `0-1`, catalog default `0.5`, recommended band `0.2-0.6`. No trigger
+word. Requires `--no-filter`. `h3-mystic-xxx-v4` remains available with the
+same range and default.
+
+`h3-action-speed-slider` — changes how fast limb actions such as punches,
+kicks and sword swings play. Range `-8` to `8`, catalog default `4`,
+recommended band `-4` to `4`; negative strengths give slow motion and `0` is
+off. No trigger word.
+
+Neither Mystic version nor Action Speed is offered on Reference-to-video.
 
 Only `h3-realism-people` is published on every mode. Ref2VA carries it alone.
 
@@ -74,6 +86,10 @@ sogni-agent --video --ref shot.png -m minimax-h3-i2v \
 sogni-agent --video -m minimax-h3-t2v --no-filter \
   --loras h3-realism-people,h3-vbvr-video-reasoning \
   --lora-strengths 0.8,0.9 "r34l1sm, a welder lowers her mask"
+
+# Slow motion with the bipolar Action Speed Slider
+sogni-agent --video --ref shot.png -m minimax-h3-i2v \
+  --lora h3-action-speed-slider --lora-strength -4 "a sword swing through falling rain"
 ```
 
 Omitting `--lora-strengths` applies each adapter's **catalog default**. Sending

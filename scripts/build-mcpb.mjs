@@ -31,9 +31,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     stageMcpb(staging);
     const output = join(ROOT, 'dist', 'sogni-creative-agent.mcpb');
     mkdirSync(dirname(output), { recursive: true });
+    // Exact version: a bare `npx` runs whatever is newest on the registry.
     const result = spawnSync(
       process.platform === 'win32' ? 'npx.cmd' : 'npx',
-      ['-y', '@anthropic-ai/mcpb', 'pack', staging, output],
+      ['-y', '@anthropic-ai/mcpb@2.1.2', 'pack', staging, output],
       { stdio: 'inherit', shell: process.platform === 'win32' },
     );
     if (result.error) throw result.error;

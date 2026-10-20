@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "CLI and agent skill for personal LoRAs, image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D single- and multi-view image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo (including audio-to-video from an uploaded track)/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.58.3"
+  version: "3.58.4"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -80,7 +80,7 @@ When a user asks to uninstall, run `npx setup-sogni-agent-skill --uninstall --re
 ## Setup
 
 1. **Get your Sogni API key** by logging into https://dashboard.sogni.ai and opening the account menu.
-2. **Create the credentials file** (or just export `SOGNI_API_KEY`):
+2. **Create the credentials file** (or just export `SOGNI_API_KEY`). When the person has a terminal, have them do this themselves rather than paste the key into the chat; if they give it to you anyway, write it only to this file and don't repeat it back:
 
 ```bash
 mkdir -p ~/.config/sogni
@@ -90,7 +90,7 @@ EOF
 chmod 600 ~/.config/sogni/credentials
 ```
 
-3. **Verify:** `sogni-agent doctor`
+3. **Verify:** `sogni-agent doctor`, which checks the key without showing it. **Keep the key secret:** never read or print the key or the credentials file (`cat`, `echo $SOGNI_API_KEY`), and never put it in a commit, a generated file, a log or a prompt.
 
 When this skill is distributed via ClawHub, it bootstraps its runtime dependencies from `skill-package.json` during install (the install hook skips the copy when a real `package.json` is already present, so it never clobbers a git checkout).
 
@@ -104,7 +104,7 @@ sogni-agent -o cat.png "a cat wearing a hat"         # ✓ lands in PWD
 sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't easily find it
 ```
 
-`/tmp` is reserved for transient intermediate files the CLI cleans up itself. Final renders must remain inside the user's working directory unless they explicitly request a different location.
+`/tmp` is reserved for transient intermediate files the CLI cleans up itself. Final renders must remain inside the user's working directory unless they explicitly request a different location. `-o` replaces an existing file without warning, so give each new render its own filename. Unless the person asks, never write over their source files or an earlier render, and never remove their media, personas or memories (`--persona-remove`, `--memory-remove`): renders cost money, and their photos may be irreplaceable.
 
 ## Filesystem Paths and Overrides
 

@@ -125,7 +125,8 @@ chmod 600 ~/.config/sogni/credentials
 ```
 
 You can also export `SOGNI_API_KEY` instead of writing the file. Confirm with
-`sogni-agent doctor`.
+`sogni-agent doctor`. Agents: have the person save the key in their own
+terminal where they can, and never read or print the key or this file.
 
 The CLI leases a stable app ID per process from a persistent slot pool in
 `~/.config/sogni/app-ids/`, so concurrent agents (Claude Code, Codex,

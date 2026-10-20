@@ -16,8 +16,10 @@ preserves normal CLI behavior while attributing the request to Claude Code.
 
 1. Install the CLI (one-time): `npm install -g @sogni-ai/sogni-creative-agent-skill@latest`.
 2. Provide your Sogni API key (get one at https://dashboard.sogni.ai → account menu): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
-3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working.
+3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working. Run `doctor` only after an install or upgrade, or when a command fails, never as a preflight before generating: generation commands check the key, ffmpeg and balance themselves.
 4. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
+
+Keep the key secret. When the user has a terminal, have them save it there rather than paste it into the chat; if they give it to you anyway, write it only to the credentials file and don't repeat it back. Never read or print the key or that file (`sogni-agent doctor --json` checks it without showing it), and never put it in a commit, a generated file or a log.
 
 Do not run the default `npx setup-sogni-agent-skill` from an installed plugin unless the user explicitly wants a separate personal skill registration in `~/.claude/skills/` or another host's personal skill directory; using both can create duplicate skills.
 
@@ -32,6 +34,9 @@ stages unless the user requested a review pause. Preserve exact prompts, source
 choices, counts, and model choices; repeat shared requirements in every variation.
 Do not repeat a successful stage or automatically add `--no-filter` after failure.
 Honor requests to wait for user input; model-specific policies still apply.
+`-o` replaces an existing file, so give each new render its own filename. Unless
+the user asks, never write over their source files or an earlier render, or
+remove their media, personas or memories.
 
 - Image: `sogni-agent "a cat on the moon, cinematic"`
 - Image edit: `sogni-agent -c <path> "make it night, add fireflies"`

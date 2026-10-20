@@ -1,3 +1,11 @@
+## [3.58.4] - 2026-10-20
+
+### Bug Fixes
+
+* Agents keep your Sogni API key out of the chat. When you have a terminal, they ask you to save the key there yourself; they never read or print it, and check it with `sogni-agent doctor` instead.
+* Agents give each new render its own filename. Unless you ask, they never write over your source files or an earlier render, or remove your media, personas or memories.
+* In Claude Code and Codex, agents run `sogni-agent doctor` only after an install or upgrade, or when a command fails, not before every render.
+
 ## [3.58.3] - 2026-10-20
 
 ### Bug Fixes

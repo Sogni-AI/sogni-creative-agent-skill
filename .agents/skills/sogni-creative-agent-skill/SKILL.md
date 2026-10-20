@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.58.3"
+  version: "3.58.4"
   author: Sogni AI
   hermes:
     category: creative
@@ -42,8 +42,10 @@ a command fails because the CLI is missing.
 2. Ask the user to get an API key from https://dashboard.sogni.ai by opening
    the account menu. Accept either `SOGNI_API_KEY` in the environment or the
    credentials file `~/.config/sogni/credentials` containing
-   `SOGNI_API_KEY=<key>`. Never echo, log, commit, or embed the key in generated
-   files.
+   `SOGNI_API_KEY=<key>`. When the user has a terminal, have them save the key
+   there rather than paste it into the chat. Never echo, log, commit, or embed
+   the key in generated files, and never read or print the credentials file;
+   `doctor` checks the key without showing it.
 3. Run `sogni-agent-hermes doctor --json` after installation or upgrade and
    confirm that `success` is `true`. Do not run `doctor` as a routine preflight;
    normal generation commands perform their own checks.
@@ -52,6 +54,9 @@ a command fails because the CLI is missing.
 
 - Save final media in the user's current working directory unless they request
   another destination. Never put final output in `/tmp`.
+- `-o` replaces an existing file, so give each new render its own filename.
+  Unless the user asks, never write over their source files or an earlier
+  render, or remove their media, personas or memories.
 - Use paths the user supplied. If an agent host exposes inbound attachments,
   run `sogni-agent-hermes --json --list-media` instead of guessing filenames.
 - Honor an explicitly requested model. Otherwise use the CLI defaults and

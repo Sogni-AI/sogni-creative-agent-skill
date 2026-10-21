@@ -233,7 +233,8 @@ test('MiniMax H3 docs expose Standard, Balanced, LightX2V Turbo, and FastH3 work
     assert.match(text, /minimax-h3-fasth3-i2v-turbo/, `${docFile}: missing FastH3 i2v selector`);
     assert.match(text, /minimax-h3-fasth3-flf2v-turbo/, `${docFile}: missing FastH3 flf2v selector`);
     assert.match(text, /FastH3[\s\S]{0,180}(?:Euler|euler)\/simple/, `${docFile}: missing FastH3 Euler/simple recipe`);
-    assert.match(text, /FastH3[\s\S]{0,240}no (?:R2V|r2v)|no (?:R2V|r2v)[\s\S]{0,240}FastH3/, `${docFile}: missing FastH3 no-R2V boundary`);
+    assert.match(text, /minimax-h3-fasth3-r2v-turbo/, `${docFile}: missing FastH3 Reference r2v selector`);
+    assert.doesNotMatch(text, /FastH3[^.\n]{0,80}\bno (?:R2V|r2v)\b/, `${docFile}: stale claim that FastH3 has no R2V`);
     assert.doesNotMatch(text, /no CLI selector yet|has no `-m minimax-h3-r2v` selector/i,
       `${docFile}: stale claim that H3 r2v is unavailable in the CLI`);
   }

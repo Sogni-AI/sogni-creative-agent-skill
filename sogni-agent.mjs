@@ -2786,6 +2786,8 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_2stage', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced_2stage', 'r2v'],
+  ['minimax-h3-fastvideo-omni-int8_r2v_turbo', 'r2v'],
+  ['minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage', 'r2v'],
   ['minimax-h3-fastvideo-int8_t2v_turbo', 't2v'],
   ['minimax-h3-fastvideo-int8_i2v_turbo', 'i2v'],
   ['minimax-h3-fastvideo-int8_flf2v_turbo', 'flf2v'],
@@ -2873,8 +2875,22 @@ const MINIMAX_H3_R2V_BALANCED_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced';
 // and LoRAs are its one-stage tier's.
 const MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_2stage';
 const MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced_2stage';
-const MINIMAX_H3_R2V_SELECTOR_HINT = 'Reference-to-video is -m minimax-h3-r2v, -r2v-balanced or -r2v-turbo; '
-  + 'for 1080p or 2K use -m minimax-h3-r2v-2stage or minimax-h3-r2v-balanced-2stage.';
+// FastH3 Reference: FastVideo's FastH3 Omni, the FastH3 tier's own Ref2VA
+// checkpoint, and its two-stage id (same request, delivered at twice the canvas).
+// Not a Turbo id despite the _turbo suffix: it runs its own 8-step recipe, which
+// the CLI never sends, and takes no --sampler override.
+const MINIMAX_H3_FASTH3_R2V_MODEL_ID = 'minimax-h3-fastvideo-omni-int8_r2v_turbo';
+const MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID = 'minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage';
+// The pinned Intelligence Client's isMinimaxH3TwoStageModelId does not list
+// FastH3 Reference Two-Stage yet, so the CLI adds its id and selector until the
+// pin carries them.
+const MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS = new Set([
+  MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID,
+  'minimax-h3-fasth3-r2v-turbo-2stage'
+]);
+const MINIMAX_H3_R2V_SELECTOR_HINT = 'Reference-to-video is -m minimax-h3-r2v, -r2v-balanced, -r2v-turbo or '
+  + 'minimax-h3-fasth3-r2v-turbo; for 1080p or 2K use -m minimax-h3-r2v-2stage, minimax-h3-r2v-balanced-2stage '
+  + 'or minimax-h3-fasth3-r2v-turbo-2stage.';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
   videos: 3,
@@ -3107,6 +3123,8 @@ function resolveSkillVideoModelAlias(
   }
   if (normalized === 'minimax-h3-r2v-2stage') return MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
+  if (normalized === 'minimax-h3-fasth3-r2v-turbo') return MINIMAX_H3_FASTH3_R2V_MODEL_ID;
+  if (normalized === 'minimax-h3-fasth3-r2v-turbo-2stage') return MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID;
   return normalized === '10eros' || normalized === 'ltx23-eros'
     ? LTX23_10EROS_MODEL_ID
     : modelId;
@@ -3121,8 +3139,15 @@ function isMiniMaxH3TurboModel(modelId) {
 }
 
 function isMiniMaxH3TwoStageModel(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
   return isMinimaxH3TwoStageModelId(modelId)
-    || MINIMAX_H3_AUDIO_GUIDE_TWO_STAGE_SELECTIONS.has(String(modelId || '').trim().toLowerCase());
+    || MINIMAX_H3_AUDIO_GUIDE_TWO_STAGE_SELECTIONS.has(normalized)
+    || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized);
+}
+
+function isMiniMaxH3FastH3R2vModel(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === MINIMAX_H3_FASTH3_R2V_MODEL_ID || normalized === MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID;
 }
 
 function isMiniMaxH3AudioGuideModel(modelId) {
@@ -3166,13 +3191,18 @@ function isMiniMaxH3R2vModel(modelId) {
     || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
     || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID
     || normalized === MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID
-    || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
+    || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
+    || isMiniMaxH3FastH3R2vModel(normalized);
 }
 
-// The Intelligence Client selector for a Ref2VA Two-Stage selector or id.
+// The Intelligence Client selector for a Ref2VA Two-Stage selector or id. FastH3
+// Reference Two-Stage renders the same 384/544/768 px canvases, so it sizes on
+// the Balanced table until the pinned client carries its own selector.
 function miniMaxH3R2vTwoStageSelector(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
-  return normalized === 'minimax-h3-r2v-balanced-2stage' || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
+  return normalized === 'minimax-h3-r2v-balanced-2stage'
+    || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
+    || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized)
     ? 'minimax-h3-r2v-balanced-2stage'
     : 'minimax-h3-r2v-2stage';
 }
@@ -3238,6 +3268,8 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-r2v-balanced'
     || normalized === 'minimax-h3-r2v-2stage'
     || normalized === 'minimax-h3-r2v-balanced-2stage'
+    || normalized === 'minimax-h3-fasth3-r2v-turbo'
+    || normalized === 'minimax-h3-fasth3-r2v-turbo-2stage'
     || isMiniMaxH3Model(normalized);
 }
 
@@ -3282,6 +3314,8 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
   if (normalized === 'minimax-h3-r2v-2stage') return 'r2v';
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return 'r2v';
+  if (normalized === 'minimax-h3-fasth3-r2v-turbo') return 'r2v';
+  if (normalized === 'minimax-h3-fasth3-r2v-turbo-2stage') return 'r2v';
   if (MINIMAX_H3_AUDIO_GUIDE_SELECTORS.has(normalized)) {
     return MINIMAX_H3_MODEL_MODES.get(MINIMAX_H3_AUDIO_GUIDE_SELECTORS.get(normalized));
   }
@@ -5347,18 +5381,22 @@ state negatives in the structured prompt.):
                                      canvas, 2K by default (1344x768 -> 2688x1536); --target-resolution 1080 or 720
   minimax-h3-r2v-balanced-2stage    Balanced Ref2VA Two-Stage: the minimax-h3-r2v-balanced request (8 steps),
                                      delivered at twice the canvas like minimax-h3-r2v-2stage
+  minimax-h3-fasth3-r2v-turbo       FastH3 Reference: FastH3's own reference-to-video model, with the references
+                                     of minimax-h3-r2v; catalog LoRAs only (no Personal LoRAs)
+  minimax-h3-fasth3-r2v-turbo-2stage
+                                    FastH3 Reference Two-Stage, delivered at twice the canvas like minimax-h3-r2v-2stage
   minimax-h3-turbo                  4-step LightX2V Turbo; --ref selects I2VA, --ref-end L2VA, and both FL2VA
   minimax-h3-t2v-turbo              4-step LightX2V Turbo text-to-video
   minimax-h3-i2v-turbo              4-step LightX2V Turbo I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-turbo            4-step LightX2V Turbo first-frame -> last-frame (--ref plus --ref-end)
   minimax-h3-r2v-turbo              4-step Ref2VA Turbo with loose image/video/audio references
                                      (upstream default: 960x544, Euler/simple)
-  minimax-h3-fasth3-turbo           FastVideo VSA FastH3 Turbo; infers T2VA/I2VA/L2VA/FL2VA; no R2V
+  minimax-h3-fasth3-turbo           FastVideo VSA FastH3 Turbo; infers T2VA/I2VA/L2VA/FL2VA (R2V: -fasth3-r2v-turbo)
   minimax-h3-fasth3-t2v-turbo       FastH3 text-to-video (up to 6x faster than Standard)
   minimax-h3-fasth3-i2v-turbo       FastH3 I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-fasth3-flf2v-turbo     FastH3 first-frame -> last-frame (--ref plus --ref-end)
   minimax-h3-fasth3-turbo-2stage    FastH3 Two-Stage: delivered at twice the canvas, 2K by default (1344x768 -> 2688x1536);
-                                     --target-resolution 1080 or 720 for 1080p or 720p; infers T2VA/I2VA/L2VA/FL2VA; no R2V
+                                     --target-resolution 1080 or 720 for 1080p or 720p; infers T2VA/I2VA/L2VA/FL2VA
   minimax-h3-fasth3-t2v-turbo-2stage
                                     FastH3 Two-Stage text-to-video
   minimax-h3-fasth3-i2v-turbo-2stage
@@ -6393,7 +6431,7 @@ if (options.music) {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--target-resolution', value: '2K', model: options.model },
       hint: isMiniMaxH3R2vModel(options.model)
-        ? 'Use -m minimax-h3-r2v-2stage (or minimax-h3-r2v-balanced-2stage) for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
+        ? 'Use -m minimax-h3-r2v-2stage (or minimax-h3-r2v-balanced-2stage or minimax-h3-fasth3-r2v-turbo-2stage) for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
         : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
     });
   }
@@ -15395,7 +15433,9 @@ async function main() {
       if (isMiniMaxH3TwoStageModel(options.model) && !options.quiet) {
         // Two-stage renders this canvas and delivers twice it: same frames and audio.
         const delivered = minimaxH3TwoStageDeliveredSize(projectConfig.width, projectConfig.height);
-        const twoStageLabel = isMiniMaxH3R2vModel(options.model) ? 'Ref2VA Two-Stage' : 'FastH3 Two-Stage';
+        const twoStageLabel = isMiniMaxH3FastH3R2vModel(options.model)
+          ? 'FastH3 Reference Two-Stage'
+          : isMiniMaxH3R2vModel(options.model) ? 'Ref2VA Two-Stage' : 'FastH3 Two-Stage';
         console.error(
           `MiniMax H3 ${twoStageLabel}: delivered at ${delivered.width}x${delivered.height} ` +
           `(twice the ${projectConfig.width}x${projectConfig.height} canvas), same length and audio.`

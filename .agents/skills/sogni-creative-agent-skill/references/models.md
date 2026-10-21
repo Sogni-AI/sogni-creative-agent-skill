@@ -597,12 +597,14 @@ Read [hosted-api.md](./hosted-api.md) for execution and
 | `minimax-h3-i2v-turbo` | 4-step | H3 LightX2V Turbo first-frame image-to-video |
 | `minimax-h3-flf2v-turbo` | 4-step | H3 LightX2V Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-turbo` | 4-step | H3 Turbo reference-to-video from a whole reference set; 960×544 default |
+| `minimax-h3-fasth3-r2v-turbo` | FastH3 Reference | FastH3's own reference-to-video model from a whole reference set; catalog LoRAs only (no Personal LoRAs) |
+| `minimax-h3-fasth3-r2v-turbo-2stage` | FastH3 Reference | FastH3 Reference Two-Stage, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`) |
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | 4-step | FastVideo VSA FastH3 text-to-video; generic selector infers frame modes; about 2x faster than LightX2V Turbo and up to 6x Standard |
 | `minimax-h3-fasth3-i2v-turbo` | 4-step | FastH3 first-frame image-to-video or last-frame-only L2VA |
-| `minimax-h3-fasth3-flf2v-turbo` | 4-step | FastH3 first-frame → last-frame video; no FastH3 R2V mode |
+| `minimax-h3-fasth3-flf2v-turbo` | 4-step | FastH3 first-frame → last-frame video |
 | `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | 4-step | FastH3 Two-Stage text-to-video, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`); generic selector infers frame modes |
 | `minimax-h3-fasth3-i2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame image-to-video or last-frame-only L2VA |
-| `minimax-h3-fasth3-flf2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame → last-frame video; no R2V mode |
+| `minimax-h3-fasth3-flf2v-turbo-2stage` | 4-step | FastH3 Two-Stage first-frame → last-frame video |
 | `wan_v2.2-14b-fp8_i2v_lightx2v` | Fast | **Default single-image image-to-video** (one `--ref`, no end frame) |
 | `wan_v2.2-14b-fp8_i2v` | Slow | Higher quality video |
 | `wan_v2.2-14b-fp8_t2v_lightx2v` | Fast | Text-to-video |
@@ -931,14 +933,17 @@ from the delivered file rather than skipping audio generation. It is an explicit
 universal default. The bare `minimax-h3`, `minimax-h3-balanced`, and
 `minimax-h3-turbo`, `minimax-h3-fasth3-turbo`, and `minimax-h3-fasth3-turbo-2stage` selectors resolve to the matching engine and mode inferred
 from your references. The Standard, Balanced, and LightX2V Turbo families accept
-an explicit `--workflow r2v`; FastH3 and FastH3 Two-Stage reject it.
+an explicit `--workflow r2v`; the generic FastH3 and FastH3 Two-Stage selectors
+reject it, because FastH3's reference-to-video is its own selector (below).
 **`minimax-h3-r2v` is never inferred** — it runs a different checkpoint and must
 be asked for by name. Its Balanced and Turbo counterparts are
 `minimax-h3-r2v-balanced` and `minimax-h3-r2v-turbo`, and Standard and Balanced
 each have a two-stage form, `minimax-h3-r2v-2stage` and
 `minimax-h3-r2v-balanced-2stage` (see "Ref2VA Two-Stage" below); those are
-never inferred either.
-FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selector.
+never inferred either. FastH3 Reference, `minimax-h3-fasth3-r2v-turbo`, is the
+FastH3 tier's reference-to-video model, with the two-stage form
+`minimax-h3-fasth3-r2v-turbo-2stage`; it is never inferred and takes no
+`--sampler`.
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -956,12 +961,14 @@ FastH3 has no R2V mode, so `--workflow r2v` is rejected with its generic selecto
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
 | `minimax-h3-r2v-turbo` | Turbo reference-to-video | Dedicated 4-step Ref2VA LoRA; Euler/simple and 960×544 by default |
+| `minimax-h3-fasth3-r2v-turbo` | FastH3 Reference reference-to-video | FastH3's own Ref2VA model with the same reference set as `minimax-h3-r2v`; 1344×768 by default |
+| `minimax-h3-fasth3-r2v-turbo-2stage` | FastH3 Reference Two-Stage | The `minimax-h3-fasth3-r2v-turbo` request, delivered at twice the canvas |
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | FastH3 text-to-video | Separate FastVideo VSA four-step engine; generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo` | FastH3 image-to-video | First-frame I2VA or last-frame-only L2VA from one endpoint |
-| `minimax-h3-fasth3-flf2v-turbo` | FastH3 first → last frame | Both endpoints; FastH3 has no R2V selector |
+| `minimax-h3-fasth3-flf2v-turbo` | FastH3 first → last frame | Both endpoints |
 | `minimax-h3-fasth3-turbo-2stage` / `minimax-h3-fasth3-t2v-turbo-2stage` | FastH3 Two-Stage text-to-video | FastH3 on a half-size canvas, delivered at twice it (2K default, 1080p or 720p); generic selector infers frame workflows |
 | `minimax-h3-fasth3-i2v-turbo-2stage` | FastH3 Two-Stage image-to-video | First-frame I2VA or last-frame-only L2VA, delivered at twice the canvas |
-| `minimax-h3-fasth3-flf2v-turbo-2stage` | FastH3 Two-Stage first → last frame | Both endpoints, delivered at twice the canvas; no R2V |
+| `minimax-h3-fasth3-flf2v-turbo-2stage` | FastH3 Two-Stage first → last frame | Both endpoints, delivered at twice the canvas |
 | `minimax-h3-fasth3-ia2v-turbo` | FastH3 image + audio to video | `--ref` first frame plus `--ref-audio`; the upload drives the clip and is its soundtrack |
 | `minimax-h3-fasth3-flfa2v-turbo` | FastH3 first + last frame + audio | `--ref`, `--ref-end` and `--ref-audio` |
 | `minimax-h3-fasth3-a2v-turbo` | FastH3 audio to video | `--ref-audio` only |
@@ -987,14 +994,17 @@ FastH3 is not an alias for LightX2V: it maps to
 `minimax-h3-fastvideo-int8_t2v_turbo`, `minimax-h3-fastvideo-int8_i2v_turbo`,
 and `minimax-h3-fastvideo-int8_flf2v_turbo`. Its qualified FastVideo VSA recipe
 is fixed four-step Euler/simple, it is about 2x faster than LightX2V Turbo and
-up to 6x faster than Standard for comparable 768p, 15-second requests, and it has no R2V mode.
+up to 6x faster than Standard for comparable 768p, 15-second requests. FastH3
+Reference is a separate checkpoint, FastVideo's FastH3 Omni, with worker id
+`minimax-h3-fastvideo-omni-int8_r2v_turbo`, exposed as `minimax-h3-fasth3-r2v-turbo`.
 FastH3 Two-Stage has its own worker ids, `minimax-h3-fastvideo-int8_t2v_turbo_2stage`,
 `minimax-h3-fastvideo-int8_i2v_turbo_2stage`, and `minimax-h3-fastvideo-int8_flf2v_turbo_2stage`,
 with the FastH3 request shape on a half-size canvas. Every output class (720p,
 1080p and 2K) uses the same `_2stage` id; `--target-resolution 720` sends it
 with the 384 px canvas. Ref2VA Two-Stage likewise has one id per tier,
-`minimax-h3-ref2va-fp8_r2v_2stage` (Standard) and
-`minimax-h3-ref2va-fp8_r2v_balanced_2stage` (Balanced).
+`minimax-h3-ref2va-fp8_r2v_2stage` (Standard),
+`minimax-h3-ref2va-fp8_r2v_balanced_2stage` (Balanced) and
+`minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage` (FastH3 Reference).
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -1047,8 +1057,8 @@ video-conditioned R2V requires a worker above 40 GB.
   still delivered at twice. Any other value, 768 included, is refused. Other
   canvases up to a 544 px short edge add 6 Spark/s, and larger ones 12. Prices
   follow measured GPU time. Ordinary 768p output stays on the regular
-  FastH3 selectors; of the other H3 tiers only Standard and Balanced Ref2VA have
-  a two-stage path (next item). The summary
+  FastH3 selectors; of the other H3 tiers only Standard, Balanced and FastH3
+  Reference have a two-stage path (next item). The summary
   line and `--json` (`deliveredWidth`, `deliveredHeight`) report the delivered
   size. If the server is not serving two-stage, it refuses before charging and
   the CLI prints its message unchanged. This is Sogni's own path; MiniMax's
@@ -1056,8 +1066,10 @@ video-conditioned R2V requires a worker above 40 GB.
   `outputScale` request option is refused.
 - **1080p and 2K reference-to-video is Ref2VA Two-Stage.** `-m minimax-h3-r2v-2stage` (Standard, 20 steps, worker id
   `minimax-h3-ref2va-fp8_r2v_2stage`) and `-m minimax-h3-r2v-balanced-2stage`
-  (Balanced, 8 steps, `minimax-h3-ref2va-fp8_r2v_balanced_2stage`) send exactly
-  the request of `minimax-h3-r2v` / `minimax-h3-r2v-balanced` — the same loose
+  (Balanced, 8 steps, `minimax-h3-ref2va-fp8_r2v_balanced_2stage`), and
+  `-m minimax-h3-fasth3-r2v-turbo-2stage` (FastH3 Reference,
+  `minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage`), send exactly the request
+  of `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo` — the same loose
   `--ref`/`-c` images, repeatable `--ref-video`/`--ref-audio`, reference limits,
   durations, LoRAs and six-field prompt contract — on the half-size canvas, and
   the platform delivers exactly twice it. They are never Turbo (no `--sampler`)
@@ -1147,7 +1159,7 @@ clip, in addition to `--ref` / `--ref-end`.
 |-----------|-----------|
 | `minimax-h3-i2v`, `minimax-h3-flf2v`, and their `-balanced`, `-turbo`, `-fasth3-…-turbo`, and FastH3 Two-Stage forms (including generic selectors that resolve to them) | Yes, between the first and last frame |
 | `minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`, and their `-2stage` forms | Yes; the uploaded audio still drives the clip |
-| `minimax-h3-r2v`, `-r2v-balanced`, `-r2v-turbo`, `-r2v-2stage`, `-r2v-balanced-2stage` | Yes; keyframes travel in their own upload slots and are not references |
+| `minimax-h3-r2v`, `-r2v-balanced`, `-r2v-turbo`, `-r2v-2stage`, `-r2v-balanced-2stage`, `minimax-h3-fasth3-r2v-turbo` and its `-2stage` form | Yes; keyframes travel in their own upload slots and are not references |
 | Text-to-video (`minimax-h3-t2v`, or any generic selector with no frame, audio, or reference) | No; the CLI refuses the flag |
 
 - **Times:** each keyframe lands on frame `round(seconds × 24)`, which must be
@@ -1212,8 +1224,8 @@ and complete Ref2VA contract.
 
 ### MiniMax H3 reference-to-video (r2v)
 
-The `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, and
-`minimax-h3-r2v-turbo` selectors are the H3 modes that condition on a whole
+The `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, `minimax-h3-r2v-turbo`, and
+`minimax-h3-fasth3-r2v-turbo` selectors are the H3 modes that condition on a whole
 **reference set** instead of one or two locked frames. Ref2VA runs its own
 checkpoint, so it is **never inferred** from stray uploads the way HappyHorse
 r2v is — the user or the plan must name a tier. Direct CLI uses
@@ -1417,11 +1429,12 @@ model recommendations.
 | MiniMax H3 LightX2V Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
 | MiniMax H3 LightX2V Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
 | MiniMax H3 Ref2VA Turbo from loose references | `minimax-h3-r2v-turbo` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
+| MiniMax H3 FastH3 Reference from loose references | `minimax-h3-fasth3-r2v-turbo` with the same references as `minimax-h3-r2v` |
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
-| MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B`; no R2V |
-| MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage`; no R2V |
-| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-2stage` (Standard) or `minimax-h3-r2v-balanced-2stage` (Balanced) with the same references as `minimax-h3-r2v`; 2K default, `--target-resolution 1080` or `720` |
+| MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B` |
+| MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage` |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-2stage` (Standard), `minimax-h3-r2v-balanced-2stage` (Balanced) or `minimax-h3-fasth3-r2v-turbo-2stage` (FastH3 Reference) with the same references as `minimax-h3-r2v`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by the user's own voice or song | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); add `-2stage` for Two-Stage |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 
@@ -1430,7 +1443,7 @@ model recommendations.
 - **WAN 2.2 models** use dimensions divisible by 16, each side 480–1536 px, and at most 1,048,576 pixels per frame (1024×1024), so 1280×720, 720×1280, and 1024×1024 fit but 1536×864 and 1080p do not (as of 2026-09). The CLI refuses an explicit `-w`/`-h` or `--target-resolution` above that instead of sending it; sizes it chooses itself are fitted. (Since 2026-09-26 the network itself scales an oversized WAN 2.2 request down to about 1 MP and refuses only a side below 480, error 4101.)
 - **Wan 3** uses fixed 30 fps, fixed or smart 2–30 s output, and 480P/720P/1080P buckets with `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`; see [Alibaba Wan 3](#alibaba-wan-3).
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
-- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (Ref2VA Turbo: 522,240, its own 960×544 canvas; the CLI fits larger requests inside it). Standard, Balanced, LightX2V FL2VA Turbo, and FastH3 default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine and has no R2V mode. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
+- **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (Ref2VA Turbo: 522,240, its own 960×544 canvas; the CLI fits larger requests inside it). Standard, Balanced, LightX2V FL2VA Turbo, FastH3, and FastH3 Reference default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine; FastH3 Reference is its reference-to-video model and takes no sampler override. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-mini-uncensored`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini`, `seedance2-mini-uncensored` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.

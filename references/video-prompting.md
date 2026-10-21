@@ -105,10 +105,12 @@ H3 input.
 Applies to Standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v` for both
 opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 8-step
 Balanced `*-balanced` and 4-step Turbo `*-turbo` variants; and—with its own
-six-field contract—to `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, and
-`minimax-h3-r2v-turbo`. The exact FL2VA worker ids are
-`minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an optional `_balanced` or `_turbo`
-suffix; Ref2VA uses `minimax-h3-ref2va-fp8_r2v` with the same tier suffixes. See
+six-field contract—to `minimax-h3-r2v`, `minimax-h3-r2v-balanced`,
+`minimax-h3-r2v-turbo`, and FastH3 Reference `minimax-h3-fasth3-r2v-turbo`. The
+exact FL2VA worker ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an
+optional `_balanced` or `_turbo` suffix; Ref2VA uses `minimax-h3-ref2va-fp8_r2v`
+with the same tier suffixes, and FastH3 Reference uses
+`minimax-h3-fastvideo-omni-int8_r2v_turbo`. See
 [MiniMax H3 reference-to-video (r2v)](#minimax-h3-reference-to-video-r2v) below
 before writing an r2v prompt.
 
@@ -141,11 +143,12 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   sharpest H3 output; ordinary 768p stays on the regular FastH3 selectors. The
   prompt contract is FastH3's.
 - **1080p and 2K reference-to-video is Ref2VA Two-Stage.**
-  `-m minimax-h3-r2v-2stage` (Standard, 20 steps) and
-  `-m minimax-h3-r2v-balanced-2stage` (Balanced, 8 steps) take exactly the
+  `-m minimax-h3-r2v-2stage` (Standard, 20 steps),
+  `-m minimax-h3-r2v-balanced-2stage` (Balanced, 8 steps) and
+  `-m minimax-h3-fasth3-r2v-turbo-2stage` (FastH3 Reference) take exactly the
   references, limits, durations, LoRAs and six-field Ref2VA prompt contract of
-  `minimax-h3-r2v` / `minimax-h3-r2v-balanced`, render the half-size canvas and
-  deliver twice it. `--target-resolution` reads as above (2K default, `1080`,
+  `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`,
+  render the half-size canvas and deliver twice it. `--target-resolution` reads as above (2K default, `1080`,
   `720`); a reference image never sets the canvas aspect. Each bills its
   tier's reference rate plus the two-stage surcharge of the delivered class;
   quote it with `--estimate-video-cost`. Keep ordinary 768p reference video on
@@ -168,8 +171,10 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   FastH3 is the separate FastVideo VSA engine: use
   `minimax-h3-fasth3-turbo`, `minimax-h3-fasth3-t2v-turbo`,
   `minimax-h3-fasth3-i2v-turbo`, or `minimax-h3-fasth3-flf2v-turbo`.
-  FastH3 uses Euler/simple only, is about 2x faster than LightX2V Turbo and up
-  to 6x faster than Standard for comparable 768p, 15-second requests, and has no R2V mode.
+  FastH3 uses Euler/simple only and is about 2x faster than LightX2V Turbo and up
+  to 6x faster than Standard for comparable 768p, 15-second requests. Its
+  reference-to-video is FastH3 Reference, `minimax-h3-fasth3-r2v-turbo`, which
+  uses the six-field Ref2VA contract and takes no sampler override.
 - **Native 32 kHz stereo audio is generated jointly with the picture.** Every
   sound — dialogue, foley, ambience, score — exists only because the prompt
   asked for it. `generateAudio=false` strips that generated track from the
@@ -533,8 +538,9 @@ other frame rate without changing duration before submission, or H3 will
 time-distort the visual reference relative to its soundtrack.
 Reference-video duration totals may not exceed 15 seconds, and standalone
 reference-audio duration totals may not exceed 15 seconds. It runs a separate
-ref2va checkpoint, so it is never inferred — the Standard, Balanced, or Turbo
-selector must be chosen by name with direct CLI `-m minimax-h3-r2v*` or the
+ref2va checkpoint, so it is never inferred — the Standard, Balanced, Turbo, or
+FastH3 Reference selector must be chosen by name with direct CLI
+`-m minimax-h3-r2v*` or `-m minimax-h3-fasth3-r2v-turbo`, or the
 `generate_video` tool's matching `videoModel` (including callers such as Sogni
 Chat). Direct CLI
 uses `--ref` then repeatable `-c` for images, plus repeatable `--ref-video` and

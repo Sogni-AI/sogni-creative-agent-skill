@@ -27,6 +27,7 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
 | FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |
 | FastH3 first+last frame | `-m minimax-h3-fasth3-flf2v-turbo` | `minimax-h3-fastvideo-int8_flf2v_turbo` |
+| FastH3 Reference | `-m minimax-h3-fasth3-r2v-turbo` | `minimax-h3-fastvideo-omni-int8_r2v_turbo` |
 
 Bare `-m minimax-h3` is not enough to validate a LoRA request: it resolves by
 frame arguments, and availability differs per mode. Name the explicit mode.
@@ -35,9 +36,11 @@ as their Standard modes (as of 2026-10); their built-in LightX2V FL2VA or Larry
 v4 Ref2VA acceleration dependency is not a custom LoRA slot. The live catalog
 remains authoritative if that changes.
 FastH3 keeps the FastVideo engine when an H3 LoRA is attached. Base jobs
-require 23 GB, while jobs with an H3 LoRA require 32 GB. FastH3 has no R2V
-mode. Always check the exact FastVideo model id's live catalog before relying
-on a particular adapter.
+require 23 GB, while jobs with an H3 LoRA require 32 GB. Always check the exact
+FastVideo model id's live catalog before relying on a particular adapter.
+FastH3 Reference (`-m minimax-h3-fasth3-r2v-turbo` and its `-2stage` form)
+takes the same catalog adapters as Reference-to-video; Personal LoRAs are not
+available on it.
 The FastH3 audio-to-video modes (`minimax-h3-fasth3-ia2v-turbo`,
 `-flfa2v-turbo`, `-a2v-turbo` and their `-2stage` forms) take the same catalog
 and Personal H3 LoRAs as the frame modes (as of 2026-09-23): pass `--lora` with

@@ -1,3 +1,9 @@
+## [3.59.0] - 2026-10-21
+
+### Features
+
+* Agents know that Seedance 2.5, Seedance 2.0 and Seedance 2.0 Mini take photos and clips of you, or of people who have given you their consent, after the one-time likeness agreement. When one of them turns down a real person, agents offer the agreement and try again on the same model. Unlimited members hear about MiniMax H3 first.
+
 ## [3.58.4] - 2026-10-20
 
 ### Bug Fixes

@@ -417,6 +417,8 @@ function getMaxContextImages(modelId) {
   ) return 2;
   // Mirrors the intelligence client, which allows FLUX 3 Image Klein ten references.
   if (modelId === 'flux3_image_klein_sd_int8_convrot') return 10;
+  // And Seedream 5.0 Pro Uncensored ten.
+  if (modelId === 'seedream-5-0-pro-uncensored') return 10;
   return 0;
 }
 

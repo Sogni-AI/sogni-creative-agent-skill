@@ -94,6 +94,7 @@ sogni-agent-hermes --speech --speech-voice ryan -o ./speech.wav "Welcome to the 
 # Generate or edit an image
 sogni-agent-hermes -o ./image.png "cinematic moonlit mountain lake"
 sogni-agent-hermes -c ./source.png -o ./edited.png "make it night; add fireflies"
+sogni-agent-hermes -m seedream-5-0-pro-uncensored -c ./portrait.png -o ./seedream.png "the person in Image 1 on a rooftop at dusk"
 
 # Promptless RTX VSR upscale
 sogni-agent-hermes --upscale ./source.png -o ./upscaled.png
@@ -127,7 +128,9 @@ Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
 with optional `--output-format mov` and `--return-last-frame`. Seedance 2.5
 Uncensored (`seedance2-5-uncensored`) has the same limits and Seedance 2.0 Mini
 Uncensored (`seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only
-when asked. On error 4103, show the returned `consentUrl` and
+when asked. Seedream 5.0 Pro Uncensored (`seedream-5-0-pro-uncensored`) makes
+images and edits from 1-10 references, also only when asked, and shares their
+agreement. On error 4103, show the returned `consentUrl` and
 `consentInstructions`: sign in with the same account as the agent/API key,
 accept the shared agreement, then return and retry the original request.
 Never accept for the user or retry while acceptance is pending. FastH3 Two-Stage

@@ -99,6 +99,13 @@ import {
   getGptImageRequestOptions,
   isGptImageModel,
   isKreaIdentityEditModel,
+  // Seedream 5.0 Pro Uncensored: external-API image model (text-to-image and
+  // 1-10 reference edits), Spark only, gated by the Seedance Uncensored agreement.
+  getSeedreamImageSizeRefusal,
+  isSeedreamImageModel,
+  normalizeSeedreamModelAlias,
+  SEEDREAM_DEFAULT_HEIGHT,
+  SEEDREAM_DEFAULT_WIDTH,
   SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
   calculateVideoDimensions as calculateSharedVideoDimensions,
   isMinimaxH3TwoStageModelId,
@@ -172,7 +179,7 @@ function subscriptionBillingFallback(code) {
       // Vendor model the subscription never covers, or no verified entitlement.
       return {
         retryable: false,
-        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance, HappyHorse) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
+        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance, Seedream, HappyHorse) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
         purchaseLabel: 'Get Premium Spark',
         purchaseUrl: SPARK_PACKS_PURCHASE_URL,
       };
@@ -807,11 +814,11 @@ function classifyCliError(error, context = {}) {
     };
   }
 
-  // Socket 4103: Seedance 2.5 Uncensored and Seedance 2.0 Mini Uncensored refuse
-  // every job until the account accepts their shared one-time likeness and
-  // consent agreement in the Sogni app. The message names the refused model. It
-  // must win over the Seedance failure matchers below, never be retried, and
-  // never be accepted by the CLI.
+  // Socket 4103: Seedance 2.5 Uncensored, Seedance 2.0 Mini Uncensored and
+  // Seedream 5.0 Pro Uncensored refuse every job until the account accepts their
+  // shared one-time likeness and consent agreement in the Sogni app. The message
+  // names the refused model. It must win over the Seedance failure matchers
+  // below, never be retried, and never be accepted by the CLI.
   const consentPayload = modelConsentRequiredPayloadFromError(error, context.accountUsername);
   if (consentPayload) {
     return {
@@ -2267,6 +2274,7 @@ function normalizeMusicTimeSignature(value) {
 
 function requiresSparkOnlyToken(modelId) {
   return isGptImage2ModelSelection(modelId)
+    || isSeedreamImageModel(normalizeSeedreamModelAlias(modelId))
     || isSeedanceModel(modelId)
     || isHappyHorseModel(modelId)
     || isWan3ModelSelectionLocal(modelId);
@@ -5248,6 +5256,10 @@ Image Models:
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
   gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
+  seedream-5-0-pro-uncensored      Seedream 5.0 Pro Uncensored (also "Seedream 5 Pro Uncensored", "Seedream Uncensored"):
+                                     text-to-image and edits (1-10 context images), 921,600-4,194,304 pixels up to 16:1,
+                                     default 1536x1536. Use it only when asked for. It shares the Seedance 2.5 Uncensored
+                                     likeness agreement (error 4103 until accepted in the Sogni app). Premium Spark only.
   flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 10 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   moss_image_sft_int8_convrot     MOSS-Image SFT text-to-image (50 steps, no reference editing)
@@ -5761,7 +5773,7 @@ if (options.multiAngle) {
 }
 
 if (!options.video && !options.music && options.model) {
-  options.model = normalizeGptImageModelAlias(options.model);
+  options.model = normalizeSeedreamModelAlias(normalizeGptImageModelAlias(options.model));
 }
 if (options.outputFormat) {
   const normalized = options.outputFormat.toLowerCase();
@@ -6487,6 +6499,17 @@ if (!options.video && !options.music && isGptImage2ModelSelection(options.model)
   if (width % 16 || height % 16 || Math.max(width, height) > 3840 || Math.max(width, height) / Math.min(width, height) > 3 || width * height < 655360 || width * height > 8294400) {
     fatalCliError('GPT Image dimensions must be multiples of 16, at most 3840 per edge, within 3:1 and 655360–8294400 pixels.', { code: 'INVALID_ARGUMENT' });
   }
+  if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
+}
+
+// Seedream 5.0 Pro Uncensored renders 921,600-4,194,304 pixels up to 16:1 and
+// defaults to 1536x1536. Refuse a size the vendor would reject before paying.
+if (!options.video && !options.music && isSeedreamImageModel(normalizeSeedreamModelAlias(options.model))) {
+  options.model = normalizeSeedreamModelAlias(options.model);
+  if (!cliSet.width && !widthFromConfig && !widthFromPrompt) options.width = SEEDREAM_DEFAULT_WIDTH;
+  if (!cliSet.height && !heightFromConfig && !heightFromPrompt) options.height = SEEDREAM_DEFAULT_HEIGHT;
+  const sizeRefusal = getSeedreamImageSizeRefusal(options.width, options.height);
+  if (sizeRefusal) fatalCliError(sizeRefusal, { code: 'INVALID_ARGUMENT' });
   if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 }
 

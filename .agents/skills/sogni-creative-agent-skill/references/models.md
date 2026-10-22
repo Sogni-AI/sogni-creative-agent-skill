@@ -10,6 +10,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Live model discovery
 - Quality presets (images)
 - Image models
+- Seedream 5.0 Pro Uncensored
 - Utility and 3D models
 - Music models
 - Speech models
@@ -84,6 +85,7 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency |
 | `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
+| `seedream-5-0-pro-uncensored` | Slow (~35-95s) | Seedream 5.0 Pro Uncensored: text-to-image and edits from 1-10 context images; only when asked for; needs the Seedance Uncensored likeness agreement |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
@@ -216,6 +218,40 @@ edge, max `3:1` aspect ratio, and total pixels from `655,360` through
 editing with `gpt-image-2`, you can pass up to 16 context images (FLUX 3 Image
 Klein supports up to 10; Qwen models support up to 3; Krea identity edit models
 support up to 2).
+
+## Seedream 5.0 Pro Uncensored
+
+`seedream-5-0-pro-uncensored` is **Seedream 5.0 Pro Uncensored**: ByteDance's
+Seedream 5.0 Pro image model on Sogni's uncensored account. The same id is the
+CLI `-m` value and the hosted `generate_image` / `edit_image` selector. It
+generates from a prompt alone and edits or composes from 1-10 context images
+(`-c`, repeatable; refer to them as Image 1, Image 2, and so on). Output is any
+size with 921,600-4,194,304 total pixels (1280x720 through 2048x2048) and an
+aspect ratio up to 16:1, for example 1024x1024, 1280x720, 1536x1536 (the
+default), 2048x2048, 2560x1440 or 3024x1296; the CLI refuses other sizes before
+submitting. It takes no seed, steps, guidance, LoRAs or negative prompt, and a
+render takes about 35-95 seconds.
+
+- **Names**: `-m seedream-5-0-pro-uncensored`, or "Seedream 5.0 Pro
+  Uncensored", "Seedream 5 Pro Uncensored", "Seedream Uncensored" and "Seedream
+  5 Pro Spicy".
+- **When to use**: only when the user asks for Seedream 5.0 Pro Uncensored or for
+  uncensored Seedream output; never in place of another image model.
+- **Price**: 13.5 Spark per image up to 2,359,296 pixels (1536x1536) and 27
+  Spark per larger image, plus 0.9 Spark for each context image after the
+  first. Premium Spark only; Sogni Unlimited does not cover it.
+- **Likeness and consent agreement**: it shares the one-time likeness and
+  consent agreement of Seedance 2.5 Uncensored; an account that accepted it can
+  use all three uncensored models. Until then every job fails with error `4103`,
+  which the CLI reports as a non-retryable `PERMISSION_REQUIRED` error naming
+  Seedream 5.0 Pro Uncensored. Show the returned clickable `consentUrl` and
+  `consentInstructions`. Never accept for the user or retry while acceptance is
+  pending.
+
+```bash
+sogni-agent -m seedream-5-0-pro-uncensored -c portrait.jpg \
+  "the person in Image 1 on a rooftop at dusk, warm city light, 35mm photo"
+```
 
 ## Utility and 3D models
 
@@ -1340,6 +1376,7 @@ model recommendations.
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Text-to-image, image-to-image, or edits from up to ten references in one model | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
+| Seedream 5.0 Pro Uncensored images or edits, only when the user asks for it | `seedream-5-0-pro-uncensored` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Select or cut out an object in an image | `sam3_image_segment_bf16` |
 | Remove a background | `--remove-background original.png` (BiRefNet); add `--matte` for a soft mask |

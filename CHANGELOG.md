@@ -3,6 +3,7 @@
 ### Features
 
 * Create images and edit from up to ten references with Seedream 5.0 Pro Uncensored. Choose it by name; it shares the one-time Seedance likeness agreement.
+* Make MiniMax H3 reference videos on the FastH3 tier with FastH3 Reference (`minimax-h3-fasth3-r2v-turbo`, or `minimax-h3-fasth3-r2v-turbo-2stage` for 1080p and 2K). It takes the same pictures, clips, sound, catalog LoRAs and Personal LoRAs as the other Reference to Video choices.
 
 ### Updates
 

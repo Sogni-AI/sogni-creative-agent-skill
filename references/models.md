@@ -597,7 +597,7 @@ Read [hosted-api.md](./hosted-api.md) for execution and
 | `minimax-h3-i2v-turbo` | 4-step | H3 LightX2V Turbo first-frame image-to-video |
 | `minimax-h3-flf2v-turbo` | 4-step | H3 LightX2V Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-turbo` | 4-step | H3 Turbo reference-to-video from a whole reference set; 960×544 default |
-| `minimax-h3-fasth3-r2v-turbo` | FastH3 Reference | FastH3's own reference-to-video model from a whole reference set; catalog LoRAs only (no Personal LoRAs) |
+| `minimax-h3-fasth3-r2v-turbo` | FastH3 Reference | FastH3's own reference-to-video model from a whole reference set; catalog and Personal LoRAs |
 | `minimax-h3-fasth3-r2v-turbo-2stage` | FastH3 Reference | FastH3 Reference Two-Stage, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`) |
 | `minimax-h3-fasth3-turbo` / `minimax-h3-fasth3-t2v-turbo` | 4-step | FastVideo VSA FastH3 text-to-video; generic selector infers frame modes; about 2x faster than LightX2V Turbo and up to 6x Standard |
 | `minimax-h3-fasth3-i2v-turbo` | 4-step | FastH3 first-frame image-to-video or last-frame-only L2VA |

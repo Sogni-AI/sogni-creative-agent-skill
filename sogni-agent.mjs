@@ -5382,7 +5382,7 @@ state negatives in the structured prompt.):
   minimax-h3-r2v-balanced-2stage    Balanced Ref2VA Two-Stage: the minimax-h3-r2v-balanced request (8 steps),
                                      delivered at twice the canvas like minimax-h3-r2v-2stage
   minimax-h3-fasth3-r2v-turbo       FastH3 Reference: FastH3's own reference-to-video model, with the references
-                                     of minimax-h3-r2v; catalog LoRAs only (no Personal LoRAs)
+                                     of minimax-h3-r2v; catalog and Personal LoRAs
   minimax-h3-fasth3-r2v-turbo-2stage
                                     FastH3 Reference Two-Stage, delivered at twice the canvas like minimax-h3-r2v-2stage
   minimax-h3-turbo                  4-step LightX2V Turbo; --ref selects I2VA, --ref-end L2VA, and both FL2VA

@@ -1,3 +1,13 @@
+## [3.60.0] - 2026-10-22
+
+### Features
+
+* Create images and edit from up to ten references with Seedream 5.0 Pro Uncensored. Choose it by name; it shares the one-time Seedance likeness agreement.
+
+### Updates
+
+* Use the released image and video tool contracts in intelligence client 4.19.0 and Sogni SDK 5.69.0.
+
 ## [3.59.0] - 2026-10-21
 
 ### Features

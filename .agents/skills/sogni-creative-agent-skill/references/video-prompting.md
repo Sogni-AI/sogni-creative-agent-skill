@@ -91,6 +91,8 @@ Use this shape instead: "A medium cinematic shot frames a woman in her 30s stand
 
 ## MiniMax H3 Prompting
 
+For MiniMax reference-to-video, default to **FastH3 Omni R2V** (`minimax-h3-fasth3-r2v-turbo`), the newest and preferred option (as of 2026-10). Use `minimax-h3-fasth3-r2v-turbo-2stage` for two-stage, 1080p or 2K output. Keep Standard, Balanced, or LightX2V Turbo only when explicitly requested.
+
 Write every H3 prompt using MiniMax's official structured rewrite contract. Do
 not substitute an unstructured prompt for the required fields. The field names,
 order, shot notation, alignment preamble, reference labels, and dialogue markup

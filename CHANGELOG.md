@@ -1,3 +1,9 @@
+## [3.60.1] - 2026-10-22
+
+### Bug Fixes
+
+* Prefer FastH3 Omni for MiniMax reference-to-video, including the two-stage option for 1080p and 2K. Explicit Standard, Balanced and LightX2V Turbo selections remain available.
+
 ## [3.60.0] - 2026-10-22
 
 ### Features

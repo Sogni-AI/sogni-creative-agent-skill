@@ -2888,9 +2888,6 @@ const MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS = new Set([
   MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID,
   'minimax-h3-fasth3-r2v-turbo-2stage'
 ]);
-const MINIMAX_H3_R2V_SELECTOR_HINT = 'Reference-to-video is -m minimax-h3-r2v, -r2v-balanced, -r2v-turbo or '
-  + 'minimax-h3-fasth3-r2v-turbo; for 1080p or 2K use -m minimax-h3-r2v-2stage, minimax-h3-r2v-balanced-2stage '
-  + 'or minimax-h3-fasth3-r2v-turbo-2stage.';
 const MINIMAX_H3_REFERENCE_LIMITS = Object.freeze({
   images: 9,
   videos: 3,
@@ -3000,7 +2997,7 @@ function resolveSkillVideoModelAlias(
   if (normalized === 'ltx25-ia2v') return LTX25_DISTILLED_WORKFLOW_MODELS.ia2v;
   if (normalized === 'ltx25-v2v') return LTX25_DISTILLED_WORKFLOW_MODELS.v2v;
   if (normalized === 'minimax-h3' && workflow) {
-    if (workflow === 'r2v') return MINIMAX_H3_R2V_MODEL_ID;
+    if (workflow === 'r2v') return MINIMAX_H3_FASTH3_R2V_MODEL_ID;
     if (workflow === 'i2v') {
       return hasStartFrame && hasEndFrame
         ? 'minimax-h3-fl2va-fp8_flf2v'
@@ -3037,11 +3034,7 @@ function resolveSkillVideoModelAlias(
   }
   if (normalized === 'minimax-h3-fasth3-turbo' && workflow) {
     if (workflow === 'r2v') {
-      fatalCliError('MiniMax H3 FastH3 Turbo has no r2v workflow.', {
-        code: 'INVALID_ARGUMENT',
-        details: { model: modelId, workflow },
-        hint: MINIMAX_H3_R2V_SELECTOR_HINT
-      });
+      return MINIMAX_H3_FASTH3_R2V_MODEL_ID;
     }
     if (workflow === 'i2v') {
       return hasStartFrame && hasEndFrame
@@ -3070,11 +3063,7 @@ function resolveSkillVideoModelAlias(
   }
   if (normalized === 'minimax-h3-fasth3-turbo-2stage' && workflow) {
     if (workflow === 'r2v') {
-      fatalCliError('MiniMax H3 FastH3 Two-Stage has no r2v workflow.', {
-        code: 'INVALID_ARGUMENT',
-        details: { model: modelId, workflow },
-        hint: MINIMAX_H3_R2V_SELECTOR_HINT
-      });
+      return MINIMAX_H3_FASTH3_R2V_TWO_STAGE_MODEL_ID;
     }
     if (workflow === 'i2v') {
       return hasStartFrame && hasEndFrame
@@ -6124,8 +6113,8 @@ if (options.video) {
 
   // Standard, Balanced, and LightX2V Turbo each have four concrete worker
   // selectors (Standard and Balanced r2v also have a two-stage id, picked only
-  // by its own minimax-h3-r2v[-balanced]-2stage selector); FastH3 has three and
-  // deliberately has no r2v. The FL2VA and
+  // by its own minimax-h3-r2v[-balanced]-2stage selector). FastH3 family selectors
+  // route explicit --workflow r2v to FastH3 Omni. The FL2VA and
   // FastVideo checkpoints cover t2v, first-frame i2v, last-frame-only
   // l2v, and first/last-frame (represented by the CLI's i2v workflow); Ref2VA
   // is a separate r2v checkpoint and is never inferred from loose references.
@@ -6163,7 +6152,7 @@ if (options.video) {
     const audioGuideHint = 'FastH3 audio-to-video: -m minimax-h3-fasth3-ia2v-turbo (--ref plus --ref-audio), '
       + '-m minimax-h3-fasth3-flfa2v-turbo (--ref, --ref-end and --ref-audio), or '
       + '-m minimax-h3-fasth3-a2v-turbo (--ref-audio only); add -2stage for Two-Stage. '
-      + 'For audio as a loose reference rather than the soundtrack, use -m minimax-h3-r2v.';
+      + 'For audio as a loose reference rather than the soundtrack, use -m minimax-h3-fasth3-r2v-turbo.';
     if (
       (options.videoWorkflow === 'ia2v' || options.videoWorkflow === 'a2v')
       && !isMiniMaxH3FastH3TurboSelectionLocal(options.model)
@@ -6431,7 +6420,7 @@ if (options.music) {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--target-resolution', value: '2K', model: options.model },
       hint: isMiniMaxH3R2vModel(options.model)
-        ? 'Use -m minimax-h3-r2v-2stage (or minimax-h3-r2v-balanced-2stage or minimax-h3-fasth3-r2v-turbo-2stage) for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
+        ? 'Use -m minimax-h3-fasth3-r2v-turbo-2stage for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
         : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
     });
   }
@@ -7204,7 +7193,7 @@ if (options.video) {
         }
       }
       if (options.contextImages.length > 0 || options.refAudio || options.refVideo || options.refAudios.length > 0 || options.refVideos.length > 0) {
-        fatalCliError('MiniMax H3 i2v/flf2v accepts only --ref and optional --ref-end image anchors; use minimax-h3-r2v for loose image/video/audio references.', { code: 'INVALID_ARGUMENT' });
+        fatalCliError('MiniMax H3 i2v/flf2v accepts only --ref and optional --ref-end image anchors; use minimax-h3-fasth3-r2v-turbo for loose image/video/audio references.', { code: 'INVALID_ARGUMENT' });
       }
     } else {
       if (!options.refImage && !options.refImageEnd) {

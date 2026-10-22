@@ -16,6 +16,8 @@ Video LoRAs are a different shape from the Krea 2 image sliders:
 
 ## Selecting a compatible model
 
+For MiniMax reference-to-video, prefer FastH3 Omni R2V (minimax-h3-fasth3-r2v-turbo), including LoRA requests. Keep other R2V tiers only when explicitly requested.
+
 LoRAs attach to the resolved H3 model, so name the mode in the same command:
 
 | Mode | Selector | Canonical model id |
@@ -23,7 +25,7 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | Text-to-video | `-m minimax-h3-t2v` (`-turbo`) | `minimax-h3-fl2va-fp8_t2v` |
 | Image-to-video | `-m minimax-h3-i2v` (`-turbo`) | `minimax-h3-fl2va-fp8_i2v` |
 | First+last frame | `-m minimax-h3-flf2v` (`-turbo`) | `minimax-h3-fl2va-fp8_flf2v` |
-| Reference-to-video | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
+| Standard reference-to-video (explicit choice) | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
 | FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
 | FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |
 | FastH3 first+last frame | `-m minimax-h3-fasth3-flf2v-turbo` | `minimax-h3-fastvideo-int8_flf2v_turbo` |

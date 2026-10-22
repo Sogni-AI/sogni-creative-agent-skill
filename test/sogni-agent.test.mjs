@@ -2561,10 +2561,11 @@ test('MiniMax H3 FastH3 friendly selectors resolve exactly three supported modes
     assert.equal(state.lastVideoProject.fps, 24);
   }
 
-  expectCliError(
-    ['--video', '-m', 'minimax-h3-fasth3-turbo', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
-    'MiniMax H3 FastH3 Turbo has no r2v workflow'
+  const r2v = runCli(
+    ['--video', '-m', 'minimax-h3-fasth3-turbo', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']
   );
+  assert.equal(r2v.exitCode, 0, r2v.stderr);
+  assert.equal(r2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-omni-int8_r2v_turbo');
 });
 
 test('bare MiniMax H3 FastH3 selector infers text and frame workflows', () => {
@@ -8095,10 +8096,11 @@ test('MiniMax H3 FastH3 Two-Stage family selector infers text and frame workflow
   assert.equal(flf2v.exitCode, 0, flf2v.stderr);
   assert.equal(flf2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-int8_flf2v_turbo_2stage');
 
-  expectCliError(
-    ['--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
-    'MiniMax H3 FastH3 Two-Stage has no r2v workflow'
+  const r2v = runCli(
+    ['--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']
   );
+  assert.equal(r2v.exitCode, 0, r2v.stderr);
+  assert.equal(r2v.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage');
 });
 
 test('MiniMax H3 FastH3 Two-Stage selectors and socket ids keep the FastH3 request shape', () => {
@@ -8409,17 +8411,28 @@ test('MiniMax H3 Ref2VA Two-Stage selectors send the R2V request on the 2stage i
     ['--video', '-m', 'minimax-h3-r2v-2stage', '--ref-audio', 'voice.m4a', 'Use <Audio 1> for the voice.'],
     'needs at least one visual reference'
   );
-  // The FastH3 frame selectors take no r2v; the refusal names the reference
-  // selectors, FastH3 Reference included.
+  // The FastH3 family also routes reference workflows to Omni Two-Stage.
   const fastH3 = runCli([
     '--video', '-m', 'minimax-h3-fasth3-turbo-2stage', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
   ]);
-  assert.equal(fastH3.exitCode, 1);
-  assert.match(fastH3.stderr, /MiniMax H3 FastH3 Two-Stage has no r2v workflow/);
-  assert.match(
-    fastH3.stderr,
-    /-m minimax-h3-r2v-2stage, minimax-h3-r2v-balanced-2stage or minimax-h3-fasth3-r2v-turbo-2stage/
-  );
+  assert.equal(fastH3.exitCode, 0, fastH3.stderr);
+  assert.equal(fastH3.state.lastVideoProject.modelId, 'minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage');
+});
+
+test('MiniMax H3 family defaults R2V to Omni while explicit tiers stay pinned', () => {
+  for (const [model, expected] of [
+    ['minimax-h3', 'minimax-h3-fastvideo-omni-int8_r2v_turbo'],
+    ['minimax-h3-r2v', 'minimax-h3-ref2va-fp8_r2v'],
+    ['minimax-h3-balanced', 'minimax-h3-ref2va-fp8_r2v_balanced'],
+    ['minimax-h3-turbo', 'minimax-h3-ref2va-fp8_r2v_turbo'],
+  ]) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE,
+      'Use <Picture 1> for identity.'
+    ]);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastVideoProject.modelId, expected, model);
+  }
 });
 
 test('MiniMax H3 FastH3 Reference selectors send the R2V request on the FastH3 Omni ids', () => {
@@ -8633,7 +8646,7 @@ test('Ref2VA Two-Stage refuses a delivered class it cannot render, and one-stage
     assert.match(stderr, /--target-resolution 2K is the MiniMax H3 Two-Stage delivered size/, model);
     assert.match(
       stderr,
-      /-m minimax-h3-r2v-2stage \(or minimax-h3-r2v-balanced-2stage or minimax-h3-fasth3-r2v-turbo-2stage\)/,
+      /-m minimax-h3-fasth3-r2v-turbo-2stage for 2K MiniMax H3 reference-to-video/,
       model
     );
     assert.equal(state?.lastVideoProject ?? null, null, model);

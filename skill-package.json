@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "4.19.1",
+    "@sogni-ai/sogni-intelligence-client": "4.20.0",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.5"

@@ -1,3 +1,14 @@
+## [3.60.2] - 2026-10-23
+
+### Bug Fixes
+
+* Default MiniMax H3 reference-to-video to Balanced (`minimax-h3-r2v-balanced`, or `minimax-h3-r2v-balanced-2stage` for 1080p and 2K). Standard, LightX2V Turbo and FastH3 Reference remain available by name.
+* List Mystic X v5 on MiniMax H3 Reference to Video.
+
+### Updates
+
+* Use intelligence client 4.20.2 and the creative agent 2.23.1 runtime.
+
 ## [3.60.1] - 2026-10-22
 
 ### Bug Fixes

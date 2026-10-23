@@ -506,11 +506,11 @@ sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
 sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png \
   -c wardrobe.png "Keep the endpoint frames and use Image 1 for wardrobe detail"
 
-# MiniMax R2V default: FastH3 Omni (minimax-h3-fasth3-r2v-turbo); other tiers only when requested.
+# MiniMax R2V default: Balanced (minimax-h3-r2v-balanced); other tiers only when requested.
 # MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, FastH3 Turbo, FastH3 Reference, and FastH3 and Ref2VA Two-Stage (1080p/2K) video
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
-sogni-agent --video -m minimax-h3-fasth3-r2v-turbo --ref identity.png -c wardrobe.png \
+sogni-agent --video -m minimax-h3-r2v-balanced --ref identity.png -c wardrobe.png \
   --ref-video motion.mp4 --ref-audio voice.m4a \
   "<six-field Ref2VA prompt>"
 sogni-agent --video -m minimax-h3-balanced --duration 8 "<three-field H3 prompt>"
@@ -767,9 +767,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B` |
-| MiniMax H3 reference-to-video (default: FastH3 Omni R2V) | `minimax-h3-fasth3-r2v-turbo` with up to 9 images, 3 videos, 3 audios / 12 files total; catalog and Personal LoRAs |
+| MiniMax H3 reference-to-video (default: Balanced R2V) | `minimax-h3-r2v-balanced` with up to 9 images, 3 videos, 3 audios / 12 files total; catalog and Personal LoRAs |
 | MiniMax H3 1080p or 2K video (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (infers the frame mode; 2K default, `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage` |
-| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-r2v-turbo-2stage` (preferred FastH3 Omni R2V; Standard and Balanced only when explicitly requested): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`; 2K default, `--target-resolution 1080` or `720` |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-balanced-2stage` (preferred Balanced R2V; Standard and FastH3 Reference only when explicitly requested): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by your own voice or song (FastH3 audio-to-video) | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); `minimax-h3-fasth3-turbo` with `--ref-audio` picks the mode; add `-2stage` for Two-Stage; `--lora` works as on the frame modes |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |

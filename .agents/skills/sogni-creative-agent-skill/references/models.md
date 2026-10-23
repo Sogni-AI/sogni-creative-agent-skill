@@ -1429,12 +1429,12 @@ model recommendations.
 | MiniMax H3 LightX2V Turbo image-to-video from one first frame | `minimax-h3-i2v-turbo` with `--ref` |
 | MiniMax H3 LightX2V Turbo first frame → last frame transition | `minimax-h3-flf2v-turbo` with `--ref A --ref-end B` |
 | MiniMax H3 Ref2VA Turbo from loose references | `minimax-h3-r2v-turbo` with `--ref`/`-c`, repeatable `--ref-video`, and repeatable `--ref-audio` |
-| MiniMax H3 from loose references (default: FastH3 Omni R2V) | `minimax-h3-fasth3-r2v-turbo` with the same references as `minimax-h3-r2v` |
+| MiniMax H3 from loose references (default: Balanced R2V) | `minimax-h3-r2v-balanced` with the same references as `minimax-h3-r2v` |
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first frame → last frame | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B` |
 | MiniMax H3 1080p or 2K (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (2K default; `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage` |
-| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-r2v-turbo-2stage` (preferred FastH3 Omni R2V; Standard and Balanced only when explicitly requested) with the same references as `minimax-h3-r2v`; 2K default, `--target-resolution 1080` or `720` |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-balanced-2stage` (preferred Balanced R2V; Standard and FastH3 Reference only when explicitly requested) with the same references as `minimax-h3-r2v`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by the user's own voice or song | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); add `-2stage` for Two-Stage |
 | Face lip-sync with uploaded audio | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 

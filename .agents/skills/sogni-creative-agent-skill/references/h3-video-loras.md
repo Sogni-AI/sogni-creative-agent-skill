@@ -16,7 +16,7 @@ Video LoRAs are a different shape from the Krea 2 image sliders:
 
 ## Selecting a compatible model
 
-For MiniMax reference-to-video, prefer FastH3 Omni R2V (minimax-h3-fasth3-r2v-turbo), including LoRA requests. Keep other R2V tiers only when explicitly requested.
+For MiniMax reference-to-video, prefer Balanced R2V (minimax-h3-r2v-balanced), including LoRA requests; it holds Mystic X v5 at full strength. Use minimax-h3-r2v-balanced-2stage for two-stage, 1080p or 2K output. Keep other R2V tiers only when explicitly requested.
 
 LoRAs attach to the resolved H3 model, so name the mode in the same command:
 
@@ -25,6 +25,7 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | Text-to-video | `-m minimax-h3-t2v` (`-turbo`) | `minimax-h3-fl2va-fp8_t2v` |
 | Image-to-video | `-m minimax-h3-i2v` (`-turbo`) | `minimax-h3-fl2va-fp8_i2v` |
 | First+last frame | `-m minimax-h3-flf2v` (`-turbo`) | `minimax-h3-fl2va-fp8_flf2v` |
+| Balanced reference-to-video (default) | `-m minimax-h3-r2v-balanced` | `minimax-h3-ref2va-fp8_r2v_balanced` |
 | Standard reference-to-video (explicit choice) | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
 | FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
 | FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |
@@ -75,7 +76,7 @@ kicks and sword swings play. Range `-8` to `8`, catalog default `4`,
 recommended band `-4` to `4`; negative strengths give slow motion and `0` is
 off. No trigger word.
 
-Neither Mystic version nor Action Speed is offered on Reference-to-video.
+On Reference-to-video only Mystic X v5 is offered, on the author's own Ref2VA file (as of 2026-10); v4 and Action Speed are not.
 
 Only `h3-realism-people` is published on every mode. Ref2VA carries it alone.
 

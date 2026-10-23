@@ -38,7 +38,7 @@ Honor requests to wait for user input; model-specific policies still apply.
 the user asks, never write over their source files or an earlier render, or
 remove their media, personas or memories.
 
-For MiniMax reference-to-video, default to **FastH3 Omni R2V** (`minimax-h3-fasth3-r2v-turbo`), the newest and preferred option (as of 2026-10). Use `minimax-h3-fasth3-r2v-turbo-2stage` for two-stage, 1080p or 2K output. Keep Standard, Balanced, or LightX2V Turbo only when explicitly requested.
+For MiniMax reference-to-video, default to **Balanced R2V** (`minimax-h3-r2v-balanced`), the tier that passes the quality bar for mature content and holds Mystic X at full strength (as of 2026-10). Use `minimax-h3-r2v-balanced-2stage` for two-stage, 1080p or 2K output. Keep Standard, LightX2V Turbo, or FastH3 Omni R2V only when explicitly requested.
 
 - Image: `sogni-agent "a cat on the moon, cinematic"`
 - Image edit: `sogni-agent -c <path> "make it night, add fireflies"`

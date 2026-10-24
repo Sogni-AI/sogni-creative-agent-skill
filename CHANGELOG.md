@@ -7,7 +7,7 @@
 
 ### Updates
 
-* Use intelligence client 4.20.2 and the creative agent 2.23.1 runtime.
+* Use intelligence client 4.21.0 and the creative agent 2.24.0 runtime.
 
 ## [3.60.1] - 2026-10-22
 

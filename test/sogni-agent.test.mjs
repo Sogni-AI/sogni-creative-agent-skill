@@ -3304,9 +3304,9 @@ test('seedance 2.5 routes HTTPS and local --ref inputs to first-frame generation
   const remote = runCli([
     '--video',
     '-m', 'seedance2-5',
-    '--ref', 'https://example.com/first.png',
+    '--ref', 'https://example.com/sogni-agent-test-reference.png',
     'The camera tracks forward from the supplied opening frame.'
-  ]);
+  ], { SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH: SCREENSHOT_FIXTURE });
   const local = runCli([
     '--video',
     '-m', 'seedance2-5',
@@ -3314,10 +3314,11 @@ test('seedance 2.5 routes HTTPS and local --ref inputs to first-frame generation
     'The camera tracks forward from the supplied opening frame.'
   ]);
 
-  assert.equal(remote.exitCode, 1);
+  assert.equal(remote.exitCode, 0, remote.stderr);
   assert.match(remote.stderr, /Generating video \(t2v\) with seedance-2-5/);
-  assert.match(remote.stderr, /Reference image: https:\/\/example\.com\/first\.png/);
-  assert.match(remote.stderr, /Failed to fetch media \(404 Not Found\)/);
+  assert.match(remote.stderr, /Reference image: https:\/\/example\.com\/sogni-agent-test-reference\.png/);
+  assert.ok(remote.state.lastVideoProject.referenceImage);
+  assert.equal(remote.state.lastVideoProject.referenceImageUrls, undefined);
   assert.equal(local.exitCode, 0);
   assert.ok(local.state.lastVideoProject.referenceImage);
   assert.equal(local.state.lastVideoProject.referenceImageUrls, undefined);

@@ -27,10 +27,16 @@ use this LoRA ID with WAN models.
 For explicit scenes at film quality, prefer `seedance-2-5-uncensored` over
 10Eros: it is a premium loose-reference model that can start from a clothed,
 world-consistent frame and go explicit at the story beat you choose. It
-requires `--no-filter`. Without that flag, explicit wording is rejected with
-"Sensitive content detected" and neutral wording is silently sanitized to a
-clothed result — the failure looks like a prude model, but the flag is the
-whole fix.
+requires `--no-filter` for the workflow described here. The author reported
+"Sensitive content detected" errors or more restricted results when that
+flag was omitted. The prompting notes below describe those reported renders;
+results vary with the prompt and references.
+
+The account must also accept the one-time likeness and consent agreement in
+a Sogni app before its first render. Follow the
+[model requirements](./models.md#seedance-25-uncensored) using the same account
+as the CLI/API key. This model requires Premium Spark; price estimates remain
+available before accepting the agreement.
 
 Command shape:
 
@@ -65,9 +71,10 @@ When the scene already exists as an explicit still, draw that still with
 identity-edit variant sanitizes explicit prompts) and pass it as the single
 reference with "Recreate and animate the exact scene from @Image1".
 
-`--duration` is whole seconds and `--target-resolution` is `720` or `1080`;
-Seedance bills premium per-second rates from the token balance, which no
-Unlimited plan covers — quote before rendering.
+`--duration` is 4–30 whole seconds and `--target-resolution` is `480`, `720`,
+or `1080`. Seedance bills premium per-second rates from Premium Spark, which
+no Unlimited plan covers. Use `--estimate-video-cost` with the intended
+settings before rendering.
 
 ## Specialized prompt vocabulary
 

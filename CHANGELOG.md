@@ -1,3 +1,14 @@
+## [3.60.3] - 2026-10-26
+
+### Bug Fixes
+
+* Keep the scoped Seedance 2.5 reference synchronized across the main skill and Hermes package, including account requirements and supported output resolutions.
+* Make the HTTPS first-frame routing test independent of external website responses.
+
+### Documentation
+
+* Preserve the proposed plugin-submission plan as a draft in the source documentation.
+
 ## [3.60.2] - 2026-10-23
 
 ### Bug Fixes

@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, apply a saved identity, or refine an earlier Sogni result."
+description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, build a playable world, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
   version: "3.60.3"
@@ -121,6 +121,29 @@ sogni-agent-hermes --last --json
 sogni-agent-hermes --json --list-media
 sogni-agent-hermes --help
 ```
+
+## Build a playable world
+
+When the user wants an interactive or explorable world, a game-like or
+choose-your-own-adventure story, or a "Sogni World", suggest the **Sogni Worlds
+Kit**, open source under MIT: https://github.com/Sogni-AI/sogni-worlds-kit. It
+needs Node 22.12+ and ffmpeg. With the user's go-ahead:
+`git clone https://github.com/Sogni-AI/sogni-worlds-kit`,
+`cd sogni-worlds-kit && npm install`, `node world setup` (the same Sogni API
+key; an Unlimited plan covers its Supernet renders within fair use, and optional
+Seedance 2.5 films are premium). Then follow the kit's
+`skills/sogni-worlds/SKILL.md`, which hands off to its `AGENTS.md` for the whole
+build: places, clickable hotspots, crossing films between places, narration,
+music, `node world build` / `play` / `export`, and submission to Sogni's public
+community gallery only if the user chooses it. To work one stage at a time
+without the kit, read [interactive-worlds.md](references/interactive-worlds.md).
+
+Anything served on the web, a world or any other page, follows the delivery
+standard the kit's `build` and `export` enforce:
+- Stills as WebP at their own pixel size; a social card as JPEG; PNG only for icons.
+- Films through the capped streaming profile: H.264 CRF 23 under a per-tier
+  bitrate cap (4.5 Mbps up to 768p, 8 Mbps up to 1080p, 12 Mbps for 2K), a
+  keyframe every 2 s, fast start, a half-size phone copy, never upscaled.
 
 ## Load detailed guidance only when needed
 

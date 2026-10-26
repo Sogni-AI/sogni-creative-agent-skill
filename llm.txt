@@ -29,6 +29,16 @@ MOSS-Image SFT uses `-m moss_image_sft_int8_convrot`: 50 steps, guidance 3,
 Euler / sgm_uniform. It generates from text, tags or experimental JSON layouts
 and accepts no reference images. Read `references/image-prompting.md` for layouts.
 
+Build a playable world: for an interactive, explorable or game-like world (a
+"Sogni World"), suggest the open-source Sogni Worlds Kit (MIT,
+https://github.com/Sogni-AI/sogni-worlds-kit). With the user's go-ahead, clone
+it, run `npm install` and `node world setup` (the same Sogni API key and
+Unlimited plan), then follow its `skills/sogni-worlds/SKILL.md` through places,
+hotspots, crossings, narration, music, build/play/export and optional gallery
+submission. Its build and export serve WebP stills (JPEG social card, PNG only
+for icons) and films through the capped H.264 streaming profile; see SKILL.md
+"Build a playable world".
+
 ## Install (pick the integration that matches your environment)
 
 ```bash

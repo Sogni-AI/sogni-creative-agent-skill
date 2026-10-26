@@ -34,6 +34,7 @@ With this skill, an agent can:
 - turn an image folder into a visually deduplicated, music-backed seamless loop with one plugin skill invocation
 - generate instrumental music or full songs with lyrics
 - run hosted creative workflows including storyboard-driven video
+- build a playable, click-through world (places, crossing films, narration, music, 3D collectibles) with the open-source [Sogni Worlds Kit](https://github.com/Sogni-AI/sogni-worlds-kit), which uses the same Sogni API key
 - save personas, preferences, and last-render state across sessions
 - check balances, list models, and refine previous results
 

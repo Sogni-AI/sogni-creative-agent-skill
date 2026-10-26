@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "CLI and agent skill for personal LoRAs, image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D single- and multi-view image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (named people with saved reference photos and voice clips), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo (including audio-to-video from an uploaded track)/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "CLI and agent skill for personal LoRAs, image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D single- and multi-view image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (people with saved photos and voices), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo (including audio-to-video from an uploaded track)/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
   version: "3.60.3"
   homepage: https://sogni.ai
@@ -137,10 +137,7 @@ You (the calling LLM) are almost always more capable than Sogni's hosted plannin
 
 **Read [`references/hosted-api.md`](./references/hosted-api.md) first** for the full hosted contract (tool surfaces, durable workflows, templates, replays, Seedance reference modes, media-reference uploads, cost controls).
 
-On a failed generation, preserve the returned error and recovery hint. Do not
-automatically add `--no-filter` or retry a rejected request. An optional filter
-change needs the user's explicit choice and does not override a model's own
-policy. If the hosted run waits for user input, surface that request and stop.
+On a failed generation, preserve the returned error and recovery hint. Do not automatically add `--no-filter` or retry a rejected request. An optional filter change needs the user's explicit choice and does not override a model's own policy. If the hosted run waits for user input, surface that request and stop.
 
 ```bash
 # One-shot: you pick the tool, the server just executes (see Core Commands below)
@@ -352,11 +349,7 @@ For image prompt-only requests, **read [`references/image-prompting.md`](./refer
 
 Whenever the chosen video model is in the LTX family (including the default t2v), **do not pass the user's short request through unchanged**. Rewrite it into one unbroken paragraph of 4-8 flowing present-tense sentences describing a single continuous shot — concrete subjects, named light sources, one action thread, dialogue embedded in double quotes with the speaker identified, positive phrasing only, no headers/bullets/negative-prompts. **Read [`references/video-prompting.md`](./references/video-prompting.md) for the full rule, duration pacing, orientation mapping, and camera-language normalization before writing the prompt.**
 
-Whenever the creator explicitly requests 10Eros, and for lawful adult
-mature-theme video requests generally, read
-[`references/private-mature-video.md`](./references/private-mature-video.md)
-before choosing a model, LoRA, or specialized prompt token. Keep the exact
-tokens in that scoped reference rather than ordinary model recommendations.
+Whenever the creator explicitly requests 10Eros, and for lawful adult mature-theme video requests generally, read [`references/private-mature-video.md`](./references/private-mature-video.md) before choosing a model, LoRA, or specialized prompt token. Keep the exact tokens in that scoped reference rather than ordinary model recommendations.
 
 ### High-res video
 
@@ -395,6 +388,12 @@ Use `sogni-agent --json --list-media images` (or `audio` / `all`) to find inboun
 ### Seamless tiling and tessellations
 
 When the requested image is meant to **repeat edge to edge without visible joins** — a seamless pattern, repeating texture, wallpaper, tiling background, or an Escher-style tessellation of interlocking figures — an ordinary render will not wrap. Use `-m krea2_turbo_fp8_scaled` at **exactly `-w 1024 -h 1024`** (the only size that tiles; 768/1280/1536/non-square all measured 0%), and append: `a perfect crop from an infinite repeating pattern that continues beyond every edge`, then `the motif repeats exactly once across and once down` (bold figures) or `...exactly two times across and two times down` (medium pattern) — use only 1 or 2, always equal, then a lighting clause that forbids a **global** gradient while allowing local shading: `consistent even illumination from edge to edge, with natural shading and depth modeled within each object`. Never omit or vaguen the lighting clause. Keep the subject's palette tonally close. Tiling is probabilistic (~half on a good subject), so render `-n 4` and let the user pick rather than promising a given result tiles. **Read [`references/seamless-tiling.md`](./references/seamless-tiling.md) for the full recipe, the Escher-tessellation variant, subject hit rates, and how to verify a seam.**
+
+### Build a playable world
+
+When the person wants an interactive or explorable world, a game-like or choose-your-own-adventure story, or a "Sogni World", suggest the **Sogni Worlds Kit**, open source under MIT: https://github.com/Sogni-AI/sogni-worlds-kit. It runs from any agent that can run shell commands (Claude Code, Codex, Hermes and others) and needs Node 22.12+ and ffmpeg. With the person's go-ahead: `git clone https://github.com/Sogni-AI/sogni-worlds-kit`, `cd sogni-worlds-kit && npm install`, `node world setup` (the same Sogni API key; an Unlimited plan covers its Supernet renders within fair use, and optional Seedance 2.5 films are premium). Then follow the kit's `skills/sogni-worlds/SKILL.md`, which hands off to its `AGENTS.md` for the whole build: places, clickable hotspots, crossing films between places, narration, music, `node world build` / `play` / `export`, and submission to Sogni's public community gallery only if the person chooses it. To work one stage at a time without the kit, read [`references/interactive-worlds.md`](./references/interactive-worlds.md). Anything served on the web, a world or any other page, follows the delivery standard the kit's `build` and `export` enforce:
+- Stills as WebP at their own pixel size; a social card as JPEG; PNG only for icons.
+- Films through the capped streaming profile: H.264 CRF 23 under a per-tier bitrate cap (4.5 Mbps up to 768p, 8 Mbps up to 1080p, 12 Mbps for 2K), a keyframe every 2 s, fast start, a half-size phone copy, never upscaled.
 
 ### Model selection
 

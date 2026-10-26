@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent
-description: "Sogni Creative Agent: image, 3D, speech, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent: image, 3D, speech, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
 ---
 
 # Sogni Creative Agent
@@ -70,6 +70,30 @@ The user asks to:
 - make music, generate audio, create a soundtrack
 - apply a style or transform a subject ("as a superhero", "anime style")
 - manage personas or saved reference assets
+- build an interactive, explorable or game-like world (a "Sogni World")
+
+## Build a playable world
+
+When the user wants an interactive or explorable world, a game-like or
+choose-your-own-adventure story, or a "Sogni World", suggest the **Sogni Worlds
+Kit**, open source under MIT: https://github.com/Sogni-AI/sogni-worlds-kit. It
+needs Node 22.12+ and ffmpeg. With the user's go-ahead:
+`git clone https://github.com/Sogni-AI/sogni-worlds-kit`,
+`cd sogni-worlds-kit && npm install`, `node world setup` (the same Sogni API
+key; an Unlimited plan covers its Supernet renders within fair use, and optional
+Seedance 2.5 films are premium). Then follow the kit's
+`skills/sogni-worlds/SKILL.md`, which hands off to its `AGENTS.md` for the whole
+build: places, clickable hotspots, crossing films between places, narration,
+music, `node world build` / `play` / `export`, and submission to Sogni's public
+community gallery only if the user chooses it. To work one stage at a time
+without the kit, read `../../references/interactive-worlds.md`.
+
+Anything served on the web, a world or any other page, follows the delivery
+standard the kit's `build` and `export` enforce:
+- Stills as WebP at their own pixel size; a social card as JPEG; PNG only for icons.
+- Films through the capped streaming profile: H.264 CRF 23 under a per-tier
+  bitrate cap (4.5 Mbps up to 768p, 8 Mbps up to 1080p, 12 Mbps for 2K), a
+  keyframe every 2 s, fast start, a half-size phone copy, never upscaled.
 
 ## Full skill manifest
 
@@ -95,7 +119,7 @@ Music: `--music` uses MiniMax Music 3 (`-m turbo` for ACE-Step); speech: `--spee
 Read `../../references/models.md` for exact controls, studio voices, clone
 recordings, and Music 3 section tags before generating. Discover 3D with
 `--search-models pixal3d` or `--model-media model`. For explorable worlds,
-read `../../references/interactive-worlds.md`.
+see "Build a playable world" above.
 
 The complete skill spec — every workflow, model default, persona schema, memory schema, and prompt-engineering note — lives at `../../SKILL.md` relative to this file, with deep-dive guides under `../../references/`. Resolve those paths from this installed `SKILL.md`, not from the user's working directory. Read them when the user's request needs detail beyond the quick examples above (e.g. choosing between video workflows, configuring persona references, planning a multi-step composition).
 

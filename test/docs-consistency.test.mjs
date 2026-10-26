@@ -374,6 +374,24 @@ test('MiniMax H3 keyframe docs quote the shared tool wording and keep the priced
   }
 });
 
+test('every skill surface offers the Sogni Worlds Kit and the web delivery standard', () => {
+  for (const file of [
+    'SKILL.md',
+    'plugin-skills/sogni-creative-agent/SKILL.md',
+    '.agents/skills/sogni-creative-agent-skill/SKILL.md',
+  ]) {
+    const text = read(file);
+    assert.match(text, /^#{2,3} Build a playable world$/m, `${file}: missing the section`);
+    assert.match(text, /https:\/\/github\.com\/Sogni-AI\/sogni-worlds-kit/, `${file}: missing the kit link`);
+    assert.match(text, /`node world setup`/, `${file}: missing kit setup`);
+    assert.match(text, /`skills\/sogni-worlds\/SKILL\.md`/, `${file}: missing the kit skill`);
+    assert.match(text, /Stills as WebP/, `${file}: missing the still delivery rule`);
+    assert.match(text, /H\.264 CRF 23 under a per-tier\s+bitrate cap/, `${file}: missing the film delivery rule`);
+  }
+  assert.match(read('llm.txt'), /Sogni Worlds Kit/);
+  assert.match(read('README.md'), /\[Sogni Worlds Kit\]\(https:\/\/github\.com\/Sogni-AI\/sogni-worlds-kit\)/);
+});
+
 test('SKILL.md core stays lean (progressive disclosure guard)', () => {
   const lineCount = read('SKILL.md').split('\n').length;
   assert.ok(lineCount <= 500,

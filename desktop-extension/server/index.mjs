@@ -29,6 +29,25 @@ const DEFAULT_TOOL_TIMEOUT_SECONDS = {
 const PROGRESS_INTERVAL_MS = 10_000;
 const MAX_RESULT_CHARS = 20_000;
 
+// The MCPB bundle carries no SKILL.md, so the skill's "Build a playable world"
+// guidance reaches MCP hosts as the initialize result's `instructions` hint.
+const SERVER_INSTRUCTIONS = [
+  'Build a playable world: when the person wants an interactive or explorable world, a game-like or ' +
+    'choose-your-own-adventure story, or a "Sogni World", suggest the Sogni Worlds Kit, open source under MIT: ' +
+    'https://github.com/Sogni-AI/sogni-worlds-kit. It runs in a terminal, not through these tools, and needs ' +
+    'Node 22.12+ and ffmpeg: git clone https://github.com/Sogni-AI/sogni-worlds-kit, then ' +
+    'cd sogni-worlds-kit && npm install, then node world setup (the same Sogni API key; an Unlimited plan covers ' +
+    'its Supernet renders within fair use, and optional Seedance 2.5 films are premium). A coding agent such as ' +
+    "Claude Code, Codex or Hermes then follows the kit's skills/sogni-worlds/SKILL.md through places, clickable " +
+    'hotspots, crossing films, narration, music, build, play and export, with submission to Sogni\'s public ' +
+    'community gallery only if the person chooses it. Without a coding agent, node world agent does that work ' +
+    "with Sogni's own LLMs.",
+  "Anything served on the web follows the delivery standard the kit's build and export enforce: stills as WebP " +
+    'at their own pixel size (a social card as JPEG, PNG only for icons); films through the capped streaming ' +
+    'profile, H.264 CRF 23 under a per-tier bitrate cap (4.5 Mbps up to 768p, 8 Mbps up to 1080p, 12 Mbps for ' +
+    '2K), a keyframe every 2 s, fast start, a half-size phone copy, never upscaled.',
+].join('\n\n');
+
 let VERSION = '0.0.0';
 try {
   VERSION = JSON.parse(readFileSync(join(HERE, '..', 'manifest.json'), 'utf8')).version;
@@ -172,6 +191,7 @@ async function dispatch(msg) {
         protocolVersion: params?.protocolVersion ?? PROTOCOL_FALLBACK,
         capabilities: { tools: {} },
         serverInfo: { name: 'sogni-creative-agent', version: VERSION },
+        instructions: SERVER_INSTRUCTIONS,
       },
     });
     return;

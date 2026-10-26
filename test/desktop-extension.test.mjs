@@ -358,6 +358,11 @@ test('initialize handshake returns serverInfo and tools capability', async (t) =
   assert.equal(res.result.protocolVersion, '2025-06-18');
   assert.equal(res.result.serverInfo.name, 'sogni-creative-agent');
   assert.ok(res.result.capabilities.tools);
+  // The MCPB has no SKILL.md; its world-building guidance travels as instructions.
+  assert.match(res.result.instructions, /https:\/\/github\.com\/Sogni-AI\/sogni-worlds-kit/);
+  assert.match(res.result.instructions, /node world setup/);
+  assert.match(res.result.instructions, /skills\/sogni-worlds\/SKILL\.md/);
+  assert.match(res.result.instructions, /H\.264 CRF 23 under a per-tier bitrate cap/);
 });
 
 test('standalone MCPB starts outside the checkout with its shared modules', { timeout: 5000 }, async (t) => {

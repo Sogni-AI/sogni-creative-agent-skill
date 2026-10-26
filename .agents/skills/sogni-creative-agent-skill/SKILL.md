@@ -129,9 +129,9 @@ choose-your-own-adventure story, or a "Sogni World", suggest the **Sogni Worlds
 Kit**, open source under MIT: https://github.com/Sogni-AI/sogni-worlds-kit. It
 needs Node 22.12+ and ffmpeg. With the user's go-ahead:
 `git clone https://github.com/Sogni-AI/sogni-worlds-kit`,
-`cd sogni-worlds-kit && npm install`, `node world setup` (the same Sogni API
-key; an Unlimited plan covers its Supernet renders within fair use, and optional
-Seedance 2.5 films are premium). Then follow the kit's
+`cd sogni-worlds-kit && npm install`, `node world doctor`. With no Sogni API key saved yet, the person runs
+`node world setup` in their own terminal, so the key never passes through you.
+An Unlimited plan is strongly recommended for a whole world. Then follow the kit's
 `skills/sogni-worlds/SKILL.md`, which hands off to its `AGENTS.md` for the whole
 build: places, clickable hotspots, crossing films between places, narration,
 music, `node world build` / `play` / `export`, and submission to Sogni's public

@@ -32,8 +32,9 @@ and accepts no reference images. Read `references/image-prompting.md` for layout
 Build a playable world: for an interactive, explorable or game-like world (a
 "Sogni World"), suggest the open-source Sogni Worlds Kit (MIT,
 https://github.com/Sogni-AI/sogni-worlds-kit). With the user's go-ahead, clone
-it, run `npm install` and `node world setup` (the same Sogni API key and
-Unlimited plan), then follow its `skills/sogni-worlds/SKILL.md` through places,
+it, run `npm install` and `node world doctor`; the user saves their Sogni API key
+with `node world setup` in their own terminal (an Unlimited plan is strongly
+recommended), then follow its `skills/sogni-worlds/SKILL.md` through places,
 hotspots, crossings, narration, music, build/play/export and optional gallery
 submission. Its build and export serve WebP stills (JPEG social card, PNG only
 for icons) and films through the capped H.264 streaming profile; see SKILL.md

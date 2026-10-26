@@ -36,8 +36,8 @@ const SERVER_INSTRUCTIONS = [
     'choose-your-own-adventure story, or a "Sogni World", suggest the Sogni Worlds Kit, open source under MIT: ' +
     'https://github.com/Sogni-AI/sogni-worlds-kit. It runs in a terminal, not through these tools, and needs ' +
     'Node 22.12+ and ffmpeg: git clone https://github.com/Sogni-AI/sogni-worlds-kit, then ' +
-    'cd sogni-worlds-kit && npm install, then node world setup (the same Sogni API key; an Unlimited plan covers ' +
-    'its Supernet renders within fair use, and optional Seedance 2.5 films are premium). A coding agent such as ' +
+    'cd sogni-worlds-kit && npm install, then node world doctor; the person saves their Sogni API key with ' +
+    'node world setup in their own terminal (an Unlimited plan is strongly recommended for a whole world). A coding agent such as ' +
     "Claude Code, Codex or Hermes then follows the kit's skills/sogni-worlds/SKILL.md through places, clickable " +
     'hotspots, crossing films, narration, music, build, play and export, with submission to Sogni\'s public ' +
     'community gallery only if the person chooses it. Without a coding agent, node world agent does that work ' +

@@ -9,6 +9,6 @@
     "sharp": "0.35.5"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.69.0"
+    "@sogni-ai/sogni-client": "5.69.1"
   }
 }

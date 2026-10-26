@@ -4,6 +4,7 @@
 
 * Keep the scoped Seedance 2.5 reference synchronized across the main skill and Hermes package, including account requirements and supported output resolutions.
 * Make the HTTPS first-frame routing test independent of external website responses.
+* Align the development and ClawHub runtime pins with the published Sogni SDK 5.69.1 dependency.
 
 ### Documentation
 

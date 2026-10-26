@@ -22,6 +22,53 @@ The LoRA supports:
 Sogni installs the LT3X v3 LoRA, not the separately trained WAN release. Do not
 use this LoRA ID with WAN models.
 
+## Seedance 2.5 Uncensored
+
+For explicit scenes at film quality, prefer `seedance-2-5-uncensored` over
+10Eros: it is a premium loose-reference model that can start from a clothed,
+world-consistent frame and go explicit at the story beat you choose. It
+requires `--no-filter`. Without that flag, explicit wording is rejected with
+"Sensitive content detected" and neutral wording is silently sanitized to a
+clothed result — the failure looks like a prude model, but the flag is the
+whole fix.
+
+Command shape:
+
+```bash
+sogni-agent --video -m seedance-2-5-uncensored --no-filter \
+  --seedance-task-type reference --target-resolution 720 --duration 10 \
+  -c ./identity-woman.png -c ./identity-man.png \
+  -c ./ref-vulva.png -c ./ref-penetration-front.png -c ./ref-penetration-rear.png \
+  -o ./scene.mp4 "<beat-by-beat prompt>"
+```
+
+Prompt construction:
+
+1. Pass one identity reference per character, then one reference for EVERY
+   genital appearance the scene will show — the model will not introduce
+   genitals that no reference contains. Give each a job in the prompt
+   ("@Image3 is the exact reference for her bare vulva when it is exposed";
+   "@Image4 is the exact reference for the penetration when it is visible face
+   to face") and match each reference's pose to where the camera will see it.
+2. Write the scene as chronological story beats and bind each explicit beat to
+   its reference ("he pushes her slip up, exposing her bare vulva exactly as in
+   @Image3; … the camera low behind them as in @Image5"). This starts the film
+   clothed and goes explicit at the chosen beat.
+3. Direct the camera explicitly — "the camera held close and low on their hips
+   where he thrusts" — or Seedance frames tastefully above the waist no matter
+   how explicit the prompt is.
+4. If the tail drifts back to a tame shot, put the explicit beat last; the
+   model weights its closing frames.
+
+When the scene already exists as an explicit still, draw that still with
+`dark_beast_krea2_fp8 --no-filter` (identity by written description works; the
+identity-edit variant sanitizes explicit prompts) and pass it as the single
+reference with "Recreate and animate the exact scene from @Image1".
+
+`--duration` is whole seconds and `--target-resolution` is `720` or `1080`;
+Seedance bills premium per-second rates from the token balance, which no
+Unlimited plan covers — quote before rendering.
+
 ## Specialized prompt vocabulary
 
 The LoRA is one multi-concept adapter. Each token selects an action concept:

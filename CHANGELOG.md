@@ -1,3 +1,10 @@
+## [3.60.4] - 2026-10-26
+
+### Updates
+
+* When you want an interactive, explorable or game-like world, agents offer the open-source [Sogni Worlds Kit](https://github.com/Sogni-AI/sogni-worlds-kit). With your go-ahead they clone it, run `node world setup` with your Sogni API key, and follow the kit's own skill through places, crossings, narration, music, build and export, submitting to Sogni's public community gallery only if you choose. The skill, the Claude Code and Codex plugins, the Hermes bundle and the MCP extension (as server instructions) all carry it.
+* Agents serve stills as WebP (a JPEG social card, PNG only for icons) and films through the capped H.264 streaming profile with a half-size phone copy, the standard the kit's build and export enforce.
+
 ## [3.60.3] - 2026-10-26
 
 ### Bug Fixes

@@ -1,3 +1,9 @@
+## [3.60.6] - 2026-10-30
+
+### Bug Fixes
+
+* Correct speech option forwarding for Qwen preset voices, voice cloning and voice design while preserving existing defaults.
+
 ## [3.60.5] - 2026-10-29
 
 ### Bug Fixes

@@ -71,3 +71,21 @@ test('pinned SDK transports Qwen speech scripts, speakers, directions, and clone
     assert.equal(message.creativity, 0.9);
   }
 });
+
+test('pinned SDK carries the Qwen speech filter choice in the project request', () => {
+  for (const mode of ['voice', 'clone', 'design']) {
+    for (const noFilter of [undefined, false, true]) {
+      const model = `qwen3_tts_1.7b_${mode === 'voice' ? 'custom_voice' : `voice_${mode}`}_bf16`;
+      const project = { ...speechConfig({ model, prompt: 'Speak exactly these words.', count: 1,
+        musicLanguage: 'auto', outputFormat: 'wav', seed: null, speechCreativity: null, noFilter,
+        speechVoice: mode === 'voice' ? 'ryan' : null,
+        voiceDescription: mode === 'design' ? 'Warm, deep narrator' : null,
+        voiceTranscript: mode === 'clone' ? 'Known words.' : null
+      }, mode === 'clone' ? source : undefined), type: 'audio' };
+      validateProjectConfig(project);
+      const message = serialize('00000000-0000-4000-8000-000000000001', project, audioOptions);
+      assert.equal(message.disableSafety, noFilter === true, `${mode}: noFilter=${noFilter}`);
+      assert.equal(message.keyFrames[0].positivePrompt, 'Speak exactly these words.');
+    }
+  }
+});

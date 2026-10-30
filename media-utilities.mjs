@@ -133,6 +133,7 @@ export function speechConfig(options, referenceAudio) {
   return {
     modelId: options.model, positivePrompt: options.prompt, numberOfMedia: options.count,
     tokenType: options.tokenType || 'spark', waitForCompletion: false,
+    disableNSFWFilter: options.noFilter === true,
     language: options.musicLanguage, outputFormat: options.outputFormat,
     ...(options.speechVoice ? { speaker: options.speechVoice } : {}),
     ...(options.voiceDescription ? { instruct: options.voiceDescription } : {}),

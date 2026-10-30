@@ -9485,6 +9485,21 @@ test('Qwen speech clone forwards the original recording and known transcript', (
   assert.equal(config.outputFormat, 'wav');
 });
 
+test('Qwen speech forwards --no-filter in every mode and keeps the filter on by default', () => {
+  const reference = speechReferenceFixture();
+  for (const mode of ['voice', 'clone', 'design']) {
+    for (const noFilter of [false, true]) {
+      const result = runCli(['--speech', '--speech-mode', mode,
+        ...(mode === 'clone' ? ['--voice-reference', reference, '--voice-transcript', 'Known words.'] : []),
+        ...(mode === 'design' ? ['--voice-description', 'Warm, deep narrator'] : []),
+        ...(noFilter ? ['--no-filter'] : []), 'Speak exactly these words.', '--json']);
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(result.state.lastAudioProject.disableNSFWFilter, noFilter, `${mode}: noFilter=${noFilter}`);
+      assert.equal(result.state.lastAudioProject.positivePrompt, 'Speak exactly these words.');
+    }
+  }
+});
+
 test('Qwen speech rejects missing and incompatible inputs', () => {
   for (const args of [
     ['--speech', '--speech-mode', 'clone'],

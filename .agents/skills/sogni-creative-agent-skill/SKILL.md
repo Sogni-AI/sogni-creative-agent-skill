@@ -3,7 +3,7 @@ name: sogni-creative-agent-skill
 description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, build a playable world, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
-  version: "3.60.4"
+  version: "3.60.5"
   author: Sogni AI
   hermes:
     category: creative
@@ -178,6 +178,8 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
 
 - Model choice, quality tiers, Krea identity edits, and video aliases: read
   [models.md](references/models.md).
+- Recognizable identity within a creative transformation, with explicit locks
+  and bounded edits respected: read the [style-transfer recipes](references/personas-memory.md#style-transfer-recipes).
 - Krea 2 LoRA ids, strength ranges, bipolar sliders, and stacking up to 8 in
   one render: read [krea2-loras.md](references/krea2-loras.md).
 - Video prompts, reference roles, LTX, WAN 2.2, Wan 3, MiniMax, Seedance, and HappyHorse:

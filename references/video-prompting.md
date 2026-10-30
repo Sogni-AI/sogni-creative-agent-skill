@@ -652,11 +652,26 @@ N/A
 Trim definitions for references that were not attached; unresolved labels are
 invalid.
 
-Sogni's current agent-facing R2V attachments are loose references. A prompt may
-borrow a clip's motion, pacing, or temporal structure, but must not claim
-`video editing` or `video continuation` unless the caller actually supplies a
-typed transformation relationship. Use I2VA, L2VA, or FL2VA when an endpoint
-must be locked.
+**Source-shot edits.** When the user asks to transform an attached source shot,
+use `video editing` and the exact edited-version opening above. Ref2VA carries
+the source through the ordinary video reference input; it needs no extra SDK
+edit flag. For appearance replacement, mark `<Video N>` `partially_preserved`:
+list the camera, scene, positions, action and timing that stay, and the identity,
+hair, clothing or body attributes that change. Do not mark the whole source
+`fully_preserved` just because its motion or framing is retained.
+
+Define the replacement subject from its image references, with face and wardrobe
+pictures assigned to the correct person. The replaced performer supplies the
+performance, not a second retained visible identity. Keep original clothing only
+when requested. Define untouched performers separately. If the replacement
+resembles an existing performer, explicitly state the final subject count and
+distinct positions so the image does not bind only to the existing match.
+
+For a new shot borrowing motion, use `reference generation` and state the
+transferred attributes and requested identity/setting. Neither task label
+guarantees pixel-exact preservation or exact choreography. `video continuation`
+still needs an actual continuation workflow. Use I2VA, L2VA, or FL2VA when an
+endpoint must be locked.
 
 For voice references, bind the voice to the speaking subject by reusing that
 subject's `(Sx)` in `subject_definitions`; do not put the speaker ID in

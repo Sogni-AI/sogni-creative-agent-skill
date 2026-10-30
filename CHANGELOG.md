@@ -1,3 +1,12 @@
+## [3.60.5] - 2026-10-29
+
+### Bug Fixes
+
+* Express a referenced individual's recognizable identity within the requested visual language. Artistic transformations can change proportions, skin treatment, accessories, expression, pose and framing; bounded edits and explicit preservation requests remain respected.
+* Share the corrected image guidance across the creative runtime, tool descriptions, prompt-authoring reference, persona recipes and Hermes bundle. Preserve custom wording and existing model defaults.
+* Align the bundled runtime with intelligence-client 4.22.2, creative-agent 2.26.5 and the published Sogni SDK 5.70.0.
+* Clarify source-shot reference-video editing: apply requested changes while preserving the requested source continuity and untouched content.
+
 ## [3.60.4] - 2026-10-26
 
 ### Updates

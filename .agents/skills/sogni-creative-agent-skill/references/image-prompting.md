@@ -13,7 +13,7 @@ substitute another destination model's prompt contract.
 | SD 1.5 | Weighted or comma-separated tags; quality/medium, subject, environment, lighting/camera | `positive_prompt:` plus `negative_prompt:` |
 | SDXL | Hybrid natural language plus selective comma-separated style/quality terms; Pony variants start with their score tags | `positive_prompt:` plus `negative_prompt:` |
 | FLUX.1 Schnell | One concise natural-language visual description centered on the subject, composition, light, and style; no SD score/tag soup | Prompt text only |
-| FLUX 3 Image Klein | A full scene caption in plain sentences: subject, framing, setting, lighting, and style; for reference edits, what to take from each reference and how they combine; no negative prompt (guidance is fixed at 1) | Prompt text only |
+| FLUX 3 Image Klein | A full scene caption in plain sentences: subject, framing, setting, lighting, and style; name reference contributions by attachment order (the first image, the second image); no negative prompt (guidance is fixed at 1) | Prompt text only |
 | Chroma 1 / v.46 / Detail | One coherent natural-language visual description; exact visible text in quotes; no SD score/tag soup | Prompt text only |
 | Krea 2 / Krea 2 Turbo | Dense, fluent rich caption emphasizing observable composition, palette, light, texture, and atmosphere; no SD weighting syntax | Prompt text only |
 | MOSS-Image SFT | Detailed natural-language caption, tags, or a supplied experimental JSON layout; preserve exact visible text and line breaks | Prompt text only; generation only |
@@ -64,6 +64,14 @@ Markdown fence, preamble, explanation, or render offer.
   visible copy, proper nouns, style, and constraints. Add supporting visual
   detail without inventing extra objects, labels, slogans, characters, or
   story events.
+- For a referenced person or character, distinguish a bounded edit from a
+  creative transformation. Keep genuinely untargeted content stable for a
+  bounded edit; express the recognizable individual in the requested medium
+  for a transformation, including its implied retouching or physical redesign.
+  Honor explicit locks without imposing a fixed face, texture, accessory,
+  pose, framing or facial-exposure inventory. Source observations are evidence
+  to interpret, not immutable requirements. Write task-specific art direction
+  rather than appending a universal identity or beauty paragraph.
 - Model capability selection comes from typed model and operation metadata.
   Never infer it from sentence-shape regexes or a list of creative keywords.
 

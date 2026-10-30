@@ -2,7 +2,7 @@
 
 Read this when managing personas (named people with saved reference photos and
 voice clips), persistent user preferences, custom agent personality, or
-multi-persona scenes.
+multi-persona scenes, or style transformations of a referenced individual.
 
 ## Persona System
 
@@ -98,13 +98,18 @@ sogni-agent -c photo.jpg -o ./styled.png "Apply style: Andy Warhol pop art with 
 # Studio Ghibli transformation
 sogni-agent -c photo.jpg -o ./ghibli.png "Apply style: Studio Ghibli watercolor with soft pastel sky and lush greenery"
 
-# For photos with people, always preserve identity
-sogni-agent -c portrait.jpg -o ./styled.png "Apply style: oil painting in the style of Vermeer. Preserve all facial features, expressions, and identity."
+# Translate the particular person's likeness into the requested visual language
+sogni-agent -c portrait.jpg -o ./styled.png "Reimagine the person from this portrait in a Vermeer-inspired oil painting, with a recognizable individual likeness expressed through the painted forms."
 ```
 
-**Tips:** reference artists and styles BY NAME for best results. Use positive
-phrasing. For photos with people, always append identity-preservation
-instructions.
+**Tips:** use the requested artist or visual language and concrete art direction.
+For a bounded edit, preserve genuinely untargeted content. For a creative
+transformation, the complete brief can imply changed proportions, anatomy,
+expression, pose, framing, accessories or skin treatment. Make the particular
+individual recognizable within that design; source observations are evidence,
+not an unchanged-feature inventory. Honor explicit locks and choose facial
+exposure with artistic judgment. Do not append universal face-preservation or
+beauty boilerplate to every prompt.
 
 ## Photo Restoration recipes
 

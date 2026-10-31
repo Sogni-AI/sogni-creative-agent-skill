@@ -1758,6 +1758,31 @@ test('--status reports a queued project and why it is waiting', () => {
   assert.deepEqual(state?.projectLookups, [{ method: 'getResult', projectId: 'proj-9', options: null }]);
 });
 
+// A project that failed while this client was not listening (2026-10-30: a Seedance copyright refusal printed as a bare
+// "failed"): the explanation stored with its status comes through, in JSON and in text.
+const FAILED_RESULT = JSON.stringify({
+  id: 'proj-7', status: 'failed', finished: true, modelId: 'seedance-2-5-uncensored',
+  failure: {
+    code: 'OutputAudioSensitiveContentDetected.PolicyViolation', category: 'content_policy',
+    message: "Seedance blocked this video because it did not pass the provider's content policy. No video was returned. Its generated soundtrack may match copyrighted audio."
+  },
+  jobs: []
+});
+
+test('--status and --result say why a failed project failed', () => {
+  const json = runCli(['--status', 'proj-7', '--json'], { SOGNI_AGENT_TEST_GET_RESULT_JSON: FAILED_RESULT });
+  assert.equal(json.exitCode, 0);
+  const output = JSON.parse(json.stdout.trim().split('\n').pop());
+  assert.equal(output.status, 'failed');
+  assert.equal(output.failure.code, 'OutputAudioSensitiveContentDetected.PolicyViolation');
+  assert.match(output.failure.message, /copyrighted audio/);
+
+  const status = runCli(['--status', 'proj-7'], { SOGNI_AGENT_TEST_GET_RESULT_JSON: FAILED_RESULT });
+  assert.match(status.stdout, /Why it failed: Seedance blocked this video .*copyrighted audio/);
+  const result = runCli(['--result', 'proj-7'], { SOGNI_AGENT_TEST_GET_RESULT_JSON: FAILED_RESULT });
+  assert.match(result.stdout, /Project proj-7: failed\nWhy it failed: Seedance blocked this video/);
+});
+
 const FINISHED_RESULT = JSON.stringify({
   id: 'proj-9', status: 'completed', finished: true,
   jobs: [{ id: 'IMG-1', status: 'completed', kind: 'video', url: 'https://cdn.test/IMG-1.mp4' }]

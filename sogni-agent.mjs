@@ -12989,6 +12989,9 @@ function projectLookupSummary(result) {
     ...(result.modelId ? { model: result.modelId } : {}),
     waitingReason: result.waitingReason ?? null,
     ...(message ? { message } : {}),
+    // Why a failed project failed, as its owner was told (sogni-client's getResult reads it from the stored status, so it
+    // survives a disconnect or a follow from another app; it used to read back as nothing).
+    ...(result.failure ? { failure: result.failure } : {}),
     jobs: (result.jobs || []).map((job) => ({
       id: job.id,
       status: job.status,
@@ -13009,6 +13012,7 @@ function printProjectStatus(result) {
   const done = summary.jobs.filter((job) => job.status === 'completed').length;
   console.log(`Project ${summary.projectId}: ${summary.status}${summary.finished ? ` (${done}/${summary.jobs.length} render(s) completed)` : ''}`);
   if (summary.message) console.log(summary.message);
+  if (summary.failure?.message) console.log(`Why it failed: ${summary.failure.message}`);
   for (const job of summary.jobs) {
     if (job.status !== 'completed') console.log(`  ${job.id}: ${job.status}${job.reason ? ` (${job.reason})` : ''}`);
   }
@@ -13045,6 +13049,7 @@ async function saveProjectResult(result) {
     return;
   }
   console.log(`Project ${summary.projectId}: ${summary.status}`);
+  if (summary.failure?.message) console.log(`Why it failed: ${summary.failure.message}`);
   if (localPaths.length) {
     for (const path of localPaths) console.log(`Saved to ${path}`);
   } else {

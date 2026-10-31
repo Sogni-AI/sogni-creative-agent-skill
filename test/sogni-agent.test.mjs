@@ -7038,9 +7038,20 @@ test('--balance without --json displays human-readable output', () => {
 });
 
 for (const premiumSpark of [6.96, 0]) {
-  test(`--balance preserves Premium Spark ${premiumSpark} separately from total Spark in JSON and text`, () => {
+  test(`--balance preserves installed wrapper Premium Spark ${premiumSpark} in JSON and text`, async () => {
+    const { SogniClientWrapper } = createRequire(import.meta.url)('@sogni-ai/sogni-intelligence-client');
+    const wrapper = new SogniClientWrapper({ apiKey: 'test-api-key', autoConnect: false });
+    wrapper.connectionState = { isConnected: true };
+    wrapper.client = {
+      account: {
+        refreshBalance: async () => ({
+          spark: { net: '1756.40', premiumCredit: String(premiumSpark) },
+          sogni: { net: '0.22' }
+        })
+      }
+    };
     const env = {
-      SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 1756.4, premiumSpark, sogni: 0.22 })
+      SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify(await wrapper.getBalance())
     };
     const json = runCli(['--json', '--balance'], env);
     assert.equal(json.exitCode, 0, json.stderr);

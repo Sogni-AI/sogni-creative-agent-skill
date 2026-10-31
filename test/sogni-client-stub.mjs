@@ -267,6 +267,7 @@ class SogniClientWrapper extends EventEmitter {
     return {
       sogni: 100,
       spark: 100,
+      premiumSpark: 7.25,
       lastUpdated: new Date()
     };
   }

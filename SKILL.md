@@ -2,7 +2,7 @@
 name: sogni-creative-agent-skill
 description: "CLI and agent skill for personal LoRAs, image, video, and music generation using Sogni AI's decentralized GPU network. Supports Pixal3D single- and multi-view image-to-GLB, BiRefNet background removal, Qwen3-TTS speech/voice cloning/design, MiniMax Music 3, SAM 3 object selection, promptless RTX VSR image upscaling through 16K, promptless FlashVSR video upscaling to 1080p/1440p, one-click image-folder loop reels, personas (people with saved photos and voices), persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/H3 Balanced/LightX2V Turbo/FastH3 Turbo (including audio-to-video from an uploaded track)/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Ask the agent to \"draw\", \"generate\", \"create an image\", \"upscale an image\", \"upscale a video\", \"make a video/animate\", \"turn this image folder into a loop\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
 metadata:
-  version: "3.60.6"
+  version: "3.61.0"
   homepage: https://sogni.ai
   openclaw:
     emoji: "🎨"
@@ -461,7 +461,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 }
 ```
 
-`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "sogni": 0.56, "username": "name", "subscription": { "active": true, "status": "active", "tier": "unlimited" } }` (`username`/`subscription` are `null` when unavailable; an active subscription means eligible renders are covered by Sogni Unlimited even when `spark` is low). `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
+`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "premiumSpark": 2.50, "sogni": 0.56, "username": "name", "subscription": { "active": true, "status": "active", "tier": "unlimited" } }`. `spark` is total Spark; `premiumSpark` is the Premium portion already included in it. `premiumSpark: 0` means none remains; `null` means the client did not expose it. Use this read-only command to check a top-up, never a paid render. `username`/`subscription` are `null` when unavailable; an active subscription means eligible renders are covered by Sogni Unlimited even when `spark` is low. `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
 
 ## Cost
 

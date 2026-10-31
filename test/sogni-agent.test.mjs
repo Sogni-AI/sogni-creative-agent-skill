@@ -7011,6 +7011,7 @@ test('--balance with --json returns balance information', () => {
   assert.equal(payload.success, true);
   assert.equal(payload.type, 'balance');
   assert.equal(payload.spark, 100);
+  assert.equal(payload.premiumSpark, 7.25);
   assert.equal(payload.sogni, 100);
   assert.ok(payload.tokenType);
   assert.ok(payload.timestamp);
@@ -7023,6 +7024,7 @@ test('--balances (alias) with --json returns balance information', () => {
   assert.equal(payload.success, true);
   assert.equal(payload.type, 'balance');
   assert.equal(payload.spark, 100);
+  assert.equal(payload.premiumSpark, 7.25);
   assert.equal(payload.sogni, 100);
 });
 
@@ -7030,8 +7032,56 @@ test('--balance without --json displays human-readable output', () => {
   const { exitCode, stdout } = runCli(['--balance']);
   assert.equal(exitCode, 0);
   assert.ok(stdout.includes('SPARK:'));
+  assert.ok(stdout.includes('PREMIUM SPARK: 7.25'));
   assert.ok(stdout.includes('SOGNI:'));
   assert.ok(stdout.includes('100'));
+});
+
+for (const premiumSpark of [6.96, 0]) {
+  test(`--balance preserves installed wrapper Premium Spark ${premiumSpark} in JSON and text`, async () => {
+    const { SogniClientWrapper } = createRequire(import.meta.url)('@sogni-ai/sogni-intelligence-client');
+    const wrapper = new SogniClientWrapper({ apiKey: 'test-api-key', autoConnect: false });
+    wrapper.connectionState = { isConnected: true };
+    wrapper.client = {
+      account: {
+        refreshBalance: async () => ({
+          spark: { net: '1756.40', premiumCredit: String(premiumSpark) },
+          sogni: { net: '0.22' }
+        })
+      }
+    };
+    const env = {
+      SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify(await wrapper.getBalance())
+    };
+    const json = runCli(['--json', '--balance'], env);
+    assert.equal(json.exitCode, 0, json.stderr);
+    const payload = JSON.parse(json.stdout.trim());
+    assert.equal(payload.spark, 1756.4);
+    assert.equal(payload.premiumSpark, premiumSpark);
+    assert.equal(payload.sogni, 0.22);
+    assert.equal(json.state.lastImageProject, null);
+    assert.equal(json.state.lastVideoProject, null);
+    assert.equal(json.state.lastAudioProject, null);
+
+    const text = runCli(['--balance'], env);
+    assert.equal(text.exitCode, 0, text.stderr);
+    assert.match(text.stdout, /^SPARK: 1756\.40$/m);
+    assert.ok(text.stdout.includes(`PREMIUM SPARK: ${premiumSpark.toFixed(2)}`));
+    assert.match(text.stdout, /^SOGNI: 0\.22$/m);
+  });
+}
+
+test('--balance reports unknown Premium Spark when the wrapper does not expose it', () => {
+  const env = {
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 1756.4, sogni: 0.22 })
+  };
+  const json = runCli(['--json', '--balance'], env);
+  assert.equal(json.exitCode, 0, json.stderr);
+  assert.equal(JSON.parse(json.stdout.trim()).premiumSpark, null);
+
+  const text = runCli(['--balance'], env);
+  assert.equal(text.exitCode, 0, text.stderr);
+  assert.match(text.stdout, /^PREMIUM SPARK: unknown$/m);
 });
 
 test('--balance does not require a prompt', () => {

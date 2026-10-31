@@ -1,3 +1,14 @@
+## [3.61.0] - 2026-10-30
+
+### Features
+
+* Show the recorded explanation for a failed project in status and result output.
+
+### Bug Fixes
+
+* Include Premium Spark in balance JSON and text output while preserving total Spark, account and subscription details. Distinguish zero Premium from unavailable information.
+* Use intelligence-client 4.22.4 and Sogni SDK 5.71.0 across the CLI and standalone skill runtime.
+
 ## [3.60.6] - 2026-10-30
 
 ### Bug Fixes

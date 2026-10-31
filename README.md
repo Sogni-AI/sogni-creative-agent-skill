@@ -864,7 +864,7 @@ Uses SDXL Turbo (`coreml-sogniXLturbo_alpha1_ad`) at 1024×1024 by default. The 
 
 Multi-angle mode (`--multi-angle` / `--angles-360`) auto-builds the `<sks>` prompt and applies the `multiple_angles` LoRA. `--angles-360-video` generates i2v clips between consecutive angles (including last → first) and concatenates them with `ffmpeg` into a seamless loop.
 
-`--balance` / `--balances` does not require a prompt and prints the account username, subscription plan (`Plan: Sogni Unlimited (active)` / `Plan: none`), and current `SPARK` and `SOGNI` balances before exiting. In `--json` mode the payload carries `username` and `subscription` fields (`null` when unavailable). `--doctor` likewise reports the authenticated user and an explicit `plan` check, so a wrong-account API key or a missing subscription is visible at a glance.
+`--balance` / `--balances` does not require a prompt and prints the account username, subscription plan (`Plan: Sogni Unlimited (active)` / `Plan: none`), and current `SPARK`, `PREMIUM SPARK`, and `SOGNI` balances before exiting. In `--json` mode, `spark` is total Spark and `premiumSpark` is the Premium portion already included in that total. Premium is `null` in JSON or `unknown` in text when the client does not expose it; zero means a known zero balance. The payload also carries `username` and `subscription` fields (`null` when unavailable). Use this read-only command to check for a top-up; never submit a paid render to discover the balance. `--doctor` likewise reports the authenticated user and an explicit `plan` check, so a wrong-account API key or a missing subscription is visible at a glance.
 
 ---
 

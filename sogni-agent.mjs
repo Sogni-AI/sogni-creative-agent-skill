@@ -14660,6 +14660,7 @@ async function main() {
     if (options.showBalance) {
       const balance = await client.getBalance();
       const spark = Number.parseFloat(balance?.spark);
+      const premiumSpark = Number.parseFloat(balance?.premiumSpark);
       const sogni = Number.parseFloat(balance?.sogni);
       // Identity + plan make wrong-account and no-subscription states visible
       // (a low Spark balance is fine when Unlimited covers the renders).
@@ -14675,6 +14676,7 @@ async function main() {
           success: true,
           type: 'balance',
           spark: Number.isFinite(spark) ? spark : null,
+          premiumSpark: Number.isFinite(premiumSpark) ? premiumSpark : null,
           sogni: Number.isFinite(sogni) ? sogni : null,
           tokenType: options.tokenType || 'spark',
           username: accountInfo?.username ?? null,
@@ -14695,6 +14697,7 @@ async function main() {
           console.log(`Plan: ${describeSubscription(subscription)}`);
         }
         console.log(`SPARK: ${formatTokenValue(spark)}`);
+        console.log(`PREMIUM SPARK: ${formatTokenValue(premiumSpark)}`);
         console.log(`SOGNI: ${formatTokenValue(sogni)}`);
       }
       return;

@@ -461,7 +461,7 @@ Failure (single JSON object on stdout, exit code 1; progress/warnings on stderr)
 }
 ```
 
-`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "sogni": 0.56, "username": "name", "subscription": { "active": true, "status": "active", "tier": "unlimited" } }` (`username`/`subscription` are `null` when unavailable; an active subscription means eligible renders are covered by Sogni Unlimited even when `spark` is low). `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
+`--json --balance` → `{ "success": true, "type": "balance", "spark": 12.34, "premiumSpark": 2.50, "sogni": 0.56, "username": "name", "subscription": { "active": true, "status": "active", "tier": "unlimited" } }`. `spark` is total Spark; `premiumSpark` is the Premium portion already included in it. `premiumSpark: 0` means none remains; `null` means the client did not expose it. Use this read-only command to check a top-up, never a paid render. `username`/`subscription` are `null` when unavailable; an active subscription means eligible renders are covered by Sogni Unlimited even when `spark` is low. `--last --json` wraps the last render record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered. In `--json` mode stdout always carries exactly one JSON object — SSE workflow frames and progress lines go to stderr.
 
 ## Cost
 

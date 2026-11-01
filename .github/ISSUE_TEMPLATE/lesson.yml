@@ -32,4 +32,4 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: "sogni-agent 3.61.0 (sogni-agent --version)"
+      placeholder: "the output of sogni-agent --version"

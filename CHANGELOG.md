@@ -1,3 +1,12 @@
+## [3.61.1] - 2026-11-01
+
+### Updates
+
+* Agents get better every session. They keep a short local lessons file (`~/.config/sogni/lessons.md`), read it before planning or rendering, and add a dated line when you correct them or a render fails for a reason the guides don't cover. With your yes, and showing you the exact text first, they can share a lesson as a GitHub issue so it reaches every install. Nothing is posted automatically, and lessons never include keys, private prompts, names or media.
+* New guidance from real Seedance 2.5 productions: check the first frames for a jump, keep anchor images in agreement about who stands where, spell spoken words the way they sound, use an edit as a whole replacement shot, and expect a large Premium Spark hold on reference-video and edit requests. When both Seedance models refuse a shot, Wan 3.0 Enhanced is the closest-looking alternative.
+* Cutting takes from different models together: join them with `--concat-fps 24` so one 30 fps Wan clip doesn't convert the whole sequence, and prefer plain cuts to added whooshes.
+* GPT Image 2.5 masked edits: composite the result back onto the original through the same mask.
+
 ## [3.61.0] - 2026-10-30
 
 ### Features

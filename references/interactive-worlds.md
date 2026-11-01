@@ -243,6 +243,10 @@ the transcript it conditions on the recording itself. If your transcript was
 produced automatically, check it by ear before using it; a mis-transcribed word
 teaches the model the wrong sounds for those phonemes.
 
+A clone reads every line evenly. When a line needs real emotion, have a video
+model perform it in that voice and keep only the sound
+([models.md › When a cloned line sounds flat](./models.md#when-a-cloned-line-sounds-flat)).
+
 ### A character who speaks on camera
 
 If the character is *visible* while speaking, you cannot swap the audio — the
@@ -257,6 +261,10 @@ from that frame to the uploaded line and keeps it as the soundtrack, and
 `minimax-h3-fasth3-flfa2v-turbo` adds `--ref-end` to land on a known last frame.
 Write the spoken words inside the prompt's `<d>` tag. No LoRAs load on these
 modes. (Not part of the measured build above.)
+
+Seedance 2.5 `--workflow ia2v` lip-syncs to an uploaded line too, but performs
+it again in its own timing; read models.md › Seedance 2.5 takes in practice
+before using it.
 
 If the character is *never seen* — written as a voice, which is worth doing
 deliberately for most of a cast — their clips need no regeneration at all.

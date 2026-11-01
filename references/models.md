@@ -13,7 +13,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Seedream 5.0 Pro Uncensored
 - Utility and 3D models
 - Music models
-- Speech models
+- Speech models (and what to do when a cloned line sounds flat)
 - Video models — current selectors
 - Seedance 2.5 (and its takes in practice: read before judging, editing or splicing a Seedance take)
 - Seedance 2.5 Uncensored
@@ -202,8 +202,11 @@ edit with `-m krea2_identity_edit_v1_2`. Infer that semantic intent in any
 language; never route from keyword or regex matching. Also use it for a
 single-character sheet unless Pro/detail-critical layout requirements favor
 GPT Image 2. An explicitly requested model always wins. Use
-`-m dark_beast_krea2_identity_edit_v1_2` only when the creator explicitly
-requests that community/uncensored variant.
+`-m dark_beast_krea2_identity_edit_v1_2` when the creator requests that
+community/uncensored variant or a horror or sexy edit. GPT Image runs OpenAI's
+safety system, which refuses gore on a real person's likeness and sexualized
+edits, so horror and sexy stills go to `dark_beast_krea2_fp8` (text-to-image)
+and this edit model instead.
 
 These models accept 1-2 context images at 512-2048 px. With two references,
 pass the base scene first and the person/detail/outfit/pose/style reference
@@ -211,6 +214,13 @@ second. Use a concise 1-4 sentence delta instruction rather than restating the
 whole image, do not send a negative prompt, and leave steps, guidance, sampler,
 and scheduler unset so the current model tier and worker choose their optimized
 defaults.
+
+In practice (as of 2026-11), Dark Beast Krea 2 Identity Edit re-composes rather
+than edits in place: it tends to add a second person or reframe the shot. Crop
+the reference to the subject, or use it for a new composition of the same
+identity. Qwen Image Edit 2511 handles simple instruction edits (clothing, pose)
+but softens fine detail and garbles background lettering; check both at full
+size.
 
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through
@@ -552,6 +562,33 @@ identity and accent by listening, not by automatic transcription accuracy.
 Read [hosted-api.md](./hosted-api.md) for execution and
 [interactive-worlds.md](./interactive-worlds.md) for recurring-character audio.
 
+### When a cloned line sounds flat
+
+Qwen3-TTS reads evenly. For a line that needs real emotion or timing (panic, a
+shout, a sob, a comic beat), have a video model perform it in the same voice
+and keep only the sound (as of 2026-11):
+
+- **LTX-2.3 voice identity first.** It is Sogni-hosted (a 7 s clip quoted 18
+  Spark): `--video -m ltx23-22b-fp8_t2v_distilled --reference-audio-identity voice.m4a`
+  with the clean recording. LTX-2.5 refuses voice identity. Write the prompt in
+  the three sections Sogni's web app sends: `[VISUAL]:` the speaker on camera,
+  saying their mouth moves as they speak; `[SPEECH]:` only the words, no quotes,
+  `...` for a beat; `[SOUNDS]:` the delivery (tone, volume, pace, close mic),
+  then the room. The CLI's quoted-dialogue warning does not apply to this
+  layout. It may ad-lib or repeat a word.
+- **Seedance 2.5 for the hardest delivery** (about ten times the LTX price even
+  at 480p): `--video -m seedance2-5 --seedance-task-type reference -c speaker.jpg --ref-audio voice.m4a --target-resolution 480`,
+  prompt `Use @Audio1 only for the sound of his voice; do not repeat its words.`
+  then the exact lines in quotes, each with its own delivery direction. Only the
+  sound is kept, so 480p is enough.
+- When the voice need not match anyone, plain `-m ltx25` with the line in quotes
+  performs it too.
+
+Run speech-to-text over each take, keep one where every word arrives in order,
+and judge the voice by ear. Lay its sound into the finished film without
+re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --mix-at 3.2`
+(a video works as the source; `--bed-audio take.mp4` replaces the soundtrack instead).
+
 ## Video models — current selectors
 
 | Model | Speed | Use Case |
@@ -711,9 +748,9 @@ applies Seedance's fixed 24 fps,
 4-30 s duration window, larger reference caps, reference-mode exclusivity, and
 HTTPS reference forwarding before dispatch.
 
-### Seedance 2.5 takes in practice (as of 2026-10)
+### Seedance 2.5 takes in practice (as of 2026-11)
 
-Learned on Sogni's own productions (Sogni Meme World, 2026-10). They apply to
+Learned on Sogni's own productions (Sogni Meme World, 2026-10 and 2026-11). They apply to
 `seedance2-5` and `seedance2-5-uncensored` alike.
 
 - **Check frames 0–3 of every frame-anchored take.** A take can jump at frame
@@ -738,6 +775,31 @@ Learned on Sogni's own productions (Sogni Meme World, 2026-10). They apply to
   take with dialogue.
 - **One local `--ref-audio` per run.** Further audio references must be HTTPS
   URLs, so put the local file first.
+- **Keyframes go through reference mode.** To pin where a move or a
+  transformation lands, pass the pictures in time order
+  (`--seedance-task-type reference -c a.jpg -c b.jpg`) and start the prompt with
+  the line Sogni's web app sends: `Use @Image1, @Image2 in order as keyframes.
+  Keyframe timing targets: @Image1 at 0s, @Image2 at 5s.` (whole seconds, 0 to
+  the clip length). `--keyframe` is H3-only; in frame mode use `--ref` alone or
+  `--ref` with `--ref-end`.
+- **Change a body up close.** A body or shape transformation in a wide shot came
+  back as the whole body inflating. Frame closer on what changes and pin the end
+  state with a keyframe or an end frame.
+- **Restate the design in every shot.** Each shot sees only its own prompt and
+  pictures. A prompt that just named the creature brought a city-sized monster
+  back as a small lizard in another street. Repeat its look, its scale against
+  the surroundings and the setting in every shot of a sequence.
+- **Describe an original design.** A still made from a generic idea can look like
+  famous IP (a "kaiju" still came out Godzilla-like), and Seedance then refused
+  every shot made from it at output. Describe the design explicitly (silhouette,
+  skin, colours, features) before painting.
+- **Lip-sync with `--workflow ia2v` is a new performance.** Seedance re-performs
+  the drive audio in its own timing and can drop words from a dense drive. Leave
+  about 0.3 s more silence around each line, write `every word in @Audio1 spoken
+  in full, none skipped`, run speech-to-text over the take, and keep the take's
+  own soundtrack: the mouths follow it, so never lay the drive back over them.
+  Here `--ref` is a loose @Image reference, not a first frame, and `--ref-end` is
+  refused.
 - **Edit mode** (`--seedance-task-type edit`):
   - `--duration` takes whole seconds, so trim the source first.
   - Takes came back about 6% short (113 frames for a 5 s, 120-frame source),

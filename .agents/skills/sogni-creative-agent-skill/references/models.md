@@ -833,9 +833,10 @@ message as written.
 A Seedance rejection of an input image that may show a real person
 (`SAFETY_REJECTED`, `metadata.error` `seedance_input_image_privacy_policy`)
 also reports the socket's message as written. It names the uncensored Seedance
-counterpart, which keeps the likeness, then MiniMax H3; where the uncensored
-models are not released it names MiniMax H3 alone. Offer only those, and run an
-uncensored model only when the user picks it.
+counterpart first, which keeps the likeness, then the closest-looking model to
+try instead; where the uncensored models are not released it names only the
+models that will run. Offer only those, and run an uncensored model only when
+the user picks it.
 
 ## HappyHorse 1.1 models
 

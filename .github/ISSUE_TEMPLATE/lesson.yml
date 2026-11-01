@@ -1,0 +1,35 @@
+name: Lesson from a session
+description: Something a render or a person taught your agent that these guides should say.
+title: "Lesson: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing it. Accepted lessons go into SKILL.md or `references/`, and every install picks them up through its update check.
+        Leave out API keys, private prompts, names, and anything taken from your media.
+  - type: input
+    id: where
+    attributes:
+      label: Model or step
+      placeholder: "seedance2-5 edit, --concat-videos, Krea 2 Identity Edit, …"
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What you saw, with error codes, frame numbers or settings where they matter.
+    validations:
+      required: true
+  - type: textarea
+    id: instead
+    attributes:
+      label: What to do instead
+      description: The fix that worked, and how you checked it.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "sogni-agent 3.61.0 (sogni-agent --version)"

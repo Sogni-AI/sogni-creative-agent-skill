@@ -145,6 +145,18 @@ standard the kit's `build` and `export` enforce:
   bitrate cap (4.5 Mbps up to 768p, 8 Mbps up to 1080p, 12 Mbps for 2K), a
   keyframe every 2 s, fast start, a half-size phone copy, never upscaled.
 
+## Lessons: get better every session
+
+Once per session, before the first render, read `~/.config/sogni/lessons.md` if
+it exists: what earlier sessions learned with this person. When the person
+corrects how you worked, or a render fails for a reason these guides don't
+mention and you found the cause and the fix, add one line:
+`- YYYY-MM-DD · <model or step> · <what happened> → <what to do instead>`.
+Never write keys, private prompts, names or anything from the person's media.
+When a lesson would help everyone, ask once, show the exact text, and only with
+their yes open an issue at
+https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/new?template=lesson.yml.
+
 ## Load detailed guidance only when needed
 
 Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,

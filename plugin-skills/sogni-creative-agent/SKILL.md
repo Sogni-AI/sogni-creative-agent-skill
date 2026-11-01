@@ -121,6 +121,8 @@ recordings, and Music 3 section tags before generating. Discover 3D with
 `--search-models pixal3d` or `--model-media model`. For explorable worlds,
 see "Build a playable world" above.
 
+Lessons: once per session, before the first render, read `~/.config/sogni/lessons.md` if it exists. When the person corrects you, or a render fails for a reason the guides don't mention and you found the fix, add one dated line there. Offer to share lessons that would help everyone as a GitHub issue, only with the person's yes (`../../SKILL.md` › "Lessons: get better every session").
+
 The complete skill spec — every workflow, model default, persona schema, memory schema, and prompt-engineering note — lives at `../../SKILL.md` relative to this file, with deep-dive guides under `../../references/`. Resolve those paths from this installed `SKILL.md`, not from the user's working directory. Read them when the user's request needs detail beyond the quick examples above (e.g. choosing between video workflows, configuring persona references, planning a multi-step composition).
 
 Personal LoRA imports and library management: read [Personal LoRAs](../../references/personal-loras.md) for account-bound discovery, asynchronous import status, consent, compatible models, and rendering with owned adapters.

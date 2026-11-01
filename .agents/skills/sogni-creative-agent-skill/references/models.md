@@ -15,7 +15,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Music models
 - Speech models
 - Video models — current selectors
-- Seedance 2.5
+- Seedance 2.5 (and its takes in practice: read before judging, editing or splicing a Seedance take)
 - Seedance 2.5 Uncensored
 - Seedance 2.0 Mini Uncensored
 - HappyHorse 1.1 models
@@ -710,6 +710,61 @@ tasks; see `package.json` for the current dependency versions. The direct CLI
 applies Seedance's fixed 24 fps,
 4-30 s duration window, larger reference caps, reference-mode exclusivity, and
 HTTPS reference forwarding before dispatch.
+
+### Seedance 2.5 takes in practice (as of 2026-10)
+
+Learned on Sogni's own productions (Sogni Meme World, 2026-10). They apply to
+`seedance2-5` and `seedance2-5-uncensored` alike.
+
+- **Check frames 0–3 of every frame-anchored take.** A take can jump at frame
+  1: frame 0 is your still, frame 1 is a different shot (a person missing, a
+  giant prop in the wide). If the rest of the take holds, trim frame 0.
+  Otherwise, retake.
+- **First and last frames must agree on who stands where.** If someone is on
+  the left in one anchor and on the right in the other, Seedance dissolves
+  see-through doubles between them. Fix the anchors, or write the move into the
+  prompt ("he walks behind her from screen right to screen left").
+- **Loose-reference mode tends to open on @Image1.** A place still in that slot
+  brings its composition back as the opening shot. For a new composition, make
+  an opening still and use frame mode (`--ref`).
+- **Size people from references explicitly.** A second take with the same
+  people refs drew them as giant cut-outs. "Small in the frame, full figures,
+  ordinary proportions, as far away as in @Image1" fixed it.
+- **Never name what must not appear.** There is no negative prompt, and naming
+  the thing brings it in: "glasses he isn't wearing" put glasses on him.
+  Describe only what is there.
+- **Spell spoken words the way they sound.** "Rickrolled" came out as
+  "Rick-wrapped"; writing "Rick-rolled" fixed it. Run speech-to-text over every
+  take with dialogue.
+- **One local `--ref-audio` per run.** Further audio references must be HTTPS
+  URLs, so put the local file first.
+- **Edit mode** (`--seedance-task-type edit`):
+  - `--duration` takes whole seconds, so trim the source first.
+  - Takes came back about 6% short (113 frames for a 5 s, 120-frame source),
+    with a constant 1–2% zoom, a shift of about 10 px and a slight colour drift.
+  - So an edit doesn't line up frame for frame with its source: use it as a
+    whole replacement shot. Splicing it into the untouched shot, or onto the
+    stills around it, needs alignment (one affine transform), colour matching
+    and retiming outside this CLI.
+  - On a near-static source, Seedance may cut to a close-up of what you changed.
+    Say "the camera never moves, zooms or cuts", and edit static clips on their
+    own.
+  - Edit is good at changing what a screen or a sign shows across a moving shot.
+    It beats tracking a mask and compositing, because tracked mattes jitter. It
+    is poor at small selective prop fixes: asked to remove one of three
+    sneakers, it removed all three.
+- **Holds.** A request with a reference video (edit, extend or reference)
+  holds Premium Spark as if the input were 30 s long, and an edit also as if
+  its output were 15 s. The job then settles at the real price: a 5 s edit held
+  5,546 Spark and settled at 892. The balance must cover the hold. An
+  Insufficient funds (`4024`) failure arrives after the "Submitted" line, so
+  check the result's `success` before waiting on a project.
+- **When both Seedance models refuse a shot that has to cut among Seedance
+  shots,** Wan 3.0 Enhanced (`wan3.0-spicy-video`) was the closest match in
+  look. MiniMax H3 reads visibly softer beside Seedance footage. Wan renders 30
+  fps, so join it with `--concat-fps 24` (see video-editing.md › Cutting takes
+  from different models together). This is separate from the input-privacy
+  refusal below, whose message names the options to offer.
 
 ## Seedance 2.5 Uncensored
 
@@ -1466,6 +1521,10 @@ accepts an original PNG alpha mask of the first context image; it must match
 that image's dimensions (the image itself may be JPEG, PNG or WebP) and be
 smaller than 50 MB. Transparent
 mask regions identify edits; the model can also change pixels outside them.
+To keep everything outside the mask exactly as it was, composite the result
+back onto the original through the same mask, feathered a few pixels (a
+masked edit of the people in a street scene also faded a shop window behind
+them).
 The image mask flag is separate from video `--mask` semantics.
 
 Dimensions default to 1024×1024: multiples of 16, at most 3840 per edge,

@@ -1,8 +1,8 @@
 # Video Editing & Stitching (local FFmpeg-wrapper workflows)
 
 Read this when the user asks to animate between images, continue a video,
-bridge two videos, build a 360 turntable video, stitch clips, or remix/layer
-audio over a finished video.
+bridge two videos, build a 360 turntable video, stitch clips (above all clips
+from different models), or remix/layer audio over a finished video.
 
 **Never run raw `ffmpeg`, `ls`, or `cp` shell commands for any of this.**
 Always use the built-in safe wrappers: `--extract-first-frame`,
@@ -156,6 +156,25 @@ sogni-agent --remix-audio ./merged.mp4 ./final.mp4 \
 - `--audio-loop` loops the bed to cover the full video; `--audio-fade-in` / `--audio-fade-out` fade it.
 - `--mix-audio` overlays one extra track (mixed with a peak limiter so it never clips); position it with `--mix-at` and adjust level with `--mix-gain` (dB).
 - To mix more than two layers, chain `--remix-audio` passes (each only re-encodes audio).
+
+## Cutting takes from different models together
+
+Learned on Sogni's own productions (2026-10):
+
+- **Set the frame rate yourself.** `--concat-videos` uses the highest clip fps
+  by default. One Wan 3 shot (30 fps) among Seedance or MiniMax H3 shots (24
+  fps) turns the whole sequence into 30 fps with repeated frames. Pass
+  `--concat-fps 24`.
+- **Watch the joined sequence at full size.** A shot from another model often
+  has a different contrast and colour from the shots around it. Point it out to
+  the person: matching the grade needs a colour tool outside this CLI.
+- **Listen to the last second of each clip.** Generated clips often end on a
+  whoosh or swish that nothing on screen makes, and it sounds bad on a cut.
+  If a clip ends on one, end the shot before it. Between scenes, a plain cut
+  beats a whoosh, a synthetic whip blur or a crossfade.
+- **To change what a screen or a sign shows across a moving shot,** edit the
+  clip with Seedance 2.5 (`--seedance-task-type edit`), rather than tracking a
+  mask and compositing. See models.md › Seedance 2.5 takes in practice.
 
 ## Multiple Angles (Turnaround) and 360 Video
 

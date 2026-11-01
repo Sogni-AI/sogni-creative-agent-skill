@@ -120,14 +120,7 @@ sogni-agent -o /tmp/cat.png "a cat wearing a hat"    # ✗ avoid — user can't 
 
 ## Recommended path: you plan, Sogni executes
 
-Preserve the requested deliverable: capability questions need an answer, a
-writing/review request stops at the draft, and a storyboard-image request stops
-at the still. Continue through images, animation, and stitching when the user
-requested that full sequence; pause only at their requested review points.
-Keep exact prompts, model choices, source references, output counts, and the
-latest duration. Each variation needs its own complete prompt, including every
-shared lettering, visual, dialogue, or loop requirement. Once a stage succeeds,
-continue to the next requested stage instead of generating it again.
+Preserve the requested deliverable: capability questions need an answer, a writing/review request stops at the draft, and a storyboard-image request stops at the still. Continue through images, animation, and stitching when the user requested that full sequence; pause only at their requested review points. Keep exact prompts, model choices, source references, output counts, and the latest duration. Each variation needs its own complete prompt, including every shared lettering, visual, dialogue, or loop requirement. Once a stage succeeds, continue to the next requested stage instead of generating it again.
 
 You (the calling LLM) are almost always more capable than Sogni's hosted planning model, so **do the planning and tool selection yourself** and let the hosted endpoints do what only the server can — run on the GPU network, persist assets/manifests, orchestrate durable multi-step runs with replay, and apply structured-contract repair. Don't flatten a rich request into a single natural-language string and hand planning back to a weaker model. Match the mode to the work:
 
@@ -430,6 +423,10 @@ Cancelling a paid subscription keeps access until the end of the paid period; ca
 ### Suggest next steps after a render
 
 After an image: offer to animate it (`--video --ref <result>`), restyle it (`-c <result> "Apply style: ..."`), change the angle (`--multi-angle -c <result>`), generate variations (`-n 3 "{a|b|c}"`), or refine at `-Q pro`. After a video: offer different motion, dialogue (LTX), longer `--duration`, stitching (`--concat-videos`), or a soundtrack (`--concat-audio` / `--remix-audio`).
+
+### Lessons: get better every session
+
+Once per session, before the first render, read `~/.config/sogni/lessons.md` if it exists (shared with the Sogni Worlds Kit): what earlier sessions learned with this person, their taste and the model traps they hit; follow it unless the current request says otherwise. When the person corrects how you worked, or a render fails for a reason these guides don't mention and you found the cause and the fix, add or update one line there: `- YYYY-MM-DD · <model or step> · <what happened> → <what to do instead>`. Never write keys, private prompts, names or anything from the person's media. When a lesson would help everyone (a model trap, a missing warning, something here that is wrong), ask once and show the exact text; only with their yes, file it with the GitHub CLI (`gh issue create`) on Sogni-AI/sogni-creative-agent-skill, or give them https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/new?template=lesson.yml. Accepted lessons land in these guides and reach every install through the update check; then delete the local line.
 
 ## JSON Output Contract
 

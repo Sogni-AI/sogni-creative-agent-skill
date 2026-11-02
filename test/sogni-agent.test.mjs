@@ -5052,6 +5052,45 @@ test('--api-chat reports an error sent in the body of a 200 response', async () 
   }
 });
 
+test('--api-chat asks the API to keep a long call connected', async () => {
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode } = await runCliAsync([
+      '--api-chat', '--api-base-url', apiBaseUrl,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(exitCode, 0);
+    assert.equal(requests[0].url, '/v1/chat/completions');
+    assert.equal(requests[0].headers['x-sogni-nonstream-keepalive'], 'true');
+  });
+});
+
+test('--api-chat waits for the final body once a kept-alive response has started', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.write(' ');
+    setTimeout(() => response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Finished after the keep-alive.' } }] })), 300);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      SOGNI_HTTP_TIMEOUT_MS: '100',
+    });
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /Finished after the keep-alive/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('--api-chat honors an explicit HTTP response timeout', async () => {
   const server = createServer((_request, response) => {
     setTimeout(() => response.end(JSON.stringify({ choices: [] })), 200);
@@ -6281,11 +6320,13 @@ test('--api-workflow storyboard-video defaults to GPT Image 2.5 Sunburst and See
 
     assert.equal(requests.length, 2);
     assert.equal(requests[0].url, '/v1/chat/completions');
+    assert.equal(requests[0].headers['x-sogni-nonstream-keepalive'], 'true');
     assert.equal(requests[0].body.sogni_tool_execution, false);
     assert.equal(requests[0].body.max_tokens, 4096);
     assert.match(requests[0].body.messages[0].content, /SCENE NN - Title block/);
     assert.match(requests[0].body.messages[0].content, /DIALOGUE\/VO: \[no dialogue\]/);
     assert.equal(requests[1].url, '/v1/creative-agent/workflows');
+    assert.equal(requests[1].headers['x-sogni-nonstream-keepalive'], undefined);
     assert.equal(requests[1].headers['idempotency-key'], 'idem-storyboard-123');
     assert.equal(Object.hasOwn(requests[1].body, 'kind'), false);
     assert.equal(Object.hasOwn(requests[1].body, 'idempotency_key'), false);

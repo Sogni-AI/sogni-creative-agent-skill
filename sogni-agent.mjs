@@ -8803,7 +8803,11 @@ function extractChatMessage(payload) {
   return data?.choices?.[0]?.message || data?.choices?.[0]?.delta || payload?.choices?.[0]?.message || {};
 }
 
-// A long chat call answers 200 before it finishes, so a failure can arrive in the body.
+// With this header, a chat call still working after 90 seconds answers 200 and sends
+// spaces until it finishes, so it outlasts this CLI's timeout and Cloudflare's. A failure
+// after that can only arrive in the body, so every such call must check it below.
+const CHAT_KEEPALIVE_HEADERS = { 'X-Sogni-Nonstream-Keepalive': 'true' };
+
 function throwIfChatBodyHasError(payload) {
   const data = extractApiEnvelopeData(payload);
   if (!payload?.error || data?.choices) return;
@@ -9057,6 +9061,7 @@ async function runApiChat(log) {
       apiKey,
       method: 'POST',
       body,
+      headers: CHAT_KEEPALIVE_HEADERS,
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
@@ -9568,6 +9573,7 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       apiKey,
       method: 'POST',
       body,
+      headers: CHAT_KEEPALIVE_HEADERS,
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));

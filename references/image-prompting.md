@@ -54,8 +54,9 @@ Markdown fence, preamble, explanation, or render offer.
 - `flux-3-klein` (FLUX 3 Image Klein) is one selector for both operations:
   generation with no references, a start image, or edits guided by up to ten
   references.
-- Use `qwen` / `qwen-lightning` as edit selectors and
-  `qwen-2512` / `qwen-2512-lightning` as generation selectors.
+- `qwen` / `qwen-lightning` are edit selectors (Qwen Image Edit, an older
+  model: only when the user names it) and `qwen-2512` / `qwen-2512-lightning`
+  are generation selectors.
 - Use `krea-identity-edit` or
   `dark-beast-krea2-identity-edit` for Krea identity edits. Assign
   `context_image_0` as the base and `context_image_1` as the secondary

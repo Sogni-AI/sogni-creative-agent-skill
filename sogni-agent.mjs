@@ -1895,6 +1895,25 @@ function getJpegDimensions(buffer) {
 }
 
 const FLUX3_IMAGE_KLEIN_MODEL_ID = 'flux3_image_klein_sd_int8_convrot';
+const KREA2_IDENTITY_EDIT_MODEL_ID = 'krea2_identity_edit_v1_2';
+const KREA2_IDENTITY_EDIT_MAX_CONTEXT_IMAGES = 2;
+
+/**
+ * The model a context edit (-c) uses when neither -m nor the OpenClaw
+ * defaultEditModel names one. Mark's routing (2026-11-01): Krea 2 Identity Edit
+ * for edits of people, FLUX 3 Image Klein for type and graphic design, Dark
+ * Beast Krea 2 Identity Edit for NSFW, GPT Image 2.5 Sunburst as the Premium
+ * Spark best option, and never Qwen Image Edit. Agents choose among them with
+ * -m from what the request means (SKILL.md). Without -m the CLI cannot know what
+ * the request means, so it edits with Krea 2 Identity Edit, which takes one or
+ * two references, and with FLUX 3 Image Klein (up to ten) when more are given.
+ */
+function defaultEditModelFor(contextImageCount) {
+  return contextImageCount > KREA2_IDENTITY_EDIT_MAX_CONTEXT_IMAGES
+    ? FLUX3_IMAGE_KLEIN_MODEL_ID
+    : KREA2_IDENTITY_EDIT_MODEL_ID;
+}
+
 const FLUX3_IMAGE_KLEIN_SINGLE_REFERENCE_MAX_PIXELS = 4 * 1024 * 1024;
 // About 2 megapixels: Black Forest Labs says Klein does best at 2K, and 2K is
 // 2 MP (Mark, 2026-10-17). The size of a text-to-image with no size given, and
@@ -4993,7 +5012,8 @@ Image Options:
   --loras <ids>         Comma-separated LoRA ids
   --lora-strength <n>   LoRA strength (repeatable)
   --lora-strengths <n>  Comma-separated LoRA strengths
-  -c, --context <path>  Context image for editing (can use multiple)
+  -c, --context <path>  Context image for editing (can use multiple); without -m edits with
+                        krea2_identity_edit_v1_2, or flux3_image_klein_sd_int8_convrot for 3-10 images
   --last-image          Use last generated image as context
   --segment <path|url>  SAM 3 object selection; returns one original-size PNG mask
   --segment-point <x,y> Include point, normalized 0–1; repeat to refine
@@ -5292,8 +5312,8 @@ Image Models:
   dark_beast_krea2_identity_edit_v1_2  Dark Beast Krea 2 Identity Edit (up to 2 context images)
   flux1-schnell-fp8               Very fast
   qwen_image_2512_fp8             High quality
-  qwen_image_edit_2511_fp8        Image editing with context (up to 3 images)
-  qwen_image_edit_2511_fp8_lightning  Fast image editing
+  qwen_image_edit_2511_fp8        Older edit model (up to 3 images): only when named with -m
+  qwen_image_edit_2511_fp8_lightning  Older fast edit model: only when named with -m
   rtx_vsr_pro                     Promptless deterministic RTX VSR upscale (--upscale)
 
 Recommended LTX 2.5 Video Models:
@@ -5456,8 +5476,9 @@ Examples:
   sogni-agent --video -m ltx25 --duration 20 "A wide cinematic aerial shot opens over steep tropical cliffs at golden hour, warm sunlight grazing the rock faces while sea mist drifts above the water below. Palm trees bend gently along the ridge as waves roll against the shoreline, leaving bright bands of foam across the dark stone. The camera glides forward in one continuous pass, revealing more of the coastline as sunlight flickers across wet surfaces and distant birds wheel through the haze. The scene holds a calm, upscale travel-film mood with smooth stabilized motion and crisp environmental detail."
   sogni-agent --video --ref subject.jpg --ref-video motion.mp4 --workflow animate-move "transfer motion"
   sogni-agent --video --last-image "gentle camera pan"
-  sogni-agent -c photo.jpg "make the background a beach" -m qwen_image_edit_2511_fp8
+  sogni-agent -c photo.jpg "make the background a beach"
   sogni-agent -c person.jpg -m krea2_identity_edit_v1_2 "editorial portrait, same identity, new wardrobe"
+  sogni-agent -c poster.png -m flux3_image_klein_sd_int8_convrot "the headline now reads GRAND OPENING in the same lettering"
   sogni-agent -c subject.jpg -c style.jpg "apply the style to the subject"
   sogni-agent -m flux3_image_klein_sd_int8_convrot -c mug.png -c kitchen.jpg "the mug from the first image on the oak counter from the second image, morning window light"
   sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
@@ -6510,7 +6531,7 @@ if (options.music) {
   }
 } else if (options.contextImages.length > 0) {
   // Use the default edit model when context images are provided unless -m overrides it.
-  options.model = options.model || openclawConfig?.defaultEditModel || 'qwen_image_edit_2511_fp8_lightning';
+  options.model = options.model || openclawConfig?.defaultEditModel || defaultEditModelFor(options.contextImages.length);
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 60000; // 1 min for editing
   }
@@ -7983,7 +8004,7 @@ if (options.contextImages.length > 0 && !options.video) {
     fatalCliError(`Model ${options.model} does not support context images.`, {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },
-      hint: 'Try: qwen_image_edit_2511_fp8, qwen_image_edit_2511_fp8_lightning, flux3_image_klein_sd_int8_convrot (up to 10), krea2_identity_edit_v1_2, or dark_beast_krea2_identity_edit_v1_2'
+      hint: 'Try: krea2_identity_edit_v1_2 (people, up to 2), flux3_image_klein_sd_int8_convrot (type and design, up to 10), dark_beast_krea2_identity_edit_v1_2 (NSFW, up to 2), or gpt-image-2.5-sunburst (Premium Spark, up to 16)'
     });
   }
   if (options.contextImages.length > maxImages) {

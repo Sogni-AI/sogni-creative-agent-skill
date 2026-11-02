@@ -61,6 +61,12 @@ a command fails because the CLI is missing.
   run `sogni-agent-hermes --json --list-media` instead of guessing filenames.
 - Honor an explicitly requested model. Otherwise use the CLI defaults and
   consult [models.md](references/models.md) only when model selection matters.
+- Pick an image edit's model from what the request means: a person's likeness
+  `krea2_identity_edit_v1_2` (the `-c` default for one or two images), type or
+  graphic design `flux3_image_klein_sd_int8_convrot` (the default for three to
+  ten), NSFW `dark_beast_krea2_identity_edit_v1_2`, and the best result with
+  Premium Spark `gpt-image-2.5-sunburst`. Never choose Qwen Image Edit, an
+  older model, unless the user names it.
 - Answer capability questions without generating. Stop at text for a writing or
   review request and at a still for a storyboard-image request. Continue through
   a requested images-to-video sequence unless the user requested a review pause.

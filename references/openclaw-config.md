@@ -19,7 +19,7 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
         "enabled": true,
         "config": {
           "defaultImageModel": "z_image_turbo_bf16",
-          "defaultEditModel": "qwen_image_edit_2511_fp8_lightning",
+          "defaultEditModel": "krea2_identity_edit_v1_2",
           "defaultPhotoboothModel": "coreml-sogniXLturbo_alpha1_ad",
           "defaultMusicModel": "minimax_music3",
           "videoModels": {
@@ -70,6 +70,9 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
 Notes:
 
 - Seed strategies: `prompt-hash` (deterministic) or `random`.
+- `defaultEditModel` pins one model for every `-c` edit that names no `-m`.
+  Leave it unset to keep the CLI's choice: `krea2_identity_edit_v1_2` for one
+  or two context images, `flux3_image_klein_sd_int8_convrot` for three to ten.
 - `videoModels.i2v` also governs two-image `--ref` + `--ref-end` renders:
   when set, it overrides the built-in LTX-2.5 first/last-frame default
   (`ltx25-22b-int8_i2v_distilled`) that otherwise applies to first/last-frame

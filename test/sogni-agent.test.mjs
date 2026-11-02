@@ -1196,6 +1196,38 @@ test('--upscale-video explains the FlashVSR availability refusal', () => {
   assert.match(stderr, /nothing was charged/);
 });
 
+test('a context edit without -m uses Krea 2 Identity Edit, never Qwen Image Edit', () => {
+  const { exitCode, state } = runCli(['-c', SCREENSHOT_FIXTURE, 'make the background a beach']);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastEditProject?.modelId, 'krea2_identity_edit_v1_2');
+});
+
+test('a context edit without -m uses FLUX 3 Image Klein for more references than Krea takes', () => {
+  const { exitCode, state } = runCli([
+    '-c', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE,
+    'the three products side by side on one shelf',
+  ]);
+
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastEditProject?.modelId, 'flux3_image_klein_sd_int8_convrot');
+  assert.equal(state.lastEditProject.contextImages.length, 3);
+});
+
+test('a context edit keeps an explicitly named edit model, Qwen Image Edit included', () => {
+  for (const model of ['qwen_image_edit_2511_fp8', 'gpt-image-2.5-sunburst', 'dark_beast_krea2_identity_edit_v1_2']) {
+    const { exitCode, state } = runCli(['-c', SCREENSHOT_FIXTURE, '-m', model, 'make it night']);
+    assert.equal(exitCode, 0, model);
+    // GPT Image edits are submitted as image projects with context images.
+    assert.equal((state?.lastEditProject ?? state?.lastImageProject)?.modelId, model);
+  }
+  const configured = runCli(['-c', SCREENSHOT_FIXTURE, 'make it night'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultEditModel: 'flux3_image_klein_sd_int8_convrot' }),
+  });
+  assert.equal(configured.exitCode, 0);
+  assert.equal(configured.state?.lastEditProject?.modelId, 'flux3_image_klein_sd_int8_convrot');
+});
+
 test('Krea identity edit preserves explicitly supplied execution controls', () => {
   const { exitCode, state } = runCli([
     '-c', SCREENSHOT_FIXTURE,
@@ -1600,7 +1632,9 @@ test('a context image on a prompt-only model suggests the models that take refer
 
   assert.equal(exitCode, 1);
   assert.match(stderr, /does not support context images/);
-  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(up to 10\)/);
+  assert.match(stderr, /krea2_identity_edit_v1_2 \(people, up to 2\)/);
+  assert.match(stderr, /flux3_image_klein_sd_int8_convrot \(type and design, up to 10\)/);
+  assert.doesNotMatch(stderr, /qwen_image_edit/);
 });
 
 test('SDK-returned insufficient funds from image generation surfaces Spark Packs CTA', () => {

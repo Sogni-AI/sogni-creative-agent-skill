@@ -180,6 +180,13 @@ Learned on Sogni's own productions (2026-10):
 
 Generate specific camera angles from a single reference image using the Multiple Angles LoRA:
 
+These flags run Qwen Image Edit 2511, the only model with the Multiple Angles
+LoRA. It is an older model that is never a default or a recommendation: use
+`--multi-angle` / `--angles-360` only when the user asks for them (or the
+Multiple Angles LoRA) by name. For an ordinary change of camera angle, edit
+with `-c` on the model SKILL.md's edit-model routing picks (Krea 2 Identity
+Edit for a person, FLUX 3 Image Klein for type or design).
+
 ```bash
 # Single angle
 sogni-agent --multi-angle -c subject.jpg \

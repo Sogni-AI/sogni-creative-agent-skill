@@ -175,6 +175,11 @@ retrying.
   `-c <image> -m dark_beast_krea2_identity_edit_v1_2` for identity-preserving
   Krea edits with 1-2 references, 512-2048 px output, 8-12 steps, and
   guidance 1.
+- Edit-model routing: Krea 2 Identity Edit for a person's likeness (the `-c`
+  default for 1-2 references), FLUX 3 Image Klein for type and graphic design
+  (the default for 3-10), Dark Beast Krea 2 Identity Edit for NSFW, and
+  `gpt-image-2.5-sunburst` for the best result with Premium Spark. Qwen Image
+  Edit is an older model: never a default, only when the user names it.
 - FLUX 3 Image Klein: `-m flux3_image_klein_sd_int8_convrot` for text-to-image,
   or add up to ten `-c <image>` references for edits (references optional);
   256-4096 px (4K included for prompts and several references), 4-16 steps

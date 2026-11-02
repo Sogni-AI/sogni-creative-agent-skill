@@ -40,7 +40,7 @@ sogni-agent --persona-remove "Mark"
 
 When a user mentions a persona by explicit saved name, id, or tag/alias:
 
-1. **For images:** use `--persona "Name" "prompt"` — auto-injects the persona's reference photo as context and selects the Qwen editing model.
+1. **For images:** use `--persona "Name" "prompt"` — auto-injects the persona's reference photo as context and edits with Krea 2 Identity Edit (`krea2_identity_edit_v1_2`), which keeps the person's likeness. Add `-m dark_beast_krea2_identity_edit_v1_2` for an NSFW scene.
 2. **For video with voice cloning:** the persona's voice clip is used as `--reference-audio-identity` automatically when `--video` is combined with `--persona`. `--voice-persona <name>` selects just the voice identity.
 3. **For video without a voice clip:** describe the voice in the prompt ("speaks in a warm alto with a British accent").
 

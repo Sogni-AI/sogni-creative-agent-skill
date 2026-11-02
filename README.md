@@ -453,8 +453,9 @@ does not mean the optional content filter withheld the image.
 # Image generation
 sogni-agent -Q hq -o dragon.png "a dragon eating tacos"
 
-# Edit an image
+# Edit an image (a person: Krea 2 Identity Edit, the default; type or design: FLUX 3 Image Klein)
 sogni-agent -c subject.jpg "add a neon cyberpunk glow"
+sogni-agent -c poster.png -m flux3_image_klein_sd_int8_convrot "the headline now reads GRAND OPENING"
 
 # Photobooth face transfer
 sogni-agent --photobooth --ref face.jpg "80s fashion portrait"
@@ -668,7 +669,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 |--------|-----|
 | `-Q fast\|hq\|pro` | Pick image quality without memorizing model IDs |
 | `-o <path>` | Save output locally |
-| `-c <path>` | Provide image context for edits |
+| `-c <path>` | Provide image context for edits (without `-m`: Krea 2 Identity Edit for 1-2 images, FLUX 3 Image Klein for 3-10) |
 | `--video` | Generate video instead of image |
 | `--music` | Generate music instead of an image: MiniMax Music 3 by default, 10–300s (60s default, a ceiling); `-m turbo` or `-m sft` for ACE-Step (10–600s) |
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | `--lyrics` for any model (Music 3: plain `[Verse]`/`[Chorus]` tags); `--bpm`/`--keyscale`/`--timesig` are exact ACE-Step controls and are written into the prompt on the default Music 3 |
@@ -739,7 +740,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Default images | `z_image_turbo_bf16` |
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
 | Highest-quality images | `qwen_image_2512_fp8` (or `-Q pro`) |
-| Image editing | `qwen_image_edit_2511_fp8_lightning` |
+| Image editing, chosen by what the request means (never Qwen Image Edit unless the user names it) | a person's likeness: `krea2_identity_edit_v1_2` (the `-c` default for 1-2 references); type, logos and graphic design: `flux3_image_klein_sd_int8_convrot` (the default for 3-10); NSFW: `dark_beast_krea2_identity_edit_v1_2`; the best result with Premium Spark: `gpt-image-2.5-sunburst` |
 | Deterministic image upscaling through 16K | `rtx_vsr_pro` via `--upscale` |
 | Promptless video upscaling to 1080p/1440p | `flashvsr_v1.1_tiny_long_bf16` via `--upscale-video` |
 | Object masks from points, boxes, or a description | `sam3_image_segment_bf16` via `--segment` |
@@ -860,9 +861,9 @@ sogni-agent --photobooth --ref face.jpg -n 4 "LinkedIn professional headshot"
 
 Uses SDXL Turbo (`coreml-sogniXLturbo_alpha1_ad`) at 1024×1024 by default. The face image is passed via `--ref` and styled by the prompt. Cannot be combined with `--video` or `-c` / `--context`.
 
-`--photobooth` is face-reference generation, not full-image editing. If the request is "same image, different style" — for example an anime version that must keep the same face, pose, clothing, background, framing, and composition — use Qwen image editing with `-c/--context` instead.
+`--photobooth` is face-reference generation, not full-image editing. If the request is "same image, different style" — for example an anime version that must keep the same face, pose, clothing, background, framing, and composition — use context editing with `-c/--context` instead (Krea 2 Identity Edit, `-m krea2_identity_edit_v1_2`, keeps the person recognizable).
 
-Multi-angle mode (`--multi-angle` / `--angles-360`) auto-builds the `<sks>` prompt and applies the `multiple_angles` LoRA. `--angles-360-video` generates i2v clips between consecutive angles (including last → first) and concatenates them with `ffmpeg` into a seamless loop.
+Multi-angle mode (`--multi-angle` / `--angles-360`) auto-builds the `<sks>` prompt and applies the `multiple_angles` LoRA. It runs on Qwen Image Edit 2511, the only model with that LoRA, so use it only when asked for by name; an ordinary change of camera angle is a `-c` edit on the routed model. `--angles-360-video` generates i2v clips between consecutive angles (including last → first) and concatenates them with `ffmpeg` into a seamless loop.
 
 `--balance` / `--balances` does not require a prompt and prints the account username, subscription plan (`Plan: Sogni Unlimited (active)` / `Plan: none`), and current `SPARK`, `PREMIUM SPARK`, and `SOGNI` balances before exiting. In `--json` mode, `spark` is total Spark and `premiumSpark` is the Premium portion already included in that total. Premium is `null` in JSON or `unknown` in text when the client does not expose it; zero means a known zero balance. The payload also carries `username` and `subscription` fields (`null` when unavailable). Use this read-only command to check for a top-up; never submit a paid render to discover the balance. `--doctor` likewise reports the authenticated user and an explicit `plan` check, so a wrong-account API key or a missing subscription is visible at a glance.
 

@@ -17,8 +17,7 @@
       },
       "defaultEditModel": {
         "type": "string",
-        "default": "qwen_image_edit_2511_fp8_lightning",
-        "description": "Default model for image editing when context images are provided."
+        "description": "Default model for image editing when context images are provided. Unset: krea2_identity_edit_v1_2 for one or two context images, flux3_image_klein_sd_int8_convrot for three to ten."
       },
       "defaultPhotoboothModel": {
         "type": "string",

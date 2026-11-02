@@ -183,7 +183,16 @@ test('Krea identity routing follows typed shared policy without prose parsing', 
     assert.match(text, /leave steps, guidance, sampler,\s+and scheduler unset/);
     assert.match(text, /any\s+language; never route from keyword or regex matching/);
   }
-  assert.match(skill, /agents must pass the Krea model explicitly/);
+  // Edits route by meaning: Krea for people, Klein for type and design, Dark
+  // Beast for NSFW, GPT Image 2.5 Sunburst with Premium Spark; never Qwen Image Edit.
+  for (const text of [skill, models]) {
+    assert.match(text, /krea2_identity_edit_v1_2/);
+    assert.match(text, /flux3_image_klein_sd_int8_convrot/);
+    assert.match(text, /dark_beast_krea2_identity_edit_v1_2/);
+    assert.match(text, /gpt-image-2\.5-sunburst/);
+    assert.match(text, /Never choose Qwen Image Edit|never choose or suggest it/);
+  }
+  assert.doesNotMatch(skill, /-m qwen_image_edit_2511/);
 });
 
 test('every runtime video model alias is documented in references/models.md', () => {

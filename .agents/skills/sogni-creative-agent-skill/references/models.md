@@ -83,25 +83,25 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `z_image_bf16` | Variable | Full Z-Image; explicit model selection |
 | `dark_beast_z_image_turbo_v9_bf16` | Variable | Dark Beast Z-Image Turbo v9 community model |
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
-| `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency |
+| `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency; the best edit when the user has Premium Spark or asks for top quality |
 | `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
 | `seedream-5-0-pro-uncensored` | Slow (~35-95s) | Seedream 5.0 Pro Uncensored: text-to-image and edits from 1-10 context images; only when asked for; needs the Seedance Uncensored likeness agreement |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
-| `flux3_image_klein_sd_int8_convrot` | Variable | FLUX 3 Image Klein (Black Forest Labs): text-to-image, image-to-image, and edits from up to 10 optional context images |
+| `flux3_image_klein_sd_int8_convrot` | Variable | FLUX 3 Image Klein (Black Forest Labs): text-to-image, image-to-image, and edits from up to 10 optional context images; the edit model for type and graphic design, and the `-c` default for 3-10 references |
 | `krea2_turbo_fp8_scaled` | Fast | Krea 2 Turbo text-to-image, fast high-quality generations with strong prompt adherence |
 | `moss_image_sft_int8_convrot` | Full-step | Uncensored MOSS-Image SFT text-to-image with compatible Personal LoRAs; natural-language captions, tags and experimental JSON layouts; 50 steps, CFG 3, Euler / sgm_uniform |
 | `moss_image_sft_dmd8_int8_convrot` | 8-step | Uncensored MOSS-Image with the built-in DMD adapter; CFG 1, Euler / sgm_uniform; compatible Personal LoRAs |
 | `dark_beast_krea2_fp8` | Fast | Dark Beast Krea 2 community text-to-image fine-tune |
-| `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references |
-| `dark_beast_krea2_identity_edit_v1_2` | Fast | Dark Beast Krea 2 Identity Edit community LoRA with 1-2 references |
+| `krea2_identity_edit_v1_2` | Fast | Krea 2 Identity Edit LoRA v1.2, identity-preserving edits with 1-2 references; the edit model for people, and the `-c` default for 1-2 references |
+| `dark_beast_krea2_identity_edit_v1_2` | Fast | Dark Beast Krea 2 Identity Edit community LoRA with 1-2 references; the edit model for NSFW |
 | `chroma-v.46-flash_fp8` | Medium | Balanced |
 | `chroma-v48-detail-svd_fp8` | Variable | Chroma v.48 detail-calibrated model |
 | `chroma1-hd_fp8_scaled` | Variable | Chroma1-HD |
 | `one_obsession_v22_fp16` | Variable | One Obsession v22 community model |
-| `qwen_image_edit_2511_fp8` | Medium | Image editing with context (up to 3), strongest preservation |
-| `qwen_image_edit_2511_fp8_lightning` | Fast | Quick image editing (default for `-c`) |
+| `qwen_image_edit_2511_fp8` | Medium | Older edit model (up to 3 references): never a default or recommendation; only when the user names it |
+| `qwen_image_edit_2511_fp8_lightning` | Fast | Older fast edit model: only when the user names it |
 | `coreml-sogniXLturbo_alpha1_ad` | Fast | Photobooth face transfer (SDXL Turbo) |
 | `rtx_vsr_pro` | Fast | Promptless, deterministic NVIDIA RTX VSR upscale from one starting image; 512-15360 target box, 8px step |
 
@@ -195,18 +195,27 @@ sogni-agent --list-loras --lora-catalog-model krea2_turbo_fp8_scaled
 sogni-agent --search-loras lighting
 ```
 
-For an edit of a referenced person or character that must preserve likeness or
+Choose an edit's model from what the request means (as of 2026-11). For an
+edit of a referenced person or character that must preserve likeness or
 character identity while changing clothing, hair or makeup, pose or position,
 face/head/body, background, lighting, or visual style, default to a context
-edit with `-m krea2_identity_edit_v1_2`. Infer that semantic intent in any
+edit with `-m krea2_identity_edit_v1_2`; it is also the CLI's `-c` default
+for one or two references. Infer that semantic intent in any
 language; never route from keyword or regex matching. Also use it for a
 single-character sheet unless Pro/detail-critical layout requirements favor
-GPT Image 2. An explicitly requested model always wins. Use
-`-m dark_beast_krea2_identity_edit_v1_2` when the creator requests that
-community/uncensored variant or a horror or sexy edit. GPT Image runs OpenAI's
-safety system, which refuses gore on a real person's likeness and sexualized
-edits, so horror and sexy stills go to `dark_beast_krea2_fp8` (text-to-image)
-and this edit model instead.
+GPT Image 2.5 Sunburst. An explicitly requested model always wins. Edits of
+type, logos, posters, labels, layouts and other graphic design use
+`-m flux3_image_klein_sd_int8_convrot` (up to 10 references; the `-c`
+default for three to ten). Use `-m dark_beast_krea2_identity_edit_v1_2` for
+NSFW: when the creator requests that community/uncensored variant or a horror
+or sexy edit. GPT Image runs OpenAI's safety system, which refuses gore on a
+real person's likeness and sexualized edits, so horror and sexy stills go to
+`dark_beast_krea2_fp8` (text-to-image) and this edit model instead. Otherwise,
+when the user has Premium Spark (`--balance` shows it) or asks for the best
+quality, `-m gpt-image-2.5-sunburst` is the premium best edit. Qwen Image
+Edit 2511 (`qwen_image_edit_2511_fp8`, `qwen_image_edit_2511_fp8_lightning`)
+is an older model: never choose or suggest it; it runs only when the user
+names it.
 
 These models accept 1-2 context images at 512-2048 px. With two references,
 pass the base scene first and the person/detail/outfit/pose/style reference
@@ -226,8 +235,8 @@ model, which scrubs the detail out. Check every result at full size.
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through
 `8,294,400`; the API snaps dimensions to valid multiples of 16. For image
 editing with `gpt-image-2`, you can pass up to 16 context images (FLUX 3 Image
-Klein supports up to 10; Qwen models support up to 3; Krea identity edit models
-support up to 2).
+Klein supports up to 10; Krea identity edit models support up to 2; the older
+Qwen Image Edit supports up to 3).
 
 ## Seedream 5.0 Pro Uncensored
 
@@ -1501,7 +1510,7 @@ model recommendations.
 | Default images | `z_image_turbo_bf16` |
 | OpenAI GPT Image generation, editing, or strong text rendering | `gpt-image-2` |
 | Highest-quality images | `qwen_image_2512_fp8` (or `-Q pro`) |
-| Image editing | `qwen_image_edit_2511_fp8_lightning` |
+| Image editing, chosen by what the request means (never Qwen Image Edit unless the user names it) | a person's likeness: `krea2_identity_edit_v1_2` (the `-c` default for 1-2 references); type, logos and graphic design: `flux3_image_klein_sd_int8_convrot` (the default for 3-10); NSFW: `dark_beast_krea2_identity_edit_v1_2`; the best result with Premium Spark: `gpt-image-2.5-sunburst` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Text-to-image, image-to-image, or edits from up to ten references in one model | `flux3_image_klein_sd_int8_convrot` |

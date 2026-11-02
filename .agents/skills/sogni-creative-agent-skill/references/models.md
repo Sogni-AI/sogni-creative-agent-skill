@@ -218,9 +218,9 @@ defaults.
 In practice (as of 2026-11), Dark Beast Krea 2 Identity Edit re-composes rather
 than edits in place: it tends to add a second person or reframe the shot. Crop
 the reference to the subject, or use it for a new composition of the same
-identity. Qwen Image Edit 2511 handles simple instruction edits (clothing, pose)
-but softens fine detail and garbles background lettering; check both at full
-size.
+identity, and fix a content problem by re-prompting it (it follows what the
+prompt names, so leave out what must not appear) rather than with an older edit
+model, which scrubs the detail out. Check every result at full size.
 
 `gpt-image-2` supports flexible OpenAI image sizes up to `3840px` on either
 edge, max `3:1` aspect ratio, and total pixels from `655,360` through

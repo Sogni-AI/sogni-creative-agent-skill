@@ -8803,6 +8803,16 @@ function extractChatMessage(payload) {
   return data?.choices?.[0]?.message || data?.choices?.[0]?.delta || payload?.choices?.[0]?.message || {};
 }
 
+// A long chat call answers 200 before it finishes, so a failure can arrive in the body.
+function throwIfChatBodyHasError(payload) {
+  const data = extractApiEnvelopeData(payload);
+  if (!payload?.error || data?.choices) return;
+  const err = new Error(payload.error.message || 'Sogni API request failed.');
+  err.code = 'API_REQUEST_FAILED';
+  err.details = { payload };
+  throw err;
+}
+
 function extractChatWorkflows(payload) {
   const data = extractApiEnvelopeData(payload);
   return data?.creative_workflows || payload?.creative_workflows || [];
@@ -9050,6 +9060,7 @@ async function runApiChat(log) {
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
+  throwIfChatBodyHasError(payload);
   const message = extractChatMessage(payload);
   const workflows = extractChatWorkflows(payload);
   const toolCalls = message.tool_calls || message.toolCalls || [];
@@ -9560,6 +9571,7 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
+  throwIfChatBodyHasError(payload);
   const message = extractChatMessage(payload);
   const storyline = typeof message.content === 'string' ? message.content.trim() : '';
   if (!storyline) {

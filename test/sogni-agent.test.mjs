@@ -5028,6 +5028,30 @@ test('--durable-chat rejects unsupported tool restrictions before making request
   }
 });
 
+test('--api-chat reports an error sent in the body of a 200 response', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.write('   ');
+    response.end(JSON.stringify({ error: { message: 'The model stopped responding.', type: 'server_error', param: null, code: 'server_error' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.notEqual(result.exitCode, 0);
+    const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /The model stopped responding/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('--api-chat honors an explicit HTTP response timeout', async () => {
   const server = createServer((_request, response) => {
     setTimeout(() => response.end(JSON.stringify({ choices: [] })), 200);

@@ -39,8 +39,8 @@ a command fails because the CLI is missing.
    sogni-agent-hermes --version
    ```
 
-2. Ask the user to get an API key from https://dashboard.sogni.ai by opening
-   the account menu. Accept either `SOGNI_API_KEY` in the environment or the
+2. Ask the user to get an API key from https://dashboard.sogni.ai/api-key.
+   Accept either `SOGNI_API_KEY` in the environment or the
    credentials file `~/.config/sogni/credentials` containing
    `SOGNI_API_KEY=<key>`. When the user has a terminal, have them save the key
    there rather than paste it into the chat. Never echo, log, commit, or embed

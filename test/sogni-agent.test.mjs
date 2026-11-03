@@ -6960,7 +6960,7 @@ test('missing API key is rejected', () => {
   assert.equal(payload.retryable, false);
   assert.equal(
     payload.hint,
-    'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.'
+    'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can get an API key at https://dashboard.sogni.ai/api-key.'
   );
 });
 

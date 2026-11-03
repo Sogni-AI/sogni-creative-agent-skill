@@ -23,7 +23,7 @@
     "api_key": {
       "type": "string",
       "title": "Sogni API key",
-      "description": "Optional if you've already run `npx setup-sogni-agent-skill` (which saves ~/.config/sogni/credentials). Get a key at https://dashboard.sogni.ai.",
+      "description": "Optional if you've already run `npx setup-sogni-agent-skill` (which saves ~/.config/sogni/credentials). Get a key at https://dashboard.sogni.ai/api-key.",
       "sensitive": true,
       "required": false
     }

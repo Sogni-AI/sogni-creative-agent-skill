@@ -79,7 +79,7 @@ When a user asks to uninstall, run `npx setup-sogni-agent-skill --uninstall --re
 
 ## Setup
 
-1. **Get your Sogni API key** by logging into https://dashboard.sogni.ai and opening the account menu.
+1. **Get your Sogni API key** at https://dashboard.sogni.ai/api-key (sign in or create an account first).
 2. **Create the credentials file** (or just export `SOGNI_API_KEY`). When the person has a terminal, have them do this themselves rather than paste the key into the chat; if they give it to you anyway, write it only to this file and don't repeat it back:
 
 ```bash
@@ -469,7 +469,7 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 
 - **Anything broken?** Run `sogni-agent doctor` first — it checks Node, credentials (and file permissions), config-dir writability, ffmpeg, live auth, and version freshness, with a fix in every failure detail.
 - **A newly listed live model fails immediately with `PROJECT_ERROR`:** if `doctor` reports a newer CLI, update before retrying. The live catalog can expose a model that needs model-specific client rules added after the installed CLI version; repeated submissions with generic defaults will fail the same way.
-- **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai, account menu).
+- **Auth errors:** check `SOGNI_API_KEY` or `~/.config/sogni/credentials` (key from https://dashboard.sogni.ai/api-key).
 - **Error 4061 / too many app IDs:** the CLI leases stable IDs from the persistent pool in `~/.config/sogni/app-ids/`. Do not delete that directory between runs. For ephemeral/container homes, set the same `SOGNI_APP_ID` on every session. An existing block may require waiting before retrying after upgrading.
 - **Kicked mid-render / SWITCH_CONNECTION 4015:** two processes shared one app ID. The slot pool prevents this for concurrent CLI runs; if a long-lived daemon also uses this account, give it its own pinned `SOGNI_APP_ID`.
 - **Video size errors:** sizes are model-specific (WAN 2.2 ÷16, sides 480–1536, at most 1,048,576 pixels, so no 1080p; Wan 3 uses its exact 480P/720P/1080P ratio buckets, 720P unless `--target-resolution 1080`; LTX ÷64, long side ≤2048). The CLI auto-adjusts for local refs; `--strict-size` makes it fail with a suggested size instead. Details in [`references/models.md`](./references/models.md).

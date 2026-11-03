@@ -15,7 +15,7 @@ preserves normal CLI behavior while attributing the request to Claude Code.
 ## Setup
 
 1. Install the CLI (one-time): `npm install -g @sogni-ai/sogni-creative-agent-skill@latest`.
-2. Provide your Sogni API key (get one at https://dashboard.sogni.ai → account menu): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
+2. Provide your Sogni API key (get one at https://dashboard.sogni.ai/api-key): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
 3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working. Run `doctor` only after an install or upgrade, or when a command fails, never as a preflight before generating: generation commands check the key, ffmpeg and balance themselves.
 4. Optional config files honored: `~/.config/sogni/credentials`, `~/.config/sogni/last-render.json`.
 

@@ -88,7 +88,7 @@ With this skill, an agent can:
 
 ## Quick Start
 
-1. Get a Sogni API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu) and save it — see [Setup](#setup-sogni-api-key).
+1. Get a Sogni API key from [the API Keys page](https://dashboard.sogni.ai/api-key) and save it — see [Setup](#setup-sogni-api-key).
 2. Install (one command):
 
    ```bash
@@ -131,7 +131,7 @@ Then ask your agent to do something:
 ## Requirements
 
 - **Node.js ≥ 22.11.0**
-- **Sogni API key** ([dashboard.sogni.ai](https://dashboard.sogni.ai))
+- **Sogni API key** ([API Keys page](https://dashboard.sogni.ai/api-key))
 - **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`; `--upscale-video` needs `ffprobe`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery (a leading `~` is expanded).
 - macOS, Linux, or Windows
 
@@ -391,7 +391,7 @@ Codex also runs the Skill natively (see [OpenAI Codex CLI](#openai-codex-cli)) �
 
 ## Setup (Sogni API key)
 
-1. Get your API key from [dashboard.sogni.ai](https://dashboard.sogni.ai) (open the account menu).
+1. Get your API key from [the API Keys page](https://dashboard.sogni.ai/api-key).
 2. Save it to a credentials file:
 
    ```bash

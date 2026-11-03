@@ -814,6 +814,11 @@ function classifyCliError(error, context = {}) {
     };
   }
 
+  // The same class as the timeout this replaces on a long chat call: another try can work.
+  if (error?.code === 'NETWORK_CONNECTION_LOST') {
+    return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message: rawMessage, retryable: true };
+  }
+
   // Socket 4103: Seedance 2.5 Uncensored, Seedance 2.0 Mini Uncensored and
   // Seedream 5.0 Pro Uncensored refuse every job until the account accepts their
   // shared one-time likeness and consent agreement in the Sogni app. The message
@@ -8413,7 +8418,18 @@ async function fetchApiJson(path, {
   };
 
   const response = await fetchWithTimeout(url, init, timeoutMs);
-  const text = await response.text();
+  let text;
+  try {
+    text = await response.text();
+  } catch (cause) {
+    // A kept-alive chat call answers 200 long before its reply, so the connection can
+    // still drop here, and fetch reports that only as "terminated".
+    const err = new Error('The connection to Sogni was lost before the reply finished.');
+    err.code = 'NETWORK_CONNECTION_LOST';
+    err.hint = 'Check your internet connection or proxy, then run the request again. Part of the work may already have run.';
+    err.cause = cause;
+    throw err;
+  }
   let payload = {};
   if (text) {
     try {
@@ -8803,6 +8819,21 @@ function extractChatMessage(payload) {
   return data?.choices?.[0]?.message || data?.choices?.[0]?.delta || payload?.choices?.[0]?.message || {};
 }
 
+// With this header, a chat call still working after 90 seconds answers 200 and sends
+// spaces until it finishes, so it outlasts this CLI's timeout and Cloudflare's. A failure
+// after that can only arrive in the body, so every such call must check it below. The
+// body also has no Content-Length, so a hop that ends it early looks like a clean end.
+const CHAT_KEEPALIVE_HEADERS = { 'X-Sogni-Nonstream-Keepalive': 'true' };
+
+function throwIfChatBodyHasError(payload) {
+  const data = extractApiEnvelopeData(payload);
+  if (!payload?.error && data?.choices) return;
+  const err = new Error(payload?.error?.message || 'Sogni ended this chat call without a complete reply.');
+  err.code = 'API_REQUEST_FAILED';
+  err.details = { payload };
+  throw err;
+}
+
 function extractChatWorkflows(payload) {
   const data = extractApiEnvelopeData(payload);
   return data?.creative_workflows || payload?.creative_workflows || [];
@@ -9047,9 +9078,11 @@ async function runApiChat(log) {
       apiKey,
       method: 'POST',
       body,
+      headers: CHAT_KEEPALIVE_HEADERS,
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
+  throwIfChatBodyHasError(payload);
   const message = extractChatMessage(payload);
   const workflows = extractChatWorkflows(payload);
   const toolCalls = message.tool_calls || message.toolCalls || [];
@@ -9557,9 +9590,11 @@ async function generateStoryboardWorkflowStoryline(apiKey) {
       apiKey,
       method: 'POST',
       body,
+      headers: CHAT_KEEPALIVE_HEADERS,
       timeoutMs: CHAT_HTTP_TIMEOUT_MS,
       workloadAttribution,
     }));
+  throwIfChatBodyHasError(payload);
   const message = extractChatMessage(payload);
   const storyline = typeof message.content === 'string' ? message.content.trim() : '';
   if (!storyline) {
@@ -16485,10 +16520,20 @@ async function main() {
       }
     } catch (e) {}
   }
+  await flushStdout();
   process.exit(exitCode);
 }
 
+// process.exit drops whatever a pipe hasn't taken yet. On macOS that is everything past
+// its first 64 KB, so a long --json reply reached an agent cut short, with exit code 0.
+function flushStdout() {
+  return new Promise((resolve) => process.stdout.write('', resolve));
+}
+
 main().then(
-  () => process.exit(0),
+  async () => {
+    await flushStdout();
+    process.exit(0);
+  },
   (error) => reportFatalError(error)
 );

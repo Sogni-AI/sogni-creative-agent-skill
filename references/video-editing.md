@@ -10,6 +10,26 @@ Always use the built-in safe wrappers: `--extract-first-frame`,
 `--video-start`, `--audio-start`, `--audio-duration`. They produce safer, more
 reproducible results and are the only sanctioned file operations.
 
+## Before you show a stitched video: check every join
+
+Judge video from many frames, never a handful (Mark, 2026-11-02: judging from "a
+handful of frames" is "a major major major detriment to quality"). Look at
+two dozen or more frames across every clip. After every `--concat-videos`,
+check each join: pull the last frame of each clip and the first frame of the
+next (`--extract-last-frame` / `--extract-first-frame`) and compare them at full
+size. Check:
+
+- the same people on the same sides, with the same props and wardrobe;
+- a vehicle that keeps its model, lights, mirrors, plate and passengers;
+- eyelines that point at whoever is being spoken to, and motion that keeps its
+  screen direction;
+- the same light and time of day.
+
+Two clips in the same framing but a different place or time read as a jump:
+put a clip between them. A join that breaks continuity is a defect even when
+each clip is good on its own. The Sogni Worlds Kit's `node world joins <video>`
+lays out every cut of a finished film, frame by frame on both sides, in one step.
+
 ## Animate Between Two Images (First-Frame / Last-Frame)
 
 When a user asks to **animate between two images**, use `--ref` (first frame) and `--ref-end` (last frame):

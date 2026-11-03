@@ -110,12 +110,12 @@ sogni-agent-hermes --upscale-video ./clip.mp4 -o ./clip-1440p.mp4
 
 # Generate or animate video
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
-sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "slow camera push-in"
-sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "smooth transformation"
+sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "the cyclist stands on the pedals and sprints out of frame as the camera whip-pans to follow"
+sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "the camera pushes through the doorway as the lights come up, arriving on the final frame"
 sogni-agent-hermes --video -m minimax-h3-fasth3-ia2v-turbo --ref ./first.png --ref-audio ./voice.m4a --duration 8 -o ./talking.mp4 "<I2V preamble plus three-field H3 prompt>"
-sogni-agent-hermes --video -m seedance2-5 --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A quiet bookshop, slow camera push-in, soft room ambience"
+sogni-agent-hermes --video -m seedance2-5 -c ./courier.png --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A tracking shot follows a courier sprinting through a rain-soaked night market. Use @Image1 for the courier's face and yellow jacket. 0–3 s: she vaults the turnstile as stall awnings whip past the lens; 3–6 s: she skids around a corner, scattering pigeons; 6–8 s: she bursts into the open street, breathing hard. Rain hiss, slapping footsteps."
 sogni-agent-hermes --video -m wan3 --target-resolution 1080 --duration 8 -o ./wan3.mp4 'a presenter says "Welcome" in a detailed studio'
-sogni-agent-hermes --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 -o ./seedance-uncensored.mp4 "A slow dolly through a neon street at night"
+sogni-agent-hermes --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 -o ./seedance-uncensored.mp4 "Two dancers spin through a packed neon club as the camera arcs fast around them, strobes flashing across their faces"
 sogni-agent-hermes --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 -o ./seedance-mini-uncensored.mp4 "A slow dolly through a neon street at night"
 sogni-agent-hermes --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 -o ./wan3-enhanced.mp4 'a presenter says "Welcome" in a detailed studio'
 
@@ -200,11 +200,13 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
   and bounded edits respected: read the [style-transfer recipes](references/personas-memory.md#style-transfer-recipes).
 - Krea 2 LoRA ids, strength ranges, bipolar sliders, and stacking up to 8 in
   one render: read [krea2-loras.md](references/krea2-loras.md).
-- Video prompts, reference roles, LTX, WAN 2.2, Wan 3, MiniMax, Seedance, and HappyHorse:
-  read [video-prompting.md](references/video-prompting.md).
-- Prompt-only image deliverables for SD/SDXL, FLUX.1 Schnell, FLUX 3 Image Klein,
-  Chroma, Krea 2, Qwen, Z-Image, GPT Image, and model-specific editing: read
-  [image-prompting.md](references/image-prompting.md).
+- Before writing any video prompt, read the section of
+  [video-prompting.md](references/video-prompting.md) for the chosen model: LTX,
+  MiniMax H3, Seedance, WAN 2.2, Wan 3, or HappyHorse (via its link). Direct mode
+  runs no model-aware prompt shaper (Wan 3 aside), so the model reads your words.
+- Before writing any image prompt, rendered or returned as text, for SD/SDXL,
+  FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen, Z-Image, GPT Image,
+  and model-specific editing: read [image-prompting.md](references/image-prompting.md).
 - Local video cutting, stitching, overlays, subtitles, audio remixing, and
   verification: read [video-editing.md](references/video-editing.md).
 - Saved identities, reusable assets, memory, and personality: read

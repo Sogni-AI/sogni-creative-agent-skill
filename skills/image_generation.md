@@ -21,7 +21,7 @@ Text-to-image synthesis with the current Sogni image stack (Z-Image, Krea 2, Dar
 - Use `-m dark_beast_krea2_fp8` when the user explicitly requests Dark Beast Krea 2 or the uncensored community Krea 2 fine-tune, or asks for a horror or sexy still: GPT Image's OpenAI safety system refuses gore on a real person's likeness and sexualized content.
 - FLUX 3 Image Klein (`-m flux3_image_klein_sd_int8_convrot`; hosted selector `flux-3-klein`) works best with a full scene caption. Its guidance is fixed at 1, so a negative prompt has no effect.
 - Seedream 5.0 Pro Uncensored (`-m seedream-5-0-pro-uncensored`, the same hosted selector) is used only when the user asks for it or for uncensored Seedream output. It renders 921,600-4,194,304 pixels up to 16:1 (default 1536x1536) and takes no seed, steps, guidance, LoRAs, or negative prompt. It shares the Seedance 2.5 Uncensored likeness agreement: on error 4103, tell the user to accept it in the Sogni app and do not retry.
-- The app applies model-specific prompt-enhancement automatically — pass the user's intent faithfully and avoid empty quality-booster spam.
+- Hosted chat applies model-specific prompt shaping; the direct CLI applies none, so write the prompt in the model's own form (`references/image-prompting.md`). Either way, pass the user's intent faithfully and avoid empty quality-booster spam.
 
 ## Constraints
 

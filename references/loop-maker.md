@@ -8,7 +8,7 @@ Use this workflow for one-command requests to turn a folder of still images into
 - Support `.jpg`, `.jpeg`, `.png`, and `.webp` source images.
 - Keep one strongest representative of each visual concept.
 - Use the strongest retained image as the opener unless the user names another, then rotate the ordered list without otherwise reordering it.
-- Render one 3-second clip per image pair: about 2 seconds of restrained motion followed by a smooth transition into the next supplied image.
+- Render one 3-second clip per image pair: about 2 seconds of restrained motion followed by a smooth transition into the next supplied image, unless the user asks for a different energy (a hype reel, for instance), which then sets the motion and transition pace.
 - Close the loop with the last retained image to the opener.
 - Use `ltx25-22b-int8_i2v_distilled`, `--token-type auto`, and the exact original files as both `--ref` and `--ref-end` for every pair.
 - Pin both endpoint strengths to `1` and disable SDK asset auto-resizing after choosing a valid LTX canvas.
@@ -68,7 +68,7 @@ Do not render standalone image-animation clips, extra bridge clips, or multi-ang
 For each pair, write one LTX-safe paragraph of 4-8 present-tense sentences:
 
 1. Establish the supplied starting image and its concrete visual identity.
-2. Describe restrained, believable motion for roughly the first two seconds.
+2. Describe restrained, believable motion for roughly the first two seconds, or motion at the energy the user asked for.
 3. Connect shared lighting, color, texture, shapes, atmosphere, or camera movement into the supplied target image.
 4. State that the shot settles exactly into the supplied final image with stable identity, wardrobe, style, and composition.
 

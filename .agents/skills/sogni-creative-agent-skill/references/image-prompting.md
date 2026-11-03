@@ -1,10 +1,16 @@
 # Image Prompt Authoring Guide
 
-Use this guide only when the creator asks for prompt text as the deliverable. A
-prompt-only request does not authorize a render. Require both the exact target
-model/version and the operation (`generate` or `edit`). If either is missing,
-ask for it. If the exact pair is not registered, report that limitation; never
-substitute another destination model's prompt contract.
+Read this before writing any image prompt, whether you render it or return it
+as text: the families below do not share one prompt shape. Direct CLI mode
+runs no model-aware prompt shaper and has no negative-prompt input, so when you
+render, the positive prompt you write is all the model reads; state exclusions
+positively in it.
+
+When the creator asks for prompt text as the deliverable, a prompt-only request
+does not authorize a render. Require both the exact target model/version and
+the operation (`generate` or `edit`). If either is missing, ask for it. If the
+exact pair is not registered, report that limitation;
+never substitute another destination model's prompt contract.
 
 ## Output contracts by family
 

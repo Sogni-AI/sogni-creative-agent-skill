@@ -471,9 +471,10 @@ sogni-agent --video --target-resolution 768 \
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 \
   "A polished product reveal with native ambient sound"
 
-# Seedance multimodal context with public HTTPS references
+# Seedance multimodal context with public HTTPS references (-c for the image: loose
+# references cannot be combined with --ref/--ref-end frame anchors)
 sogni-agent --video -m seedance2 --workflow t2v \
-  --ref https://cdn.example.com/product.png \
+  -c https://cdn.example.com/product.png \
   --ref-video https://cdn.example.com/motion.mp4 \
   --ref-audio https://cdn.example.com/music.m4a \
   "Use @Image1 for product identity, @Video1 for camera movement, and @Audio1 for music rhythm"
@@ -495,7 +496,7 @@ sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-promp
 # Accept its one-time likeness and consent agreement in the Sogni app first
 # (until then jobs fail with error 4103, which is not retryable).
 sogni-agent --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 \
-  "A slow dolly through a rain-soaked neon street at night"
+  "Two dancers spin through a packed neon club as the camera arcs fast around them, strobes flashing across their faces"
 
 # Seedance 2.0 Mini Uncensored: every Seedance 2.0 Mini mode and limit (480p/720p,
 # 4-15s) under its own model. It shares the Seedance 2.5 Uncensored agreement.
@@ -541,7 +542,7 @@ sogni-agent --video -m minimax-h3-fasth3-flf2v-turbo --ref first.png --ref-end l
   "<keyframe alignment line plus three-field H3 prompt that names each keyframe <Picture N> and describes it at its time>"
 
 # Image-to-video (i2v; defaults to wan_v2.2-14b-fp8_i2v_lightx2v)
-sogni-agent --video --ref cat.jpg "gentle camera pan"
+sogni-agent --video --ref cat.jpg "the cat leaps off the sofa and bolts toward the camera as it tracks back"
 
 # Animate two images together (first frame → last frame; defaults to
 # ltx25-22b-int8_i2v_distilled using the standard first/last-frame template)
@@ -829,16 +830,19 @@ The LTX-2.5 v2v selector `ltx25-v2v` supports two extra control modes: **`outpai
 
 ## LTX-2.x Prompting Guide
 
+Every video family reads its own prompt grammar: `references/video-prompting.md` has a section per model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3). This section summarizes the LTX one.
+
 When you use LTX-2.5 or an LTX-2.3 rollback model, do **not** feed it short tag prompts like `"cinematic drone shot over tropical cliffs"`. LTX renders more reliably from a dense natural-language scene description.
 
 - Write one unbroken paragraph — no line breaks, bullets, headers, or tag blocks.
-- Use 4–8 flowing present-tense sentences describing one continuous shot, not a montage.
+- Use 4–8 flowing present-tense sentences describing one continuous shot unless the user asks for cuts. LTX-2.5 text-to-video keeps every requested shot: one sentence per shot, in order, each opening with its cut time (`At exactly 3 seconds, a hard cut switches to a close-up of …`).
 - Start with shot scale and scene identity, then cover environment, time of day, textures, and named light sources.
-- Keep characters and objects concrete and stable; describe one main action thread from start to finish.
+- Keep characters and objects concrete and stable; give each shot one main action thread from start to finish.
 - For dialogue, include the exact spoken words in double quotes with the speaker and delivery identified inline.
+- Keep any on-screen text the user asks for exactly, in double quotes after "reads" (`a neon sign reads "OPEN ALL NIGHT"`), and add none they did not ask for.
 - Express mood through visible behavior, motion, and sound cues — not vague adjectives.
-- Use positive phrasing. Avoid script formatting, negative prompts, on-screen text/logo requests, and filler words like "beautiful" or "nice".
-- Match scene density to clip length. For short clips, describe one main beat, not several actions.
+- Use positive phrasing. Avoid script formatting, negative prompts, and filler words like "beautiful" or "nice".
+- Fit every action the user names into the clip, in order. If they cannot all finish on screen, suggest a longer clip rather than dropping one.
 
 **Example rewrite:**
 

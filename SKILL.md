@@ -124,7 +124,7 @@ Preserve the requested deliverable: capability questions need an answer, a writi
 
 You (the calling LLM) are almost always more capable than Sogni's hosted planning model, so **do the planning and tool selection yourself** and let the hosted endpoints do what only the server can — run on the GPU network, persist assets/manifests, orchestrate durable multi-step runs with replay, and apply structured-contract repair. Don't flatten a rich request into a single natural-language string and hand planning back to a weaker model. Match the mode to the work:
 
-- **One-shot generation** → direct-to-SDK flags (the Core Commands below). You already know the tool, model, and prompt — just run it. No LLM round-trip, lowest latency/cost.
+- **One-shot generation** → direct-to-SDK flags (the Core Commands below). You pick the tool and model. The direct path runs no model-aware prompt shaper (Wan 3 aside), so before running it, write the prompt in that model's grammar from its section of [`references/video-prompting.md`](./references/video-prompting.md) or from [`references/image-prompting.md`](./references/image-prompting.md). No LLM round-trip, lowest latency/cost.
 - **Multi-step / durable / resumable** → `--api-workflow` with an explicit step graph via `--workflow-input <json|@path>`. *You* author the exact plan — `steps[]` with `toolName`, `arguments`, and `dependsOn` bindings (e.g. `sourceStepId`, `targetArgument`, `transform: "artifact_url"`) — and the server executes it durably with replay/resumability, **without re-planning through the hosted LLM**. Presets like `--api-workflow storyboard-video` are fine when they already match the request.
 - **`--api-chat` / `--durable-chat` (hosted LLM owns the loop)** → reserve for when you deliberately *want* the hosted model to drive a long server-side tool loop (saves client round-trips on long async jobs), when structured-contract repair recipes should govern, or when several local files must be uploaded for a single turn (multi-file local upload is only supported here). These delegate planning to the hosted model — choose them on purpose, not by default.
 
@@ -173,7 +173,7 @@ sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-resolution 1080 -o ./
 # Photobooth (face transfer — new portrait from a face photo)
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
 
-# Text-to-video / image-to-video (write the prompt per references/video-prompting.md)
+# Text-to-video / image-to-video (write the prompt per the model's section of references/video-prompting.md)
 # Single-image i2v defaults to wan_v2.2-14b-fp8_i2v_lightx2v; adding --ref-end
 # defaults to ltx25-22b-int8_i2v_distilled (the standard LTX-2.5 FLF template).
 sogni-agent -q --video -o ./video.mp4 "<cinematic prose paragraph>"
@@ -282,7 +282,7 @@ sogni-agent doctor --json
 | `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
-| `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt rewriting and Wan 3 watermark control | rewrite on / watermark off |
+| `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt guardrails (quote and duration checks, storyboard fallback) plus Sogni's server-side Wan 3 rewrite; `--no-expand-prompt` sends the prompt literally. Wan 3 watermark control | on / watermark off |
 | `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |
 | `--sampler <name>` | Image/music sampler; LightX2V FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo and FastH3 Turbo: `euler` only | LightX2V FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |
@@ -338,11 +338,13 @@ sogni-agent -c photo.jpg -m krea2_identity_edit_v1_2 "Turn her into an anime cha
 
 When the creator asks only to write, draft, return, or generate a prompt for **any image or video model/workflow**, the prompt text is the final deliverable. Require the named model/version and operation, apply its registered model-native contract, and return only the directly runnable prompt. Do not invoke the CLI, hosted API, or any media-generation tool; do not add a Markdown fence, preamble, generic tips, explanation, render offer, or follow-up question after a completed prompt. If the target is omitted, ask which model to tune for. If the model/version/operation has no validated contract, say so and ask for the exact target; never substitute a generic prompt or another model's format. If the same request also asks to render the media now, that execution request wins and the shaped prompt becomes the generation input.
 
-For image prompt-only requests, **read [`references/image-prompting.md`](./references/image-prompting.md)** before writing. SD 1.5, SDXL/Pony, FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen Image, Z-Image, GPT Image, and their edit operations do not share one prompt syntax or output envelope.
+Before writing any image prompt, rendered or returned as text, **read [`references/image-prompting.md`](./references/image-prompting.md)**. SD 1.5, SDXL/Pony, FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen Image, Z-Image, GPT Image, and their edit operations do not share one prompt syntax or output envelope.
 
-### LTX video prompts
+### Video prompts
 
-Whenever the chosen video model is in the LTX family (including the default t2v), **do not pass the user's short request through unchanged**. Rewrite it into one unbroken paragraph of 4-8 flowing present-tense sentences describing a single continuous shot — concrete subjects, named light sources, one action thread, dialogue embedded in double quotes with the speaker identified, positive phrasing only, no headers/bullets/negative-prompts. **Read [`references/video-prompting.md`](./references/video-prompting.md) for the full rule, duration pacing, orientation mapping, and camera-language normalization before writing the prompt.**
+Every video family reads its own prompt grammar. Before writing any video prompt, read the chosen model's section of [`references/video-prompting.md`](./references/video-prompting.md): LTX, MiniMax H3, Seedance 2.0/2.5, WAN 2.2, or Wan 3.
+
+Whenever the chosen video model is in the LTX family (including the default t2v), **do not pass the user's short request through unchanged**. Rewrite it into one unbroken paragraph of present-tense prose — concrete subjects, named light sources, every action the user names in order, dialogue embedded in double quotes with the speaker identified, requested on-screen text in double quotes, positive phrasing only, no headers/bullets/negative-prompts. Write 4-8 flowing sentences for one continuous shot unless the user asks for cuts; LTX-2.5 text-to-video keeps each requested shot as its own time-coded sentence. **Read [`references/video-prompting.md`](./references/video-prompting.md) for the full rule, duration pacing, orientation mapping, and camera language before writing the prompt.**
 
 Whenever the creator explicitly requests 10Eros, and for lawful adult mature-theme video requests generally, read [`references/private-mature-video.md`](./references/private-mature-video.md) before choosing a model, LoRA, or specialized prompt token. Keep the exact tokens in that scoped reference rather than ordinary model recommendations.
 
@@ -480,8 +482,8 @@ Eligible Sogni-hosted renders use Unlimited coverage when active; otherwise rend
 | Read this | When the task involves |
 |-----------|------------------------|
 | [`references/interactive-worlds.md`](./references/interactive-worlds.md) | Building an explorable world end to end: the nine-model stack in order, the prepare/render/verify/retain loop, and the measured failure modes of each stage — segmentation prompts, matte thresholds, 3D input resolution, single-keyframe clips and reverse playback, dialogue loudness spread, voice-clone transcripts, on-camera lip-sync |
-| [`references/image-prompting.md`](./references/image-prompting.md) | Writing prompt-only image deliverables for SD/SDXL/Pony, FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen, Z-Image, MOSS-Image, GPT Image, or model-specific edit operations |
-| [`references/video-prompting.md`](./references/video-prompting.md) | Writing LTX video prompts; writing MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, dialogue tags, and intermediate keyframes; high-res/4K routing; orientation/aspect mapping; camera language |
+| [`references/image-prompting.md`](./references/image-prompting.md) | Writing any image prompt, rendered or returned as text, for SD/SDXL/Pony, FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen, Z-Image, MOSS-Image, GPT Image, or model-specific edit operations |
+| [`references/video-prompting.md`](./references/video-prompting.md) | Writing any video prompt: LTX; MiniMax H3 official ordered-field prompts, mode preambles, shot notation, speaker IDs, dialogue tags, and intermediate keyframes; Seedance 2.0/2.5 reference roles, timed beats, and edits; WAN 2.2; Wan 3; high-res/4K routing; orientation/aspect mapping; camera language |
 | [`references/private-mature-video.md`](./references/private-mature-video.md) | Mature-theme video model, LoRA, frame modes, and prompt tokens |
 | [`references/video-editing.md`](./references/video-editing.md) | Animate between images, continue/bridge videos, 360 turnarounds, concat, audio remix/layering, v2v ControlNet |
 | [`references/loop-maker.md`](./references/loop-maker.md) | One-click image-folder loops with visual deduplication, direct LTX first/last-frame clips, music, and verification |

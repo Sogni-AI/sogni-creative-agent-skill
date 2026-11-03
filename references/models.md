@@ -738,7 +738,8 @@ no negative prompt and no ControlNet.
   `seedance-reference-limits` catalog.
 - **Prompting**: the same `@Image1` / `@Video1` / `@Audio1` loose-reference
   grammar and the same mutually exclusive dedicated-frame vs loose-reference
-  modes as Seedance 2.0.
+  modes as Seedance 2.0. Write the prompt per
+  [video-prompting.md § Seedance Prompting](./video-prompting.md#seedance-prompting).
 - **Task contract**: Seedance 2.5 first/last-frame, edit, and extend requests
   use adaptive output ratio. The CLI sends typed task metadata so
   `seedance2-5-v2v` defaults to edit; pass `--seedance-task-type extend` for
@@ -772,7 +773,9 @@ Learned on Sogni's own productions (Sogni Meme World, 2026-10 and 2026-11). They
   prompt ("he walks behind her from screen right to screen left").
 - **Loose-reference mode tends to open on @Image1.** A place still in that slot
   brings its composition back as the opening shot. For a new composition, make
-  an opening still and use frame mode (`--ref`).
+  an opening still and use frame mode (`--ref`); when people or props must also
+  persist through the shot, attach that still first in reference mode with the
+  job "the opening shot reference" instead.
 - **Size people from references explicitly.** A second take with the same
   people refs drew them as giant cut-outs. "Small in the frame, full figures,
   ordinary proportions, as far away as in @Image1" fixed it.
@@ -818,8 +821,8 @@ Learned on Sogni's own productions (Sogni Meme World, 2026-10 and 2026-11). They
     stills around it, needs alignment (one affine transform), colour matching
     and retiming outside this CLI.
   - On a near-static source, Seedance may cut to a close-up of what you changed.
-    Say "the camera never moves, zooms or cuts", and edit static clips on their
-    own.
+    Say "the camera holds @Video1's exact framing for the whole clip, one
+    continuous shot", and edit static clips on their own.
   - Edit is good at changing what a screen or a sign shows across a moving shot.
     It beats tracking a mask and compositing, because tracked mattes jitter. It
     is poor at small selective prop fixes: asked to remove one of three
@@ -973,11 +976,10 @@ IDs. It renders 2–30 second clips at fixed 30 fps with native audio (enabled b
 default, disable with `--no-generate-audio`) at 480P, 720P, or 1080P.
 Supported ratios are `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, and `9:16`.
 Use `--smart-duration` for provider-selected timing or `--duration 2..30` for
-an exact request. `--no-expand-prompt` bypasses local prompt guardrails and
-sends literal wording; hosted agent paths run Sogni's exact-model shaper. The
-configured Alibaba Model Studio WAN3 endpoint accepts no provider-side
-`prompt_extend` behavior is coordinated with Sogni's own model-specific shaping
-so a prompt is not rewritten twice.
+an exact request. By default Sogni's AI Screenwriter rewrites the prompt on the
+server and submits it with Alibaba's own `prompt_extend` off, so a prompt is
+never rewritten twice. `--no-expand-prompt` sends your wording literally and
+also skips the CLI's local prompt guardrails.
 
 - **Frame mode:** `--ref` is the first frame; optional `--ref-end` is the last
   frame. A last frame requires a first frame.
@@ -1017,7 +1019,8 @@ so a prompt is not rewritten twice.
 Prompt in plain natural language. Name references exactly as `Image 1`,
 `Video 1`, and `Audio 1` in per-modality submission order. For dialogue, quote
 the words and identify the speaker; keep the visual action and camera direction
-observable and concise.
+observable and concise. The full rules are in
+[video-prompting.md § Wan 3 Prompting](./video-prompting.md#wan-3-prompting).
 
 ## Wan 3.0 Enhanced
 

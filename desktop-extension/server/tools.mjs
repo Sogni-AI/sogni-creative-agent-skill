@@ -34,7 +34,10 @@ export const TOOLS = [
       'Generate one or more images from a text prompt on the Sogni GPU network. ' +
       'Pass output_path (absolute, .png/.jpg) to save locally; otherwise a hosted URL is returned. ' +
       'Use context_images for image editing ("make the background a beach") and persona to include a saved person. ' +
-      'Image results are attached inline in the tool result. ' + CHAT_ATTACHMENT_NOTE,
+      'Image results are attached inline in the tool result. ' +
+      'The model reads your prompt with no model-specific rewrite, so write it in that model family\'s own form: ' +
+      'https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/image-prompting.md. ' +
+      CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
@@ -82,11 +85,14 @@ export const TOOLS = [
       'drives the clip with the uploaded audio and keeps it as the soundtrack; no LoRAs. ' +
       'MiniMax H3 i2v, first/last-frame, FastH3 audio-to-video and r2v also take keyframes: extra images pinned at chosen times inside the clip. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
+      'The model reads your prompt with no model-specific rewrite (Wan 3 aside), so before writing it read the section for the ' +
+      'chosen model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) in ' +
+      'https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/video-prompting.md. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
-        prompt: str('Motion/scene description'),
+        prompt: str('The prompt, in the chosen model\'s own grammar (see the tool description): what is seen and heard'),
         output_path: str('Absolute .mp4 path to save (optional)'),
         model: str('Video model id (optional)'),
         workflow: { type: 'string', enum: ['t2v', 'i2v', 'r2v', 's2v', 'ia2v', 'a2v', 'v2v', 'animate-move', 'animate-replace'] },

@@ -43,14 +43,14 @@ For MiniMax reference-to-video, default to **Balanced R2V** (`minimax-h3-r2v-bal
 - Image: `sogni-agent "a cat on the moon, cinematic"`
 - Image edit: `sogni-agent -c <path> "make it night, add fireflies"`
 - Object mask: `sogni-agent --segment <path> --segment-point 0.5,0.5 -o mask.png` (SAM 3; see `../../references/object-selection.md`)
-- Video (image-to-video): `sogni-agent --video --ref <path> "gentle camera pan"` (defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`)
-- Animate two images (first frame → last frame): `sogni-agent --video --ref <first> --ref-end <last> "smooth morph into the final frame"` (defaults to `ltx25-22b-int8_i2v_distilled` and the standard FLF template; no transition LoRA is attached)
-- Seedance 2.5 at 1080p: `sogni-agent --video -m seedance2-5 --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A quiet bookshop, slow camera push-in, soft room ambience"` (4–30s; 480p/720p/1080p, native audio; optional `--output-format mov` and `--return-last-frame`)
+- Video (image-to-video): `sogni-agent --video --ref <path> "the cyclist stands on the pedals and sprints out of frame as the camera whip-pans to follow"` (defaults to `wan_v2.2-14b-fp8_i2v_lightx2v`)
+- Animate two images (first frame → last frame): `sogni-agent --video --ref <first> --ref-end <last> "the camera pushes through the doorway as the lights come up, arriving on the final frame"` (defaults to `ltx25-22b-int8_i2v_distilled` and the standard FLF template; no transition LoRA is attached)
+- Seedance 2.5 at 1080p: `sogni-agent --video -m seedance2-5 -c ./courier.png --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A tracking shot follows a courier sprinting through a rain-soaked night market. Use @Image1 for the courier's face and yellow jacket. 0–3 s: she vaults the turnstile as stall awnings whip past the lens; 3–6 s: she skids around a corner, scattering pigeons; 6–8 s: she bursts into the open street, breathing hard. Rain hiss, slapping footsteps."` (4–30s; 480p/720p/1080p, native audio; optional `--output-format mov` and `--return-last-frame`)
 - Upscale a finished video: `sogni-agent --upscale-video ./clip.mp4 --upscale-resolution 1080 -o ./clip-1080p.mp4` (promptless FlashVSR; also supports 1440p)
 - MiniMax H3 reference-to-video: `sogni-agent --video -m minimax-h3-fasth3-r2v-turbo --ref <identity> -c <wardrobe> --ref-video <motion> --ref-audio <voice> "<Picture 1> controls identity; <Picture 2> controls wardrobe; <Video 1> controls motion; <Audio 1> controls voice."`
 - Alibaba Wan 3 unified video: `sogni-agent --video -m wan3 --target-resolution 1080 --duration 8 "a presenter says 'Welcome' in a detailed studio"`
 - Seedream 5.0 Pro Uncensored image or edit, only when asked: `sogni-agent -m seedream-5-0-pro-uncensored -c <path> "the person in Image 1 on a rooftop at dusk"` (1-10 references, default 1536x1536; shares the Seedance 2.5 Uncensored agreement)
-- Seedance 2.5 Uncensored, only when asked: `sogni-agent --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 "a slow dolly through a neon street at night"` (same limits as Seedance 2.5; on error 4103 show the returned `consentUrl` and `consentInstructions`, use the same account as the agent/API key, and return to retry after manual acceptance)
+- Seedance 2.5 Uncensored, only when asked: `sogni-agent --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 "two dancers spin through a packed neon club as the camera arcs fast around them, strobes flashing across their faces"` (same limits as Seedance 2.5; on error 4103 show the returned `consentUrl` and `consentInstructions`, use the same account as the agent/API key, and return to retry after manual acceptance)
 - Seedance 2.0 Mini Uncensored, only when asked: `sogni-agent --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 "a slow dolly through a neon street at night"` (same limits as Seedance 2.0 Mini; shares the agreement; on error 4103 show `consentUrl` and `consentInstructions`, including the account and return guidance; never accept or retry for the user)
 - Wan 3.0 Enhanced through MuleRouter: `sogni-agent --video -m wan3-enhanced --target-resolution 1080 --smart-duration --wan3-ratio adaptive "a presenter says 'Welcome' in a detailed studio"`
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
@@ -101,8 +101,12 @@ For capability questions and model selection, read `../../references/models.md`.
 It covers Seedance 2.5 1080p (including edit/extend), FastH3 Two-Stage delivered
 720p/1080p/2K, GPT Image 2.5 Sunburst/Flare edits and masks, and current video
 and image upscale limits. Honor an explicitly selected model and resolution.
-For FastH3, read `../../references/video-prompting.md` before writing its
-ordered-field prompt; select the Two-Stage model for higher delivered sizes.
+Before writing any video prompt, read the section of
+`../../references/video-prompting.md` for the model you chose (LTX, MiniMax H3
+including FastH3, Seedance, WAN 2.2, Wan 3); before writing any image prompt,
+read `../../references/image-prompting.md`. Direct mode runs no model-aware
+prompt shaper (Wan 3 aside), so the model reads your words. For FastH3, select
+the Two-Stage model for higher delivered sizes.
 To drive H3 with the user's own voice or song, use FastH3 audio-to-video:
 `-m minimax-h3-fasth3-ia2v-turbo --ref first.png --ref-audio track.m4a`
 (`-flfa2v-turbo` adds `--ref-end`, `-a2v-turbo` takes the audio alone).

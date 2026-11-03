@@ -91,9 +91,10 @@ The LoRA is one multi-concept adapter. Each token selects an action concept:
 
 Use one matching token for a clip focused on one action. Multiple tokens can be
 used for sequential actions, but results may blend the concepts. For more
-reliable output, render one action per clip and stitch the clips. When a single
-continuous transition is preferred, keep the sequence short, describe it
-chronologically, and place each token beside its corresponding action.
+reliable output, offer to render one action per clip and stitch the clips.
+When a single continuous transition is preferred, keep the sequence short,
+describe it chronologically, and place each token beside its corresponding
+action.
 
 ## Prompt construction for 10Eros + DR34ML4Y
 
@@ -119,13 +120,16 @@ prompt; fold those details into cinematic prose instead.
    environmental sound, and music where relevant.
 
 Be specific and literal. Do not substitute euphemisms or generalizations for
-the requested visible action. Keep the action density appropriate for the
-duration, and avoid contradictory positions, unrelated cuts, generic quality
-tags, and repeating the same action in several different ways. Prefer one
-simple, logical, interesting motion evolution. Keep acting and physical motion
-natural and cinematic, with realistic weight and restrained gestures rather
-than exaggerated motion or slapstick. Do not introduce extra characters unless
-they are clearly visible in the supplied image or explicitly requested.
+the requested visible action. Fit every action the creator names into the
+clip, in order; if they cannot all finish on screen, say so and suggest a
+longer clip or one clip per action rather than dropping one. Avoid
+contradictory positions, unrelated cuts, generic quality tags, and repeating
+the same action in several different ways. Give the motion one logical,
+physically continuous evolution. Play the action at the intensity and pace the
+creator asked for, natural and cinematic, with realistic weight and physically
+coherent motion; add slapstick or comic exaggeration only when asked.
+Do not introduce extra characters unless they are clearly visible in the
+supplied image or explicitly requested.
 
 When an image is attached and the creator says "one for this image", "make one
 for this", or similar, treat the image as the start-frame authority and build

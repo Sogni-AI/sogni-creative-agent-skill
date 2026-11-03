@@ -25,6 +25,11 @@ Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); Qwen
 `--speech-mode voice|clone|design`. Read the model reference for required inputs,
 allowed controls, and hosted alternatives.
 
+Prompts: direct CLI mode runs no model-aware prompt shaper (Wan 3 aside), so
+before writing a prompt read the chosen model's section of
+`references/video-prompting.md` (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) or
+`references/image-prompting.md`.
+
 MOSS-Image SFT uses `-m moss_image_sft_int8_convrot`: 50 steps, guidance 3,
 Euler / sgm_uniform. It generates from text, tags or experimental JSON layouts
 and accepts no reference images. Read `references/image-prompting.md` for layouts.

@@ -297,7 +297,7 @@ test('runtime plans Seedance storyboard fallback for a single uploaded image', (
     uploadedImageCount: 1,
     defaultDurationSeconds: 5
   }), {
-    prompt: SEEDANCE_STORYBOARD_REFERENCE_PROMPT,
+    prompt: `${SEEDANCE_STORYBOARD_REFERENCE_PROMPT} Additional user direction to honor while following the storyboard: I am uploading a storyboard. Turn it into a 9 second video.`,
     duration: 9,
     referenceImageIndices: [-1],
     skipPromptProcessing: true,
@@ -316,7 +316,7 @@ test('runtime plans Seedance storyboard fallback for a single uploaded image', (
   });
   assert.equal(plan.model, 'seedance-2-0');
   assert.equal(plan.workflow, 't2v');
-  assert.equal(plan.prompt, SEEDANCE_STORYBOARD_REFERENCE_PROMPT);
+  assert.equal(plan.prompt, `${SEEDANCE_STORYBOARD_REFERENCE_PROMPT} Additional user direction to honor while following the storyboard: I am uploading a storyboard. Turn it into a 9 second video.`);
   assert.equal(plan.duration, 9);
   assert.equal(plan.storyboard.reason, 'text_mentions_storyboard');
 });

@@ -3553,7 +3553,7 @@ test('storyboard upload mention routes to Seedance storyboard fallback', () => {
   assert.equal(exitCode, 0);
   assert.ok(state?.lastVideoProject, 'createVideoProject was called');
   assert.equal(state.lastVideoProject.modelId, 'seedance-2-0');
-  assert.equal(state.lastVideoProject.positivePrompt, SEEDANCE_STORYBOARD_REFERENCE_PROMPT);
+  assert.equal(state.lastVideoProject.positivePrompt, `${SEEDANCE_STORYBOARD_REFERENCE_PROMPT} Additional user direction to honor while following the storyboard: I am uploading a storyboard. Turn it into a 9 second video.`);
   assert.equal(state.lastVideoProject.duration, 9);
   assert.equal(state.lastVideoProject.fps, 24);
   assert.equal(state.lastVideoProject.referenceImage != null, true);
@@ -6535,7 +6535,7 @@ test('--api-workflow storyboard-video defaults to GPT Image 2.5 Sunburst and See
     assert.equal(videoStep.arguments.generateAudio, true);
     assert.equal(videoStep.arguments.numberOfVariations, 1);
     assert.match(videoStep.arguments.prompt, /@Image1: approved storyboard reference image/);
-    assert.match(videoStep.arguments.prompt, /not as a collage, split-screen, grid/);
+    assert.match(videoStep.arguments.prompt, /Each shot fills the whole frame as moving footage of its scene, in the look the storyboard shows\./);
     assert.deepEqual(videoStep.dependsOn, [{
       sourceStepId: 'storyboard_image',
       sourceArtifactIndex: 0,

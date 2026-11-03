@@ -30,6 +30,32 @@ put a clip between them. A join that breaks continuity is a defect even when
 each clip is good on its own. The Sogni Worlds Kit's `node world joins <video>`
 lays out every cut of a finished film, frame by frame on both sides, in one step.
 
+## Check that the world stays physical, and split the checking up
+
+A video model draws whatever the prompt names, even when the first frame lacks it:
+"the cars pile into a pillar" over a still with no pillar grows one down out of the
+sky. On every clip, check that:
+
+- nothing appears, vanishes or grows;
+- people sit the right way in vehicles (the driver faces the wheel);
+- people are in scale with doors, windows and wheels;
+- props stay on the same side in every angle;
+- the skyline, bridges and direction of travel agree across clips, and pursuers stay
+  behind;
+- a shot that should move moves;
+- every sign and plate reads correctly.
+
+Name only what the first frame shows, or put the object in the still first. Before
+the user sees a stitched video, have a fresh agent with no stake in the clips run the
+same list over it.
+
+Work in parallel wherever it costs no quality: build every contact sheet in one
+ffmpeg pass, then give each reviewer a few clips with their ready sheets (one reviewer
+working through a whole film clip by clip took 32 minutes; split up, it takes a few).
+Re-check only what changed since the last review, and submit independent renders
+together, judging each as it lands. One agent keeps the edit and the final call:
+helpers report what they find and never change the cut.
+
 ## Animate Between Two Images (First-Frame / Last-Frame)
 
 When a user asks to **animate between two images**, use `--ref` (first frame) and `--ref-end` (last frame):

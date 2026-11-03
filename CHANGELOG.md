@@ -1,3 +1,20 @@
+## [3.62.0] - 2026-11-03
+
+### Features
+
+* Image edits route by what you ask for: Krea 2 Identity Edit for people, FLUX 3 Image Klein for type and graphic design, Dark Beast Krea 2 Identity Edit for NSFW, and GPT Image 2.5 Sunburst as the Premium Spark best option. Qwen Image Edit runs only when you name it.
+
+### Bug Fixes
+
+* Seedance 2.5 and Seedance 2.5 Uncensored edits keep a 30-second source video and 30 seconds of reference audio. A local source was trimmed to 15 seconds before upload, so a 30-second edit came back half as long. Seedance 2.0 keeps its 15-second limit.
+* Long hosted chat calls stay connected past two minutes and deliver their whole reply, including long `--json` output through a pipe.
+* API key hints link straight to the API Keys page.
+* Use intelligence-client 4.22.9 and Sogni SDK 5.73.0 across the CLI and standalone skill runtime.
+
+### Updates
+
+* New production guidance: perform flat cloned dialogue with a video model and keep only the sound, re-prompt Dark Beast instead of cleaning its stills with another editor, check every join of a stitched video at full size, check that every clip stays physically plausible, and keep a recurring character's voice reference and wording identical in every clip.
+
 ## [3.61.1] - 2026-11-01
 
 ### Updates

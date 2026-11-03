@@ -345,6 +345,15 @@ Tested on a branching horror route the same day, on top of the rules above:
   plain American accent with a light, mid-pitched voice at a quick, breathless
   pace, says: <d>[English] …</d>`. "A bright, breathless voice" alone drifted
   to a British accent between takes.
+- **A recurring character keeps one voice, word for word.** Write each speaking
+  character's voice once (their reference clip if they have one, plus one fixed
+  wording) and paste it verbatim into every clip they speak in. With a Seedance
+  voice reference, say "Jean's voice is exactly @Audio1." once and "Jean, in his
+  own voice exactly @Audio1," before each of his lines, and add no accent or
+  language words: a fresh description ("plain American English") pulls the take
+  off the reference, and the character sounds like a different person from clip
+  to clip. Delivery (quiet, gritted) goes after the tag. Judge by ear, played
+  right after an approved line.
 - **Dialogue after the action that motivates it.** She says "That's my dad"
   after she has picked the photograph up, in the shot where she holds it.
 - **Whose hands.** In first-person coverage say whose hands are in frame

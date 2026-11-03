@@ -116,9 +116,13 @@ server-side, so do not rely on `--no-thinking` as a hard suppression switch).
 The default output budget is 4,096 tokens for hosted chat (including durable
 chat) and storyboard planning. Keep enough room for every requested scene and
 complete tool arguments; `--max-tokens` overrides that budget.
-HTTP chat and storyboard-planning requests allow up to two minutes for a full
-response by default; `SOGNI_HTTP_TIMEOUT_MS` overrides this timeout. Other HTTP
-requests keep their existing timeouts.
+HTTP chat and storyboard-planning requests ask the API to keep long calls
+connected: a call still working after 90 seconds answers `200` and sends a space
+every 15 seconds until it finishes, for up to 35 minutes, and prints nothing
+meanwhile. They allow two minutes for the response to start by default;
+`SOGNI_HTTP_TIMEOUT_MS` overrides that wait, and it can no longer end a call once
+the response has started. Stopping the CLI cancels the call. Other HTTP requests
+keep their existing timeouts.
 
 ### Hosted tool surfaces (`sogni_tools`)
 

@@ -5091,6 +5091,129 @@ test('--api-chat waits for the final body once a kept-alive response has started
   }
 });
 
+test('--api-chat --json delivers a reply larger than a pipe buffer in full', async () => {
+  const content = 'x'.repeat(300 * 1024);
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Write something long.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(result.exitCode, 0);
+    assert.equal(JSON.parse(result.stdout.trim()).content.length, content.length);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('--api-chat reports a connection lost after the 200 as a retryable network failure', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.write(' ');
+    setTimeout(() => response.destroy(), 100);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(result.exitCode, 1);
+    const payload = JSON.parse(result.stdout.trim());
+    assert.equal(payload.success, false);
+    assert.equal(payload.errorCode, 'NETWORK_CONNECTION_LOST');
+    assert.equal(payload.retryable, true);
+    assert.match(payload.error, /connection to Sogni was lost/i);
+    assert.ok(payload.hint);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+for (const [name, body] of [
+  ['only the keep-alive spaces', '   '],
+  ['truncated JSON', '  {"choices":[{"message":'],
+  ['a proxy error page', '<html><body>502 Bad Gateway</body></html>'],
+  ['an empty reply', ''],
+]) {
+  test(`--api-chat fails on a 200 whose body is ${name}`, async () => {
+    const server = createServer((_request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(body);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const result = await runCliAsync([
+        '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+        '--json', 'Describe a storyboard concept.',
+      ], {
+        SOGNI_API_KEY: 'test-api-key',
+        SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+      });
+      assert.equal(result.exitCode, 1);
+      const payload = JSON.parse(result.stdout.trim());
+      assert.equal(payload.success, false);
+      assert.match(payload.error, /without a complete reply/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+}
+
+test('--api-chat fails on a 200 carrying an error beside its choices', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ error: { message: 'The worker failed.' }, choices: [] }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-chat', '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Describe a storyboard concept.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(result.exitCode, 1);
+    assert.match(JSON.parse(result.stdout.trim()).error, /The worker failed/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('--api-workflow storyboard-video reports an error sent in the body of a 200 response', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ error: { message: 'The model stopped responding.' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await runCliAsync([
+      '--api-workflow', 'storyboard-video',
+      '--api-base-url', `http://127.0.0.1:${server.address().port}`,
+      '--json', 'Create a 12 second 9:16 bakery launch video.',
+    ], {
+      SOGNI_API_KEY: 'test-api-key',
+      SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
+    });
+    assert.equal(result.exitCode, 1);
+    assert.match(JSON.parse(result.stdout.trim()).error, /The model stopped responding/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test('--api-chat honors an explicit HTTP response timeout', async () => {
   const server = createServer((_request, response) => {
     setTimeout(() => response.end(JSON.stringify({ choices: [] })), 200);

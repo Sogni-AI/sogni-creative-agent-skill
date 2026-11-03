@@ -16527,10 +16527,7 @@ async function main() {
 // process.exit drops whatever a pipe hasn't taken yet. On macOS that is everything past
 // its first 64 KB, so a long --json reply reached an agent cut short, with exit code 0.
 function flushStdout() {
-  return new Promise((resolve) => {
-    process.stdout.once('error', resolve); // The reader has gone.
-    process.stdout.write('', resolve);
-  });
+  return new Promise((resolve) => process.stdout.write('', resolve));
 }
 
 main().then(

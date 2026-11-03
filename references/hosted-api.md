@@ -121,8 +121,10 @@ connected: a call still working after 90 seconds answers `200` and sends a space
 every 15 seconds until it finishes, for up to 35 minutes, and prints nothing
 meanwhile. They allow two minutes for the response to start by default;
 `SOGNI_HTTP_TIMEOUT_MS` overrides that wait, and it can no longer end a call once
-the response has started. Stopping the CLI cancels the call. Other HTTP requests
-keep their existing timeouts.
+the response has started. Stopping the CLI cancels the call and refunds its
+renders, except a vendor-model render that has started, which keeps running and
+finishes into the account's history. Other HTTP requests keep their existing
+timeouts.
 
 ### Hosted tool surfaces (`sogni_tools`)
 

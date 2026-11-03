@@ -5071,7 +5071,7 @@ test('--api-chat waits for the final body once a kept-alive response has started
   const server = createServer((_request, response) => {
     response.setHeader('Content-Type', 'application/json');
     response.write(' ');
-    setTimeout(() => response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Finished after the keep-alive.' } }] })), 300);
+    setTimeout(() => response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Finished after the keep-alive.' } }] })), 1500);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
@@ -5081,7 +5081,7 @@ test('--api-chat waits for the final body once a kept-alive response has started
     ], {
       SOGNI_API_KEY: 'test-api-key',
       SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1',
-      SOGNI_HTTP_TIMEOUT_MS: '100',
+      SOGNI_HTTP_TIMEOUT_MS: '1000',
     });
     assert.equal(result.exitCode, 0);
     assert.match(result.stdout, /Finished after the keep-alive/);
@@ -5111,6 +5111,13 @@ test('--api-chat --json delivers a reply larger than a pipe buffer in full', asy
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('a direct render --json result larger than a pipe buffer arrives in full', async () => {
+  const prompt = 'p'.repeat(200 * 1024);
+  const { exitCode, stdout } = await runCliAsync(['--json', prompt]);
+  assert.equal(exitCode, 0);
+  assert.equal(JSON.parse(stdout.trim()).prompt.length, prompt.length);
 });
 
 test('--api-chat reports a connection lost after the 200 as a retryable network failure', async () => {

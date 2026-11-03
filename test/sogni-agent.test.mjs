@@ -5114,7 +5114,8 @@ test('--api-chat --json delivers a reply larger than a pipe buffer in full', asy
 });
 
 test('a direct render --json result larger than a pipe buffer arrives in full', async () => {
-  const prompt = 'p'.repeat(200 * 1024);
+  // Over a macOS pipe's 64 KB, under Linux's 128 KB limit on one argument.
+  const prompt = 'p'.repeat(100 * 1024);
   const { exitCode, stdout } = await runCliAsync(['--json', prompt]);
   assert.equal(exitCode, 0);
   assert.equal(JSON.parse(stdout.trim()).prompt.length, prompt.length);

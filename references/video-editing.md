@@ -12,8 +12,7 @@ reproducible results and are the only sanctioned file operations.
 
 ## Before you show a stitched video: check every join
 
-Judge video from many frames, never a handful (Mark, 2026-11-02: judging from "a
-handful of frames" is "a major major major detriment to quality"). Look at
+Judge video from many frames, never a handful: look at
 two dozen or more frames across every clip. After every `--concat-videos`,
 check each join: pull the last frame of each clip and the first frame of the
 next (`--extract-last-frame` / `--extract-first-frame`) and compare them at full

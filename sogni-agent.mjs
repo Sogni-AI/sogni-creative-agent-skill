@@ -50,7 +50,6 @@ import {
   PUBLIC_SKILL_DEFAULT_TOOL_DEFINITIONS,
   PUBLIC_SKILL_DEFAULT_TOOL_NAMES,
   QUALITY_TIERS,
-  SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS,
   VIDEO_WORKFLOW_DEFAULT_MODELS,
   buildStoryboardProject,
   buildStoryboardVideoHostedToolSequenceInput,
@@ -107,6 +106,8 @@ import {
   SEEDREAM_DEFAULT_HEIGHT,
   SEEDREAM_DEFAULT_WIDTH,
   SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
+  getSeedanceReferenceAudioMaxDurationSeconds,
+  getSeedanceV2VReferenceMaxDurationSeconds,
   calculateVideoDimensions as calculateSharedVideoDimensions,
   isMinimaxH3TwoStageModelId,
   minimaxH3TwoStageCanvasShortEdge,
@@ -11187,7 +11188,7 @@ async function trimSeedanceReferenceAudioToMp3(request) {
   const start = Math.max(0, Number(request.start) || 0);
   const duration = Math.max(
     0.1,
-    Math.min(15, Number(request.duration) || 15),
+    Math.min(seedanceReferenceAudioMaxSeconds(), Number(request.duration) || seedanceReferenceAudioMaxSeconds()),
   );
   try {
     writeFileSync(inputPath, Buffer.from(request.data));
@@ -11234,13 +11235,22 @@ async function trimSeedanceV2VSourceVideo(request) {
   };
 }
 
+// Seedance 2.5 and 2.5 Uncensored accept 30 s of reference video and audio; the 2.0 family accepts 15 s.
+function seedanceReferenceVideoMaxSeconds() {
+  return getSeedanceV2VReferenceMaxDurationSeconds(options.model);
+}
+
+function seedanceReferenceAudioMaxSeconds() {
+  return Math.floor(getSeedanceReferenceAudioMaxDurationSeconds(options.model));
+}
+
 function seedanceReferenceAudioWindow() {
   const requestedDuration = options.audioDuration ?? options.duration;
   const maxDurationSeconds = Math.min(
     Number.isFinite(Number(requestedDuration)) && Number(requestedDuration) > 0
       ? Number(requestedDuration)
-      : SEEDANCE_R2V_REFERENCE_AUDIO_MAX_DURATION_SECONDS,
-    15,
+      : getSeedanceReferenceAudioMaxDurationSeconds(options.model),
+    seedanceReferenceAudioMaxSeconds(),
   );
   return {
     maxDurationSeconds,
@@ -11297,7 +11307,7 @@ async function prepareSeedanceReferenceVideoUploadFile(pathOrUrl, buffer) {
   const sourceDurationSeconds = await probeLocalMediaDurationSeconds(pathOrUrl);
   const requestedDuration = Number.isFinite(Number(options.duration))
     ? Number(options.duration)
-    : SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS;
+    : seedanceReferenceVideoMaxSeconds();
   const prepared = await prepareSharedSeedanceV2VSourceVideo(
     buffer,
     rawMimeType,
@@ -11305,7 +11315,7 @@ async function prepareSeedanceReferenceVideoUploadFile(pathOrUrl, buffer) {
     sourceDurationSeconds,
     requestedDuration,
     options.videoStart ?? 0,
-    { trimVideo: trimSeedanceV2VSourceVideo },
+    { trimVideo: trimSeedanceV2VSourceVideo, modelId: options.model },
   );
   if (!options.quiet && prepared.trimmed) {
     console.error('Prepared Seedance V2V reference video clip before upload.');
@@ -11481,7 +11491,7 @@ async function trimSeedanceV2VSourceVideoBuffer(buffer, sourceLabel, startOffset
   const start = Math.max(0, Number(startOffset) || 0);
   const duration = Math.max(
     0.1,
-    Math.min(SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS, Number(requestedDuration) || SEEDANCE_V2V_REFERENCE_MAX_DURATION_SECONDS),
+    Math.min(seedanceReferenceVideoMaxSeconds(), Number(requestedDuration) || seedanceReferenceVideoMaxSeconds()),
   );
   try {
     writeFileSync(inputPath, buffer);
@@ -15197,7 +15207,8 @@ async function main() {
         && shouldTrimSeedanceV2VSourceVideo({
           sourceDurationSeconds: null,
           requestedDurationSeconds: options.duration,
-          startOffsetSeconds: options.videoStart ?? 0
+          startOffsetSeconds: options.videoStart ?? 0,
+          maxDurationSeconds: seedanceReferenceVideoMaxSeconds()
         })
       ) {
         videoBuffer = await trimSeedanceV2VSourceVideoBuffer(

@@ -3294,6 +3294,58 @@ test('seedance 2.5 first-frame generation keeps its frame anchor without an omni
   assert.ok(state.lastVideoProject.referenceImage);
 });
 
+async function seedanceLocalSourceRun(model, duration) {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-source-length-'));
+  const video = join(tempDir, 'source.mp4');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
+  const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  const ffmpegLog = join(tempDir, 'ffmpeg-args.jsonl');
+  writeFileSync(video, Buffer.from('thirty second source video'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+console.log(args.includes('format=duration') ? '30' : '24/1');
+`);
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+import { appendFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(ffmpegLog)}, JSON.stringify(args) + '\\n');
+if (args.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(0); }
+writeFileSync(args[args.length - 1], 'trimmed source video');
+`);
+  chmodSync(fakeFfprobe, 0o755);
+  chmodSync(fakeFfmpeg, 0o755);
+  let result;
+  await withTestApiServer(async (apiBaseUrl) => {
+    result = await runCliAsync(
+      ['--api-base-url', apiBaseUrl, '--video', '-m', model, '--ref-video', video, '--duration', String(duration), 'Replace the lead with the mascot.'],
+      { SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1', FFPROBE_PATH: fakeFfprobe, FFMPEG_PATH: fakeFfmpeg },
+    );
+  });
+  let ffmpegCalls = [];
+  try {
+    ffmpegCalls = readFileSync(ffmpegLog, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  } catch {}
+  return { ...result, trims: ffmpegCalls.filter(args => args.includes('-t')) };
+}
+
+test('seedance 2.5 keeps a 30-second local edit source untrimmed', async () => {
+  for (const model of ['seedance2-5-v2v', 'seedance2-5-uncensored-v2v']) {
+    const result = await seedanceLocalSourceRun(model, 30);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.doesNotMatch(result.stderr, /Prepared Seedance V2V reference video clip/, model);
+    assert.equal(result.trims.length, 0, model);
+  }
+});
+
+test('seedance 2.0 still trims a 30-second local edit source to 15 seconds', async () => {
+  const result = await seedanceLocalSourceRun('seedance2-v2v', 15);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(result.stderr, /Prepared Seedance V2V reference video clip/);
+  assert.equal(result.trims.length, 1);
+  const args = result.trims[0];
+  assert.equal(args[args.indexOf('-t') + 1], '15');
+});
+
 test('seedance 2.5 edit requires a source video', () => {
   expectCliError(
     ['--video', '-m', 'seedance2-5', '--seedance-task-type', 'edit', 'edit the clip'],

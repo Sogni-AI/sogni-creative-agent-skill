@@ -124,8 +124,8 @@ sogni-agent              # OpenClaw (auto-detected) and everything else
 
 ## Configure Sogni API key
 
-Once-only setup, used by every integration above. The API key can always be
-found by logging into https://dashboard.sogni.ai and opening the account menu.
+Once-only setup, used by every integration above. Get an API key at
+https://dashboard.sogni.ai/api-key. It's shown only once, so save it when you create it.
 
 ```bash
 mkdir -p ~/.config/sogni

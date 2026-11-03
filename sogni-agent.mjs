@@ -1028,8 +1028,8 @@ function fatalCliError(message, opts = {}) {
 
 // Friendly guidance shown when the Sogni API key is missing or rejected.
 const INVALID_API_KEY_HINT =
-  'Your Sogni API key was rejected. Verify it — or generate a new one — by ' +
-  'logging into https://dashboard.sogni.ai and opening the account menu. ' +
+  'Your Sogni API key was rejected. Verify it — or generate a new one — at ' +
+  'https://dashboard.sogni.ai/api-key. ' +
   "If you don't have a Sogni account yet, create one there first, then add its API key.";
 
 // Detect an invalid/rejected API key across the several shapes the SDK can
@@ -8125,8 +8125,8 @@ function loadCredentials() {
   const err = new Error('No Sogni API key found.');
   err.code = 'MISSING_CREDENTIALS';
   err.hint = credentialsFileExisted
-    ? `Found ${CREDENTIALS_PATH} but it has no usable "SOGNI_API_KEY=..." line. Check for typos/extra quotes, or set SOGNI_API_KEY in the environment. Get your key at https://dashboard.sogni.ai (account menu).`
-    : 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can find your API key by logging into https://dashboard.sogni.ai and opening the account menu.';
+    ? `Found ${CREDENTIALS_PATH} but it has no usable "SOGNI_API_KEY=..." line. Check for typos/extra quotes, or set SOGNI_API_KEY in the environment. Get your key at https://dashboard.sogni.ai/api-key.`
+    : 'Set SOGNI_API_KEY, or configure SOGNI_CREDENTIALS_PATH with SOGNI_API_KEY. You can get an API key at https://dashboard.sogni.ai/api-key.';
   err.details = {
     triedEnv: ['SOGNI_API_KEY'],
     triedFile: CREDENTIALS_PATH,
@@ -14158,7 +14158,7 @@ async function runDoctor() {
       }
     } catch (err) {
       if (isInvalidApiKeyError(err)) {
-        add('auth', 'fail', 'API key rejected — get a fresh key at https://dashboard.sogni.ai (account menu)');
+        add('auth', 'fail', 'API key rejected — get a fresh key at https://dashboard.sogni.ai/api-key');
       } else {
         add('auth', 'warn', `could not verify the key (network?): ${err?.message || err}`);
       }

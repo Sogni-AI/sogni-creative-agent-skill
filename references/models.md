@@ -681,7 +681,8 @@ itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
 | `ltx23-a2v` | `ltx23-22b-fp8_a2v_distilled` |
 | `ltx23-v2v` | `ltx23-22b-fp8_v2v_distilled` |
 | `ltx23-eros`, `10eros` | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
-| `wan22`, `wan22-t2v` | `wan_v2.2-14b-fp8_t2v_lightx2v` |
+| `wan22-t2v` | `wan_v2.2-14b-fp8_t2v_lightx2v` |
+| `wan22` | LTX-2.5 (`ltx25-22b-int8_<workflow>_distilled`) for t2v, i2v, v2v, a2v and ia2v runs; `wan_v2.2-14b-fp8_s2v_lightx2v` and the Animate models for s2v and animate workflows |
 | `wan22-i2v` | `wan_v2.2-14b-fp8_i2v_lightx2v` |
 | `wan22-s2v` | `wan_v2.2-14b-fp8_s2v_lightx2v` |
 | `wan22-animate-move` | `wan_v2.2-14b-fp8_animate-move_lightx2v` |
@@ -782,9 +783,10 @@ Learned on Sogni's own productions (Sogni Meme World, 2026-10 and 2026-11). They
 - **Never name what must not appear.** There is no negative prompt, and naming
   the thing brings it in: "glasses he isn't wearing" put glasses on him.
   Describe only what is there.
-- **Spell spoken words the way they sound.** "Rickrolled" came out as
-  "Rick-wrapped"; writing "Rick-rolled" fixed it. Run speech-to-text over every
-  take with dialogue.
+- **Spell names and coined words the way they sound.** The line keeps the
+  user's words; only the spelling of a word the model would say wrong changes:
+  "Rickrolled" came out as "Rick-wrapped", and writing "Rick-rolled" fixed it.
+  Run speech-to-text over every take with dialogue.
 - **One local `--ref-audio` per run.** Further audio references must be HTTPS
   URLs, so put the local file first.
 - **Keyframes go through reference mode.** To pin where a move or a
@@ -932,15 +934,18 @@ image; r2v accepts up to nine reference images.
 
 ### HappyHorse 1.1 prompting tips
 
-HappyHorse rewards short, concrete scene direction — roughly 15–30 words for a
-simple shot. One subject, one action, one setting, and one strong visual or
-camera cue is the sweet spot; over-long prompts reduce face and hand fidelity, so
-simplify before adding detail.
+HappyHorse rewards concrete scene direction: one subject, one main action
+thread, one setting, and one strong visual or camera cue. Sogni's own prompt
+writer gives a single-beat shot about 80–160 words
+([video-prompting.md § HappyHorse 1.1 Prompting](./video-prompting.md#happyhorse-11-prompting),
+or `sogni-agent prompt-guide happyhorse-1.1 --mode <t2v|i2v|r2v>`). Spend them on
+what is seen and heard, not filler: fal's guide finds that piled-up detail lowers
+face and hand fidelity.
 
 **What to include:**
 
 - **Observable visual detail**: "overcast daylight", "wet asphalt", "warm amber
-  backlight", "shallow depth of field" — not evaluative filler like "cinematic",
+  backlight", "long window shadows" — not evaluative filler like "cinematic",
   "beautiful", "stunning", "epic", or "masterpiece".
 - **One cinematography idea**: put the camera move last and be specific — "slow
   dolly-in", "lateral orbit with parallax", "locked-off wide". Prefer one exact
@@ -948,9 +953,9 @@ simplify before adding detail.
 - **Plain prose only**: no tag lists, JSON, or weighting syntax; HappyHorse
   ignores negative prompts.
 
-**Multi-beat clips:** use a timecoded shot list rather than "first X then Y" —
-for example: *"Shot 1 (wide establishing, 0–2 s): …; Shot 2 (mid tracking,
-2–5 s): …"*
+**Multi-beat clips:** use time-coded beats rather than "first X then Y", for
+example: *"0-2s: a wide establishing shot of …, 2-5s: cut to a medium tracking
+shot of …"*, and cut only when the request asks for cuts, a montage, or separate shots.
 
 **By mode:**
 
@@ -1162,8 +1167,8 @@ video-conditioned R2V requires a worker above 40 GB.
   Ref2VA Turbo uses the exact upstream Euler/simple recipe and accepts only
   `--sampler euler`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch and a `negativePrompt`
-  parameter is ignored wherever it is accepted. Put negative direction in the
-  prompt text instead.
+  parameter is ignored wherever it is accepted. Put exclusions in the prompt
+  text as positive facts ("the hall is empty").
 - **Balanced and Turbo use the same prompt contract as Standard H3.** Balanced
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
   `simple` scheduler; only Turbo's sampler has the three

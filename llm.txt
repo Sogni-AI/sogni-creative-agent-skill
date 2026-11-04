@@ -26,8 +26,10 @@ Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); Qwen
 allowed controls, and hosted alternatives.
 
 Prompts: direct CLI mode runs no model-aware prompt shaper (Wan 3 aside), so
-before writing a prompt read the chosen model's section of
-`references/video-prompting.md` (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) or
+before writing a prompt run `sogni-agent prompt-guide <model> --mode <mode>`
+(free and offline: the rules Sogni's own prompt writer uses for that model and
+mode) and read the chosen model's section of `references/video-prompting.md`
+(LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3, HappyHorse) or
 `references/image-prompting.md`.
 
 MOSS-Image SFT uses `-m moss_image_sft_int8_convrot`: 50 steps, guidance 3,

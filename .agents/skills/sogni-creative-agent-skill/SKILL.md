@@ -111,12 +111,12 @@ sogni-agent-hermes --upscale-video ./clip.mp4 -o ./clip-1440p.mp4
 # Generate or animate video
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
 sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "the cyclist stands on the pedals and sprints out of frame as the camera whip-pans to follow"
-sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "the camera pushes through the doorway as the lights come up, arriving on the final frame"
+sogni-agent-hermes --video --ref ./first.png --ref-end ./last.png -o ./transition.mp4 "A wide shot opens on the dim hallway of the first frame as the camera pushes through the doorway, the overhead lights flickering on one by one across the polished floor, and arrives on the bright room of the final frame while footsteps echo and a switch clicks."
 sogni-agent-hermes --video -m minimax-h3-fasth3-ia2v-turbo --ref ./first.png --ref-audio ./voice.m4a --duration 8 -o ./talking.mp4 "<I2V preamble plus three-field H3 prompt>"
-sogni-agent-hermes --video -m seedance2-5 -c ./courier.png --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A tracking shot follows a courier sprinting through a rain-soaked night market. Use @Image1 for the courier's face and yellow jacket. 0–3 s: she vaults the turnstile as stall awnings whip past the lens; 3–6 s: she skids around a corner, scattering pigeons; 6–8 s: she bursts into the open street, breathing hard. Rain hiss, slapping footsteps."
+sogni-agent-hermes --video -m seedance2-5 -c ./courier.png --target-resolution 1080 --duration 8 -o ./seedance-1080p.mp4 "A low tracking shot follows a courier sprinting through a rain-soaked night market, stall awnings and paper lanterns whipping past the lens. Use @Image1 for the courier's face and yellow jacket. 0-3s: she vaults the turnstile at the market gate and lands mid-stride, rain spraying off her shoulders as two stall keepers jerk back. 3-6s: she skids around a fruit stall on the wet tiles, one hand slapping the counter to swing her through the turn, and a flock of pigeons bursts up from the crates she clips. 6-8s: she bursts out into the open street, chest heaving, the neon signs behind her smearing into streaks of color as the camera holds level with her. Rain hiss, slapping footsteps, beating wings, a vendor shouting in the distance. Her yellow jacket and face stay the same in every frame."
 sogni-agent-hermes --video -m wan3 --target-resolution 1080 --duration 8 -o ./wan3.mp4 'a presenter says "Welcome" in a detailed studio'
-sogni-agent-hermes --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 -o ./seedance-uncensored.mp4 "Two dancers spin through a packed neon club as the camera arcs fast around them, strobes flashing across their faces"
-sogni-agent-hermes --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 -o ./seedance-mini-uncensored.mp4 "A slow dolly through a neon street at night"
+sogni-agent-hermes --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 -o ./seedance-uncensored.mp4 "A low camera circles two dancers spinning through a packed neon club, the crowd and strobe lights streaking past the lens. 0-3s: they lock hands and whip into a tight turn, her sequined dress and his loose shirt flaring out as the dancers around them throw their arms up. 3-6s: the taller dancer dips her partner low to the floor while the camera swings around them, magenta and blue light washing across their faces and sweat glinting on their shoulders. 6-8s: they snap upright together on the bass drop, chests heaving and grinning, as the crowd surges in behind them. Pounding bass, the crowd cheering, heels striking the floor. Both dancers keep the same faces, outfits and hair from the first frame to the last."
+sogni-agent-hermes --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 -o ./seedance-mini-uncensored.mp4 "A slow dolly glides down a rain-soaked neon street at night at chest height, the wet asphalt mirroring pink and blue signs. 0-3s: a lone cyclist in a yellow raincoat rolls through the frame from left to right, tires hissing through a wide puddle and scattering the reflections. 3-6s: steam curls up from a street grate as a shop shutter on the right rattles down to the pavement. 6-8s: the dolly comes to rest on a glowing noodle-bar window where a cook tosses noodles in a smoking wok. Steady rain patter on awnings, distant traffic, the shutter's metal clatter. The street stays empty apart from the cyclist and the cook."
 sogni-agent-hermes --video -m wan3-enhanced --target-resolution 1080 --duration 8 --wan3-ratio 16:9 -o ./wan3-enhanced.mp4 'a presenter says "Welcome" in a detailed studio'
 
 # Generate music
@@ -200,10 +200,13 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
   and bounded edits respected: read the [style-transfer recipes](references/personas-memory.md#style-transfer-recipes).
 - Krea 2 LoRA ids, strength ranges, bipolar sliders, and stacking up to 8 in
   one render: read [krea2-loras.md](references/krea2-loras.md).
-- Before writing any video prompt, read the section of
+- Before writing any image or video prompt, run
+  `sogni-agent prompt-guide <model> --mode <mode>` for the model and mode you
+  chose: it prints the rules Sogni's own prompt writer uses, free and offline.
+- Then, for a video prompt, read the section of
   [video-prompting.md](references/video-prompting.md) for the chosen model: LTX,
-  MiniMax H3, Seedance, WAN 2.2, Wan 3, or HappyHorse (via its link). Direct mode
-  runs no model-aware prompt shaper (Wan 3 aside), so the model reads your words.
+  MiniMax H3, Seedance, WAN 2.2, Wan 3, or HappyHorse. Direct mode runs no
+  model-aware prompt shaper (Wan 3 aside), so the model reads your words.
 - Before writing any image prompt, rendered or returned as text, for SD/SDXL,
   FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen, Z-Image, GPT Image,
   and model-specific editing: read [image-prompting.md](references/image-prompting.md).

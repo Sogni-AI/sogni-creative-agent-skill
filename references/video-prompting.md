@@ -1,14 +1,20 @@
 # Video Prompting Guide (LTX-2.x, MiniMax H3, Seedance, WAN 2.2, Wan 3, pacing, orientation, camera language)
 
-Read the section for the model you are about to run before writing any video
-prompt, and read [High-Res Video Routing](#high-res-video-routing) whenever the
-user asks for "hd", "1080p", "4k", "uhd", or "high-res" video. Direct CLI mode
-runs no model-aware prompt shaper: the model reads the words you write (Wan 3
-is the exception; see its section). So the section's rules are the only shaping
-your prompt gets.
+Before writing any video prompt, run `sogni-agent prompt-guide <model> --mode
+<mode>` for the model and mode you are about to run (free and offline), and read
+that model's section below. Read [High-Res Video Routing](#high-res-video-routing)
+whenever the user asks for "hd", "1080p", "4k", "uhd", or "high-res" video.
+Direct CLI mode runs no model-aware prompt shaper: the model reads the words you
+write (Wan 3 is the exception; see its section). So those rules are the only
+shaping your prompt gets. Each section ends with the rules Sogni's own prompt
+writer uses for one mode, generated from `@sogni-ai/sogni-intelligence-client`;
+`sogni-agent prompt-guide` prints the same rules for every mode. Some of them
+speak to that writer ("the base request", "output only the rewritten prompt"):
+read the base request as your user's request.
 
-The families require different prompt **shapes**. LTX wants one unbroken prose
-paragraph with no line breaks and no negative phrasing. MiniMax H3 requires the
+The families require different prompt **shapes**. LTX wants plain present-tense
+prose (in text-to-video, one sentence per shot) with no markup and no negative
+phrasing. MiniMax H3 requires the
 official ordered-field rewrite contract, shot notation, speaker IDs, dialogue
 tags, and mode-specific alignment preamble. Seedance wants a director's shot
 brief with one job per `@Image1` / `@Video1` / `@Audio1` reference and
@@ -20,7 +26,7 @@ the section that matches the model you are about to invoke:
 - Seedance 2.0, Mini, Fast and 2.5, uncensored variants included: [Seedance Prompting](#seedance-prompting).
 - WAN 2.2: [WAN 2.2 Prompting](#wan-22-prompting).
 - Wan 3 and Wan 3.0 Enhanced: [Wan 3 Prompting](#wan-3-prompting).
-- HappyHorse 1.1: [models.md § HappyHorse 1.1 prompting tips](./models.md#happyhorse-11-prompting-tips).
+- HappyHorse 1.1: [HappyHorse 1.1 Prompting](#happyhorse-11-prompting).
 
 Set the clip length yourself on every video command (`--duration`, or Wan 3's
 `--smart-duration`). Without it, the CLI counts every double-quoted span in the
@@ -44,15 +50,18 @@ never substitute a generic prompt or another model's syntax.
 Whenever the chosen video model is LTX-2.5 (`ltx25-*`, including the default
 text-to-video and first/last-frame models) or an LTX-2.3 rollback model
 (`ltx23-*`, 10Eros), do not pass the user's short request through unchanged.
-Rewrite it into an LTX-safe prompt before calling `sogni-agent`.
+Rewrite it into an LTX-safe prompt before calling `sogni-agent`. The shape and
+length differ by version and mode: print the rules for the one you will run
+(`sogni-agent prompt-guide ltx25 --mode i2v`); both versions' text-to-video rules
+are generated in full at the end of this section.
 
-- Output one single paragraph only. No line breaks, bullet points, section labels, tag lists, or screenplay formatting.
-- **Shots.** When the user has not asked for cuts, use 4-8 flowing present-tense sentences describing one continuous shot, and invent no cut, montage, or unrelated scene jump.
-  - **LTX-2.5 text-to-video keeps every shot the user asks for.** Write one sentence per requested shot, in the user's order, each with exactly one shot type (extreme wide, wide, medium, medium close-up, close-up, or extreme close-up). Open every sentence after the first with its cut time, for example `At exactly 3 seconds, a hard cut switches to a close-up of the captain as he shouts "Hard to port!"`. Copy any cut times the user gave; otherwise space the cuts so every shot is seen.
-  - LTX-2.5 image-to-video and first/last-frame render one continuous take, and the LTX-2.3 rollback models keep the older one-continuous-shot rule. If the user asked for a cut on one of those, say so instead of dropping it silently.
-- Start with shot scale plus the scene's visual identity, then describe environment, time of day, atmosphere, textures, and specific light sources.
-- Keep people, clothing, props, and locations concrete and stable across the whole paragraph.
-- Give each shot one main action thread from start to finish. Use connectors like `as`, `while`, and `then` so motion reads as a continuous filmed moment.
+- **Text-to-video (LTX-2.5 and LTX-2.3): one sentence per shot**, each with exactly one shot type (extreme wide, wide, medium, medium close-up, close-up, or extreme close-up). When the user has not asked for cuts, write one continuous shot and invent no cut, montage, or scene jump. When they ask for shots, keep every one in their order and open every sentence after the first with its cut time, for example `At exactly 3 seconds, a hard cut switches to a close-up of the captain as he shouts "Hard to port!"`. Copy any cut times the user gave; otherwise space the cuts so every shot is seen. A single newline between shot sentences is allowed.
+- **Image-to-video and first/last-frame render one continuous take.** On LTX-2.5 the prompt opens exactly on the supplied image in one or two short sentences (a last-frame-only clip instead ends on it); on LTX-2.3 it is one paragraph of short sentences about what happens next, each simultaneous change in its own sentence. If the user asked for a cut on one of these, say so instead of dropping it silently.
+- Follow the length in the printed rules, but never drop, merge, or shorten a requested detail to meet it.
+- No bullet points, section labels, tag lists, Markdown, or screenplay formatting.
+- Begin with action or visual detail, never "The scene opens", "We see", or "There is". In text-to-video that is the shot scale plus the scene's visual identity, its environment, time of day, textures, and specific light sources; in the image modes the frame already shows them, so start on the first motion.
+- Keep people, clothing, props, and locations concrete and stable across the whole prompt.
+- Give each shot one main action thread from start to finish. In an LTX-2.5 one-sentence shot, connectors like `as`, `while`, and `then` keep the motion reading as one continuous filmed moment.
 - Be specific and literal about motion. Describe what moves, where it moves,
   what it contacts, and what happens next in chronological order. Do not replace
   visible actions with euphemisms or broad summaries. For example, replace "a
@@ -60,9 +69,9 @@ Rewrite it into an LTX-safe prompt before calling `sogni-agent`.
   and returns to the center"; replace "fluid pouring" with "Water flows from
   the left container through the connecting tube into the right container
   until both levels are equal."
-- Treat native audio as part of the scene design. Integrate relevant dialogue,
-  voice delivery, foley, environmental sound, and music with the actions that
-  produce or accompany them.
+- Treat native audio as part of the scene design: quoted dialogue plus the one
+  or two most important foley or ambient sounds, woven in with the actions that
+  produce them, and music only when the user asks for it.
 - Write dialogue out verbatim in double quotes and identify the speaker and
   delivery. Never merely suggest dialogue with phrases such as "they talk,"
   "she says something," or "the couple discusses the scene."
@@ -71,7 +80,7 @@ Rewrite it into an LTX-safe prompt before calling `sogni-agent`.
 - Use positive phrasing only. Do not add negative prompts, "no ..." clauses, vague filler words like `beautiful` or `nice`, or structural markup such as `[DIALOGUE]`. **This positive-only, no-markup rule is scoped to the LTX family only.** MiniMax H3 has no separate negative-prompt input and instead requires its ordered fields, `[Shot N]` notation, `(Sx)` speaker IDs, and `<d>` dialogue tags; see [MiniMax H3 Prompting](#minimax-h3-prompting).
 - Keep any visible text the user asks for (a sign, a title card, a label) exactly as written, in double quotes after `reads`: `a neon sign above the door reads "OPEN ALL NIGHT"`. Add no text, logos, or captions they did not ask for.
 - Fit every action the user names into the clip, in order. Add actions of your own only to fill out a thin request (see Duration-Aware Pacing below). If the named actions cannot all finish on screen in the requested length, say so and suggest a longer clip; never drop one silently.
-- Preserve the user's request, but expand it into cinematic prose. Do not invent a different story just to make the prompt longer.
+- Preserve the user's request and enrich it only with observable detail. Do not invent a different story just to make the prompt longer.
 
 ### Duration-Aware Pacing
 
@@ -109,10 +118,112 @@ Add `slow` or `fast` only when the request or its action implies it: a quiet por
 ### Example rewrite
 
 ```text
-User ask: "4k video of a woman in a neon alley"
+User ask: "video of a woman in a neon alley"
 
-Use this shape instead: "A medium cinematic shot frames a woman in her 30s standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement while warm steam drifts from street vents. She wears a dark trench coat with damp strands of black hair clinging near her cheek as light glances across the fabric texture and the brick walls behind her. She turns toward the camera and steps forward with measured focus, one hand tightening around the strap of her bag while rain taps softly on the metal fire escape and a distant train hum rolls through the block. The camera performs a slow push-in as her jaw sets and her breathing steadies, maintaining smooth stabilized motion and a tense urban-thriller mood."
+LTX-2.5 text-to-video, one shot, so one sentence: "A medium shot frames a woman in her 30s in a dark trench coat standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement and steam drifting from a street vent behind her, as she turns toward the camera and steps forward with one hand tightening around her bag strap while the camera pushes in on her set jaw, rain tapping on a metal fire escape and a distant train humming through the block."
 ```
+
+<!-- BEGIN GENERATED PROMPT GUIDE: ltx-2.5 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: ltx-2.5
+
+`sogni-agent prompt-guide ltx25 --mode t2v` prints the rules Sogni's own prompt writer uses for LTX 2.5 text-to-video, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | LTX 2.5 text-to-video | `sogni-agent prompt-guide ltx25 --mode t2v` |
+| `i2v` | LTX 2.5 first-frame image-to-video | `sogni-agent prompt-guide ltx25 --mode i2v` |
+| `l2v` | LTX 2.5 last-frame image-to-video | `sogni-agent prompt-guide ltx25 --mode l2v` |
+| `flf` | LTX 2.5 first-and-last-frame video | `sogni-agent prompt-guide ltx25 --mode flf` |
+| `a2v` | LTX 2.5 audio-to-video | `sogni-agent prompt-guide ltx25 --mode a2v` |
+| `ia2v` | LTX 2.5 image-and-audio-to-video | `sogni-agent prompt-guide ltx25 --mode ia2v` |
+| `v2v` | LTX 2.5 video-to-video | `sogni-agent prompt-guide ltx25 --mode v2v` |
+
+```text
+# LTX 2.5 text-to-video
+
+Guide: ltx-2.5 t2v
+Models: ltx25
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+Begin immediately with action or visual detail. Never begin with "The scene opens", "We see", or "There is". Describe only objective, visible, and audible facts; express emotion through observable face, posture, gesture, performance, and voice rather than inferred intent.
+
+Include the visual details needed to identify the subject, setting, action, continuity, and requested style. Prefer concrete nouns and motion verbs. Faithfully enrich an underspecified request with observable motion, weather or environmental interaction, key material cues, and visible identity anchors, but never replace or bury a requested beat. When a human appears, preserve their distinguishing visible features consistently. Never infer ethnicity, nationality, religion, or culture.
+
+Give every requested shot one sentence and exactly one clear shot type (extreme wide shot, wide shot, medium shot, medium close-up, close-up, or extreme close-up). Add at most one camera motion or subject-relative viewpoint when it materially clarifies that shot. Read the request in whatever language and wording it uses. If it specifies multiple shots, scenes, or cuts, preserve all of them in order and begin every sentence after the first with an explicit transition such as "At exactly 2.5 seconds, a hard cut switches to..." Preserve requested transition types and copy every requested timestamp verbatim in numeric notation; never spell a numeric timestamp out as words. When no cut time was supplied but clip duration is known, place simple numeric cut times that divide the requested shots evenly enough for every shot to be seen. When the user does not explicitly request multiple shots, scenes, or cuts, or asks for one continuous take in any wording, write one continuous shot and do not invent a cut.
+
+Keep sound concise: preserve exact quoted dialogue in its original language plus the one or two most important environmental, foley, or requested music cues. If the request asks, in any language or wording, for silence, a muted clip, or no sound, describe that silence and add no sound; otherwise include the sounds the scene makes. Never invent dialogue when the request does not imply speech, talking, singing, or conversation. Preserve exact quoted dialogue, visible text, proper nouns, and product or brand spelling.
+
+Describe strict chronological, real-time flow and keep every requested action in motion. Use detailed but bounded prose with one sentence per shot; a single newline between shot sentences is allowed. Do not use bullets, headings, labels, JSON, preamble, or Markdown. Target 35-65 words per shot, usually 60-100 words for a single-shot request, and stay under 70 words per shot (under 140 words for one or two shots) so every cut still reads. When the request itself is longer than that, keep all of it: never drop, merge, or shorten a requested detail to meet a length target, and trim only your own additions. If the user wrote in another language, write the visual prompt in English while retaining exact dialogue and visible text in the requested language.
+
+Preserve requested visual style and production value without adding new objects, people, actions, dialogue, shots, or story events. When the user did not specify a rendering style, describe the look the request implies (for example phone footage, home video, documentary, animation, or film) in concrete terms, and do not add generic quality words.
+
+## Model notes
+
+- Keep LTX 2.5 prompts detailed but bounded: preserve production-ready input, faithfully enrich observable identity, motion, and environment, describe the look the request implies rather than adding generic quality words, target 35-65 words per shot, and stay under 70 words per shot (under 140 words for one or two shots) without dropping any requested detail.
+- Give every requested shot one sentence and one clear shot type; preserve every requested transition and copy exact cut times in numeric notation, and do not invent cuts when the request asks, in any language or wording, for one continuous take.
+- Preserve exact quoted dialogue and visible text, retain only the most important synchronized ambience and foley, describe silence when the request asks for silence or no sound, and never invent dialogue unless speech, talking, singing, or conversation is requested.
+- For I2V, match the attached first frame exactly and use one continuous take. For FLF, ground both endpoint images and describe a physically coherent continuous transition between them.
+- Use the standard T2V, I2V/FLF, A2V, or IA2V workflow that matches the supplied assets.
+- FLF uses the I2V public model ID with a separate first/last-frame template.
+- Fast, HQ, and Pro currently use the release-validated official Distilled/Turbo workflow. Dev checkpoints are withheld from public routing until upstream publishes and Sogni validates an official ComfyUI Dev recipe.
+- V2V supports canny, depth, pose, detailer, inpaint, and outpaint through the validated Distilled path. LTX 2.5 pose requires both a source video and a still reference image for the subject appearance.
+- The pinned official control templates supply their compatible Union Control or In/Outpainting IC-LoRA internally.
+- Do not attach LTX 2.3-only voice ID-LoRA, community transition LoRA, or 10Eros assets.
+```
+
+<!-- END GENERATED PROMPT GUIDE: ltx-2.5 -->
+
+<!-- BEGIN GENERATED PROMPT GUIDE: ltx-2.3 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: ltx-2.3
+
+`sogni-agent prompt-guide ltx23 --mode t2v` prints the rules Sogni's own prompt writer uses for LTX 2.3 text-to-video, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | LTX 2.3 text-to-video | `sogni-agent prompt-guide ltx23 --mode t2v` |
+| `i2v` | LTX 2.3 first-frame image-to-video | `sogni-agent prompt-guide ltx23 --mode i2v` |
+| `flf` | LTX 2.3 first-and-last-frame video | `sogni-agent prompt-guide ltx23 --mode flf` |
+| `a2v` | LTX 2.3 audio-to-video | `sogni-agent prompt-guide ltx23 --mode a2v` |
+| `ia2v` | LTX 2.3 image-and-audio-to-video | `sogni-agent prompt-guide ltx23 --mode ia2v` |
+| `v2v` | LTX 2.3 video-to-video | `sogni-agent prompt-guide ltx23 --mode v2v` |
+
+```text
+# LTX 2.3 text-to-video
+
+Guide: ltx-2.3 t2v
+Models: ltx23
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+Begin immediately with action or visual detail. Never begin with "The scene opens", "We see", or "There is". Describe only objective, visible, and audible facts; express emotion through observable face, posture, gesture, performance, and voice rather than inferred intent.
+
+Include the visual details needed to identify the subject, setting, action, continuity, and requested style. Prefer concrete nouns and motion verbs. Faithfully enrich an underspecified request with observable motion, weather or environmental interaction, key material cues, and visible identity anchors, but never replace or bury a requested beat. When a human appears, preserve their distinguishing visible features consistently. Never infer ethnicity, nationality, religion, or culture.
+
+Give every requested shot one sentence and exactly one clear shot type (extreme wide shot, wide shot, medium shot, medium close-up, close-up, or extreme close-up). Add at most one camera motion or subject-relative viewpoint when it materially clarifies that shot. Read the request in whatever language and wording it uses. If it specifies multiple shots, scenes, or cuts, preserve all of them in order and begin every sentence after the first with an explicit transition such as "At exactly 2.5 seconds, a hard cut switches to..." Preserve requested transition types and copy every requested timestamp verbatim in numeric notation; never spell a numeric timestamp out as words. When no cut time was supplied but clip duration is known, place simple numeric cut times that divide the requested shots evenly enough for every shot to be seen. When the user does not explicitly request multiple shots, scenes, or cuts, or asks for one continuous take in any wording, write one continuous shot and do not invent a cut.
+
+Keep sound concise: preserve exact quoted dialogue in its original language plus the one or two most important environmental, foley, or requested music cues. If the request asks, in any language or wording, for silence, a muted clip, or no sound, describe that silence and add no sound; otherwise include the sounds the scene makes. Never invent dialogue when the request does not imply speech, talking, singing, or conversation. Preserve exact quoted dialogue, visible text, proper nouns, and product or brand spelling.
+
+Describe strict chronological, real-time flow and keep every requested action in motion. Use detailed but bounded prose with one sentence per shot; a single newline between shot sentences is allowed. Do not use bullets, headings, labels, JSON, preamble, or Markdown. Target 35-65 words per shot, usually 60-100 words for a single-shot request, and stay under 70 words per shot (under 140 words for one or two shots) so every cut still reads. When the request itself is longer than that, keep all of it: never drop, merge, or shorten a requested detail to meet a length target, and trim only your own additions. If the user wrote in another language, write the visual prompt in English while retaining exact dialogue and visible text in the requested language.
+
+Preserve requested visual style and production value without adding new objects, people, actions, dialogue, shots, or story events. When the user did not specify a rendering style, describe the look the request implies (for example phone footage, home video, documentary, animation, or film) in concrete terms, and do not add generic quality words.
+
+## Model notes
+
+- For first/last-frame generation, focus on what changes instead of redescribing static frame contents.
+- Use short present-tense sentences with concrete camera, action, lighting, and audio cues.
+- Keep quoted dialogue within the clip duration budget.
+```
+
+<!-- END GENERATED PROMPT GUIDE: ltx-2.3 -->
 
 ## MiniMax H3 Prompting
 
@@ -189,8 +300,8 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   `--sampler sa_solver`. Ref2VA Turbo uses the exact upstream Euler/simple recipe,
   defaults to 960×544, and accepts only `--sampler euler`. The checkpoint is CFG-distilled with
   guidance locked at 1, so there is no negative branch at all: a
-  `negativePrompt` parameter is ignored wherever it is accepted. Negative
-  direction goes in the prompt text instead.
+  `negativePrompt` parameter is ignored wherever it is accepted. Exclusions go
+  in the prompt text as positive facts (`the hall is empty`).
 - **Balanced and Turbo use the same prompt contract as Standard H3.** Balanced
   is fixed at 8 steps with Euler/simple; Turbo is fixed at 4 steps with the
   `simple` scheduler. Existing `minimax-h3-turbo` / `minimax-h3-*-turbo`
@@ -272,7 +383,7 @@ action, and delivery outside the dialogue tag. Inside the tag, preserve only
 the language and exact words:
 
 ```text
-The record-store owner with a warm, gravelly voice (S1) says: <d>[English] I kept this one behind the counter for you.</d>
+The record-store owner with a warm, gravelly voice, a plain American accent and an easy pace (S1) says: <d>[English] I kept this one behind the counter for you.</d>
 ```
 
 Do not translate, paraphrase, or clean up the user's dialogue. If the user
@@ -326,8 +437,9 @@ do and never deviate from:
   text, fluids, or figures that are not in it, produces crossfades and invented
   props. I2VA: first-frame anchor → action onset → continuous development →
   result or reaction. FL2VA: first-frame state → observable intermediate
-  changes → progressively narrowing differences → last-frame state, in **one
-  continuous shot** unless the user explicitly asks for cuts; begin `in the
+  changes → progressively narrowing differences → last-frame state, preferring
+  **one continuous shot** and cutting only when the user asks or the context
+  calls for it (see Beats and voices below); begin `in the
   position and framing established by Picture 1`, carry the identity anchors
   that must stay fixed into the motion sentences, and end by arriving `on the
   pose, spacing, and composition established by Picture 2 at the end of the
@@ -349,9 +461,12 @@ Tested on a branching horror route the same day, on top of the rules above:
 
 - **One continuous shot is still the default.** In most cases it is preferred
   and the shot count stays as low as the content allows. What made the slow
-  takes boring was emptiness, not the lack of cuts: something new should
-  happen every 1.5–2.5 seconds inside the shot (an action, a reaction, a
-  reveal, a line), never walking or waiting.
+  takes boring was emptiness, not the lack of cuts: when the user leaves pacing
+  open, something new should happen every 1.5–2.5 seconds inside the shot (an
+  action, a reaction, a reveal, a line) drawn from the request rather than
+  empty walking or waiting, never a new event or line invented only to fill
+  time.
+  Walking, waiting, or stillness the user asks for keeps its requested length.
 - **Beats and multi-shot are tools for when the context calls for them.** A
   chase, a reveal that needs a new viewpoint, an exchange of lines, a jump in
   space or time: then cut (`[Shot 2] At 00:01.500, the camera cuts to …`),
@@ -413,7 +528,7 @@ sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./cafe.mp4 
 ```
 
 ```text
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, slightly desaturated, a medium two-shot frames a narrow espresso bar on a weekday morning. Soft window light rakes across the brushed-steel machine and pastry case. A barista in her late twenties slides a white cup across the counter. A customer in a grey overcoat with a quiet, clipped voice (S1) stops the saucer with two fingers and says: <d>[English] I asked for oat milk.</d> [Shot 2] At 00:03.000, the camera cuts to a static close-up over the customer's shoulder. The barista with a flat, even voice (S2) lifts the oat carton, turns it upside down, sets it on the wood, and says: <d>[English] We ran out at six this morning.</d> [Shot 3] At 00:07.000, the camera cuts back to the two-shot. The customer tightens his jaw and pulls the cup toward himself while steam curls past his face and the barista turns to the next ticket.
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, slightly desaturated, a medium two-shot frames a narrow espresso bar on a weekday morning. Soft window light rakes across the brushed-steel machine and pastry case. A barista in her late twenties slides a white cup across the counter. A customer in a grey overcoat with a quiet, clipped voice, a plain American accent and a quick pace (S1) stops the saucer with two fingers and says: <d>[English] I asked for oat milk.</d> [Shot 2] At 00:03.000, the camera cuts to a static close-up over the customer's shoulder. The barista with a flat, even voice, a light British accent and a measured pace (S2) lifts the oat carton, turns it upside down, sets it on the wood, and says: <d>[English] We ran out at six this morning.</d> [Shot 3] At 00:07.000, the camera cuts back to the two-shot. The customer tightens his jaw and pulls the cup toward himself while steam curls past his face and the barista turns to the next ticket.
 
 overall_soundscape: Low cafe room tone continues under the scene. A steam wand hisses, ceramic clinks against the saucer, the empty carton knocks against wood, and a chair leg scrapes in the background.
 
@@ -431,7 +546,7 @@ sogni-agent -q --video -m minimax-h3-i2v --ref ./portrait.png --duration 6 -w 76
 ```text
 For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
 
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, a static medium close-up begins exactly from <Picture 1>, preserving the woman's dark chin-length hair, olive canvas jacket, red vinyl seatback, and the rain-streaked night-bus window. She lowers her phone into her lap and lifts her gaze toward the window as sodium streetlights slide across her cheek. The woman with a low, unhurried voice (S1) says: <d>[English] I'm not going back.</d> She turns slightly toward the aisle, sets her jaw, and closes one hand around her bag strap while the camera remains static.
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a static medium close-up begins exactly from <Picture 1>, preserving the woman's dark chin-length hair, olive canvas jacket, red vinyl seatback, and the rain-streaked night-bus window. She lowers her phone into her lap and lifts her gaze toward the window as sodium streetlights slide across her cheek. The woman with a low, unhurried voice and a plain American accent (S1) says: <d>[English] I'm not going back.</d> She turns slightly toward the aisle, sets her jaw, and closes one hand around her bag strap while the camera remains static.
 
 overall_soundscape: A steady diesel drone and the bus-frame rattle continue throughout. Rain ticks against the glass, canvas shifts as she moves, and an air brake hisses near the end.
 
@@ -560,7 +675,7 @@ How the reference pictures align with the target video — Picture 1 (from Shot 
 ```
 
 `N` is the index of the actual final shot (`Shot 1` for the usual single-shot
-transition; FL2VA favours one continuous shot and cuts only when the user asks),
+transition; FL2VA favours one continuous shot and cuts when the user asks or the context calls for it),
 and `S.SS` is the effective duration to exactly two decimal places — `10.13` for
 243 frames at 24 fps (243 ÷ 24 = 10.125, rounded up).
 
@@ -848,8 +963,96 @@ avoids worker failures on long source files and makes the attached `<Audio 1>`
 the exact waveform-conditioned lip-sync input. Remote audio URLs and additional
 audio references keep their existing handling.
 
-<!-- BEGIN GENERATED PROMPT GUIDE: seedance -->
-<!-- source: hand-written interim; to be generated from @sogni-ai/sogni-intelligence-client prompt-guides -->
+<!-- BEGIN GENERATED PROMPT GUIDE: minimax-h3 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: minimax-h3
+
+`sogni-agent prompt-guide minimax-h3 --mode t2v` prints the rules Sogni's own prompt writer uses for MiniMax H3 text-to-video (T2VA), shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | MiniMax H3 text-to-video (T2VA) | `sogni-agent prompt-guide minimax-h3 --mode t2v` |
+| `extend` | MiniMax H3 video continuation (T2VA) | `sogni-agent prompt-guide minimax-h3 --mode extend` |
+| `i2v` | MiniMax H3 first-frame image-to-video (I2VA) | `sogni-agent prompt-guide minimax-h3-i2v --mode i2v` |
+| `l2v` | MiniMax H3 last-frame image-to-video (L2VA) | `sogni-agent prompt-guide minimax-h3-i2v --mode l2v` |
+| `flf` | MiniMax H3 first-and-last-frame video (FL2VA) | `sogni-agent prompt-guide minimax-h3-flf2v --mode flf` |
+| `i2v-keyframes` | MiniMax H3 image-to-video with intermediate keyframes (I2VA) | `sogni-agent prompt-guide minimax-h3-i2v --mode i2v-keyframes` |
+| `r2v` | MiniMax H3 reference-to-video (Ref2VA) | `sogni-agent prompt-guide minimax-h3-r2v --mode r2v` |
+| `ia2v` | MiniMax H3 FastH3 Sound to Video with a first frame (I2VA) | `sogni-agent prompt-guide minimax-h3-fasth3-ia2v-turbo --mode ia2v` |
+| `flfa2v` | MiniMax H3 FastH3 Sound to Video with first and last frames (FL2VA) | `sogni-agent prompt-guide minimax-h3-fasth3-flfa2v-turbo --mode flfa2v` |
+| `a2v` | MiniMax H3 FastH3 Sound to Video from audio only (T2VA) | `sogni-agent prompt-guide minimax-h3-fasth3-a2v-turbo --mode a2v` |
+| `a2v-keyframes` | MiniMax H3 FastH3 Sound to Video from audio with intermediate keyframes (T2VA) | `sogni-agent prompt-guide minimax-h3-fasth3-a2v-turbo --mode a2v-keyframes` |
+
+```text
+# MiniMax H3 text-to-video (T2VA)
+
+Guide: minimax-h3 t2v
+Models: minimax-h3, minimax-h3-t2v, minimax-h3-t2v-balanced, minimax-h3-fasth3-t2v-turbo
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+This is T2VA: establish the complete video from text with no reference labels or alignment line.
+
+CREATIVE FIDELITY: Preserve the user's specified subjects and ages, relationships, wardrobe, setting, genre, mood, action, shot composition, camera behavior, dialogue, visible text, and exclusions. Enrich only unspecified details that support those choices. Express the requested mood through observable performance, light, texture, and composition without replacing the premise or adding a new story event. Pacing and cinematography suggestions are defaults: an explicit locked camera, held pose, quiet pause, sustained action, or silence takes priority. Keep supplied dialogue and visible text in their original language and wording. Before returning, check the result against the original request and remove additions that contradict it.
+
+CONTEXT PLANNING: before drafting, account for every subject, visible reference, audio reference, user constraint, exact quoted string, shot, sound cue, and music instruction. Resolve conflicts in favor of explicit user wording and state the winning source when attached references conflict. Do not invent brands, references, absences, or story facts. Preserve supplied dialogue character-for-character. If the user explicitly requests speaking, dialogue, lyrics, or a vocal performance but supplies no words, author one concise line that realizes that request. Otherwise do not invent speech.
+
+BASE OUTPUT CONTRACT: output exactly three lowercase field headings, once each, in this order:
+integrated_multimodal_description: [Shot 1] ...
+overall_soundscape: ...
+non_diegetic_music: ...
+Do not output JSON, YAML, markdown, bullets, code fences, a preamble, or commentary. Do not add any other field. Structural prose is English; preserve dialogue, lyrics, and visible text in their original language.
+
+SHOT GRAMMAR: [Shot 1] has no timestamp. Every later cut starts exactly "[Shot N] At MM:SS.mmm, ..." using contiguous chronological times within the effective duration. Clock times exist only on cut markers: inside a shot, order events with words (early in the shot, as the doors part, toward the end) and never write "From 00:02.000 to 00:04.000" ranges or per-event clock times. Cut only when the cut adds new subject, space, viewpoint, or time information; otherwise carry the change with camera motion. Put a visual-style preface before [Shot 1] only in Ref2VA detailed_description. For each shot describe subject, action, setting, lighting, composition, and camera movement in filmable prose; add amplitude and speed when they are meaningful.
+
+SCENE: describe only visible or audible facts. [Shot 1] opens with the medium and look as concrete facts (Live-action; 2D-animated; 3D CG; claymation; watercolor; vintage film) and the initial composition; in frame-anchored modes derive that look from the supplied picture. Genre, mood, audience, and intent labels (horror, eerie, romantic, adult, tense, jump scare) are not visible, so never write them: write the light, surfaces, distances, movements, and sounds that produce them. Establish subject appearance and position, environment, props, action, light, weather, and continuity. Keep identity, wardrobe, colors, objects, and spatial relationships stable unless the request changes them.
+
+PHYSICAL PRECISION: the video model reads words literally and may never have seen the action, so describe anatomy, contact, and physical interactions in plain, concrete, almost scientific terms. Say which body part moves, where it starts and ends, how fast and how far it travels, and what touches what. Say how materials look (color, opacity, texture, amount, consistency) and how they behave (flow, drip, stretch, bounce); honey poured from a jar, for example, is a slow, glossy amber ribbon that folds onto itself where it lands. Replace euphemisms, slang, idioms, and genre stock phrases with the literal visible event they stand for, in as much detail as the action needs. Prefer precise everyday words over clinical jargon the model may not know. Keep every specific the user asked for.
+
+DEPICTION ONLY: the prompt is a depiction, not a note to the model. Never write production instructions or meta-commentary (preserve believable anatomy, keep the foley prominent, hard cut with no morph or dissolve, this shot is excluded from the presentation, hold six frames only) and never use capital letters for emphasis. Say what is seen and heard at each moment instead.
+
+PACING: in most cases one continuous shot is preferred, and the shot count stays as low as the content allows. When the user leaves pacing open, prefer a purposeful development every 1.5 to 2.5 seconds: an action, a reaction, a reveal, a line. Preserve requested walking, waiting, stillness, pauses, and sustained actions for their requested duration; do not invent a new event or dialogue just to meet a pacing target. Beats and multi-shot sequences are available when the context calls for them (a chase, a reveal that needs a new viewpoint, an exchange of lines, a jump in space or time): then cut with "[Shot N] At MM:SS.mmm, the camera cuts to ..." and keep continuous motion inside each shot; never cut a simple movement into pieces. Write physical acts as acts, never as suggestions: a fall is the rail giving, the wall streaking upward, the ground rushing in; a bite is the jaws snapping shut; a shove is two palms filling the frame. Place dialogue after the action that motivates it.
+
+KEYFRAME PATHS: the model sees every supplied picture, so never describe a picture back at length and never invent objects, text, fluids, or figures that are not in it. I2VA: first-frame anchor, then action onset, continuous development, and a result or reaction. FL2VA: prefer one continuous shot; write the first-frame state, the observable intermediate changes, the progressively narrowing differences, and the last-frame state; begin "in the position and framing established by Picture 1", carry the identity anchors that must stay fixed into the motion sentences, and reach "the composition established by Picture 2" inside the final shot named by the alignment line. When the context calls for beats (see PACING), cut, and let the final shot cut to the Picture 2 composition and hold with a live action, which lands cleanly where a long interpolation would crossfade. If both pictures share one camera position, the camera does not move at all. L2VA: a plausible preceding state, an explicit action and transition path, gradual convergence in the final shot, and the last-frame landing on <Picture 1>. Apply exact composition matching only at a picture's assigned timestamp.
+
+AUDIO SECTIONS: overall_soundscape is one to four sentences covering diegetic ambience, effects, and spatial continuity; do not repeat dialogue or music there. Use overall_soundscape: N/A only when the requested video is totally silent. non_diegetic_music is one to three sentences describing audience-only score through instrumentation, tempo, rhythm, timing, and dynamic development rather than abstract mood labels; use non_diegetic_music: N/A when there is no score.
+
+SOURCE-LOCKED AUDIO: decide semantically whether supplied audio is immutable before drafting. When the user asks for the same, exact, original, specific, or trending song/soundtrack, or asks to recreate choreography tied to that audio, the source signal and its timeline are immutable. Never invent a replacement track, request a loose imitation, or add a copyright-avoidance melody/lyric substitution unless the user explicitly asks for different music. In Ref2VA use the official audio reuse task, assign every immutable <Audio N> fully_copy, name it directly in the relevant audio section, and preserve its original timing. Ref2VA reference videos must themselves be exactly 24fps; normalize other rates without changing duration or audio timing before submission. Audio reference means a new signal is generated and is valid only when the user explicitly wants loose style/timbre/rhythm guidance. A generative prompt cannot guarantee waveform identity: an exact-song deliverable must stream-copy/remux the original audio after rendering. Choreography lock is separate from soundtrack lock; use explicit action times from the source, and never represent loose Ref2VA conditioning as guaranteed edit-level beat synchronization. If exact choreography timing is mandatory and the chosen workflow cannot guarantee it, stop before paid generation or use a pose/edit-controlled workflow.
+
+DIALOGUE: give every vocal source a stable identifier such as (S1), assigned in order of first vocal event and reused across shots. Put the speaker's identity, ID, action, and delivery outside <d>; put only the language tag and spoken words inside <d>[Language] ...</d>. Preserve user-supplied words, language, and punctuation character-for-character, and speak each supplied line exactly as often as the request does, never again to fill a later shot. If the user explicitly requests speech, dialogue, lyrics, or a vocal performance without supplying words, author one concise line that serves that intent; without vocal intent, do not invent speech. Put combined speakers outside the tag as (S1,S2). Bind every line to its speaker in the same sentence, as in: The young woman with a quiet, breathy voice (S1) says: <d>[English] I get off at the next station.</d> and: The two children (S1,S2) shout together, <d>[English] Wait for us!</d> When a speaker first vocalizes, describe the voice itself with its accent, pitch, timbre, and speaking rate (for example "speaking in a plain American accent with a light, mid-pitched voice at a quick, breathless pace"); an unstated accent lets the model pick one, and a voice described only by mood drifts between takes. For voiceover, use the exact phrase "says in an off-screen voiceover" and state immediately after the </d> tag that the on-screen character's lips remain closed. When one line of dialogue or lyrics crosses a cut, place <scenetrans> at the connecting point in both parts (the end of the first <d> block and the start of the next) and explicitly state that the audio continues across the cut; <scenetrans> never appears unpaired. Use <cutoff> when the video ending truncates speech. These are the author-facing spellings from MiniMax's prompt guide; do not emit tokenizer-internal <|...|> markers. Never fix an internal marker by merely deleting its pipe characters: caption markers become exact visible text in double quotes, lyrics markers become an ordinary <d>[Language] ...</d> singing block with the singer and delivery outside it, and <|cutoff|> becomes plain <cutoff>. Visible text is not dialogue: keep it in exact double quotes inside the visual description.
+
+ABSENCES: H3 has no negative-prompt input, and its contract describes only what is visible or audible, so a negation names the very thing it tries to remove. State every exclusion as a positive fact: "the hall is empty and still" instead of "no people", "the walls are bare" instead of "no text or signs", "the air is clear and sharply lit" instead of "no haze", and "non_diegetic_music: N/A" instead of "no music". Never add exclusions the user did not supply and never add a negative_prompt field. Keep a user-supplied exclusion only when it cannot be stated positively, phrased once as a plain statement.
+
+IDENTITY: use concrete visible identity anchors and keep them stable across shots. For frame-anchored modes, preserve the supplied frame's identity, wardrobe, setting, lighting direction, and composition without redundantly cataloguing every pixel.
+
+CAMERA: state shot size and lens when useful. Write camera movement as natural prose from the official vocabulary (Zoom In/Out, Push In/Pull Out, Pan Left/Right, Truck Left/Right, Tilt Up/Down, Pedestal Up/Down, Arc Shot, Tracking Shot, Static Shot, Shake Slightly/Strongly, POV, Roll Clockwise/Counterclockwise), adding "with small amplitude" / "with large amplitude" and "at slow speed" / "at fast speed" only when they matter. Keep one primary move per shot unless the request clearly requires a compound move. First-person coverage is a POV shot; write "handheld" only when the user wants visible shake, because it reads as Shake Slightly or Shake Strongly.
+
+VISIBLE TEXT: place every sign, label, title, or other text that must appear on screen in exact double quotes, preserving the user's spelling, capitalization, punctuation, and language.
+
+TIMEBASE: H3 renders at a fixed 24 fps, 124 to 362 frames on a 17-frame grid (5.17 to 15.08 seconds). Never write frame counts, frame rates, steps, samplers, or a resolution such as 1080p or 2K in the prompt: delivery size is the caller's setting, not something the prompt can ask for.
+
+LENGTH: keep every result under 7000 characters. For Ref2VA, target 350-500 words in detailed_description; do not pad the other five sections. If compression is needed, preserve required fields, user-authored exact text, reference labels and jobs, retention relationships, and shot timing first; shorten redundant adjectives and audio prose. Never silently truncate.
+
+FINAL ASSESSMENT: silently verify the exact field order, required alignment line, reference-label consistency, shot syntax, speaker IDs, dialogue markup, visible-text spelling, duration, source-audio policy, sound ownership, and character limit. Output only the typed prompt after every check passes.
+
+## Model notes
+
+- T2V, I2V, FLF2V, and L2V use exactly three ordered fields: integrated_multimodal_description, overall_soundscape, non_diegetic_music.
+- I2V, FLF2V, and L2V prepend MiniMax's exact mode-specific image-alignment line. L2V uses the existing I2V selector with only a typed last-frame asset; minimax-h3-l2v is not a hosted model selector.
+- Use [Shot 1] without a timestamp; every later shot uses [Shot N] At MM:SS.mmm, ... .
+- Use stable (S1) speaker IDs and wrap exact spoken words in <d>[Language] ...</d>; keep visible text in exact double quotes.
+- overall_soundscape owns diegetic ambience and effects; non_diegetic_music owns audience-only score and is N/A when there is none.
+- Standard runs 20 steps with res_multistep/simple. Balanced uses fixed 8-step Euler/simple acceleration: LightX2V for FL2VA and Larry v4 for Ref2VA. FL2VA Turbo runs 4 steps with simple scheduling; er_sde is the default sampler, with euler and sa_solver available as explicit A/B variants. Ref2VA Turbo uses the exact upstream 4-step euler/simple recipe. All run at fixed 24 fps and guidance 1.
+- Default MiniMax reference-to-video to Balanced R2V (minimax-h3-r2v-balanced), or minimax-h3-r2v-balanced-2stage for two-stage, 1080p or 2K output. Preserve an explicitly requested Standard, LightX2V Turbo, or FastH3 Omni R2V tier.
+- Standard, Balanced, and Turbo Ref2VA use exactly six ordered fields: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music. The two-stage Ref2VA selectors (minimax-h3-r2v-2stage at 20 steps, minimax-h3-r2v-balanced-2stage at 8 steps) write the same six-field contract with the same references; only the delivered size changes. FastH3 Reference (minimax-h3-fasth3-r2v-turbo and its -2stage form, the FastH3 tier's reference-to-video) writes the same six-field contract.
+- Ref2VA uses <Subject N> for reusable visible content, <Picture N> only for concrete keyframe/composition anchors, <Video N> for whole-video relationships, and <Audio N> for copied or referenced signals. It requires at least one image or video; audio alone is invalid.
+- The FastH3 audio guide on sound_to_video (minimax-h3-fasth3-ia2v-turbo, minimax-h3-fasth3-flfa2v-turbo, minimax-h3-fasth3-a2v-turbo and their -2stage forms) writes the Base contract of its mode: image + audio as I2V, first/last frame + audio as FLF2V, audio only as T2V. The uploaded audio drives the picture from frame 0 and is the soundtrack, so describe what it contains and never add other dialogue or music. Use these selectors only when the user asks for MiniMax H3 or FastH3.
+```
+
+<!-- END GENERATED PROMPT GUIDE: minimax-h3 -->
 
 ## Seedance Prompting
 
@@ -861,8 +1064,11 @@ director-style grammar. Seedance 2.5 widens only the limits: 4-30 s clips and
 30 image / 10 video / 10 audio references (50 in all), against 4-15 s and
 9 / 3 / 3 (12 in all) for the 2.0 family, and it also accepts audio as the only
 reference. Direct mode sends your prompt to the model as written, and there is
-no negative-prompt field. Production lessons (opening frames, sizing people,
-keyframes, lip-sync, edit quirks) are in
+no negative-prompt field. The rules Sogni's own prompt writer uses close this
+section; `sogni-agent prompt-guide seedance2-5 --mode <mode>` prints the one for
+your mode. What follows adds the CLI side and what the rules leave out.
+Production lessons (opening frames, sizing people, keyframes, lip-sync, edit
+quirks) are in
 [models.md § Seedance 2.5 takes in practice](./models.md#seedance-25-takes-in-practice-as-of-2026-11).
 
 ### Pick the mode first
@@ -875,7 +1081,8 @@ keyframes, lip-sync, edit quirks) are in
   prop.
 - **Frame mode** when the opening must be locked or the clip must join another
   one seamlessly: `--ref` is the first frame and `--ref-end` the last. Write no
-  `@Image` tags in frame mode and do not redescribe what the frames show;
+  `@Image` tags in frame mode and do not redescribe what the frames show beyond
+  the few traits that must hold as things move;
   describe the motion that carries the first frame forward, or arrives on the
   last. Add `--ref-end` only when it shows the camera and arrangement the action
   naturally ends on; otherwise Seedance morphs the shot to reach it.
@@ -883,11 +1090,11 @@ keyframes, lip-sync, edit quirks) are in
   `--workflow ia2v` is the one exception: there `--ref` is a loose `@Image1`
   beside the audio.
 - **Edits are written as edits** (`-m seedance2-5-v2v --seedance-task-type edit
-  --ref-video source.mp4 --duration <source seconds>`): name what changes and
-  what stays, as in `Edit @Video1: replace the red sedan with a teal 1960s
-  convertible; keep the driver, the street, the camera move, and the timing.` A
-  storyboard-style prompt (sections, timed beats) for an edit is refused as a
-  video extension. To keep the camera where it is, write `the camera holds
+  --ref-video source.mp4 --duration <source seconds>`): open with `Edit
+  @Video1.`, name what changes, then what stays, as in `Edit @Video1. Replace the
+  red sedan with a teal 1960s convertible. Keep the driver, the street, the camera
+  move, and the timing.` A storyboard-style prompt (sections, timed beats) for an
+  edit is refused as a video extension. To keep the camera where it is, write `the camera holds
   @Video1's exact framing for the whole clip, one continuous shot`.
 
 ### Write the prompt in this order
@@ -896,7 +1103,7 @@ keyframes, lip-sync, edit quirks) are in
    one event, carrying the evidence the shot must land, as in `A low tracking
    shot races alongside a teal convertible at highway speed, palms and
    streetlamps whipping past the lens.`
-2. **One job per reference, one line each.** Write the tags as `@Image1`,
+2. **One job per reference, one sentence each.** Write the tags as `@Image1`,
    `@Video1`, `@Audio1`: numbered from 1 within each type in the order you
    attached them, no brackets or spaces, never a URL or file name. Say whether
    each one is the edit target or only a reference, and what it controls:
@@ -919,8 +1126,9 @@ keyframes, lip-sync, edit quirks) are in
    [Camera Language Normalization](#camera-language-normalization).
 5. **Sound** as plain nouns: engine roar, rain on glass, a siren closing in.
    When speech is wanted, write the exact spoken words in double quotes, name
-   the speaker outside them, and put no acting words inside them: `The driver
-   shouts, "Hold on!"` If the user wants speech but gave no words, write the
+   the speaker outside them, put no acting words inside them, and say an
+   on-screen speaker's lips move with the words: `The driver shouts, "Hold on!",
+   his lips moving with the words.` If the user wants speech but gave no words, write the
    line. Add no music they did not ask for. With a voice reference, write
    `The driver's voice is exactly @Audio1.`
 6. **Constraints as positive facts:** `both hands stay on the wheel`, `a full
@@ -936,16 +1144,18 @@ keyframes, lip-sync, edit quirks) are in
   or the word "fast" on its own renders slower than intended. Every quality a
   shot must land (speed, size, weight, danger) is written as what a camera and
   a microphone would capture.
-- **Cuts only when asked.** One continuous shot is the default. When the user
-  asks for cuts, mark each one as a new time-coded shot: `4–6 s, new shot: a
-  close-up of the driver's hands on the wheel.`
+- **Cuts follow the request.** One continuous shot when it describes one
+  continuous action, place, or camera move; a new time-coded shot for each cut
+  when it asks for cuts or a montage, or moves between places, viewpoints, or
+  moments: `4–6 s: cut to a close-up of the driver's hands on the wheel.` In
+  frame mode, cut only when asked.
 - **On-screen text** the user asks for goes in double quotes after `reads`:
   `the diner sign reads "OPEN ALL NIGHT"`. Spell brand and product names
   exactly.
-- **Length follows the beats.** Write what the beats, lines, and reference jobs
-  need, with no padding. Never drop a beat, a line, a reference job, or any
-  detail the user gave to reach a word count; when they will not fit the clip,
-  suggest a longer one.
+- **Length:** about 80–150 words for a single-beat shot plus 30–50 for each
+  further beat, with no padding. Never drop a beat, a line, a reference job, or
+  any detail the user gave to reach a word count; when they will not fit the
+  clip, suggest a longer one.
 
 ### Worked example: reference-mode chase
 
@@ -959,17 +1169,160 @@ sogni-agent -q --video -m seedance2-5 -c ./hero-car.png -c ./cruiser.png --durat
 A low tracking shot races alongside a teal 1960s convertible down a sunlit coastal highway, palms and guardrail posts whipping past the lens. Use @Image1 for the convertible's body, teal paint, and chrome wheels. Use @Image2 for the black-and-white police cruiser. 0–3 s: the convertible swerves around a delivery van and the cruiser bursts out from behind it two car lengths back, lights flashing. 3–6 s: the cruiser closes to one car length as both cars bank through a long left curve, dust kicking off the shoulder. 6–8 s: the convertible cuts onto an exit ramp and the cruiser overshoots it, braking hard in a cloud of tire smoke. The camera stays low and level with the convertible the whole way. Engine roar, a wailing siren closing in, tires screeching through the curve. The convertible keeps its teal paint and chrome wheels in every frame.
 ```
 
-<!-- END GENERATED PROMPT GUIDE: seedance -->
+<!-- BEGIN GENERATED PROMPT GUIDE: seedance-2.5 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
 
-<!-- BEGIN GENERATED PROMPT GUIDE: wan22 -->
-<!-- source: hand-written interim; to be generated from @sogni-ai/sogni-intelligence-client prompt-guides -->
+### Sogni's prompt rules: seedance-2.5
+
+`sogni-agent prompt-guide seedance2-5 --mode t2v` prints the rules Sogni's own prompt writer uses for Seedance 2.5 text-to-video and loose references, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | Seedance 2.5 text-to-video and loose references | `sogni-agent prompt-guide seedance2-5 --mode t2v` |
+| `i2v` | Seedance 2.5 first-frame image-to-video | `sogni-agent prompt-guide seedance2-5 --mode i2v` |
+| `l2v` | Seedance 2.5 last-frame image-to-video | `sogni-agent prompt-guide seedance2-5 --mode l2v` |
+| `flf` | Seedance 2.5 first-and-last-frame video | `sogni-agent prompt-guide seedance2-5 --mode flf` |
+| `v2v` | Seedance 2.5 video-to-video: edit, extend or reference a source video | `sogni-agent prompt-guide seedance2-5 --mode v2v` |
+
+```text
+# Seedance 2.5 text-to-video and loose references
+
+Guide: seedance-2.5 t2v
+Models: seedance2-5, seedance2-5-uncensored
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Reference grammar
+
+REFERENCE GRAMMAR: Use BytePlus-style @ tags as the canonical prompt-visible reference labels. Refer to attached assets by 1-indexed counters per modality, written exactly as @Image1, @Video1, or @Audio1 with no brackets and no spaces. Counting is independent per modality and follows attachment order. If the base request uses aliases such as Image 1, Video 2, Audio 1, @Image 1, or @Video 2, normalize them to @Image1, @Video2, or @Audio1 in the rewritten prompt. Never mention reference URLs or asset IDs.
+
+## Rules
+
+REFERENCE ROLE DISCIPLINE: Assign every useful reference asset a clear creative role. Do not write vague phrases like "use the attached files." State whether each useful file is an edit target or only a reference. Use role language such as "Use @Image1 as the character identity reference," "Use @Image2 for wardrobe and color palette," "Use @Video1 for camera movement and action timing only," or "Use @Audio1 as the rhythm and background music guide."
+
+DIRECTORIAL BRIEF: Write like a concise director's shot brief, not a static image caption. Include concrete physical interactions, motion timing, mood, lighting, and sound cues that help the model understand both what the scene looks like and how it changes over time. Turn each quality the shot must convey, such as speed, size, weight, danger or feeling, into what a camera and microphone would capture at real-world proportions, because the model renders what it can see and hear, not a number or an adjective.
+
+PROMPT ANATOMY: Include task intent, reference-role assignments, subject/action, scene, camera, style/lighting, audio behavior, continuity, and any final message only when needed. For multi-beat clips, use compact time-coded beats or shot-script phrasing instead of a dense unordered list.
+
+CAMERA AND PHYSICS: Prefer one primary camera move. Separate subject motion from camera motion. Describe pace in words that match the shot instead of technical camera settings: slow, smooth, gradual, or controlled for calm moments; for fast action, show the speed through what rushes past the camera, the ground covered within a beat, and impacts with their consequences, because a stated speed or the word "fast" alone renders slower than intended. Ground action in physical details such as fabric movement, reflections, dust, water, contact, momentum, and object interaction when relevant.
+
+POSITIVE CONSTRAINTS: Prefer positive preservation language over negative-only phrasing. Say "Keep the logo crisp and readable," "Maintain the same face structure, outfit, silhouette, and proportions from @Image1," and "Keep every person, prop and color consistent from the first frame to the last."
+
+SHOTS: Use one continuous shot when the request describes one continuous action, place or camera move, and separate shots when it asks for cuts or a montage or moves between places, viewpoints or moments. Open each new shot with its own time-coded beat that names the cut, such as "4-7s: Cut to a close-up of ...".
+
+SPEECH: Write every spoken line in double quotes with who says it, and state plainly that an on-screen speaker's lips move with the words. When the request gives an @Audio reference the role of a person's voice, keep that role: it is the character's voice identity, not background music or the soundtrack.
+
+VISIBLE TEXT: Put every word that must appear on screen in double quotes after "reads", such as a sign that reads "OPEN 24H", with the request's exact spelling.
+
+When reference videos are listed, use them only for the role requested, such as camera movement, action timing, edit rhythm, or visual effects. When audio references are listed, assign them as soundtrack, rhythm guide, speech reference, or ambience based on the request.
+
+FORMAT: Single present-tense paragraph of short sentences. No bullets, headers, markdown, preamble, or labels. Output ONLY the rewritten prompt.
+
+CAMERA: Choose one primary camera behavior for the shot or beat in concrete cinematographic language, matched to scene geometry, subject motion, and mood. The camera may move, hold a POV, or stay locked/static when stillness best serves the shot. Keep camera motion separate from subject motion and do not stack multiple camera moves in one sentence.
+
+TIME-CODED BEATS: For clips longer than 5 seconds, segment the action with time-coded beats such as "0-2s: ..., 2-4s: ..., 4-6s: ...".
+
+DIALOGUE & AUDIO: Seedance generates synchronized audio natively. Preserve quoted dialogue verbatim. Add foley and ambience as plain sentences. Do not invent music when none was requested.
+
+PROPER NOUNS: Preserve exact spelling and punctuation of brand or product names from the base request, including dotted names such as Sogni.ai.
+
+AVOID: Contradictions, semicolons, em dashes, parentheticals.
+
+LENGTH: About 80–150 words for a single-beat shot, plus about 30–50 words for each further time-coded beat. Never drop a detail, beat, quoted line or reference role from the request to save words.
+
+TARGET CAPABILITIES: Seedance 2.5 uses the same director-style prompt grammar and per-modality @Image / @Video / @Audio reference syntax as the Seedance 2.0 series. Its capability envelope is larger: 4-30 second clips and up to 30 image references, 10 video references, and 10 audio references, with 50 files total across those per-modality caps. For new footage longer than 15 seconds, use a coherent chronology with time-coded beats that cover the requested duration; do not split the request into multiple clips.
+
+## Model notes
+
+- Use @Image1, @Video1, and @Audio1 tags without brackets or spaces.
+- Assign every useful reference asset a concrete role.
+- Use one 4-30 second call for a continuous clip when the requested duration fits.
+- Prefer positive preservation constraints and concise time-coded beats for longer clips.
+- Write each spoken line in double quotes with its speaker, keeping the user's words exactly, and on-screen text in double quotes after "reads".
+```
+
+<!-- END GENERATED PROMPT GUIDE: seedance-2.5 -->
+
+<!-- BEGIN GENERATED PROMPT GUIDE: seedance-2.0 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: seedance-2.0
+
+`sogni-agent prompt-guide seedance2 --mode t2v` prints the rules Sogni's own prompt writer uses for Seedance 2.0 text-to-video and loose references, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | Seedance 2.0 text-to-video and loose references | `sogni-agent prompt-guide seedance2 --mode t2v` |
+| `i2v` | Seedance 2.0 first-frame image-to-video | `sogni-agent prompt-guide seedance2 --mode i2v` |
+| `l2v` | Seedance 2.0 last-frame image-to-video | `sogni-agent prompt-guide seedance2 --mode l2v` |
+| `flf` | Seedance 2.0 first-and-last-frame video | `sogni-agent prompt-guide seedance2 --mode flf` |
+| `v2v` | Seedance 2.0 video-to-video: edit, extend or reference a source video | `sogni-agent prompt-guide seedance2 --mode v2v` |
+
+```text
+# Seedance 2.0 text-to-video and loose references
+
+Guide: seedance-2.0 t2v
+Models: seedance2, seedance2-mini, seedance2-mini-uncensored
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Reference grammar
+
+REFERENCE GRAMMAR: Use BytePlus-style @ tags as the canonical prompt-visible reference labels. Refer to attached assets by 1-indexed counters per modality, written exactly as @Image1, @Video1, or @Audio1 with no brackets and no spaces. Counting is independent per modality and follows attachment order. If the base request uses aliases such as Image 1, Video 2, Audio 1, @Image 1, or @Video 2, normalize them to @Image1, @Video2, or @Audio1 in the rewritten prompt. Never mention reference URLs or asset IDs.
+
+## Rules
+
+REFERENCE ROLE DISCIPLINE: Assign every useful reference asset a clear creative role. Do not write vague phrases like "use the attached files." State whether each useful file is an edit target or only a reference. Use role language such as "Use @Image1 as the character identity reference," "Use @Image2 for wardrobe and color palette," "Use @Video1 for camera movement and action timing only," or "Use @Audio1 as the rhythm and background music guide."
+
+DIRECTORIAL BRIEF: Write like a concise director's shot brief, not a static image caption. Include concrete physical interactions, motion timing, mood, lighting, and sound cues that help the model understand both what the scene looks like and how it changes over time. Turn each quality the shot must convey, such as speed, size, weight, danger or feeling, into what a camera and microphone would capture at real-world proportions, because the model renders what it can see and hear, not a number or an adjective.
+
+PROMPT ANATOMY: Include task intent, reference-role assignments, subject/action, scene, camera, style/lighting, audio behavior, continuity, and any final message only when needed. For multi-beat clips, use compact time-coded beats or shot-script phrasing instead of a dense unordered list.
+
+CAMERA AND PHYSICS: Prefer one primary camera move. Separate subject motion from camera motion. Describe pace in words that match the shot instead of technical camera settings: slow, smooth, gradual, or controlled for calm moments; for fast action, show the speed through what rushes past the camera, the ground covered within a beat, and impacts with their consequences, because a stated speed or the word "fast" alone renders slower than intended. Ground action in physical details such as fabric movement, reflections, dust, water, contact, momentum, and object interaction when relevant.
+
+POSITIVE CONSTRAINTS: Prefer positive preservation language over negative-only phrasing. Say "Keep the logo crisp and readable," "Maintain the same face structure, outfit, silhouette, and proportions from @Image1," and "Keep every person, prop and color consistent from the first frame to the last."
+
+SHOTS: Use one continuous shot when the request describes one continuous action, place or camera move, and separate shots when it asks for cuts or a montage or moves between places, viewpoints or moments. Open each new shot with its own time-coded beat that names the cut, such as "4-7s: Cut to a close-up of ...".
+
+SPEECH: Write every spoken line in double quotes with who says it, and state plainly that an on-screen speaker's lips move with the words. When the request gives an @Audio reference the role of a person's voice, keep that role: it is the character's voice identity, not background music or the soundtrack.
+
+VISIBLE TEXT: Put every word that must appear on screen in double quotes after "reads", such as a sign that reads "OPEN 24H", with the request's exact spelling.
+
+When reference videos are listed, use them only for the role requested, such as camera movement, action timing, edit rhythm, or visual effects. When audio references are listed, assign them as soundtrack, rhythm guide, speech reference, or ambience based on the request.
+
+FORMAT: Single present-tense paragraph of short sentences. No bullets, headers, markdown, preamble, or labels. Output ONLY the rewritten prompt.
+
+CAMERA: Choose one primary camera behavior for the shot or beat in concrete cinematographic language, matched to scene geometry, subject motion, and mood. The camera may move, hold a POV, or stay locked/static when stillness best serves the shot. Keep camera motion separate from subject motion and do not stack multiple camera moves in one sentence.
+
+TIME-CODED BEATS: For clips longer than 5 seconds, segment the action with time-coded beats such as "0-2s: ..., 2-4s: ..., 4-6s: ...".
+
+DIALOGUE & AUDIO: Seedance generates synchronized audio natively. Preserve quoted dialogue verbatim. Add foley and ambience as plain sentences. Do not invent music when none was requested.
+
+PROPER NOUNS: Preserve exact spelling and punctuation of brand or product names from the base request, including dotted names such as Sogni.ai.
+
+AVOID: Contradictions, semicolons, em dashes, parentheticals.
+
+LENGTH: About 80–150 words for a single-beat shot, plus about 30–50 words for each further time-coded beat. Never drop a detail, beat, quoted line or reference role from the request to save words.
+
+## Model notes
+
+- Use @Image1, @Video1, and @Audio1 tags without brackets or spaces.
+- Assign every useful reference asset a concrete role.
+- Prefer positive preservation constraints and concise time-coded beats for longer clips.
+- Write each spoken line in double quotes with its speaker, keeping the user's words exactly, and on-screen text in double quotes after "reads".
+```
+
+<!-- END GENERATED PROMPT GUIDE: seedance-2.0 -->
 
 ## WAN 2.2 Prompting
 
 Applies to `wan22-i2v` (`wan_v2.2-14b-fp8_i2v_lightx2v`, the default when one
-`--ref` image is animated without `-m`), `wan22` / `wan22-t2v`, `wan22-s2v`, and
-the Animate move and replace models. WAN 2.2 renders a silent picture (S2V keeps
-the audio you upload), so describe only what is seen.
+`--ref` image is animated without `-m`), `wan22-t2v`, `wan22-s2v`, and the
+Animate move and replace models. Bare `-m wan22` renders text-to-video and
+image-to-video on LTX-2.5, so name the WAN 2.2 selector (and pass it to
+`sogni-agent prompt-guide`). WAN 2.2 renders a silent picture (S2V keeps the
+audio you upload), so describe what is seen and keep any words the user quoted. The rules Sogni's own prompt
+writer uses close this section.
 
 - **Pin the model.** Without `-m`, a single-image prompt that asks for sound,
   speech, or story is routed to LTX-2.5 instead
@@ -992,22 +1345,72 @@ the audio you upload), so describe only what is seen.
   in [Camera Language Normalization](#camera-language-normalization).
 - **S2V lip-sync** (`wan22-s2v`: a portrait plus `--ref-audio`): the portrait
   fixes identity and framing, the audio fixes timing. Describe the visible
-  performance that goes with it (lips, expression, gaze, breathing, small head
-  and shoulder motion, gestures when asked), and quote words only when the user
-  supplied them.
+  performance that goes with it (lips, expression, gaze, breathing, head, body,
+  and hand motion), as still or as energetic as the request implies, and quote
+  words only when the user supplied them.
 - **Animate move / replace:** one direct instruction naming who performs the
   driving video's motion, or who replaces its performer, and what stays: the
   motion timing, camera path, framing, and background.
 
-<!-- END GENERATED PROMPT GUIDE: wan22 -->
+<!-- BEGIN GENERATED PROMPT GUIDE: wan-2.2 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
 
-<!-- BEGIN GENERATED PROMPT GUIDE: wan3 -->
-<!-- source: hand-written interim; to be generated from @sogni-ai/sogni-intelligence-client prompt-guides -->
+### Sogni's prompt rules: wan-2.2
+
+`sogni-agent prompt-guide wan22-i2v --mode i2v` prints the rules Sogni's own prompt writer uses for Wan 2.2 first-frame image-to-video, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | Wan 2.2 text-to-video | `sogni-agent prompt-guide wan22-i2v --mode t2v` |
+| `i2v` | Wan 2.2 first-frame image-to-video | `sogni-agent prompt-guide wan22-i2v --mode i2v` |
+| `l2v` | Wan 2.2 last-frame image-to-video | `sogni-agent prompt-guide wan22-i2v --mode l2v` |
+| `flf` | Wan 2.2 first-and-last-frame video | `sogni-agent prompt-guide wan22-i2v --mode flf` |
+| `s2v` | Wan 2.2 speech-to-video | `sogni-agent prompt-guide wan22-i2v --mode s2v` |
+| `animate-move` | Wan 2.2 Animate movement transfer | `sogni-agent prompt-guide wan22-i2v --mode animate-move` |
+| `animate-replace` | Wan 2.2 Animate character replacement | `sogni-agent prompt-guide wan22-i2v --mode animate-replace` |
+
+```text
+# Wan 2.2 first-frame image-to-video
+
+Guide: wan-2.2 i2v
+Models: wan22
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+Your prompt MUST:
+- Preserve the user's base request, style, constraints, motion/action beats, and exact quoted dialogue if any is present
+- Only invent a default practical action when the base request lacks motion. Keep explicit user instructions rather than replacing them with generic morphing, dissolves, or wardrobe transformations.
+- Identify the important visible subjects, objects, poses, background elements, lighting, and perspective from the anchor only as needed to plan motion — do not redescribe static details
+- Describe how each key element moves, shifts, transforms, or becomes occluded/revealed forward from the anchor
+- Specify camera motion with directional language such as dolly in, tracking shot, orbit, pan, tilt, push in, pull back, or whip pan
+- Maintain subject identity and visual continuity
+- Use a concise present-tense paragraph with short sentences
+
+NEGATIVE CONSTRAINT TRANSLATION: WAN receives only this positive prompt. Translate user avoid/no/don't constraints into affirmative production constraints instead of copying negative phrasing. For translated constraints, the output prompt must not use words such as "no", "not", "without", "avoid", or "never" except inside exact quoted user-requested text. Examples: "no people in background" becomes single subject focus with an empty background; "no text" becomes clean blank surfaces; "don't make it blurry" becomes crisp sharp focus; "no weird hands" becomes natural anatomically consistent hands; "no mouth movement, no talking, no lip syncing" becomes silent expression-only physical performance with facial motion independent of speech timing; "don't change the room" becomes the same room and layout remain consistent. If the user asks for exact quoted visible text, preserve that quoted text exactly.
+
+DYNAMIC PROMPT BRANCHES: If the base request contains one Dynamic Prompt branch such as "{option A|option B}", preserve exactly one branch with the same option count. Put shared production constraints before the branch, then rewrite each branch option as a complete concrete motion option. Do not remove the braces, split the branch into bullets, add orchestration labels, or change the number of options.
+
+OUTPUT CONSTRAINTS:
+- Single concise paragraph only: no preamble, explanations, bullets, markdown, labels, second-keyframe language, target-frame language, interpolation language, or input ordinal references
+- Motion-focused prose: static details appear only when they affect the forward motion
+- Physically coherent motion at the pace the request calls for, showing fast action through what rushes past the camera and the ground covered
+- Lettering already in the anchor frame stays exactly as it reads
+
+## Model notes
+
+- Use compact motion-first prompts for animate and transition workflows.
+- Avoid crowded simultaneous actions and rigid numerical camera constraints.
+```
+
+<!-- END GENERATED PROMPT GUIDE: wan-2.2 -->
 
 ## Wan 3 Prompting
 
 Applies to Wan 3 (`wan3`, Alibaba `wan3.0-video`) and Wan 3.0 Enhanced
 (`wan3-enhanced`, `wan3.0-spicy-video`): 2-30 s at 30 fps with native audio.
+The rules Sogni's own prompt writer uses close this section.
 
 - **Sogni rewrites Wan 3 prompts by default.** Unless you pass
   `--no-expand-prompt`, Sogni's AI Screenwriter rewrites the prompt on the
@@ -1018,8 +1421,13 @@ Applies to Wan 3 (`wan3`, Alibaba `wan3.0-video`) and Wan 3.0 Enhanced
   action, setting, camera, lighting, timing, dialogue, foley, ambience, and
   music. There is no negative-prompt field, so state constraints as positive
   facts.
-- **Time-coded beats** for a longer or multi-shot clip. Cut only where the user
-  asks, each cut a new time-coded shot.
+- **Write the shot plan and the beats.** Wan 3 makes its own cuts when the
+  prompt leaves the shot plan out: open with `One continuous shot, no cuts.` or
+  the shot count (`Two shots.`), start each later shot's first beat with `Hard
+  cut:` and its framing, and cover the whole clip with consecutive time-coded
+  beats at every length. Cut where the user asks, when the action moves to
+  another place or a later time, or when a closer angle shows a requested act
+  better.
 - **Dialogue** in double quotes with the speaker named; visible text in double
   quotes after `reads`.
 - **Frame mode** (`--ref`, optional `--ref-end`): the first frame fixes the
@@ -1034,7 +1442,113 @@ Applies to Wan 3 (`wan3`, Alibaba `wan3.0-video`) and Wan 3.0 Enhanced
   the timing.
 - Prompts may run to 20,000 characters.
 
-<!-- END GENERATED PROMPT GUIDE: wan3 -->
+<!-- BEGIN GENERATED PROMPT GUIDE: wan-3 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: wan-3
+
+`sogni-agent prompt-guide wan3 --mode t2v` prints the rules Sogni's own prompt writer uses for Wan 3 text-to-video, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | Wan 3 text-to-video | `sogni-agent prompt-guide wan3 --mode t2v` |
+| `i2v` | Wan 3 first-frame image-to-video | `sogni-agent prompt-guide wan3 --mode i2v` |
+| `flf` | Wan 3 first-and-last-frame video | `sogni-agent prompt-guide wan3 --mode flf` |
+| `r2v` | Wan 3 multimodal reference-to-video | `sogni-agent prompt-guide wan3 --mode r2v` |
+| `a2v` | Wan 3 audio-driven video | `sogni-agent prompt-guide wan3 --mode a2v` |
+
+```text
+# Wan 3 text-to-video
+
+Guide: wan-3 t2v
+Models: wan3, wan3-enhanced
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+Wan 3 renders 2-30 seconds at fixed 30 fps and can generate synchronized audio.
+
+CREATIVE FIDELITY: Preserve the user's specified subjects and ages, relationships, wardrobe, setting, genre, mood, action, shot composition, camera behavior, dialogue, visible text, and exclusions. Enrich only unspecified details that support those choices. Express the requested mood through observable performance, light, texture, and composition without replacing the premise or adding a new story event. Pacing and cinematography suggestions are defaults: an explicit locked camera, held pose, quiet pause, sustained action, or silence takes priority. Keep supplied dialogue and visible text in their original language and wording. Before returning, check the result against the original request and remove additions that contradict it.
+
+OUTPUT CONTRACT: Write one production-ready English video prompt in present tense. Preserve exact user-provided dialogue in double quotes. Describe subject, action, setting, camera, lighting, timing, dialogue, foley, ambience, and music only when relevant. Use compact timecoded beats for multi-shot or longer clips. Do not add a negative-prompt section because Wan 3 has no negative_prompt request field. Return only the rewritten prompt with no preamble or markdown.
+
+STEP TIMING AND VISIBLE STATE: Wan 3 renders an action reliably only when the prompt gives it its own time and says what it visibly changes. Write the artist's actions as consecutive timecoded beats that cover the clip's full length (for example "0-3 s: ...", "3-7 s: ..."), in the artist's order, each beat long enough for its action to be seen. When an action changes clothing or exposure (pulling fabric aside, lowering or lifting a garment, opening it, putting it back on, letting it snap back), give it its own beat: describe the hand motion, then state the visible result plainly, and keep that result true in every later beat unless the artist undoes it (for example "the crotch of her thong stays held to the side and her bare vulva stays visible"). This holds at every clip length: in a short clip use short beats (one or two seconds is fine), and never fold a clothing or exposure change into the same beat as the action that follows it. Keep your own additions short so the artist's actions get the screen time.
+
+SHOTS AND CAMERA: Wan 3 makes its own cuts when the prompt does not say how the clip is shot, so write the shot plan into the prompt and keep the timecoded beats either way. Cut when the artist asks for cuts, when the action moves to another place or a later time, or when a closer angle shows a requested act better; otherwise keep one take. For one take, open the prompt with "One continuous shot, no cuts." For several shots, open with the number of shots (for example "Two shots.") and begin the first beat of every shot after the first with "Hard cut:" followed by that shot's framing; give every shot at least 2 seconds. Name the shot size and one camera move or "fixed camera" for each shot (for example "medium-wide shot, slow push in"); when the artist chose the camera or framing, use exactly theirs. Every person, body part and act the artist asked for appears on screen: describe each one as visible in the shot, inside the artist's framing when they chose one. When the starting frame does not show a requested person, bring them into view in the first beat, by the person stepping into frame or, if the artist did not lock the camera, by a camera move such as a pull back.
+
+## Model notes
+
+- Use Image 1, Video 1, and Audio 1 as plain 1-based per-type labels without brackets, angle brackets, or @ prefixes.
+- Use native first/last-frame endpoints through animate_photo; do not mix those endpoint fields with loose multimodal references in the same request.
+- Use generate_video for text or loose references and sound_to_video when an audio asset drives timing. A video input is loose conditioning for a new generation, not a provider-backed edit or continuation.
+- Keep output duration within 2-30 seconds at the fixed 30 fps. When loose video references are present, their combined duration plus output duration must stay at or below 30 seconds.
+- Use only 480p, 720p, or 1080p and one of 16:9, 4:3, 1:1, 3:4, or 9:16.
+- Describe native dialogue, ambience, foley, and music directly; audio is enabled by default and can be disabled explicitly.
+- Translate exclusions into affirmative preservation language because Wan 3 does not accept a separate negative prompt.
+```
+
+<!-- END GENERATED PROMPT GUIDE: wan-3 -->
+
+## HappyHorse 1.1 Prompting
+
+Applies to HappyHorse 1.1 (`happyhorse` / `happyhorse-1.1`, which pick the mode
+from the inputs, and `happyhorse-1.1-t2v`, `-i2v`, `-r2v`): 3-15 s with native
+audio that is always on. What it renders well and the reference limits are in
+[models.md § HappyHorse 1.1](./models.md#happyhorse-11-prompting-tips).
+
+<!-- BEGIN GENERATED PROMPT GUIDE: happyhorse-1.1 -->
+<!-- Generated by npm run sync:prompt-guides from @sogni-ai/sogni-intelligence-client 4.23.0; edit the rules there, not here. -->
+
+### Sogni's prompt rules: happyhorse-1.1
+
+`sogni-agent prompt-guide happyhorse-1.1 --mode t2v` prints the rules Sogni's own prompt writer uses for HappyHorse 1.1 text-to-video, shown in full below. Print the guide for the mode you will run before writing its prompt:
+
+| Mode | Guide | Command |
+| --- | --- | --- |
+| `t2v` | HappyHorse 1.1 text-to-video | `sogni-agent prompt-guide happyhorse-1.1 --mode t2v` |
+| `i2v` | HappyHorse 1.1 first-frame image-to-video | `sogni-agent prompt-guide happyhorse-1.1-i2v --mode i2v` |
+| `r2v` | HappyHorse 1.1 reference-to-video | `sogni-agent prompt-guide happyhorse-1.1-r2v --mode r2v` |
+
+```text
+# HappyHorse 1.1 text-to-video
+
+Guide: happyhorse-1.1 t2v
+Models: happyhorse-1.1, happyhorse-1.1-t2v
+
+Each rule below is quoted from the system prompt Sogni's own prompt writer uses for this model and mode, so some rules speak to that writer about its base request or user message.
+
+## Rules
+
+CINEMATOGRAPHY: Write like a concise director's shot brief. Use one continuous shot unless the request asks for cuts, a montage or separate shots; then open each shot with its own time-coded beat that names the cut. Weave together the subjects with rich physical detail, the environment and the light sources the scene implies, and one primary thread of physically filmable motion using temporal connectors ("as", "then", "while"). Add a lens, color grade or film-stock note only when the request names a look or style. Express emotion through visible behavior — posture, gesture, breathing — never emotional labels. Match the pace to the action: calm words for calm moments, and for fast action show the speed through what rushes past the camera and the ground covered within a beat, because the word "fast" alone renders slower than intended.
+
+CAMERA: One primary camera move per shot — dolly in, slow pan, tracking shot, orbital arc, crane up, push-in, or pull-back. Stacking multiple moves causes jitter. Keep the camera move in its own clause, separate from subject motion.
+
+AUDIO: HappyHorse renders a native synchronized audio track — always on, with multilingual lip-sync. Weave foley and ambient sound into plain sentences (footsteps, fabric, wind, water, room tone, environmental ambience). When the scene involves speech or the user supplies dialogue, keep the spoken lines in double quotes and state that the subject speaks on camera with mouth movements matched to the words. Do not invent songs or a musical score unless the user asks for them.
+
+NEGATIVE CONSTRAINT TRANSLATION: HappyHorse has no negative-prompt input and receives only this positive prompt. Translate user avoid/no/don't constraints into affirmative production constraints instead of copying negative phrasing. The output prompt must not use words such as "no", "not", "without", "avoid", or "never" except inside exact quoted user-requested text. Examples: "no people in background" becomes single subject focus with an empty background; "no text" becomes clean blank surfaces; "don't make it blurry" becomes crisp sharp focus; "no music" becomes only natural ambient sound and foley. If the user asks for exact quoted visible text, preserve that quoted text exactly.
+
+DYNAMIC PROMPT BRANCHES: If the base request contains one Dynamic Prompt branch such as "{option A|option B}", preserve exactly one branch with the same option count. Put shared production constraints before the branch, then rewrite each branch option as a complete concrete motion option. Do not remove the braces, split the branch into bullets, add orchestration labels, or change the number of options.
+
+FORMAT: A single present-tense paragraph of flowing, visually specific prose. No bullets, headers, markdown, preamble, or labels. Avoid vague words ("beautiful", "nice"); avoid semicolons, em dashes, and parentheticals.
+
+TIME-CODED BEATS: For clips longer than 5 seconds, segment the action with compact time-coded beats such as "0-3s: …, 3-6s: …, 6-10s: …" so the motion reads in order.
+
+PROPER NOUNS: Preserve exact spelling and punctuation of brand or product names from the base request, including dotted names such as Sogni.ai.
+
+LENGTH: About 80–160 words for a single-beat shot, plus about 30 words for each further time-coded beat. Never drop a requested detail to fit. Output ONLY the rewritten prompt — no explanations, no labels.
+
+## Model notes
+
+- Use one flowing, present-tense director brief: one continuous shot with one primary camera move, or time-coded shots when the request asks for cuts or a montage.
+- For I2V, treat the single image as the locked first frame and describe only the motion that follows; do not add a reference tag.
+- For R2V, label image references exactly [Image 1] through [Image 9] and assign each image a concrete identity, wardrobe, setting, prop, or style role.
+- Describe synchronized dialogue, ambience, and foley in the prompt because native audio is always enabled.
+- Translate exclusions into affirmative visual constraints because HappyHorse does not accept a separate negative prompt.
+- Keep clips within the validated 3-15 second, 720p/1080p operating range.
+```
+
+<!-- END GENERATED PROMPT GUIDE: happyhorse-1.1 -->
 
 ## High-Res Video Routing
 
@@ -1053,8 +1567,8 @@ When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or *
 ## Agent-ready command shapes
 
 ```bash
-# Native Seedance 4K / UHD text-to-video
-sogni-agent -q --video -m seedance2 --target-resolution 2160 -o ./video.mp4 "A polished cinematic product reveal with native ambient sound"
+# Native Seedance 4K / UHD text-to-video (prompt per sogni-agent prompt-guide seedance2 --mode t2v)
+sogni-agent -q --video -m seedance2 --target-resolution 2160 -o ./video.mp4 "<Seedance prompt>"
 
 # HD / 1080p text-to-video without the Seedance vendor path: prefer LTX-2.5
 sogni-agent -q --video -m ltx25 -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
@@ -1063,19 +1577,19 @@ sogni-agent -q --video -m ltx25 -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten p
 sogni-agent -q --video --ref /path/to/image.png -m ltx25-i2v -w 1920 -h 1088 -o ./video.mp4 "<LTX-rewritten paragraph>"
 
 # LTX-2.3 voice identity / persona
-sogni-agent --video --reference-audio-identity voice.webm 'NARRATOR: "This is my voice."'
+sogni-agent --video --reference-audio-identity voice.webm 'A medium close-up frames the narrator as he looks into the lens and says in a calm, low voice, "This is my voice."'
 
 # Seedance 2.0 standard (4-15s vendor video path with native audio)
-sogni-agent --video -m seedance2 --duration 8 "A polished product reveal with native ambient sound"
+sogni-agent --video -m seedance2 --duration 8 "<Seedance prompt with time-coded beats>"
 
 # Seedance 2.5 (4-30s single clips, 480p/720p/1080p — the one Seedance that renders past 15s in one call)
-sogni-agent --video -m seedance2-5 --duration 24 "A continuous one-take product story with native ambient sound"
+sogni-agent --video -m seedance2-5 --duration 24 "<Seedance prompt whose time-coded beats cover all 24 s>"
 
 # Seedance 2.5 edit (duration must match @Video1; aspect ratio is inherited)
-sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1 while preserving its subject and timing"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1. Replace <what changes>. Keep the subject, camera path, and timing."
 
 # Seedance 2.5 extension (duration is the new continuation length)
-sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1. <the new footage after its ending, in time-coded beats>"
 ```
 
 Prefer `.webm`, `.m4a`, or `.mp3` voice clips. Local `.wav` clips are normalized

@@ -58,7 +58,7 @@ Prompt construction:
    to face") and match each reference's pose to where the camera will see it.
 2. Write the scene as chronological story beats and bind each explicit beat to
    its reference ("he pushes her slip up, exposing her bare vulva exactly as in
-   @Image3; … the camera low behind them as in @Image5"). This starts the film
+   @Image3. … the camera low behind them as in @Image5"). This starts the film
    clothed and goes explicit at the chosen beat.
 3. Direct the camera explicitly — "the camera held close and low on their hips
    where he thrusts" — or Seedance frames tastefully above the waist no matter
@@ -104,10 +104,11 @@ emit section labels such as `Performance:` or `Dialogue:` into the model
 prompt; fold those details into cinematic prose instead.
 
 1. Use the supplied start image exactly as the first frame by passing it through
-   `--ref`; do not merely mention it in prose. Briefly anchor its composition,
-   subject placement, and starting pose without inventing conflicting details.
-2. Establish the overall cinematic style, shot scale, camera movement,
-   environment, lighting, atmosphere, and relevant subtle background motion.
+   `--ref`; do not merely mention it in prose. The frame already shows its
+   composition, so name only the starting pose and placement the motion begins
+   from, without re-describing the frame or inventing conflicting details.
+2. Name the camera move and any change in lighting, environment, or background
+   motion; leave what the frame already shows.
 3. State the action concretely. Include a LoRA token when the requested action
    matches one of its trained concepts.
 4. Describe what happens step by step in chronological order: who moves, which
@@ -117,7 +118,7 @@ prompt; fold those details into cinematic prose instead.
    gaze, facial expression, micro-expressions, small pauses, and emotional
    changes that flow naturally from the starting pose.
 6. Integrate the audio design with the action: voice delivery, dialogue, foley,
-   environmental sound, and music where relevant.
+   environmental sound, and music only when the creator asks for it.
 
 Be specific and literal. Do not substitute euphemisms or generalizations for
 the requested visible action. Fit every action the creator names into the

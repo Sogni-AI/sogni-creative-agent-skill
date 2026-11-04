@@ -496,12 +496,12 @@ sogni-agent --video -m wan3 --smart-duration --wan3-ratio 9:16 --no-expand-promp
 # Accept its one-time likeness and consent agreement in the Sogni app first
 # (until then jobs fail with error 4103, which is not retryable).
 sogni-agent --video -m seedance2-5-uncensored --target-resolution 1080 --duration 8 \
-  "Two dancers spin through a packed neon club as the camera arcs fast around them, strobes flashing across their faces"
+  "A low camera circles two dancers spinning through a packed neon club, the crowd and strobe lights streaking past the lens. 0-3s: they lock hands and whip into a tight turn, her sequined dress and his loose shirt flaring out as the dancers around them throw their arms up. 3-6s: the taller dancer dips her partner low to the floor while the camera swings around them, magenta and blue light washing across their faces and sweat glinting on their shoulders. 6-8s: they snap upright together on the bass drop, chests heaving and grinning, as the crowd surges in behind them. Pounding bass, the crowd cheering, heels striking the floor. Both dancers keep the same faces, outfits and hair from the first frame to the last."
 
 # Seedance 2.0 Mini Uncensored: every Seedance 2.0 Mini mode and limit (480p/720p,
 # 4-15s) under its own model. It shares the Seedance 2.5 Uncensored agreement.
 sogni-agent --video -m seedance2-mini-uncensored --target-resolution 720 --duration 8 \
-  "A slow dolly through a rain-soaked neon street at night"
+  "A slow dolly glides down a rain-soaked neon street at night at chest height, the wet asphalt mirroring pink and blue signs. 0-3s: a lone cyclist in a yellow raincoat rolls through the frame from left to right, tires hissing through a wide puddle and scattering the reflections. 3-6s: steam curls up from a street grate as a shop shutter on the right rattles down to the pavement. 6-8s: the dolly comes to rest on a glowing noodle-bar window where a cook tosses noodles in a smoking wok. Steady rain patter on awnings, distant traffic, the shutter's metal clatter. The street stays empty apart from the cyclist and the cook."
 
 # Wan 3.0 Enhanced through MuleRouter (smart/fixed 2-30s, 30fps, native audio)
 sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
@@ -584,7 +584,7 @@ sogni-agent --music -m turbo --bpm 128 --keyscale "C major" "bright indie pop ch
 
 # LTX-2.3 voice identity / persona
 sogni-agent --video --reference-audio-identity voice.webm \
-  'NARRATOR: "This is my voice."'
+  'A medium close-up frames the narrator as he looks into the lens and says in a calm, low voice, "This is my voice."'
 
 # Hosted chat with Sogni creative-agent tools (/v1/chat/completions)
 sogni-agent --api-chat \
@@ -798,9 +798,9 @@ Music generation uses `--music` and outputs `mp3` by default. `--audio` remains 
 Seedance 2.5 loose-reference operations use an explicit task contract. `reference` accepts any loose image/video/audio set (including audio-only); `edit` and `extend` require `@Video1` through `--ref-video` and reject first/last-frame anchors. Edit inherits the source aspect ratio and requires its source duration, while extend inherits the ratio and uses the requested continuation duration:
 
 ```bash
-sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 to guide a new performance"
-sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1 while preserving its subject and timing"
-sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1 after its ending"
+sogni-agent --video -m seedance2-5 --seedance-task-type reference --ref-audio voice.m4a "Use @Audio1 as the singer's voice. <the new performance, in time-coded beats>"
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1. Replace <what changes>. Keep the subject, camera path, and timing."
+sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1. <the new footage after its ending, in time-coded beats>"
 ```
 
 ---
@@ -830,12 +830,12 @@ The LTX-2.5 v2v selector `ltx25-v2v` supports two extra control modes: **`outpai
 
 ## LTX-2.x Prompting Guide
 
-Every video family reads its own prompt grammar: `references/video-prompting.md` has a section per model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3). This section summarizes the LTX one.
+Every video family reads its own prompt grammar. `sogni-agent prompt-guide <model> --mode <mode>` prints the rules Sogni's own prompt writer uses for that model and mode (free and offline; with no model it lists every guide), and `references/video-prompting.md` has a section per model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3, HappyHorse). This section summarizes the LTX one.
 
 When you use LTX-2.5 or an LTX-2.3 rollback model, do **not** feed it short tag prompts like `"cinematic drone shot over tropical cliffs"`. LTX renders more reliably from a dense natural-language scene description.
 
-- Write one unbroken paragraph — no line breaks, bullets, headers, or tag blocks.
-- Use 4–8 flowing present-tense sentences describing one continuous shot unless the user asks for cuts. LTX-2.5 text-to-video keeps every requested shot: one sentence per shot, in order, each opening with its cut time (`At exactly 3 seconds, a hard cut switches to a close-up of …`).
+- Write present-tense prose with no bullets, headers, or tag blocks.
+- Text-to-video gives each shot one sentence: one continuous shot unless the user asks for cuts, and every requested shot kept in order, each later sentence opening with its cut time (`At exactly 3 seconds, a hard cut switches to a close-up of …`). Image-to-video and first/last-frame stay one continuous take.
 - Start with shot scale and scene identity, then cover environment, time of day, textures, and named light sources.
 - Keep characters and objects concrete and stable; give each shot one main action thread from start to finish.
 - For dialogue, include the exact spoken words in double quotes with the speaker and delivery identified inline.
@@ -849,7 +849,7 @@ When you use LTX-2.5 or an LTX-2.3 rollback model, do **not** feed it short tag 
 ```text
 User ask: "make a 4k video of a woman in a neon alley"
 
-LTX prompt: "A medium cinematic shot frames a woman in her 30s standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement while warm steam drifts from street vents. She wears a dark trench coat with damp strands of black hair clinging near her cheek as light glances across the fabric texture and the brick walls behind her. She turns toward the camera and steps forward with measured focus, one hand tightening around the strap of her bag while rain taps softly on the metal fire escape and a distant train hum rolls through the block. The camera performs a slow push-in as her jaw sets and her breathing steadies, maintaining smooth stabilized motion and a tense urban-thriller mood."
+LTX-2.5 prompt (one shot, so one sentence): "A medium shot frames a woman in her 30s in a dark trench coat standing in a rain-soaked neon alley at night, violet and amber signs reflecting across the wet pavement and steam drifting from a street vent behind her, as she turns toward the camera and steps forward with one hand tightening around her bag strap while the camera pushes in on her set jaw, rain tapping on a metal fire escape and a distant train humming through the block."
 ```
 
 ---
@@ -890,7 +890,7 @@ sogni-agent --persona-add "Sarah" --ref sarah.jpg --relationship partner --voice
 sogni-agent --persona "Mark" -o hero.png "superhero in dramatic lighting"
 
 # Video using a persona photo + saved voice identity
-sogni-agent --video --persona "Sarah" 'SARAH: "This is my voice."'
+sogni-agent --video --persona "Sarah" 'A medium close-up frames Sarah as she smiles into the lens and says, "This is my voice."'
 
 # List / remove
 sogni-agent --persona-list

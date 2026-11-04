@@ -12,6 +12,7 @@ import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 import { importMedia } from '../desktop-extension/server/import-media.mjs';
 import { PACKAGE_VERSION } from '../version.mjs';
+import { MODEL_PROMPT_GUIDES, renderModelPromptGuide } from '@sogni-ai/sogni-intelligence-client/prompt-guides';
 import { stageMcpb } from '../scripts/build-mcpb.mjs';
 
 function tempHome() {
@@ -110,7 +111,7 @@ test('TOOLS exposes the expected v1 tool names', () => {
   assert.deepEqual(TOOLS.map((t) => t.name).sort(), [
     'account_balance', 'edit_video', 'generate_image', 'generate_music',
     'generate_video', 'import_media', 'list_media', 'manage_memories',
-    'manage_personas', 'photobooth', 'sogni_doctor',
+    'manage_personas', 'photobooth', 'prompt_guide', 'sogni_doctor',
   ]);
   for (const t of TOOLS) {
     assert.equal(typeof t.description, 'string');
@@ -288,6 +289,19 @@ test('manage_personas and manage_memories dispatch per action', () => {
   assert.throws(() => m.buildArgs({ action: 'set', key: 'k' }), /value/);
 });
 
+test('prompt_guide builds offline prompt-guide argv; the generate tools point at it', () => {
+  const tool = getTool('prompt_guide');
+  assert.deepEqual(tool.buildArgs({}), ['prompt-guide', '--no-update-check']);
+  assert.deepEqual(
+    tool.buildArgs({ model: 'seedance2-5', mode: 'i2v' }),
+    ['prompt-guide', '--model', 'seedance2-5', '--mode', 'i2v', '--no-update-check'],
+  );
+  assert.equal(tool.inputSchema.required, undefined);
+  for (const name of ['generate_image', 'generate_video']) {
+    assert.match(getTool(name).description, /Before writing the prompt, call prompt_guide for the model you chose/);
+  }
+});
+
 test('doctor, balance, list_media argv', () => {
   assert.deepEqual(getTool('sogni_doctor').buildArgs({}), ['--doctor', '--json', '--no-update-check']);
   assert.deepEqual(getTool('account_balance').buildArgs({}), ['--balances', '--json', '--no-update-check']);
@@ -460,6 +474,24 @@ test('oversized success output keeps the head (front-loaded JSON), not the tail'
     text.startsWith('{"argv":["--json","-q","--no-update-check","-Q","fast","a red fox"]'),
     'expected the head (result JSON) to survive truncation, not the trailing pad',
   );
+});
+
+test('prompt_guide returns the whole guide from the real CLI, past the 20k default cap', { timeout: 20000 }, async (t) => {
+  const client = new McpClient({ SOGNI_AGENT_PATH: join(HERE, '..', 'sogni-agent.mjs'), SOGNI_API_KEY: '' });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', {
+    name: 'prompt_guide',
+    arguments: { model: 'minimax-h3-r2v-balanced', mode: 'r2v' },
+  });
+  assert.equal(res.result.isError ?? false, false);
+  const text = res.result.content[0].text;
+  const rendered = renderModelPromptGuide(MODEL_PROMPT_GUIDES['minimax-h3'].r2v, { audience: 'agent' });
+  assert.ok(rendered.length > 20000, 'fixture must exceed the default result cap');
+  assert.ok(text.startsWith(`${rendered}\n\n-m minimax-h3-r2v-balanced resolves to `), 'guide was clipped or changed');
+
+  const unknown = await client.request('tools/call', { name: 'prompt_guide', arguments: { model: 'not-a-model' } });
+  assert.equal(unknown.result.isError, true);
+  assert.match(unknown.result.content[0].text, /No prompt guide for model "not-a-model"/);
 });
 
 test('tools/call surfaces CLI failure as isError with stderr included', async (t) => {

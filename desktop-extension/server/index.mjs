@@ -156,7 +156,8 @@ async function callTool(name, input, progressToken) {
         || `sogni-agent exited with code ${code}`;
       // Success output is front-loaded (e.g. result JSON) so keep the head; on
       // failure the actionable error is at the tail, so keep the tail instead.
-      const clipped = code === 0 ? text.slice(0, MAX_RESULT_CHARS) : text.slice(-MAX_RESULT_CHARS);
+      const maxChars = tool.maxResultChars ?? MAX_RESULT_CHARS;
+      const clipped = code === 0 ? text.slice(0, maxChars) : text.slice(-maxChars);
       if (code !== 0) {
         finish(textResult(clipped, true));
         return;

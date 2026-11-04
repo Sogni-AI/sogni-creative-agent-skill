@@ -35,7 +35,8 @@ export const TOOLS = [
       'Pass output_path (absolute, .png/.jpg) to save locally; otherwise a hosted URL is returned. ' +
       'Use context_images for image editing ("make the background a beach") and persona to include a saved person. ' +
       'Image results are attached inline in the tool result. ' +
-      'The model reads your prompt with no model-specific rewrite, so write it in that model family\'s own form: ' +
+      'The model reads your prompt with no model-specific rewrite. Before writing the prompt, call prompt_guide for the model you chose, ' +
+      'and write it in that model family\'s own form: ' +
       'https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/image-prompting.md. ' +
       CHAT_ATTACHMENT_NOTE,
     inputSchema: {
@@ -85,8 +86,8 @@ export const TOOLS = [
       'drives the clip with the uploaded audio and keeps it as the soundtrack; no LoRAs. ' +
       'MiniMax H3 i2v, first/last-frame, FastH3 audio-to-video and r2v also take keyframes: extra images pinned at chosen times inside the clip. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
-      'The model reads your prompt with no model-specific rewrite (Wan 3 aside), so before writing it read the section for the ' +
-      'chosen model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) in ' +
+      'The model reads your prompt with no model-specific rewrite (Wan 3 aside). Before writing the prompt, call prompt_guide for the model you chose, ' +
+      'and read the section for that model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) in ' +
       'https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/video-prompting.md. ' +
       'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
@@ -158,6 +159,34 @@ export const TOOLS = [
       push(args, '--target-resolution', input.target_resolution);
       push(args, '-t', input.timeout_seconds);
       args.push(prompt);
+      return args;
+    },
+  },
+  {
+    name: 'prompt_guide',
+    description:
+      'The prompt rules Sogni\'s own prompt writers use for one image or video model and mode. Call it before writing a prompt ' +
+      'for generate_image or generate_video: those tools send your words to the model with no model-specific rewrite, ' +
+      'so these rules are the shaping the prompt gets. Free and offline: no credits, no API call. ' +
+      'Pass the model id you will generate with and the mode you will run; omit model to list every family, mode and model id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        model: str('The model id or alias you will pass as model, e.g. seedance2-5, ltx25, minimax-h3-r2v-balanced, wan22-i2v, krea2_identity_edit_v1_2'),
+        mode: str(
+          'The mode you will run: t2v, i2v, l2v (last frame only), flf (first and last frame), r2v, v2v, a2v, ia2v, flfa2v, s2v, ' +
+          'extend, i2v-keyframes, a2v-keyframes, animate-move, animate-replace, generate or edit. ' +
+          'Default: the mode the model id names, else t2v for video.',
+        ),
+      },
+    },
+    // MiniMax H3 guides run past 20,000 characters (r2v is about 20,100).
+    maxResultChars: 64_000,
+    buildArgs(input) {
+      const args = ['prompt-guide'];
+      push(args, '--model', input.model);
+      push(args, '--mode', input.mode);
+      args.push('--no-update-check');
       return args;
     },
   },

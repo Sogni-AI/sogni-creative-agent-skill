@@ -92,6 +92,11 @@ import {
   extractToolCallProgressUpdate
 } from '@sogni-ai/sogni-intelligence-client/chatRun';
 import {
+  MODEL_PROMPT_GUIDES,
+  getModelPromptGuide,
+  renderModelPromptGuide
+} from '@sogni-ai/sogni-intelligence-client/prompt-guides';
+import {
   buildImageEditExecutionControls,
   normalizeGptImageModelAlias,
   normalizeGptImageQuality,
@@ -3539,6 +3544,181 @@ function loadOpenClawPluginConfig() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Prompt guides: `sogni-agent prompt-guide [model] [--mode <mode>] [--json]`
+// prints the prompt rules Sogni's own writers use for a model and mode
+// (@sogni-ai/sogni-intelligence-client/prompt-guides), so an agent can read
+// them before writing the prompt itself. The model is resolved the way -m is,
+// by model id only; nothing here reads prompt text. No API call, no credentials.
+// ---------------------------------------------------------------------------
+const PROMPT_GUIDE_USAGE = 'sogni-agent prompt-guide <model> [--mode <mode>] [--json]';
+
+function promptGuideCatalog() {
+  return Object.entries(MODEL_PROMPT_GUIDES).map(([family, modes]) => ({
+    family,
+    modes: Object.keys(modes),
+    models: [...new Set(Object.values(modes).flatMap((guide) => guide.models))],
+  }));
+}
+
+function formatPromptGuideCatalog() {
+  const lines = [
+    `Usage: ${PROMPT_GUIDE_USAGE}`,
+    "Prints the prompt rules Sogni's own writers use for a model, to read before you write its prompt. Free and offline.",
+    '',
+  ];
+  for (const { family, modes, models } of promptGuideCatalog()) {
+    lines.push(family, `  modes:  ${modes.join(', ')}`, `  models: ${models.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+// The CLI resolves -m against the run's workflow and frames: with a workflow,
+// `wan22` t2v/i2v renders on LTX 2.5, and bare tier selectors such as
+// `minimax-h3-balanced` resolve only with one. A guide mode names both. With no
+// mode, a run with no media attached is t2v.
+const PROMPT_GUIDE_MODE_WORKFLOWS = Object.freeze({
+  t2v: ['t2v', false, false],
+  extend: ['t2v', false, false],
+  i2v: ['i2v', true, false],
+  'i2v-keyframes': ['i2v', true, false],
+  l2v: ['i2v', false, true],
+  flf: ['i2v', true, true],
+  flf2v: ['i2v', true, true],
+  r2v: ['r2v', false, false],
+  v2v: ['v2v', false, false],
+  a2v: ['a2v', false, false],
+  'a2v-keyframes': ['a2v', false, false],
+  ia2v: ['ia2v', true, false],
+  flfa2v: ['ia2v', true, true],
+  s2v: ['s2v', true, false],
+  'animate-move': ['animate-move', true, false],
+  'animate-replace': ['animate-replace', true, false],
+});
+
+// Every guide mode, in registry order, for listing what one -m value supports.
+const PROMPT_GUIDE_MODES = [...new Set(Object.values(MODEL_PROMPT_GUIDES).flatMap((modes) => Object.keys(modes)))];
+
+// The guide for a -m value and mode, resolved in the CLI's own order: its video
+// selectors for that workflow, then its image selector normalization. The model
+// id decides; nothing reads prompt text.
+function resolvePromptGuide(model, mode) {
+  const [workflow, hasStartFrame, hasEndFrame] = mode
+    ? (PROMPT_GUIDE_MODE_WORKFLOWS[mode] || [])
+    : PROMPT_GUIDE_MODE_WORKFLOWS.t2v;
+  const video = resolveVideoModelAlias(
+    resolveHappyHorseModelId(
+      resolveSkillVideoModelAlias(model, workflow ?? null, Boolean(hasStartFrame), Boolean(hasEndFrame)),
+      workflow ?? null
+    ),
+    workflow
+  );
+  const image = normalizeSeedreamModelAlias(normalizeGptImageModelAlias(model));
+  for (const resolvedModel of new Set([video, image])) {
+    const guide = getModelPromptGuide(resolvedModel, mode || undefined);
+    if (guide) return { guide, resolvedModel };
+  }
+  return null;
+}
+
+function runPromptGuideAction(argv) {
+  let model = null;
+  let mode = null;
+  let showCatalog = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--mode') {
+      mode = requireFlagValue(argv, i, arg).trim().toLowerCase();
+      i++;
+    } else if (arg === '-m' || arg === '--model') {
+      model = requireFlagValue(argv, i, arg).trim();
+      i++;
+    } else if (arg === '--json' || arg === '--no-update-check') {
+      // --json is read from the raw argv (JSON_ERROR_MODE); the update check reads its own flag.
+    } else if (arg === '--help') {
+      showCatalog = true;
+    } else if (arg.startsWith('-')) {
+      fatalCliError(`Unknown prompt-guide option: ${arg}`, {
+        code: 'INVALID_ARGUMENT',
+        hint: `Usage: ${PROMPT_GUIDE_USAGE}`
+      });
+    } else if (model === null) {
+      model = arg.trim();
+    } else {
+      fatalCliError(`prompt-guide takes one model; got "${model}" and "${arg}".`, {
+        code: 'INVALID_ARGUMENT',
+        hint: `Usage: ${PROMPT_GUIDE_USAGE}`
+      });
+    }
+  }
+
+  const failWithCatalog = (message, details) => {
+    if (!JSON_ERROR_MODE) console.error(formatPromptGuideCatalog());
+    fatalCliError(message, {
+      code: 'INVALID_ARGUMENT',
+      details: { ...details, families: promptGuideCatalog() },
+      hint: `Usage: ${PROMPT_GUIDE_USAGE}. Run sogni-agent prompt-guide with no model to list every guide.`
+    });
+  };
+
+  if (showCatalog || !model) {
+    if (mode && !showCatalog) {
+      failWithCatalog('prompt-guide --mode needs a model.', { mode });
+    }
+    if (JSON_ERROR_MODE) {
+      console.log(JSON.stringify({ success: true, type: 'prompt-guide-list', usage: PROMPT_GUIDE_USAGE, families: promptGuideCatalog() }));
+    } else {
+      console.log(formatPromptGuideCatalog());
+    }
+    return;
+  }
+
+  // Modes differ per selector (krea2-identity-edit only edits; wan22 s2v stays
+  // on WAN 2.2 while its t2v renders on LTX 2.5), so list this -m value's own.
+  const modes = PROMPT_GUIDE_MODES.filter((entry) => resolvePromptGuide(model, entry));
+  const resolved = resolvePromptGuide(model, mode);
+  if (!resolved) {
+    if (mode && modes.length > 0) {
+      fatalCliError(`No "${mode}" prompt guide for ${model}. Its modes: ${modes.join(', ')}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { model, mode, modes },
+        hint: `Run sogni-agent prompt-guide ${model} --mode <${modes.join('|')}>.`
+      });
+    }
+    failWithCatalog(`No prompt guide for model "${model}".`, { model, mode });
+  }
+
+  const { guide, resolvedModel } = resolved;
+  if (JSON_ERROR_MODE) {
+    console.log(JSON.stringify({
+      success: true,
+      type: 'prompt-guide',
+      model,
+      resolvedModel,
+      family: guide.family,
+      mode: guide.mode,
+      modes,
+      guide,
+    }));
+    return;
+  }
+  const otherModes = modes.filter((entry) => entry !== guide.mode);
+  const footer = [
+    `-m ${model} resolves to ${resolvedModel} in this mode.`,
+    ...(otherModes.length > 0
+      ? [`Other modes: ${otherModes.join(', ')}. Print one with: sogni-agent prompt-guide ${model} --mode <mode>`]
+      : []),
+  ];
+  console.log(`${renderModelPromptGuide(guide, { audience: 'agent' })}\n\n${footer.join('\n')}`);
+}
+
+// prompt-guide runs here: after the model alias tables it resolves with, and
+// before any config, credential or network work.
+if (RAW_ARGS[0] === 'prompt-guide') {
+  runPromptGuideAction(RAW_ARGS.slice(1));
+  process.exit(0);
+}
+
 const openclawConfig = loadOpenClawPluginConfig();
 const CREDENTIALS_PATH = resolveConfiguredPath(
   getEnv('SOGNI_CREDENTIALS_PATH') || openclawConfig?.credentialsPath,
@@ -5250,6 +5430,11 @@ General:
   --version, -V         Show sogni-agent version and exit
   --no-update-check     Skip the once-daily npm update check for this run
   self-update           Upgrade sogni-agent in place (npm/pnpm/yarn/bun auto-detected)
+  prompt-guide <model> [--mode <mode>] [--json]
+                        Print the prompt rules Sogni's own writers use for a model and mode
+                        (t2v|i2v|l2v|flf|r2v|v2v|a2v|ia2v|extend|generate|edit|...); read them
+                        before writing that model's prompt. Free and offline. With no model it
+                        lists every guide
   --extract-last-frame <video> <image>  Extract last frame from a video (safe ffmpeg wrapper)
   --extract-first-frame <video> <image> Extract first frame from a video (safe ffmpeg wrapper)
   --extract-frame-at <video> <sec> <image> Extract a timestamped frame (safe ffmpeg wrapper)
@@ -5461,7 +5646,8 @@ LTX-2 / LTX-2.3 rollback models:
 
 Examples:
   sogni-agent "a cat wearing a hat"
-  sogni-agent -o cat.jpg "a cat" 
+  sogni-agent prompt-guide seedance2-5 --mode i2v
+  sogni-agent -o cat.jpg "a cat"
   sogni-agent --multi-angle -c subject.jpg --azimuth front-right --elevation eye-level --distance medium "studio portrait"
   sogni-agent --angles-360 -c subject.jpg "studio portrait"
   sogni-agent --video --ref cat.jpg -o cat.mp4 "cat walks around"

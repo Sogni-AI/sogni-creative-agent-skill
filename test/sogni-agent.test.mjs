@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -44,8 +44,20 @@ function createPngDimensionFixture(width, height) {
   return path;
 }
 
+// Every CLI run gets its own temporary HOME. Remove them when this file's test process exits: they were never
+// deleted, and a few hundred runs a day left 17,334 folders (4.6 GiB) in the system temp folder by 2026-11-04.
+const tempHomes = [];
+process.on('exit', () => {
+  for (const dir of tempHomes) rmSync(dir, { recursive: true, force: true });
+});
+function makeTempHome(prefix) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempHomes.push(dir);
+  return dir;
+}
+
 function prepareCliRun(envOverrides = {}) {
-  const tempHome = mkdtempSync(join(tmpdir(), 'sogni-agent-test-'));
+  const tempHome = makeTempHome('sogni-agent-test-');
   const statePath = join(tempHome, 'state.json');
   const loaderPath = join(process.cwd(), 'test', 'loader.mjs');
   const cliPath = join(process.cwd(), 'sogni-agent.mjs');
@@ -3649,7 +3661,7 @@ test('storyboard upload mention routes to Seedance storyboard fallback', () => {
 });
 
 test('--last-image participates in video workflow inference', () => {
-  const tempHome = mkdtempSync(join(tmpdir(), 'sogni-agent-last-image-test-'));
+  const tempHome = makeTempHome('sogni-agent-last-image-test-');
   const lastRenderPath = join(tempHome, 'last-render.json');
   writeFileSync(lastRenderPath, JSON.stringify({ localPath: SCREENSHOT_FIXTURE }));
 

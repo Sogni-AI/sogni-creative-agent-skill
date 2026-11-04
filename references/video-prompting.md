@@ -1086,9 +1086,21 @@ quirks) are in
   describe the motion that carries the first frame forward, or arrives on the
   last. Add `--ref-end` only when it shows the camera and arrangement the action
   naturally ends on; otherwise Seedance morphs the shot to reach it.
-- The two modes cannot be combined; the CLI rejects the mix before billing.
-  `--workflow ia2v` is the one exception: there `--ref` is a loose `@Image1`
-  beside the audio.
+- The two flags cannot be combined: BytePlus rejects a `first_frame` or
+  `last_frame` image beside any reference image, video, or audio, so the CLI
+  refuses the mix before billing. `--workflow ia2v` is the one exception: there
+  `--ref` is a loose `@Image1` beside the audio.
+- **To open on a picture in reference or edit mode, state it.** Pass the picture
+  with `-c` like any other reference and say in the prompt that it is the first
+  frame: `@Image24 is the first frame of this video: identical composition,
+  framing, lighting and colour, with every person in the same place, the same
+  face and the same outfit.` Measured on a Seedance 2.5 edit of a crowd shot
+  (2026-11-04): frame 1 came back with every named character in the same place
+  and outfit, within 0.5% of the picture's zoom and one frame of its timing. A
+  stated frame is close, not pixel-locked (frame mode lands within 0.03%), so
+  keep frame mode whenever no reference is needed. This is how a re-rendered
+  stretch joins an earlier take: cut the source at a still moment, state the
+  earlier take's frame there as the first frame, and splice at that frame.
 - **Edits are written as edits** (`-m seedance2-5-v2v --seedance-task-type edit
   --ref-video source.mp4 --duration <source seconds>`): open with `Edit
   @Video1.`, name what changes, then what stays, as in `Edit @Video1. Replace the

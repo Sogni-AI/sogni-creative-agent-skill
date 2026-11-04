@@ -7672,7 +7672,8 @@ if (options.video) {
     fatalCliError(
       'Seedance reference modes are mutually exclusive: native --ref/--ref-end frame anchors cannot be combined with loose image, video, or audio references. '
       + 'Pick one: use --ref/--ref-end alone for first-class frame anchoring, or use -c/--context with optional --ref-video/--ref-audio and @ImageN/@VideoN/@AudioN prompt language. '
-      + 'For image-plus-audio generation, select --workflow ia2v; there --ref is mapped to a loose @Image reference instead of first_frame.',
+      + 'For image-plus-audio generation, select --workflow ia2v; there --ref is mapped to a loose @Image reference instead of first_frame. '
+      + 'To open on a picture while using references, pass it with -c and state it in the prompt as the first frame ("@ImageN is the first frame of this video").',
       { code: 'INVALID_ARGUMENT', details: {
           dedicatedFrames: seedanceFrameInputs,
           looseReferences: seedanceLooseInputs,

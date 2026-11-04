@@ -2,15 +2,16 @@
 
 ### Features
 
-* The video prompting guide now has sections for Seedance 2.x/2.5, WAN 2.2 and Wan 3, written for an agent writing the prompt itself: the shot in one sentence first, one job per reference, timed beats, one primary camera move, pace shown through what rushes past, constraints stated as positive facts, cuts only when asked, and the exact words for speech and on-screen text. SKILL.md, the plugin skills, `llm.txt` and the desktop extension point agents to the model's section before they write a prompt.
+* `sogni-agent prompt-guide <model> [--mode <mode>] [--json]` prints the prompt rules Sogni's own prompt writers use for an image or video model and mode, so an agent can read them before it writes the prompt. It is free and offline (no credits, no API key), resolves the model the way `-m` does for a render, and with no model lists every family, mode and model id. The desktop extension adds a matching `prompt_guide` tool, and `generate_image` and `generate_video` ask for it before a prompt is written. The video and image prompting guides carry the same rules, generated from intelligence-client: each video family's main mode in full, with the command for every other mode.
+* The video prompting guide now has sections for Seedance 2.x/2.5, WAN 2.2, Wan 3 and HappyHorse 1.1, written for an agent writing the prompt itself: the shot in one sentence first, one job per reference, timed beats, one primary camera move, pace shown through what rushes past, constraints stated as positive facts, cuts that follow the request, and the exact words for speech and on-screen text. SKILL.md, the plugin skills, `llm.txt` and the desktop extension point agents to the model's section before they write a prompt.
 
 ### Bug Fixes
 
 * Camera wording keeps the request's pace: "zoom in" maps to a push-in or crash zoom, "pan" to a pan or whip pan, "orbit" to an orbit or fast arc, instead of always slowing the move.
-* LTX 2.5 text-to-video keeps requested shots as time-coded sentences; the one-continuous-shot rule applies to LTX 2.3 and to LTX 2.5 image-to-video and first/last-frame clips.
+* LTX text-to-video gives each shot one sentence and keeps every requested shot, each later sentence opening with its cut time; image-to-video and first/last-frame clips stay one continuous take.
 * Every action the request names stays in the clip, on-screen text is kept exactly in quotes after "reads", and adult guides follow the requested intensity.
 * A storyboard upload keeps your own words after the storyboard instructions instead of replacing them with a fixed prompt.
-* Use intelligence-client 4.22.10 and the creative-agent 2.27.8 runtime.
+* Use intelligence-client 4.23.0 and the creative-agent 2.27.9 runtime.
 
 ## [3.62.0] - 2026-11-03
 

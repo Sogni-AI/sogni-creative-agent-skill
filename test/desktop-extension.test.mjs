@@ -154,6 +154,17 @@ test('generate_video maps refs and duration', () => {
   ]);
 });
 
+test('generate_video maps Seedance 2.5 draft mode, and a finalize sends no prompt', () => {
+  const tool = getTool('generate_video');
+  assert.deepEqual(tool.buildArgs({ prompt: 'a storm rolls in', model: 'seedance2-5', seedance_draft: true }), [
+    '--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-draft', 'a storm rolls in',
+  ]);
+  assert.deepEqual(tool.buildArgs({ model: 'seedance2-5', seedance_finalize: 'job-draft-1', output_path: '/tmp/final.mp4' }), [
+    '--json', '-q', '--no-update-check', '--video', '-o', '/tmp/final.mp4', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1',
+  ]);
+  assert.throws(() => tool.buildArgs({ model: 'seedance2-5' }), /prompt is required/);
+});
+
 test('generate_video exposes MiniMax H3 r2v reference arrays and audio control', () => {
   const tool = getTool('generate_video');
   assert.ok(tool.inputSchema.properties.workflow.enum.includes('r2v'));

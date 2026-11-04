@@ -280,7 +280,7 @@ sogni-agent doctor --json
 | `--video`, `--music` | Generate video / music instead of image | - |
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v; `--keyframe <image>@<sec>` pins an H3 keyframe (repeat, up to 8) | - |
-| `--seedance-task-type reference\|edit\|extend` | Explicit Seedance 2.5 loose-reference operation; v2v defaults to edit | - |
+| `--seedance-task-type reference\|edit\|extend`; `--seedance-draft`, `--seedance-finalize <jobId>` | Seedance 2.5 loose-reference operation (v2v defaults to edit). Draft mode: iterate on 480p drafts (480p price), then render the kept draft at 1080p with all its inputs, before its `seedanceDraftExpiresAt` (~3 h); see `references/models.md` § Seedance 2.5 | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
 | `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt guardrails (quote and duration checks, storyboard fallback) plus Sogni's server-side Wan 3 rewrite; `--no-expand-prompt` sends the prompt literally. Wan 3 watermark control | on / watermark off |

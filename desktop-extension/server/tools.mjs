@@ -86,6 +86,9 @@ export const TOOLS = [
       'drives the clip with the uploaded audio and keeps it as the soundtrack; no LoRAs. ' +
       'MiniMax H3 i2v, first/last-frame, FastH3 audio-to-video and r2v also take keyframes: extra images pinned at chosen times inside the clip. ' +
       'ref_audio = soundtrack/lip-sync audio, ref_video = motion reference. ' +
+      'Seedance 2.5 draft mode: seedance_draft renders a 480p draft at the 480p price, and the result carries its jobId and seedanceDraftExpiresAt; ' +
+      'seedance_finalize with that jobId (same model, no prompt, media, duration or size) renders the same video at 1080p before it expires (about three hours). ' +
+      'Iterate on drafts and finalize only the take you keep. ' +
       'The model reads your prompt with no model-specific rewrite (Wan 3 aside). Before writing the prompt, call prompt_guide for the model you chose, ' +
       'and read the section for that model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3) in ' +
       'https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/video-prompting.md. ' +
@@ -127,12 +130,16 @@ export const TOOLS = [
         generate_audio: { type: 'boolean', description: 'For MiniMax H3, keep generated audio (true) or strip it from the returned video (false)' },
         persona: str('Saved persona name (reference frame)'),
         target_resolution: num('Short-side target in px, preserves aspect'),
+        seedance_draft: { type: 'boolean', description: 'Seedance 2.5: render a 480p draft that seedance_finalize can render at 1080p' },
+        seedance_finalize: str('Seedance 2.5: the jobId of a draft to render at 1080p with its own prompt, media, length, ratio, seed and audio (send no prompt)'),
         timeout_seconds: num('Generation timeout override (default 1800)'),
       },
-      required: ['prompt'],
+      required: [],
     },
     buildArgs(input) {
-      const prompt = required(input, 'prompt');
+      // A finalize renders its draft's own prompt; every other render needs one.
+      const finalize = input.seedance_finalize;
+      const prompt = finalize ? input.prompt : required(input, 'prompt');
       const args = [...GEN_BASE, '--video'];
       push(args, '-o', input.output_path);
       push(args, '-m', input.model);
@@ -157,8 +164,10 @@ export const TOOLS = [
       if (input.generate_audio === false) args.push('--no-generate-audio');
       push(args, '--persona', input.persona);
       push(args, '--target-resolution', input.target_resolution);
+      if (input.seedance_draft === true) args.push('--seedance-draft');
+      push(args, '--seedance-finalize', finalize);
       push(args, '-t', input.timeout_seconds);
-      args.push(prompt);
+      if (prompt) args.push(prompt);
       return args;
     },
   },

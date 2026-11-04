@@ -752,6 +752,18 @@ no negative prompt and no ControlNet.
   fail asynchronously after inferring the task.
 - **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
   its only loose reference.
+- **Draft mode** (Seedance 2.5 and 2.5 Uncensored): iterate at 480p, then render
+  the take you keep at 1080p. `--seedance-draft` renders a 480p draft at the
+  480p price; any normal Seedance 2.5 input works, and the size must be 480p
+  (the CLI picks it when you give none). An ordinary 480p render cannot be
+  finalized later. Only a job submitted as a draft can. `--seedance-finalize
+  <job-id>`, with the same `-m`, renders that draft at 1080p in its ratio, with
+  its prompt, media, length, seed and audio setting, so it takes none of them.
+  `--json` reports the draft's `jobId` and `seedanceDraftExpiresAt`: finalize
+  before then (about three hours, own account only). Each finalize is billed
+  again at 1080p for the draft's length, at the video-input rate when the draft
+  had a video input. Judge the draft before finalizing: the final is the same
+  video, not a new take.
 
 The bundled CLI and pinned SDKs recognize `seedance-2-5` and transport typed
 tasks; see `package.json` for the current dependency versions. The direct CLI

@@ -3294,6 +3294,94 @@ test('seedance 2.5 first-frame generation keeps its frame anchor without an omni
   assert.ok(state.lastVideoProject.referenceImage);
 });
 
+test('seedance 2.5 --seedance-draft renders a 480p draft and reports its job id and expiry', () => {
+  const { exitCode, state, stdout, stderr } = runCli([
+    '--video', '-m', 'seedance2-5', '--seedance-draft', '--json',
+    'A lighthouse keeper climbs a spiral stair as a storm rolls in.'
+  ], {
+    SOGNI_AGENT_TEST_JOB_LABELS_JSON: JSON.stringify({
+      id: 'job-draft-1',
+      seedanceDraft: true,
+      seedanceDraftExpiresAt: '2026-11-04T12:00:00.000Z'
+    })
+  });
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastVideoProject.seedanceDraft, true);
+  assert.equal(state.lastVideoProject.seedanceDraftJobId, undefined);
+  assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 480);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.deepEqual(
+    {
+      jobId: output.results[0].jobId,
+      seedanceDraft: output.results[0].seedanceDraft,
+      seedanceDraftExpiresAt: output.results[0].seedanceDraftExpiresAt
+    },
+    { jobId: 'job-draft-1', seedanceDraft: true, seedanceDraftExpiresAt: '2026-11-04T12:00:00.000Z' }
+  );
+});
+
+test('seedance 2.5 drafts refuse a size other than 480p', () => {
+  const { exitCode, stderr } = runCli([
+    '--video', '-m', 'seedance2-5', '--seedance-draft', '--target-resolution', '720', 'A storm rolls in.'
+  ]);
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /drafts render at 480p only, not 720p/);
+});
+
+test('seedance draft mode is refused on models other than Seedance 2.5', () => {
+  const { exitCode, stderr } = runCli(['--video', '-m', 'ltx25', '--seedance-draft', 'A storm rolls in.']);
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /supported only by Seedance 2\.5/);
+});
+
+test('seedance 2.5 --seedance-finalize sends only the draft job id and none of its inherited inputs', () => {
+  const { exitCode, state, stdout, stderr } = runCli([
+    '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--json'
+  ], {
+    SOGNI_AGENT_TEST_JOB_LABELS_JSON: JSON.stringify({ id: 'job-final-1', seedanceDraftJobId: 'job-draft-1' })
+  });
+  assert.equal(exitCode, 0, stderr);
+  const project = state.lastVideoProject;
+  assert.equal(project.seedanceDraftJobId, 'job-draft-1');
+  assert.equal(project.seedanceDraft, undefined);
+  assert.equal(project.positivePrompt, '');
+  assert.equal(project.numberOfMedia, 1);
+  for (const key of ['duration', 'frames', 'seed', 'generateAudio', 'seedanceTaskType', 'ratio', 'referenceImageEnd', 'contextImages']) {
+    assert.equal(project[key], undefined, key);
+  }
+  assert.ok(!project.referenceImage);
+  const output = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(output.results[0].jobId, 'job-final-1');
+  assert.equal(output.results[0].seedanceDraftJobId, 'job-draft-1');
+  assert.equal(output.width, null);
+  assert.equal(output.duration, null);
+});
+
+test('seedance 2.5 --seedance-finalize refuses the inputs it inherits from its draft', () => {
+  const { exitCode, stderr, state } = runCli([
+    '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--duration', '8', '--seed', '7', 'A new prompt.'
+  ]);
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /remove a prompt, --duration, --seed\/--last-seed/);
+  assert.equal(state?.lastVideoProject, undefined);
+});
+
+test('seedance draft mode quotes a draft and a finalize with their own estimate fields', () => {
+  const draft = runCli(['--video', '-m', 'seedance2-5', '--seedance-draft', '--estimate-video-cost', 'A storm rolls in.']);
+  assert.equal(draft.exitCode, 0, draft.stderr);
+  assert.equal(draft.state.lastEstimateVideoCost.seedanceDraft, true);
+  const final = runCli(['--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--estimate-video-cost']);
+  assert.equal(final.exitCode, 0, final.stderr);
+  assert.equal(final.state.lastEstimateVideoCost.seedanceDraftJobId, 'job-draft-1');
+  assert.equal(final.state.lastEstimateVideoCost.seedanceDraft, undefined);
+  const quoted = runCli(['--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--estimate-video-cost', '--json']);
+  const output = JSON.parse(quoted.stdout.trim().split('\n').pop());
+  assert.deepEqual(
+    [output.width, output.height, output.duration, output.seedanceDraftJobId],
+    [null, null, null, 'job-draft-1']
+  );
+});
+
 async function seedanceLocalSourceRun(model, duration) {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-source-length-'));
   const video = join(tempDir, 'source.mp4');

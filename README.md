@@ -803,6 +803,13 @@ sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video sou
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1. <the new footage after its ending, in time-coded beats>"
 ```
 
+Seedance 2.5 draft mode lets you iterate on 480p drafts and pay for 1080p only on the take you keep. `--seedance-draft` renders a 480p draft at the 480p price. `--seedance-finalize <job-id>` renders that same video at 1080p, with the draft's prompt, media, length, ratio, seed and audio, before the draft's `seedanceDraftExpiresAt` (about three hours).
+
+```bash
+sogni-agent --video -m seedance2-5 --seedance-draft --json "<Seedance prompt>"   # results[0].jobId
+sogni-agent --video -m seedance2-5 --seedance-finalize <job-id> -o final.mp4
+```
+
 ---
 
 ## Video Sizing & Aspect Ratios

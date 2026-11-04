@@ -2047,6 +2047,19 @@ function imageOptionsFromCli() {
 }
 
 const SEEDANCE_TASK_TYPES = new Set(['reference', 'edit', 'extend']);
+
+// Seedance 2.5 draft mode: a draft's job id is what --seedance-finalize takes,
+// and its expiry is the last moment it can be rendered at 1080p. Reported only
+// for draft-mode requests, from the completed SDK job.
+function seedanceDraftResultFields(job) {
+  if (!options.seedanceDraft && options.seedanceFinalize === null) return {};
+  return {
+    jobId: job?.id ?? null,
+    ...(options.seedanceDraft
+      ? { seedanceDraft: job?.seedanceDraft === true, seedanceDraftExpiresAt: job?.seedanceDraftExpiresAt ?? null }
+      : { seedanceDraftJobId: job?.seedanceDraftJobId ?? options.seedanceFinalize })
+  };
+}
 const QWEN_IMAGE_EDIT_2511_MODEL_IDS = new Set([
   'qwen_image_edit_2511_fp8',
   'qwen_image_edit_2511_fp8_lightning',
@@ -3814,6 +3827,8 @@ const options = {
   video: false,
   videoWorkflow: null,
   seedanceTaskType: null,
+  seedanceDraft: false,
+  seedanceFinalize: null,
   legacyWan3TaskType: null,
   wan3Ratio: 'adaptive',
   wan3SmartDuration: false,
@@ -4017,6 +4032,8 @@ const cliSet = {
   video: false,
   workflow: false,
   seedanceTaskType: false,
+  seedanceDraft: false,
+  seedanceFinalize: false,
   wan3Ratio: false,
   wan3SmartDuration: false,
   wan3ReferenceFileUrl: false,
@@ -4330,6 +4347,14 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.seedanceTaskType = raw.trim().toLowerCase();
     cliSet.seedanceTaskType = true;
+  } else if (arg === '--seedance-draft') {
+    options.seedanceDraft = true;
+    cliSet.seedanceDraft = true;
+  } else if (arg === '--seedance-finalize') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.seedanceFinalize = raw.trim();
+    cliSet.seedanceFinalize = true;
   } else if (arg === '--wan3-task-type') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -5264,6 +5289,9 @@ Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
   --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
+  --seedance-draft      Seedance 2.5: render a 480p draft that --seedance-finalize can render at 1080p
+  --seedance-finalize <draft-job-id> Seedance 2.5: render that draft at 1080p with its own prompt, media,
+                        length, ratio, seed and audio (send none of them; the final is billed at 1080p)
   --wan3-ratio <ratio>  Wan 3 ratio: adaptive|16:9|4:3|1:1|3:4|9:16
   --smart-duration, --no-smart-duration  Let Wan 3 choose 2-30s, or use --duration
   --reference-file-url <url> Wan 3 public HTTPS document context (one, up to 100 MB; supported paged formats up to 50 pages)
@@ -6637,6 +6665,13 @@ if (options.music) {
         : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
     });
   }
+  // Seedance 2.5 drafts render at 480p only, so a draft with no size asked for
+  // gets the 480p canvas. A finalize sends no size: its final is the 1080p size
+  // for the draft's ratio.
+  if (options.seedanceDraft && !cliSet.targetResolution && !targetResolutionFromPrompt && !cliSet.width && !cliSet.height) {
+    options.targetResolution = 480;
+    cliSet.targetResolution = true;
+  }
   const hasExplicitVideoCanvas = cliSet.width || cliSet.height || widthFromConfig || heightFromConfig || widthFromPrompt || heightFromPrompt;
   if (isTwoStageVideo) {
     const requestedClass = (cliSet.targetResolution || targetResolutionFromPrompt) ? options.targetResolution : undefined;
@@ -6835,6 +6870,8 @@ const personaUtilityAction = Boolean(options.personaAction && options.personaAct
 const contractUtilityAction = Boolean(options.contractAction);
 const storyboardPlanUtilityAction = Boolean(options.storyboardPlanAction);
 const commandUsesGenerationSeed = !options.apiChat &&
+  // A Seedance 2.5 finalize renders its draft with the draft's own seed.
+  !options.seedanceFinalize &&
   !apiWorkflowUtilityAction &&
   !apiModelUtilityAction &&
   !liveModelUtilityAction &&
@@ -6905,7 +6942,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !options.projectLookup && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.projectLookup && !options.seedanceFinalize && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7027,8 +7064,8 @@ if (options.legacyWan3TaskType !== null) {
   );
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--seedance-task-type/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.seedanceDraft || options.seedanceFinalize || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--seedance-draft/--seedance-finalize/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -7064,6 +7101,61 @@ if (options.video) {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, seedanceTaskType: options.seedanceTaskType }
     });
+  }
+  // Seedance 2.5 draft mode: --seedance-draft renders a 480p draft, and
+  // --seedance-finalize renders that draft at 1080p. The final reuses every
+  // generation-defining input of its draft, and Sogni refuses any of them sent
+  // again, so they are refused here in the CLI's own flag names.
+  if ((options.seedanceDraft || options.seedanceFinalize !== null) && !isSeedance25Video) {
+    fatalCliError('Seedance draft mode (--seedance-draft, --seedance-finalize) is supported only by Seedance 2.5.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model },
+      hint: 'Pass -m with the Seedance 2.5 model that made (or will make) the draft, such as -m seedance2-5.'
+    });
+  }
+  if (options.seedanceDraft && options.seedanceFinalize !== null) {
+    fatalCliError('--seedance-draft and --seedance-finalize cannot be combined: render a draft, or finalize one.', {
+      code: 'INVALID_ARGUMENT'
+    });
+  }
+  if (options.seedanceDraft && (cliSet.targetResolution || targetResolutionFromPrompt) && Number(options.targetResolution) !== 480) {
+    fatalCliError(`Seedance 2.5 drafts render at 480p only, not ${options.targetResolution}p. Use --target-resolution 480 or leave it out.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { targetResolution: options.targetResolution }
+    });
+  }
+  if (options.seedanceFinalize !== null) {
+    if (!options.seedanceFinalize) {
+      fatalCliError('--seedance-finalize needs the job id of a Seedance 2.5 draft.', { code: 'INVALID_ARGUMENT' });
+    }
+    const inherited = [
+      [options.prompt, 'a prompt'],
+      [options.refImage, '--ref'],
+      [options.refImageEnd, '--ref-end'],
+      [options.contextImages.length > 0, '-c/--context'],
+      [options.refAudio || options.refAudios.length > 0, '--ref-audio'],
+      [options.refVideo || options.refVideos.length > 0, '--ref-video'],
+      [options.referenceAudioIdentity || options.voicePersonaName, '--reference-audio-identity/--voice-persona'],
+      [options.keyframes.length > 0, '--keyframe'],
+      [cliSet.duration, '--duration'],
+      [cliSet.frames, '--frames'],
+      [cliSet.seed || options.lastSeed, '--seed/--last-seed'],
+      [options.apiGenerateAudio !== null, '--generate-audio/--no-generate-audio'],
+      [cliSet.seedanceTaskType || cliSet.workflow, '--seedance-task-type/--workflow'],
+      [cliSet.width || cliSet.height || cliSet.targetResolution, '-w/-h/--target-resolution'],
+      [cliSet.count && options.count !== 1, '-n']
+    ].filter(([present]) => present).map(([, flag]) => flag);
+    if (inherited.length > 0) {
+      fatalCliError(
+        `A Seedance 2.5 finalize renders its draft at 1080p with the draft's own prompt, media, length, ratio, seed and audio; remove ${inherited.join(', ')}.`,
+        {
+          code: 'INVALID_ARGUMENT',
+          details: { seedanceFinalize: options.seedanceFinalize, inherited },
+          hint: `sogni-agent --video -m ${options.model} --seedance-finalize ${options.seedanceFinalize} -o final.mp4`
+        }
+      );
+    }
+    options.count = 1;
   }
   if ((cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
     fatalCliError('Wan 3 controls are supported only by Wan 3 or Wan 3.0 Enhanced.', {
@@ -13250,7 +13342,10 @@ function projectLookupSummary(result) {
       ...(job.reason ? { reason: job.reason } : {}),
       ...(job.kind ? { kind: job.kind } : {}),
       ...(job.url ? { url: job.url } : {}),
-      ...(job.urlUnavailable ? { urlUnavailable: job.urlUnavailable } : {})
+      ...(job.urlUnavailable ? { urlUnavailable: job.urlUnavailable } : {}),
+      // Seedance 2.5 draft mode: render a draft at 1080p with --seedance-finalize <id> before it expires.
+      ...(job.seedanceDraft === true ? { seedanceDraft: true, seedanceDraftExpiresAt: job.seedanceDraftExpiresAt ?? null } : {}),
+      ...(job.seedanceDraftJobId ? { seedanceDraftJobId: job.seedanceDraftJobId } : {})
     }))
   };
 }
@@ -14110,7 +14205,11 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
     ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
     ...(referenceImageCount !== undefined ? { referenceImageCount } : {}),
     // MiniMax H3 keyframes: two are included, each extra one adds output time.
-    ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {})
+    ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {}),
+    // Seedance 2.5 draft mode: a draft is quoted as its 480p job, a finalize
+    // from its draft (the server ignores this request's size and length).
+    ...(options.seedanceDraft ? { seedanceDraft: true } : {}),
+    ...(options.seedanceFinalize !== null ? { seedanceDraftJobId: options.seedanceFinalize } : {})
   };
 
   if ((isSeedanceVideo || isWan3Video || isMiniMaxH3R2v) && videoSources.length > 0) {
@@ -15007,6 +15106,12 @@ async function main() {
           count: options.count,
           ...(delivered ? { deliveredWidth: delivered.width, deliveredHeight: delivered.height } : {}),
           ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {}),
+          // A finalize is quoted from its draft: 1080p in the draft's ratio, for
+          // the draft's length, not this request's defaults.
+          ...(options.seedanceFinalize !== null
+            ? { width: null, height: null, frames: null, duration: null, seedanceDraftJobId: options.seedanceFinalize }
+            : {}),
+          ...(options.seedanceDraft ? { seedanceDraft: true } : {}),
           estimate
         }));
       } else {
@@ -15051,6 +15156,7 @@ async function main() {
           seed: jobData.seed,
           jobIndex: data.jobIndex,
           projectId: data.projectId,
+          ...seedanceDraftResultFields(data.job),
           nsfwDetected: data.job?.nsfwDetected ?? jobData.nsfwDetected ?? false,
           nsfwSources: data.job?.nsfwSources ?? jobData.nsfwSources ?? [],
           ...(withheld ? { urlUnavailable: 'sensitiveContent' } : {})
@@ -15584,6 +15690,7 @@ async function main() {
       if (options.seedanceTaskType) {
         projectConfig.seedanceTaskType = options.seedanceTaskType;
       }
+      if (options.seedanceDraft) projectConfig.seedanceDraft = true;
       if (options.returnLastFrame) projectConfig.returnLastFrame = true;
       if (isWan3Video) {
         projectConfig.ratio = options.wan3Ratio;
@@ -15744,6 +15851,16 @@ async function main() {
       if (options.loras.length > 0) {
         projectConfig.loras = options.loras;
         projectConfig.loraStrengths = options.loraStrengths;
+      }
+
+      if (options.seedanceFinalize !== null) {
+        // The final is its draft at 1080p: Sogni takes the prompt, media, length,
+        // ratio, seed and audio from the draft and refuses them sent again. The
+        // flags that set them are refused up front; the default length is not.
+        delete projectConfig.duration;
+        projectConfig.positivePrompt = '';
+        projectConfig.seedanceDraftJobId = options.seedanceFinalize;
+        log(`Rendering Seedance draft ${options.seedanceFinalize} at 1080p...`);
       }
 
       await warnAboutInFlightProjects(client, log);
@@ -16217,8 +16334,11 @@ async function main() {
         seeds,
         projectId: firstResult.projectId,
         urls: urls,
-        results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, urlUnavailable }) => ({
-          url: resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, ...(urlUnavailable ? { urlUnavailable } : {})
+        results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, urlUnavailable, jobId, seedanceDraft, seedanceDraftExpiresAt, seedanceDraftJobId }) => ({
+          url: resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, ...(urlUnavailable ? { urlUnavailable } : {}),
+          ...(jobId ? { jobId } : {}),
+          ...(seedanceDraft !== undefined ? { seedanceDraft, seedanceDraftExpiresAt } : {}),
+          ...(seedanceDraftJobId ? { seedanceDraftJobId } : {})
         })),
         localPath: options.output || null,
         tokenType: options.tokenType || 'spark',
@@ -16617,12 +16737,26 @@ async function main() {
             guidanceEnd: options.cnGuidanceEnd ?? 0.6,
           };
         }
+        if (options.seedanceFinalize !== null) {
+          // The final's size and length are its draft's, at 1080p, not this
+          // request's defaults.
+          output.width = null;
+          output.height = null;
+          output.duration = null;
+        }
         console.log(JSON.stringify(output));
       } else {
         urls.forEach(url => console.log(url));
         if (withheldCount > 0) console.log(`${withheldCount} of ${results.length} results withheld by the Sensitive Content Filter`);
         if (options.returnLastFrame) {
           results.forEach(result => { if (result.lastFrameUrl) console.log(`Last frame: ${result.lastFrameUrl}`); });
+        }
+        if (options.seedanceDraft) {
+          results.forEach(result => {
+            if (!result.jobId) return;
+            const until = result.seedanceDraftExpiresAt ? ` until ${result.seedanceDraftExpiresAt}` : '';
+            console.log(`Seedance draft ${result.jobId}. Render it at 1080p${until} with: sogni-agent --video -m ${options.model} --seedance-finalize ${result.jobId} -o final.mp4`);
+          });
         }
       }
     } else {

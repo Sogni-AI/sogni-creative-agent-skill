@@ -3267,6 +3267,19 @@ test('seedance 2.5 v2v defaults to the explicit edit task and keeps typed video 
   assert.equal(state.lastVideoProject.referenceVideo, undefined);
 });
 
+test('seedance --no-generate-audio turns native audio off; without the flag nothing is sent', () => {
+  const args = ['--video', '--workflow', 'v2v', '-m', 'seedance2-5-v2v', '--ref-video', 'https://example.com/source.mp4', '--duration', '5'];
+  const off = runCli([...args, '--no-generate-audio', 'Replace the blue jacket with a red jacket.']);
+  assert.equal(off.exitCode, 0);
+  assert.equal(off.state.lastVideoProject.generateAudio, false);
+  const on = runCli([...args, '--generate-audio', 'Replace the blue jacket with a red jacket.']);
+  assert.equal(on.exitCode, 0);
+  assert.equal(on.state.lastVideoProject.generateAudio, true);
+  const unset = runCli([...args, 'Replace the blue jacket with a red jacket.']);
+  assert.equal(unset.exitCode, 0);
+  assert.equal('generateAudio' in unset.state.lastVideoProject, false);
+});
+
 test('seedance 2.5 accepts an explicit extension task contract', () => {
   const { exitCode, state } = runCli([
     '--video',

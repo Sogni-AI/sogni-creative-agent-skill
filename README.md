@@ -685,7 +685,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--workflow <type>` | Force `t2v`, `i2v`, `r2v`, `s2v`, `ia2v`, `a2v`, `v2v`, or animate workflows |
 | `--wan3-ratio`, `--smart-duration`, `--reference-file-url`, `--reference-link-url`, `--watermark` | Wan 3 adaptive/fixed ratio, smart timing, document/web context, and watermark controls |
 | `--expand-prompt`, `--no-expand-prompt` | Enable provider prompt expansion for direct Wan 3 video, or preserve the exact submitted prompt |
-| `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track, enable/disable Wan 3 native audio, or control generated-keyframe workflows |
+| `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track, enable/disable Wan 3 or Seedance native audio, or control generated-keyframe workflows |
 | `--sampler <name>` | Image/music sampler; LightX2V FL2VA H3 Turbo accepts `euler`, `er_sde`, or `sa_solver` and defaults to `er_sde` on Socket. Ref2VA Turbo and FastH3 Turbo accept Euler only. The CLI omits this field unless explicitly set. |
 | `--api-chat` | Use `/v1/chat/completions` with Sogni creative-agent tools |
 | `--api-workflow` | Start a `/v1/creative-agent/workflows` durable workflow with explicit `input.steps`; optional `storyboard-video` preset |

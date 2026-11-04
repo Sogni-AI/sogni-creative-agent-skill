@@ -284,7 +284,7 @@ sogni-agent doctor --json
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
 | `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt guardrails (quote and duration checks, storyboard fallback) plus Sogni's server-side Wan 3 rewrite; `--no-expand-prompt` sends the prompt literally. Wan 3 watermark control | on / watermark off |
-| `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 native audio | keep / enabled |
+| `--generate-audio`, `--no-generate-audio` | Keep/strip MiniMax H3's track or enable/disable Wan 3 or Seedance native audio | keep / enabled |
 | `--sampler <name>` | Image/music sampler; LightX2V FL2VA H3 Turbo: `euler\|er_sde\|sa_solver`; Ref2VA Turbo and FastH3 Turbo: `euler` only | LightX2V FL2VA H3 Turbo defaults to `er_sde` on Socket; CLI omits unless set |
 | `--control-type`, `--outpaint-position`, `--outpaint-aspect-ratio` | LTX v2v control mode and outpaint canvas controls (`ltx25-v2v` default) | - |
 | `--duration <sec>` | Video or music length | video 5, music 60 (Music 3; ACE-Step 30) |

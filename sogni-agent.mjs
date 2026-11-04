@@ -5300,7 +5300,7 @@ Video Options:
   --ref-video <path|url> Video reference. Repeatable on Seedance and H3 r2v (up to 3 total);
                          first entry is the primary, extras must be HTTPS URLs in CLI
                          direct-gen for Seedance. On LTX/WAN: single primary for animate/v2v.
-  --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 native audio
+  --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 and Seedance native audio
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-mini-uncensored /
 seedance2-fast / seedance2-5 / seedance2-5-uncensored):
@@ -15677,7 +15677,7 @@ async function main() {
       if (options.seed !== null && options.seed !== undefined) {
         projectConfig.seed = options.seed;
       }
-      if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3Video)) {
+      if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3Video || isSeedanceVideo)) {
         projectConfig.generateAudio = options.apiGenerateAudio;
       }
       if (isMiniMaxH3TwoStageModel(options.model) && !options.quiet) {
@@ -16297,7 +16297,7 @@ async function main() {
           if (options.videoStart !== null) renderInfo.videoStart = options.videoStart;
         }
         if (options.refVideos.length > 0) renderInfo.refVideos = options.refVideos;
-        if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model))) {
+        if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model) || isSeedanceModel(options.model))) {
           renderInfo.generateAudio = options.apiGenerateAudio;
         }
         if (options.videoControlNetName && !isSeedanceModel(options.model)) {
@@ -16580,7 +16580,7 @@ async function main() {
             if (options.videoStart !== null) output.videoStart = options.videoStart;
           }
           if (options.refVideos.length > 0) output.refVideos = options.refVideos;
-          if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model))) {
+          if (options.apiGenerateAudio !== null && (isMiniMaxH3Model(options.model) || isWan3ModelLocal(options.model) || isSeedanceModel(options.model))) {
             output.generateAudio = options.apiGenerateAudio;
           }
           if (options.videoControlNetName && !isSeedanceModel(options.model)) {

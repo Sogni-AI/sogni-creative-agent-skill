@@ -39,6 +39,21 @@ stages unless the user requested a review pause. Preserve exact prompts, source
 choices, counts, and model choices; repeat shared requirements in every variation.
 Do not repeat a successful stage or automatically add `--no-filter` after failure.
 Honor requests to wait for user input; model-specific policies still apply.
+
+**Seedance draft mode is opt-in.** Before adding a paid 480p draft, explain
+that it can test motion, composition, or lighting before committing to 1080p;
+quote the actual draft, direct-final, and combined cost, then ask which the user
+prefers and wait. Draft cost is extra, not credit toward the final; video-input
+drafts can be costly. If a 720p/1080p attempt fails or produces an unusable take,
+suggest testing the revision in 480p draft mode before another expensive attempt:
+roughly 5.5 times cheaper than 1080p, with actual estimates for the comparison.
+Get consent before switching. An explicit draft request or agreed draft plan supplies
+consent within its scope. A later higher-quality/final request supersedes that
+plan: finalize an approved unchanged draft, or render revised content directly
+at the requested final resolution. Another draft needs renewed consent. Read
+[the Seedance 2.5 draft guide](../../references/models.md#seedance-25) before
+using `--seedance-draft` or `--seedance-finalize`.
+
 `-o` replaces an existing file, so give each new render its own filename. Unless
 the user asks, never write over their source files or an earlier render, or
 remove their media, personas or memories.

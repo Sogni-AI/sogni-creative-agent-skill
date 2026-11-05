@@ -825,10 +825,14 @@ sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video sou
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1. <the new footage after its ending, in time-coded beats>"
 ```
 
-Seedance 2.5 draft mode lets you iterate on 480p drafts and pay for 1080p only on the take you keep. `--seedance-draft` renders a 480p draft at the 480p price. `--seedance-finalize <job-id>` renders that same video at 1080p, with the draft's prompt, media, length, ratio, seed and audio, before the draft's `seedanceDraftExpiresAt` (about three hours).
+Seedance 2.5 draft mode is opt-in. A 480p preview can help check uncertain motion, composition, or lighting before committing to 1080p. Before adding a paid draft, the agent must explain that benefit, quote the actual draft, direct-final, and combined draft-plus-final estimates, ask which workflow the user prefers, and wait for their choice. If a 720p/1080p attempt fails or produces an unusable take, the agent should suggest testing the revision in 480p draft mode before another expensive attempt, then get consent before switching. A 480p draft is roughly 5.5 times cheaper than 1080p; compare actual estimates for the same inputs. A draft is an extra charge, not credit toward the final; video-input drafts can be costly. An explicit draft request or agreed draft plan already supplies consent within its scope.
+
+`--seedance-draft` renders a 480p draft at the 480p price. `--seedance-finalize <job-id>` renders that same video at 1080p for a separate 1080p charge, with the draft's prompt, media, length, ratio, seed and audio, before the draft's `seedanceDraftExpiresAt` (about three hours). It cannot change lighting or other content. A later higher-quality/final request supersedes draft-first iteration: finalize an approved unchanged draft, or render the revision directly at the requested final resolution. Another paid draft requires renewed consent. See [the full draft guide](references/models.md#seedance-25).
 
 ```bash
+# Only after the user chooses the quoted draft workflow:
 sogni-agent --video -m seedance2-5 --seedance-draft --json "<Seedance prompt>"   # results[0].jobId
+# After approval of the unchanged take and its separately quoted 1080p cost:
 sogni-agent --video -m seedance2-5 --seedance-finalize <job-id> -o final.mp4
 ```
 

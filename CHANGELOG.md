@@ -1,6 +1,7 @@
 ## [3.64.0] - 2026-11-04
 
 - Add GPT Image 2.6 Sunburst and Flare as explicit choices, with animated GIF generation, planning complexity, and annotation-guided still-image edits. GIF settings and quoted costs stay together through submission.
+* Seedance draft workflows require the user's choice after explaining their purpose and the draft, direct-final, and combined costs. After a failed or unusable 720p/1080p attempt, agents suggest testing the revision in a 480p draft, roughly 5.5 times cheaper than 1080p, and wait for consent before switching. Final-quality requests proceed to an unchanged approved draft's finalization or a revised final-resolution render without adding another unrequested draft.
 
 ## [3.63.0] - 2026-11-03
 

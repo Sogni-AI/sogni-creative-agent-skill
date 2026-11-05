@@ -4,6 +4,16 @@ Agent skill and CLI for Sogni AI image, video, and music generation. Works as
 a skill source for Claude Code, OpenAI Codex CLI, Goose, Hermes Agent, OpenClaw,
 Manus AI, and other SKILL.md-aware agent runtimes.
 
+Seedance draft mode is opt-in: explain when a 480p preview helps, quote the
+draft, direct-final, and combined costs, ask the user's preference, and wait
+before adding a paid draft. Drafts are an extra charge, not credit toward the
+final. A later higher-quality/final request means finalize an approved unchanged
+draft or render revised content directly at final resolution; another draft
+requires renewed consent. Read `references/models.md` § Seedance 2.5.
+After a failed or unusable 720p/1080p attempt, suggest testing the revision in
+480p draft mode before another expensive attempt; get consent before switching.
+480p drafts are roughly 5.5 times cheaper than 1080p; compare actual estimates.
+
 Current capabilities and limits: read `references/models.md` before answering
 model-selection questions. Seedance 2.5 supports 1080p with
 `--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,

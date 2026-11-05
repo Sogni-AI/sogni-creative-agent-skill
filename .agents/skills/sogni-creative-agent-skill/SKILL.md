@@ -170,6 +170,20 @@ https://github.com/Sogni-AI/sogni-creative-agent-skill/issues/new?template=lesso
 
 ## Load detailed guidance only when needed
 
+**Seedance draft mode is opt-in.** Before adding a paid 480p draft, explain
+that it can test motion, composition, or lighting before committing to 1080p;
+quote the actual draft, direct-final, and combined cost, then ask which the user
+prefers and wait. Draft cost is extra, not credit toward the final; video-input
+drafts can be costly. If a 720p/1080p attempt fails or produces an unusable take,
+suggest testing the revision in 480p draft mode before another expensive attempt:
+roughly 5.5 times cheaper than 1080p, with actual estimates for the comparison.
+Get consent before switching. An explicit draft request or agreed draft plan supplies
+consent within its scope. A later higher-quality/final request supersedes that
+plan: finalize an approved unchanged draft, or render revised content directly
+at the requested final resolution. Another draft needs renewed consent. Read
+[the Seedance 2.5 draft guide](references/models.md#seedance-25) before
+using `--seedance-draft` or `--seedance-finalize`.
+
 Seedance 2.5 supports 4–30s at 480p/720p/1080p, including edit/extend,
 with optional `--output-format mov` and `--return-last-frame`. Seedance 2.5
 Uncensored (`seedance2-5-uncensored`) has the same limits and Seedance 2.0 Mini

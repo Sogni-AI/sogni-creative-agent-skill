@@ -752,8 +752,28 @@ no negative prompt and no ControlNet.
   fail asynchronously after inferring the task.
 - **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
   its only loose reference.
-- **Draft mode** (Seedance 2.5 and 2.5 Uncensored): iterate at 480p, then render
-  the take you keep at 1080p. `--seedance-draft` renders a 480p draft at the
+- **Draft mode is opt-in** (Seedance 2.5 and 2.5 Uncensored). Before adding a
+  paid draft, explain the choice and ask the user's preference; wait for their
+  answer. A 480p preview can help judge uncertain motion, composition, lighting,
+  or prompt adherence before paying for 1080p, especially when rejected takes
+  would otherwise be full-resolution renders. It does not guarantee a better
+  result or lower total cost. If a 720p/1080p attempt fails or produces an unusable
+  take, suggest testing the revision in 480p draft mode before spending on another
+  high-resolution attempt. A 480p draft is roughly 5.5 times cheaper than 1080p;
+  compare actual estimates for the same inputs rather than guaranteeing that ratio.
+  Explain the recovery plan and get consent before switching; failure does not
+  authorize paid drafts or repeated high-resolution retries. Estimate the draft, direct final, and
+  combined draft-plus-final cost with `--estimate-video-cost`, keeping the model,
+  duration, aspect ratio, audio, and references matched to the planned job.
+  Video-input estimates can be conservative when source metadata is unavailable.
+  Label them as estimates, not actual charges or flat pricing.
+  Each draft is an extra charge, not credit toward the final; video-input drafts
+  use video-input pricing and must not be described as inherently cheap.
+  An explicit draft request or agreed draft plan supplies consent within its
+  scope; approval of one draft does not authorize an unbounded series of drafts.
+  If the user already requested final quality, render it directly without adding
+  a draft. If final resolution is unclear, ask whether they prefer 720p or 1080p.
+  `--seedance-draft` renders a 480p draft at the
   480p price; any normal Seedance 2.5 input works, and the size must be 480p
   (the CLI picks it when you give none). An ordinary 480p render cannot be
   finalized later. Only a job submitted as a draft can. `--seedance-finalize
@@ -764,6 +784,12 @@ no negative prompt and no ControlNet.
   again at 1080p for the draft's length, at the video-input rate when the draft
   had a video input. Judge the draft before finalizing: the final is the same
   video, not a new take.
+  A higher-quality/final request after a draft supersedes draft-first iteration:
+  finalize the approved draft only if its content is to stay unchanged. A change
+  to lighting, prompt, media, duration, or audio cannot be applied by finalizing;
+  render the revision directly at the requested final resolution. Another paid
+  draft requires renewed consent after explaining its additional cost. A request
+  for a 480p deliverable alone does not authorize a draft-plus-final workflow.
 
 The bundled CLI and pinned SDKs recognize `seedance-2-5` and transport typed
 tasks; see `package.json` for the current dependency versions. The direct CLI

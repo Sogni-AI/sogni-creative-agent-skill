@@ -1150,7 +1150,7 @@ Run the unit test suite (works without any Sogni credentials or private repos):
 npm test
 ```
 
-Paid integration tests are opt-in: `npm run test:integration` (requires a Sogni API key and submits real GPU jobs).
+Paid integration tests require a separately authorized, bounded live run: explicitly set `SOGNI_INTEGRATION=1` when running `npm run test:integration` (requires a Sogni API key and submits real GPU jobs). Ordinary tests, `test:all`, CI and release checks stay offline.
 
 Architecture notes, the private-runtime sync workflow, code-placement policy, and the release process live in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 

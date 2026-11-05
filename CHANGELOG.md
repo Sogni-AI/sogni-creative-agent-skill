@@ -1,4 +1,4 @@
-## Unreleased
+## [3.65.0] - 2026-11-05
 
 - Keep `test:all` offline and require an explicit environment opt-in for paid integration tests. Release checks never enable real GPU jobs automatically.
 - Add explicit `--priority` for covered Fast renders on paid Unlimited, with 1.5× daily and monthly fair-use consumption. The default stays ordinary Fast.

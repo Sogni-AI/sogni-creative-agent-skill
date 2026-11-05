@@ -720,6 +720,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM models |
 | `--list-models [query]`, `--search-models <query>` | List or search currently available Supernet image, video, and audio models |
 | `--model-media <type>`, `--model-network <network>` | Filter live model discovery by media or Fast/Relaxed network |
+| `--network <fast\|relaxed>` | Render on this Supernet for one run; overrides the configured `defaultNetwork` (default: Fast) |
 | `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching |
 | `--list-loras [query]`, `--search-loras <query>` | List or search the live LoRA catalog with each LoRA's hard range, recommended range, default, and slider direction |
 | `--lora-catalog-model <id>`, `--lora-category <category>` | Filter LoRA discovery to one model's compatible LoRAs or one catalog category |
@@ -1049,6 +1050,18 @@ By default the CLI sends no `billingMode`/coverage hint; the server decides cove
 Do not use `tokenType: "spark"` by itself to determine that Spark paid for a render. `tokenType` is also the quote/accounting denomination for covered jobs. The server's separate `paymentModel` is authoritative: `subscription` means it skipped the artist Spark/SOGNI debit, while `paid_spark`, `free_spark`, and `sogni` identify token-funded paths. Some client result summaries do not expose `paymentModel`; in that case the payment source is unknown from that result alone. A request that completes successfully with `--billing-mode subscription` was covered—if coverage is unavailable, the server returns `4078` or `4080` instead of silently spending Spark.
 
 With an active subscription, the CLI also skips its client-side "insufficient SPARK" pre-flight for covered video renders — a low token balance no longer blocks jobs the plan pays for. Vendor models and `--billing-mode tokens` keep the pre-flight, and the server remains authoritative either way.
+
+### Rendering on Relaxed
+
+Fast plan rendering pauses when the plan's daily or monthly fair-use capacity is used up (errors 4087 and 4089). Relaxed stays included, so you can keep rendering there:
+
+```bash
+sogni-agent --video --network relaxed --billing-mode subscription --detach --json \
+  -m minimax-h3-fastvideo-int8_i2v_turbo_2stage --ref start.png "A slow push-in"
+sogni-agent --result <projectId> --wait -o clip.mp4 --json
+```
+
+Set `defaultNetwork` to `"relaxed"` in the plugin config to make it the default, or pass `--network fast` to override that for one run. Relaxed has far fewer workers, so a video can wait for hours, and anything unfinished 24 hours after you submit it is cancelled. Not every model runs there: `sogni-agent --list-models --model-network relaxed` shows which do. With a configured default, a model with no Relaxed workers is refused rather than moved to Fast, except vendor models, which stay on Fast. Hosted chat and hosted workflows always run on Fast.
 
 ### Free-trial access
 

@@ -5,6 +5,16 @@ going when the CLI stops waiting, when its connection drops, and when no agent
 is connected at all. These commands follow a project by id instead of holding a
 connection open for its whole life.
 
+## Rendering on Relaxed
+
+`--network relaxed` (or `defaultNetwork: "relaxed"` in the plugin config) sends a
+render to the Relaxed Supernet. It is included in Sogni Unlimited, including while
+Fast is paused at the plan's fair-use capacity. Relaxed has far fewer workers, so a
+video can wait for hours, and anything unfinished 24 hours after you submit it is
+cancelled. Always submit Relaxed video with `--detach` and collect it with
+`--result <id> --wait`. Check what runs there with
+`sogni-agent --list-models --model-network relaxed`.
+
 ## Commands
 
 ```bash

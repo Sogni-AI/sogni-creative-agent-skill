@@ -1,5 +1,6 @@
-## [3.64.0] - 2026-11-04
+## [3.64.0] - 2026-11-05
 
+- Render on Relaxed from the CLI: `--network fast|relaxed` picks the Supernet for one run, and `defaultNetwork` now applies to renders. Before this, both only changed the connection and every job still ran on Fast. If you already set `defaultNetwork: "relaxed"`, renders now go to Relaxed: models with no Relaxed workers are refused with a hint rather than moved to Fast, and vendor models stay on Fast. Fast fair-use refusals (4087, 4089) now explain how to reach Relaxed.
 - Add GPT Image 2.6 Sunburst and Flare as explicit choices, with animated GIF generation, planning complexity, and annotation-guided still-image edits. GIF settings and quoted costs stay together through submission.
 * Seedance draft workflows require the user's choice after explaining their purpose and the draft, direct-final, and combined costs. After a failed or unusable 720p/1080p attempt, agents suggest testing the revision in a 480p draft, roughly 5.5 times cheaper than 1080p, and wait for consent before switching. Final-quality requests proceed to an unchanged approved draft's finalization or a revised final-resolution render without adding another unrequested draft.
 

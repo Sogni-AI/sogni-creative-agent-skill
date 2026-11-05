@@ -70,6 +70,11 @@ CLI defaults are 512×512 images, count 1, spark tokens, prompt-hash seeds):
 Notes:
 
 - Seed strategies: `prompt-hash` (deterministic) or `random`.
+- `defaultNetwork` sets the Supernet every local render uses; `--network` overrides
+  it for one run. With `relaxed`, a model with no Relaxed workers is refused rather
+  than moved to Fast (`sogni-agent --list-models --model-network relaxed` lists what
+  runs there), except vendor models, which stay on Fast. Hosted chat and hosted
+  workflows always run on Fast.
 - `defaultEditModel` pins one model for every `-c` edit that names no `-m`.
   Leave it unset to keep the CLI's choice: `krea2_identity_edit_v1_2` for one
   or two context images, `flux3_image_klein_sd_int8_convrot` for three to ten.

@@ -39,6 +39,15 @@ function required(input, field, hint) {
 
 const str = (description) => ({ type: 'string', description });
 const num = (description) => ({ type: 'number', description });
+const RENDER_OPTIONS = {
+  network: { type: 'string', enum: ['fast', 'relaxed'], description: 'Supernet for this render; omit to keep the configured default' },
+  priority: { type: 'boolean', description: 'Only when the user chooses Priority: paid Unlimited Fast worker generations consume fair-use capacity at 1.5x for earlier queue placement' },
+};
+
+function pushRenderOptions(args, input) {
+  push(args, '--network', input.network);
+  if (input.priority === true) args.push('--priority');
+}
 
 // Chat clients (Claude Desktop etc.) never expose chat-attached files to this
 // server's filesystem; without this warning the model wastes turns discovering
@@ -63,6 +72,13 @@ export const TOOLS = [
       type: 'object',
       properties: {
         prompt: str('What to generate'),
+        ...RENDER_OPTIONS,
+        output_format: { type: 'string', enum: ['png', 'jpg', 'webp', 'gif'], description: 'GIF requires GPT Image 2.6' },
+        image_quality: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'] },
+        image_complexity: { type: 'string', enum: ['low', 'medium', 'high'], description: 'GPT Image 2.6 planning effort' },
+        image_frame_count: num('GPT Image 2.6 GIF frames, 2-16; default 9'),
+        image_frame_duration_ms: num('GIF frame duration, 20-2000 milliseconds; default 200'),
+        image_markup_url: str('Transparent annotation PNG for a GPT Image 2.6 still edit, aligned to the first context image'),
         output_path: str('Absolute file path to save the image (optional)'),
         quality: { type: 'string', enum: ['fast', 'hq', 'pro'], description: 'Quality preset' },
         model: str('Model id (optional; overrides quality preset)'),
@@ -79,6 +95,13 @@ export const TOOLS = [
     buildArgs(input) {
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE];
+      pushRenderOptions(args, input);
+      push(args, '--output-format', input.output_format);
+      push(args, '--image-quality', input.image_quality);
+      push(args, '--image-complexity', input.image_complexity);
+      push(args, '--image-frame-count', input.image_frame_count);
+      push(args, '--image-frame-duration-ms', input.image_frame_duration_ms);
+      push(args, '--image-markup-url', input.image_markup_url);
       push(args, '-o', input.output_path);
       push(args, '-Q', input.quality);
       push(args, '-m', input.model);
@@ -117,6 +140,9 @@ export const TOOLS = [
       type: 'object',
       properties: {
         prompt: str('The prompt, in the chosen model\'s own grammar (see the tool description): what is seen and heard'),
+        ...RENDER_OPTIONS,
+        output_format: { type: 'string', enum: ['mp4', 'mov'] },
+        return_last_frame: { type: 'boolean', description: 'Export the last frame for a supported video model' },
         output_path: str('Absolute .mp4 path to save (optional)'),
         model: str('Video model id (optional)'),
         workflow: { type: 'string', enum: ['t2v', 'i2v', 'r2v', 's2v', 'ia2v', 'a2v', 'v2v', 'animate-move', 'animate-replace'] },
@@ -161,6 +187,9 @@ export const TOOLS = [
       const finalize = input.seedance_finalize;
       const prompt = finalize ? input.prompt : required(input, 'prompt');
       const args = [...GEN_BASE, '--video'];
+      pushRenderOptions(args, input);
+      push(args, '--output-format', input.output_format);
+      if (input.return_last_frame === true) args.push('--return-last-frame');
       push(args, '-o', input.output_path);
       push(args, '-m', input.model);
       push(args, '--workflow', input.workflow);
@@ -230,6 +259,7 @@ export const TOOLS = [
       type: 'object',
       properties: {
         prompt: str('Style/mood description; include tempo and key, e.g. "warm acoustic ballad, 92 BPM, A minor"'),
+        ...RENDER_OPTIONS,
         output_path: str('Absolute audio file path to save (optional)'),
         lyrics: str('Song lyrics (optional). Music 3: plain section tags on their own lines ([Verse], [Chorus]), no modifiers inside brackets'),
         duration: num('Seconds. Music 3 (default): 10-300, default 60. ACE-Step turbo/sft: 10-600, default 30'),
@@ -248,6 +278,7 @@ export const TOOLS = [
     buildArgs(input) {
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE, '--music'];
+      pushRenderOptions(args, input);
       push(args, '-o', input.output_path);
       push(args, '--music-model', input.music_model);
       push(args, '--lyrics', input.lyrics);
@@ -367,11 +398,13 @@ export const TOOLS = [
     name: 'manage_personas',
     description:
       'Manage saved personas (named people with reference photos and optional voice clips). ' +
-      'Actions: list, add (needs name + ref photo), remove, resolve (show details). ' + CHAT_ATTACHMENT_NOTE,
+      'Actions: list, add (needs name + ref photo), remove, resolve (show details), list_account, import_account (explicitly copy a saved account Persona and original references into the local library; never replaces a local name). ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['list', 'add', 'remove', 'resolve'] },
+        action: { type: 'string', enum: ['list', 'add', 'remove', 'resolve', 'list_account', 'import_account'] },
+        account_persona_id: str('Saved account Persona id, from list_account (import_account)'),
+        after: str('Next-page cursor returned by list_account'),
         name: str('Persona name (add/remove/resolve)'),
         ref: str('Reference photo path or URL (add)'),
         relationship: { type: 'string', enum: ['self', 'partner', 'child', 'friend', 'pet'] },
@@ -383,6 +416,12 @@ export const TOOLS = [
     buildArgs(input) {
       const action = required(input, 'action');
       if (action === 'list') return ['--json', '--no-update-check', '--persona-list'];
+      if (action === 'list_account') {
+        const args = ['--json', '--no-update-check', '--persona-list-account'];
+        push(args, '--persona-account-after', input.after);
+        return args;
+      }
+      if (action === 'import_account') return ['--json', '--no-update-check', '--persona-import-account', String(required(input, 'account_persona_id'))];
       const name = required(input, 'name');
       if (action === 'remove') return ['--no-update-check', '--persona-remove', String(name)];
       if (action === 'resolve') return ['--json', '--no-update-check', '--persona-resolve', String(name)];

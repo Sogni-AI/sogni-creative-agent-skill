@@ -257,3 +257,5 @@ Sogni-AI/sogni-creative-agent-skill
   hosted API, models, personas, video editing)
 - `openclaw.plugin.json` — OpenClaw plugin manifest and config schema
 - `sogni-agent.mjs` — CLI used by the skill (`sogni-agent --help` is canonical)
+
+Priority Fast: direct renders support explicit --priority on paid Unlimited worker jobs. Explain 1.5x daily/monthly fair-use consumption and obtain the user’s choice first. --network fast|relaxed chooses the worker pool. Hosted modes do not accept these flags. GPT Image 2.6 GIFs, planning complexity and annotation PNGs are documented in references/models.md.

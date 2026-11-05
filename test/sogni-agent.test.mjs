@@ -151,6 +151,22 @@ async function withTestApiServer(fn, { durableEvents = [] } = {}) {
 
       res.setHeader('Content-Type', 'application/json');
       const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
+      if (requestUrl.pathname.startsWith('/v1/personas')) {
+        const character = { id: 'persona-a', name: 'Alice', identityReferenceId: 'photo', revision: 3,
+          description: 'A curious explorer', voiceDescription: 'warm alto', voiceTranscript: 'A test passage.',
+          references: [
+            { id: 'photo', role: 'identity', contentType: 'image/jpeg' },
+            { id: 'voice', role: 'voice', contentType: 'audio/webm' },
+          ] };
+        if (requestUrl.pathname.endsWith('/content')) {
+          res.setHeader('Content-Type', 'application/octet-stream');
+          res.end(Buffer.from('original-reference-bytes'));
+        } else {
+          const data = requestUrl.pathname === '/v1/personas' ? { items: [character], nextCursor: 'next-page' } : character;
+          res.end(JSON.stringify({ status: 'success', data }));
+        }
+        return;
+      }
       if (requestUrl.pathname.startsWith('/v1/loras/personal')) {
         const row = { id: 'personal-test', name: 'My style', status: 'ready', modelId: 'minimax-h3-fl2va-fp8_t2v', modelIds: ['minimax-h3-fl2va-fp8_t2v', 'krea2_turbo_fp8_scaled', ...['a2v', 'ia2v', 'flfa2v'].flatMap(mode => ['', '_2stage'].map(stage => `minimax-h3-fastvideo-int8_${mode}_turbo${stage}`))], requirements: [] };
         const data = requestUrl.pathname.endsWith('/catalog')
@@ -4868,6 +4884,31 @@ test('--version with --json returns structured version information', () => {
   assert.ok(payload.timestamp);
 });
 
+test('account Personas list and import use authenticated originals and preserve local commands', async () => {
+  const personasDir = join(makeTempHome('sogni-account-import-'), 'personas');
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const env = { SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1', SOGNI_PERSONAS_DIR: personasDir };
+    const list = await runCliAsync(['--api-base-url', apiBaseUrl, '--persona-list-account', '--persona-account-after', 'older cursor', '--json'], env);
+    assert.equal(list.exitCode, 0, list.stderr);
+    assert.equal(JSON.parse(list.stdout.trim()).items[0].name, 'Alice');
+    assert.ok(requests[0].url.includes('after=older%20cursor'));
+    assert.equal(requests[0].headers.authorization, 'Bearer test-api-key');
+    const imported = await runCliAsync(['--api-base-url', apiBaseUrl, '--persona-import-account', 'persona-a', '--json'], env);
+    assert.equal(imported.exitCode, 0, imported.stderr);
+    const persona = JSON.parse(imported.stdout.trim()).persona;
+    assert.equal(persona.accountPersonaId, 'persona-a');
+    assert.equal(persona.voiceTranscript, 'A test passage.');
+    assert.equal(readFileSync(persona.photoPath, 'utf8'), 'original-reference-bytes');
+    assert.equal(readFileSync(persona.voiceClipPath, 'utf8'), 'original-reference-bytes');
+    assert.equal(requests.filter((request) => request.url.endsWith('/content')).length, 2);
+    const local = runCli(['--persona-resolve', 'Alice', '--json'], env);
+    assert.equal(JSON.parse(local.stdout.trim()).persona.accountPersonaId, 'persona-a');
+    const second = await runCliAsync(['--api-base-url', apiBaseUrl, '--persona-import-account', 'persona-a', '--json'], env);
+    assert.equal(second.exitCode, 1);
+    assert.ok(second.stdout.includes('already exists'));
+  });
+});
+
 test('state and account utility commands do not emit generation seed logs', () => {
   const runs = [
     runCli(['--json', '--memory-set', 'preferred_style', 'watercolor']),
@@ -7590,6 +7631,49 @@ test('without a network setting a render stays on Fast', () => {
   assert.equal(exitCode, 0);
   assertRenderNetwork(state, 'lastVideoProject', 'fast');
 });
+
+for (const [label, args, key] of [
+  ['image', ['a duck on a skateboard'], 'lastImageProject'],
+  ['video', ['--video', 'a skyline at dusk'], 'lastVideoProject'],
+  ['music', ['--music', '--duration', '30', 'ambient pads'], 'lastAudioProject'],
+]) {
+  test(`--priority explicitly opts a ${label} into subscription Fast`, () => {
+    const { exitCode, state, stderr } = runCli(['--priority', ...args]);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state?.[key]?.priorityMode, true);
+    assert.equal(state?.[key]?.billingMode, 'subscription');
+    assert.equal(state?.[key]?.network, 'fast');
+  });
+}
+
+test('ordinary renders omit Priority and preserve billing defaults', () => {
+  const { exitCode, state } = runCli(['a duck on a skateboard']);
+  assert.equal(exitCode, 0);
+  assert.equal(Object.hasOwn(state.lastImageProject, 'priorityMode'), false);
+  assert.equal(Object.hasOwn(state.lastImageProject, 'billingMode'), false);
+});
+
+for (const flags of [
+  ['--network', 'relaxed'], ['--billing-mode', 'tokens'], ['--token-type', 'sogni'],
+  ['-m', 'gpt-image-2.6-flare'],
+]) {
+  test(`--priority rejects incompatible settings ${flags.join(' ')}`, () => {
+    expectCliError(['--priority', ...flags, 'a duck'], '--priority requires');
+  });
+}
+
+test('--priority cannot silently enter hosted chat', () => {
+  expectCliError(['--priority', '--api-chat', 'a duck'], '--priority cannot be combined');
+});
+
+test('--priority cost estimates use the same opt-in as the render', () => {
+  const { exitCode, state, stderr } = runCli(['--priority', '--video', '--estimate-video-cost', 'a skyline at dusk']);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEstimateVideoCost.priorityMode, true);
+  assert.equal(state.lastEstimateVideoCost.billingMode, 'subscription');
+});
+
+
 
 test('defaultNetwork from OPENCLAW_PLUGIN_CONFIG sends the project to Relaxed', () => {
   const { exitCode, state } = runCli(['--video', 'a cinematic skyline at dusk'], {

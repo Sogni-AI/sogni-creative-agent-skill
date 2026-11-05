@@ -1084,6 +1084,10 @@ Actual throughput varies with demand, available Supernet capacity, and fair-use 
 - **Grace / payment retry:** if a renewal payment fails, the provider retries it and **Unlimited access is paused** during the retry window — covered renders are declined with a renewal-retry error, and access resumes automatically once payment succeeds. You can keep rendering with Spark or SOGNI in the meantime.
 - **Refunds:** mid-term refunds are not offered by default; App Store / Google Play purchases follow the store's refund process, and Stripe (web) refunds are handled by Sogni support.
 
+### Priority Fast
+
+`--priority` explicitly selects earlier Fast queue placement for a covered worker render on paid Unlimited or Unlimited Pro, behind Premium Spark. Daily and monthly fair-use consumption is 1.5×. It sets subscription billing and never falls back to token payment. Vendor models, Relaxed, hosted chat and hosted workflows are excluded. Existing render defaults stay the same.
+
 ### Subscription billing errors
 
 When a generation cannot bill to the subscription, the CLI surfaces a structured error (`--json` includes `errorCode`, `errorCategory`, and a `hint`):

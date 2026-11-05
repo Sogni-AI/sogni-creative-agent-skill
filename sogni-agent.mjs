@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSy
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
+import { importAccountPersona } from './account-personas.mjs';
 import { getEnv, hasEnv } from './env.mjs';
 import { claimSogniAppIdSlot, getOrCreateSogniAppId } from './sogni-app-id.mjs';
 import { PACKAGE_VERSION } from './version.mjs';
@@ -189,6 +190,10 @@ function subscriptionBillingFallback(code) {
   if (!SUBSCRIPTION_BILLING_ERROR_CODES.has(key)) return null;
   switch (key) {
     case '4078':
+      if (options.priorityMode) return {
+        retryable: false,
+        hint: 'The server could not admit this Priority Fast generation. Submit again without --priority for standard Fast, or choose --network relaxed.',
+      };
       // Vendor model the subscription never covers, or no verified entitlement.
       return {
         retryable: false,
@@ -2385,6 +2390,7 @@ function withBillingMode(config, attributionOptions = {}) {
     ...(!options.video && !options.upscaleVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
+    ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
     network: projectNetwork(config.modelId),
     attribution: nextSemanticWorkloadAttribution(attributionOptions),
   };
@@ -3831,6 +3837,7 @@ const options = {
   tokenType: null,
   billingMode: null, // auto|subscription|tokens — omitted by default so the server decides coverage
   network: null, // fast|relaxed; defaults to the configured network, then fast
+  priorityMode: false, // explicit per-run Unlimited Fast queue opt-in
   steps: null,
   guidance: null,
   outputFormat: null,
@@ -3986,6 +3993,7 @@ const options = {
   personaTags: null,
   personaVoice: null,
   personaVoiceClip: null,
+  personaAccountAfter: null,
   personaPhoto: null, // alias for --ref when used with --persona-add
   apiChat: false,
   durableChat: false,
@@ -4215,6 +4223,8 @@ for (let i = 0; i < args.length; i++) {
       });
     }
     options.network = raw;
+  } else if (arg === '--priority') {
+    options.priorityMode = true;
   } else if (arg === '--steps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -5146,6 +5156,13 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--persona-add') {
     options.personaAction = 'add';
     options.personaName = requireFlagValue(args, i, arg); i++;
+  } else if (arg === '--persona-account-after') {
+    options.personaAccountAfter = requireFlagValue(args, i, arg); i++;
+  } else if (arg === '--persona-list-account') {
+    options.personaAction = 'list-account';
+  } else if (arg === '--persona-import-account') {
+    options.personaAction = 'import-account';
+    options.personaName = requireFlagValue(args, i, arg); i++;
   } else if (arg === '--persona-list') {
     options.personaAction = 'list';
   } else if (arg === '--persona-remove' || arg === '--persona-delete') {
@@ -5509,6 +5526,7 @@ General:
   --billing-mode <mode> Billing: auto|subscription|tokens (default: server decides; "subscription"
                         requires Sogni Unlimited coverage, "tokens" opts out of it)
   --network <n>         Render on this Supernet: fast|relaxed (default: configured defaultNetwork, else fast).
+  --priority            Opt in to Priority Fast on paid Unlimited: earlier queue placement, 1.5x fair-use consumption. Worker models only.
                         Relaxed queues can take hours; pair long renders with --detach
   --balance, --balances Show account, plan, and SPARK/SOGNI balances and exit
   --list-models [query] List live Supernet media models; optionally filter by query
@@ -5579,7 +5597,10 @@ Personality (custom agent instructions):
 
 Personas (named people with reference photos):
   --persona-add <name>        Add a persona (combine with --ref, --relationship, --description, --voice-clip)
-  --persona-list              List all saved personas
+  --persona-list              List local personas
+  --persona-list-account      List one page of Personas saved in your Sogni account
+  --persona-account-after <cursor> Read the next account Persona page
+  --persona-import-account <id> Copy an account Persona and its original references into the local library (never overwrites)
   --persona-remove <name>     Remove a persona and its files
   --persona-resolve <name>    Show persona details and file paths
   --persona <name>            Generate using a persona's reference photo (image context, video ref frame)
@@ -7002,18 +7023,25 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
 }
-if (options.network) {
+if (options.network || options.priorityMode) {
+  const flag = options.priorityMode ? '--priority' : '--network';
   const unrouted = [
     ['--api-chat, which runs on hosted Fast', options.apiChat],
     ['hosted workflows, which run on hosted Fast', options.apiWorkflowAction],
     ['--list-models or --search-models (use --model-network)', liveModelUtilityAction]
   ].find(([, applies]) => applies);
   if (unrouted) {
-    fatalCliError(`--network cannot be combined with ${unrouted[0]}.`, {
+    fatalCliError(`${flag} cannot be combined with ${unrouted[0]}.`, {
       code: 'INVALID_ARGUMENT',
-      details: { flag: '--network', conflictsWith: unrouted[0] }
+      details: { flag, conflictsWith: unrouted[0] }
     });
   }
+}
+if (options.priorityMode && (projectNetwork(options.model) !== 'fast'
+  || requiresSparkOnlyToken(options.model) || options.billingMode === 'tokens' || options.tokenType === 'sogni')) {
+  fatalCliError('--priority requires a Sogni worker model on Fast paid with Unlimited. Use --network fast, Spark and subscription billing, or omit --priority.', {
+    code: 'INVALID_ARGUMENT', details: { flag: '--priority' }
+  });
 }
 // Relaxed queues run far longer than Fast, so its renders get at least the wait a
 // queued video gets, unless the caller or the config chose one. Timing out leaves
@@ -11182,6 +11210,7 @@ function applyPersonaAndVoiceReferences() {
       options.referenceAudioIdentity = voicePersona.voiceClipPath;
       cliSet.referenceAudioIdentity = true;
     }
+    if (!options.voiceTranscript && voicePersona.voiceTranscript) options.voiceTranscript = voicePersona.voiceTranscript;
     options._voicePersonaResolvedName = voicePersona.name;
   }
 
@@ -11201,8 +11230,12 @@ function applyPersonaAndVoiceReferences() {
       if (!options.refImage) {
         options.refImage = persona.photoPath;
       }
+      if (persona.photoPaths?.length > 1 && (options.videoWorkflow === 'r2v' || inferVideoWorkflowFromModel(options.model) === 'r2v')) {
+        options.contextImages.push(...persona.photoPaths.slice(1));
+      }
     } else {
-      options.contextImages.push(persona.photoPath);
+      options.contextImages.push(...(persona.photoPaths ?? [persona.photoPath]));
+
     }
   }
 
@@ -13034,6 +13067,7 @@ function sourceReelChildArgs(baseArgs, outputPath, prompt, plan, duration) {
   ];
   if (options.tokenType) args.push('--token-type', options.tokenType);
   if (options.network) args.push('--network', options.network);
+  if (options.priorityMode) args.push('--priority');
   if (options.steps !== null && options.steps !== undefined) args.push('--steps', String(options.steps));
   if (options.guidance !== null && options.guidance !== undefined) args.push('--guidance', String(options.guidance));
   if (options.noFilter) args.push('--no-filter');
@@ -14321,6 +14355,7 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
     numberOfMedia: options.count,
     tokenType,
     network: projectNetwork(options.model),
+    ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
     ...(Number.isFinite(steps) && steps > 0 ? { steps } : {}),
     ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
     ...(referenceImageCount !== undefined ? { referenceImageCount } : {}),
@@ -14718,7 +14753,31 @@ async function main() {
     // Persona commands (non-generate)
     if (options.personaAction && options.personaAction !== 'generate') {
       const jsonOut = options.json || JSON_ERROR_MODE;
-      if (options.personaAction === 'list') {
+      if (['list-account', 'import-account'].includes(options.personaAction)) {
+        const apiKey = requireApiKeyCredentials(loadCredentials(), 'Account Personas');
+        const requestJson = (path) => fetchApiJson(path, { apiKey });
+        if (options.personaAction === 'list-account') {
+          const payload = await requestJson('/v1/personas' + (options.personaAccountAfter ? '?after=' + encodeURIComponent(options.personaAccountAfter) : ''));
+          if (jsonOut) console.log(JSON.stringify({ success: true, type: 'persona-list-account', ...payload.data }));
+          else {
+            for (const persona of payload.data.items ?? []) console.log(`${persona.name} (${persona.id})`);
+            if (payload.data.nextCursor) console.log(`Next page: --persona-list-account --persona-account-after ${JSON.stringify(payload.data.nextCursor)}`);
+          }
+        } else {
+          const persona = await importAccountPersona({
+            id: options.personaName, directory: PERSONAS_DIR, existingPersonas: loadPersonas(), requestJson,
+            requestBytes: async (path) => {
+              const url = await buildSafeApiUrl(path);
+              const response = await fetch(url, { headers: apiRequestHeaders(apiKey), redirect: 'error', signal: AbortSignal.timeout(DEFAULT_HTTP_TIMEOUT_MS) });
+              if (!response.ok) throw new Error(`Could not download an original persona reference (HTTP ${response.status}).`);
+              return Buffer.from(await response.arrayBuffer());
+            },
+          });
+          savePersonasIndex([...loadPersonas(), persona]);
+          if (jsonOut) console.log(JSON.stringify({ success: true, type: 'persona-import-account', persona }));
+          else console.log(`Imported ${persona.name} with ${persona.references.length} original references. Use --persona ${JSON.stringify(persona.name)} to generate.`);
+        }
+      } else if (options.personaAction === 'list') {
         const personas = loadPersonas();
         if (jsonOut) {
           console.log(JSON.stringify({ success: true, type: 'persona-list', personas, timestamp: new Date().toISOString() }));

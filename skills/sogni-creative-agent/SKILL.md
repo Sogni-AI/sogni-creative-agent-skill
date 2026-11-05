@@ -9,3 +9,5 @@ This is the Codex plugin surface. Wherever the referenced skill says
 `sogni-agent` or `sogni-agent-claude-code`, invoke `sogni-agent-codex`.
 
 Read `../../plugin-skills/sogni-creative-agent/SKILL.md` relative to this installed file completely and follow it. Resolve every subsequent plugin path from the plugin root two directories above this file, never from the user's working directory.
+
+Use `--network fast|relaxed` for a direct render. Use `--priority` only after the user opts in to earlier Fast queue placement at 1.5× fair-use consumption on paid Unlimited. Worker models only; hosted chat and hosted workflows do not accept it. See the long-jobs-and-queues reference for details.

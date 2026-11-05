@@ -9,6 +9,19 @@ multi-persona scenes, or style transformations of a referenced individual.
 Personas enable identity-preserving generation across sessions. Stored at
 `~/.config/sogni/personas/`.
 
+### Personas saved in your Sogni account
+
+The Web and Chat share account Personas. The CLI keeps its local library and offers an explicit snapshot import; it never syncs or replaces local Personas automatically.
+
+```bash
+sogni-agent --persona-list-account --json
+sogni-agent --persona-list-account --persona-account-after "<nextCursor>" --json
+sogni-agent --persona-import-account "<persona-id>" --json
+sogni-agent --persona "Alice" -o ./portrait.png "Alice in a sunlit courtyard"
+```
+
+Listing reads one page and returns `nextCursor`. Import copies the selected Persona’s original reference files through the authenticated API, including saved photos, character sheets and audio voice recordings. It also saves the description, appearance, attire, voice description and transcript. A matching local name is refused without replacing anything. The imported snapshot keeps working locally; later account edits require an explicit new import after you resolve the name conflict. The first identity photo anchors a frame-guided video; image edits and explicit reference-to-video runs can use its other saved images. All downloaded reference paths appear in the imported Persona JSON. A voice supplied only as a video is retained as a file, but must be extracted as audio before using it as a local voice clip.
+
 ### Managing Personas
 
 ```bash

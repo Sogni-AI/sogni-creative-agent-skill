@@ -248,3 +248,5 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
 Where a reference says `sogni-agent`, substitute `sogni-agent-hermes`.
 
 Personal LoRA imports and library management: read [Personal LoRAs](./references/personal-loras.md) for account-bound discovery, asynchronous import status, consent, compatible models, and rendering with owned adapters.
+
+Use `--network fast|relaxed` for a direct render. Use `--priority` only after the user opts in to earlier Fast queue placement at 1.5× fair-use consumption on paid Unlimited. Worker models only; hosted chat and hosted workflows do not accept it. See the long-jobs-and-queues reference for details.

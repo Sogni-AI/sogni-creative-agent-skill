@@ -1,3 +1,9 @@
+## Unreleased
+
+- Add explicit `--priority` for covered Fast renders on paid Unlimited, with 1.5× daily and monthly fair-use consumption. The default stays ordinary Fast.
+- List account Personas with `--persona-list-account` and copy a selected one into the local library with `--persona-import-account`. Imports retain original photos, character sheets, audio voice recordings and descriptions; existing local Personas are preserved.
+- Desktop tools now forward Fast/Relaxed choices, Priority and GPT Image 2.6 GIF, complexity and annotation controls. Model references and prompt guides match the current SDK chain.
+
 ## [3.64.0] - 2026-11-05
 
 - Render on Relaxed from the CLI: `--network fast|relaxed` picks the Supernet for one run, and `defaultNetwork` now applies to renders. Before this, both only changed the connection and every job still ran on Fast. If you already set `defaultNetwork: "relaxed"`, renders now go to Relaxed: models with no Relaxed workers are refused with a hint rather than moved to Fast, and vendor models stay on Fast. Renders on Relaxed wait at least 30 minutes by default. Fast fair-use refusals (4087, 4089) now explain how to reach Relaxed, and hints for these refusals also show without `--json`.

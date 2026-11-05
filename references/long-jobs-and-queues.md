@@ -114,3 +114,11 @@ then.
 `--status`, `--result` and `--recent` need `@sogni-ai/sogni-client` 5.57.0 or
 later, and `--wait` needs 5.58.0; an older installation says so and asks for a
 skill update.
+
+## Fast, Relaxed and Priority
+
+`--network fast|relaxed` selects the worker network for a render. `--priority` is a per-run opt-in for paid Unlimited or Unlimited Pro on Fast: earlier queue placement behind Premium Spark, with daily and monthly fair-use consumption at 1.5×. Explain that tradeoff and use it only when requested. It applies to covered worker models, excluding third-party vendor models, Relaxed, token billing, hosted chat and hosted workflows. It does not make the GPU faster. If refused, show the error and let the user choose standard Fast or Relaxed. Never retry or spend Premium Spark automatically.
+
+```bash
+sogni-agent --priority --network fast --video -m minimax-h3-fasth3-t2v-turbo --duration 5 -o ./priority.mp4 "A paper bird flies across a sunlit courtyard"
+```

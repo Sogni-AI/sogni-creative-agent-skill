@@ -19,6 +19,32 @@ function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
 }
 
+test('desktop image tools forward explicit network, Priority and GPT Image 2.6 controls', () => {
+  const args = getTool('generate_image').buildArgs({
+    prompt: 'a waving robot', model: 'gpt-image-2.6-flare', network: 'fast',
+    output_format: 'gif', image_complexity: 'high', image_frame_count: 9, image_frame_duration_ms: 120,
+  });
+  for (const [flag, value] of [['--network', 'fast'], ['--output-format', 'gif'], ['--image-complexity', 'high'], ['--image-frame-count', '9'], ['--image-frame-duration-ms', '120']]) {
+    assert.equal(args[args.indexOf(flag) + 1], value);
+  }
+  assert.equal(args.includes('--priority'), false);
+  assert.ok(getTool('generate_image').buildArgs({ prompt: 'a duck', priority: true }).includes('--priority'));
+  const editArgs = getTool('generate_image').buildArgs({ prompt: 'edit the circled chair', image_markup_url: 'https://cdn.test/markup.png', context_images: ['/source.jpg'] });
+  assert.equal(editArgs[editArgs.indexOf('--image-markup-url') + 1], 'https://cdn.test/markup.png');
+});
+
+test('desktop video and music tools forward explicit worker choices', () => {
+  assert.ok(getTool('generate_video').buildArgs({ prompt: 'a duck', priority: true, return_last_frame: true }).includes('--return-last-frame'));
+  assert.ok(getTool('generate_video').buildArgs({ prompt: 'a duck', priority: true }).includes('--priority'));
+  const args = getTool('generate_music').buildArgs({ prompt: 'ambient pads', network: 'relaxed' });
+  assert.equal(args[args.indexOf('--network') + 1], 'relaxed');
+});
+
+test('desktop Personas can list an account page and explicitly import a selected id', () => {
+  assert.deepEqual(getTool('manage_personas').buildArgs({ action: 'list_account', after: 'next' }), ['--json', '--no-update-check', '--persona-list-account', '--persona-account-after', 'next']);
+  assert.deepEqual(getTool('manage_personas').buildArgs({ action: 'import_account', account_persona_id: 'alice-id' }), ['--json', '--no-update-check', '--persona-import-account', 'alice-id']);
+});
+
 test('resolveAgentPath honours SOGNI_AGENT_PATH when the file exists', () => {
   const home = tempHome();
   const agent = join(home, 'sogni-agent.mjs');

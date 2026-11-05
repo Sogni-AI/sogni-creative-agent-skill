@@ -26,6 +26,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Recommended model selectors by need
 - Video sizing & aspect ratios
 - GPT Image 2.5 controls (as of 2026-09)
+- GPT Image 2.6 GIFs and annotations (as of 2026-11)
 
 ## Live model discovery
 
@@ -85,6 +86,8 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | `gpt-image-2` | Variable | OpenAI GPT Image 2 text-to-image and edit, strong prompt and text rendering |
 | `gpt-image-2.5-sunburst` | Variable | GPT Image 2.5 Sunburst; explicit selection, edits, masks and transparency; the best edit when the user has Premium Spark or asks for top quality |
 | `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
+| `gpt-image-2.6-sunburst` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
+| `gpt-image-2.6-flare` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
 | `seedream-5-0-pro-uncensored` | Slow (~35-95s) | Seedream 5.0 Pro Uncensored: text-to-image and edits from 1-10 context images; only when asked for; needs the Seedance Uncensored likeness agreement |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
@@ -1649,4 +1652,15 @@ Dimensions default to 1024×1024: multiples of 16, at most 3840 per edge,
 3:1 maximum aspect ratio, 655,360–8,294,400 pixels. Above 3,686,400 pixels is
 experimental. Transparency is integrated but clean cutout edges failed the
 initial Flare canaries; inspect native output against a contrasting background.
-These source changes still require the coordinated package release and server rollout.
+
+
+## GPT Image 2.6 GIFs and annotations (as of 2026-11)
+
+Select `-m gpt-image-2.6-sunburst` or `-m gpt-image-2.6-flare`; existing image defaults stay the same. Both support the 2.5 still-image controls above, plus `--image-complexity low|medium|high`. Use `--output-format gif` for an animation, `--image-frame-count 2..16` (default 9), and `--image-frame-duration-ms 20..2000` (default 200). Describe the motion in the prompt. GIF sizing depends on the frame count; let the CLI fit a supported sheet and quote the actual settings.
+
+For a still-image edit, supply the original as the first `-c` reference and its aligned transparent annotation PNG URL with `--image-markup-url`. The marks guide the changes and are separate from an alpha mask. The CLI accepts a prepared annotation image; it has no drawing canvas.
+
+```bash
+sogni-agent -m gpt-image-2.6-flare --output-format gif --image-frame-count 9 --image-frame-duration-ms 200 -o ./wave.gif "A small robot waves, seamless loop"
+sogni-agent -m gpt-image-2.6-sunburst -c original.jpg --image-markup-url https://example.com/annotation.png -o ./edited.png "Replace the circled chair with a red armchair"
+```

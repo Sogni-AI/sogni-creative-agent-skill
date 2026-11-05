@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add GPT Image 2.6 Sunburst and Flare as explicit choices, with animated GIF generation, planning complexity, and annotation-guided still-image edits. GIF settings and quoted costs stay together through submission.
+
 ## [3.63.0] - 2026-11-03
 
 ### Features

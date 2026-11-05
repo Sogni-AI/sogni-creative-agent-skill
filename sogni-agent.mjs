@@ -101,6 +101,7 @@ import {
   normalizeGptImageModelAlias,
   normalizeGptImageQuality,
   getGptImageRequestOptions,
+  gptImageGifDimensions,
   isGptImageModel,
   isKreaIdentityEditModel,
   // Seedream 5.0 Pro Uncensored: external-API image model (text-to-image and
@@ -2037,6 +2038,10 @@ function imageOptionsFromCli() {
   if (!isGptImage2ModelSelection(options.model)) return {};
   return {
     ...getGptImageRequestOptions({
+      gptImageComplexity: options.imageComplexity,
+      gptImageFrameCount: options.imageFrameCount,
+      gptImageFrameDurationMs: options.imageFrameDurationMs,
+      gptImageMarkupUrl: options.imageMarkupUrl,
       gptImageBackground: options.imageBackground ?? undefined,
       gptImageOutputCompression: options.imageOutputCompression ?? undefined,
       outputFormat: options.outputFormat ?? 'png'
@@ -4177,6 +4182,14 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.outputFormat = raw;
     cliSet.outputFormat = true;
+  } else if (arg === '--image-complexity') {
+    options.imageComplexity = requireFlagValue(args, i++, arg);
+  } else if (arg === '--image-frame-count') {
+    options.imageFrameCount = parseNumberValue(requireFlagValue(args, i++, arg), arg);
+  } else if (arg === '--image-frame-duration-ms') {
+    options.imageFrameDurationMs = parseNumberValue(requireFlagValue(args, i++, arg), arg);
+  } else if (arg === '--image-markup-url') {
+    options.imageMarkupUrl = requireFlagValue(args, i++, arg);
   } else if (arg === '--image-quality') {
     options.imageQuality = requireFlagValue(args, i++, arg);
   } else if (arg === '--image-background') {
@@ -5210,11 +5223,15 @@ Image Options:
   --distance <key>      close-up|medium|wide
   --angle-strength <n>  LoRA strength for multiple_angles (default: 0.9)
   --angle-description <text>  Optional subject description
-  --output-format <f>   Images: png|jpg|webp; video: mp4|mov (MOV: Seedance 2.5)
+  --output-format <f>   Images: png|jpg|webp|gif (GIF: GPT Image 2.6); video: mp4|mov (MOV: Seedance 2.5)
   --no-prompt-metadata  Omit prompt/settings metadata from worker image outputs
   --return-last-frame   Export the final video frame as an image (Seedance 2.5)
-  --image-quality <q>   GPT Image: low|medium|high; 2.5 also xhigh|max
-  --image-background <b>  auto|opaque; 2.5 also transparent (PNG/WebP)
+  --image-complexity <q> GPT Image 2.6: low|medium|high planning effort
+  --image-frame-count <n> GIF: 2-16 frames (default 9), use --output-format gif
+  --image-frame-duration-ms <n> GIF: 20-2000 ms per frame (default 200)
+  --image-markup-url <url> Transparent annotation PNG for the first edit reference
+  --image-quality <q>   GPT Image: low|medium|high; 2.5 and 2.6 also xhigh|max
+  --image-background <b>  auto|opaque; 2.5/2.6 also transparent (PNG/WebP)
   --image-output-compression <n>  JPEG/WebP compression, integer 0–100
   --image-mask <path|url>  PNG alpha mask of first --context image, same size
   --sampler <name>      Sampler (images/music; H3 LightX2V Turbo: euler|er_sde|sa_solver; FastH3: euler)
@@ -6062,7 +6079,7 @@ if (options.outputFormat) {
         details: { outputFormat: options.outputFormat }
       });
     }
-  } else if (!['png', 'jpg', 'webp'].includes(options.outputFormat)) {
+  } else if (!['png', 'jpg', 'webp', 'gif'].includes(options.outputFormat)) {
     fatalCliError('Image output format must be "png", "jpg", or "webp".', {
       code: 'INVALID_ARGUMENT',
       details: { outputFormat: options.outputFormat }
@@ -6074,7 +6091,7 @@ if (options.returnLastFrame && (!options.video || !isSeedance25ModelSelectionLoc
   fatalCliError('--return-last-frame requires Seedance 2.5 video.', { code: 'INVALID_ARGUMENT' });
 }
 
-if (options.imageQuality !== null || options.imageBackground !== null || options.imageOutputCompression !== null || options.imageMask !== null) {
+if (options.imageQuality !== null || options.imageBackground !== null || options.imageOutputCompression !== null || options.imageMask !== null || [options.imageComplexity, options.imageFrameCount, options.imageFrameDurationMs, options.imageMarkupUrl].some(value => value !== undefined) || options.outputFormat === 'gif') {
   try {
     if (options.video || options.music || !isGptImage2ModelSelection(options.model)) {
       throw new Error('Image quality, background, compression and mask options require a GPT Image model.');
@@ -6768,11 +6785,22 @@ if (options.music) {
 
 if (!options.video && !options.music && isGptImage2ModelSelection(options.model)) {
   options.model = normalizeGptImageModelAlias(options.model);
+  if (options.outputFormat === 'gif') {
+    if (options.contextImages.length || options.imageMask || options.imageMarkupUrl) fatalCliError('GIF output requires text-to-image generation without references, mask or markup.', { code: 'INVALID_ARGUMENT' });
+    try {
+      Object.assign(options, gptImageGifDimensions(
+        cliSet.width || widthFromConfig || widthFromPrompt ? options.width : undefined,
+        cliSet.height || heightFromConfig || heightFromPrompt ? options.height : undefined,
+        options.imageFrameCount
+      ));
+    } catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
+  } else {
   if (!cliSet.width && !widthFromConfig && !widthFromPrompt) options.width = 1024;
   if (!cliSet.height && !heightFromConfig && !heightFromPrompt) options.height = 1024;
   const { width, height } = options;
   if (width % 16 || height % 16 || Math.max(width, height) > 3840 || Math.max(width, height) / Math.min(width, height) > 3 || width * height < 655360 || width * height > 8294400) {
     fatalCliError('GPT Image dimensions must be multiples of 16, at most 3840 per edge, within 3:1 and 655360–8294400 pixels.', { code: 'INVALID_ARGUMENT' });
+  }
   }
   if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 }

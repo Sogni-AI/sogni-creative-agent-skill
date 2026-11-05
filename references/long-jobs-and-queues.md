@@ -21,7 +21,9 @@ Premium Spark using `--billing-mode tokens`.
 
 A plain render on Relaxed waits at least 30 minutes before the CLI stops waiting,
 and stopping leaves the project running. `--source-reel` waits the same time for
-each clip and fails if one takes longer, so pass a long `-t` to run a reel there.
+each clip and fails if one takes longer. To run a reel there, pick a model that runs
+on Relaxed and pass a long `-t`, for example
+`--reel-model minimax-h3-fastvideo-int8_i2v_turbo -t 14400`.
 
 ## Commands
 

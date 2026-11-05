@@ -7721,6 +7721,19 @@ for (const [reason, message] of [
   });
 }
 
+test('a 4081 at the terminal keeps the server message without the generic upgrade hint', () => {
+  const message = 'Rendering with a LoRA requires a subscription, Premium Spark, or SOGNI';
+  const { exitCode, stderr } = runCli(['a duck on a skateboard'], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+      event: 'PROJECT_FAILED',
+      payload: { projectId: 'proj-1', code: 4081, message }
+    })
+  });
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes(message));
+  assert.doesNotMatch(stderr, /Upgrade to Unlimited Pro/);
+});
+
 test('a Relaxed refusal shows the same guidance without --json', () => {
   const { exitCode, stderr } = runCli(['--network', 'relaxed', '--video', 'a cinematic skyline at dusk'], {
     SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({

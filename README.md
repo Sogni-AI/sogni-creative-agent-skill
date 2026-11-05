@@ -1061,7 +1061,7 @@ sogni-agent --video --network relaxed --billing-mode subscription --detach --jso
 sogni-agent --result <projectId> --wait -o clip.mp4 --json
 ```
 
-Set `defaultNetwork` to `"relaxed"` in the plugin config to make it the default, or pass `--network fast` to override that for one run. Relaxed has far fewer workers, so a video can wait for hours, and anything unfinished 24 hours after you submit it is cancelled. Not every model runs there: `sogni-agent --list-models --model-network relaxed` shows which do for Unlimited members, and a job paid with Spark or SOGNI, or from a trial, can still be refused for a listed model. Renders on Relaxed wait at least 30 minutes by default; a longer wait leaves the project running for `--result`. With a configured default, a model with no Relaxed workers is refused rather than moved to Fast, except vendor models, which stay on Fast. Hosted chat and hosted workflows always run on Fast.
+Set `defaultNetwork` to `"relaxed"` in the plugin config to make it the default, or pass `--network fast` to override that for one run. Relaxed has far fewer workers, so a video can wait for hours, and anything unfinished 24 hours after you submit it is cancelled. Not every model runs there: `sogni-agent --list-models --model-network relaxed` shows which do for Unlimited members, and a job paid with Spark or SOGNI, or from a trial, can still be refused for a listed model. The CLI waits at least 30 minutes for a render on Relaxed by default. A render that takes longer keeps running, and `--result` collects it. With a configured default, a model with no Relaxed workers is refused rather than moved to Fast, except vendor models, which stay on Fast. Hosted chat and hosted workflows always run on Fast.
 
 ### Free-trial access
 

@@ -901,3 +901,14 @@ test('tools/call import_media surfaces validation failures as isError', async (t
   assert.equal(res.result.isError, true);
   assert.match(res.result.content[0].text, /data/);
 });
+
+test('the safety kill outlasts the CLI wait for a render on Relaxed', async () => {
+  const { hardKillTimeoutMs } = await import('../desktop-extension/server/tools.mjs');
+  // The CLI waits at least 30 minutes on Relaxed, then reports the project id.
+  // A kill before that would lose the id, so every render tool has to allow more.
+  for (const name of ['generate_image', 'generate_video', 'generate_music', 'photobooth']) {
+    assert.ok(hardKillTimeoutMs(name, {}) > 30 * 60 * 1000, `${name} would be killed first`);
+  }
+  // A longer explicit wait still gets a margin past it.
+  assert.equal(hardKillTimeoutMs('generate_video', { timeout_seconds: 7200 }), (7200 + 60) * 1000);
+});

@@ -222,7 +222,7 @@ function subscriptionBillingFallback(code) {
       // The plan's Fast capacity is used up until it resets (daily or monthly).
       return {
         retryable: false,
-        hint: 'Fast rendering on this plan is paused until it resets, so retrying on Fast will keep failing. Relaxed stays included: rerun with --network relaxed, or set defaultNetwork to relaxed in the plugin config. Not every model runs there (see --list-models --model-network relaxed) and the queue can take hours, so add --detach and collect the result with --result <id> --wait. To stay on Fast now, pay with Premium Spark using --billing-mode tokens.',
+        hint: 'Fast rendering on this plan is paused until it resets, so retrying on Fast will keep failing. Relaxed stays included: rerun with --network relaxed, or set defaultNetwork to relaxed in the plugin config until the reset. Not every model runs there (see --list-models --model-network relaxed) and the queue can take hours, so add --detach and collect the result with --result <id> --wait. To stay on Fast now, pay with Premium Spark using --billing-mode tokens.',
       };
     default:
       return null;
@@ -1012,6 +1012,13 @@ function addCanonicalErrorFields(payload, error, context = {}) {
 // Human-facing twin of addCanonicalErrorFields: print the classified, friendly
 // message (with the raw message as a detail line when it differs) so human
 // users get the same quality of error JSON consumers already receive.
+// Only these two: the other subscription hints stay in the JSON payload, because
+// their generic wording can contradict the socket's more specific message.
+function fastCapacityHint(error) {
+  const code = String(subscriptionBillingCodeFromError(unwrapGenericProjectError(error)) ?? '');
+  return code === '4087' || code === '4089' ? subscriptionBillingFallback(code).hint : null;
+}
+
 function printHumanError(error, context = {}) {
   let classified = null;
   try { classified = classifyCliError(error, context); } catch { /* fall back to raw */ }
@@ -1023,7 +1030,7 @@ function printHumanError(error, context = {}) {
   const hint = error?.hint
     || classified?.metadata?.consentInstructions
     || classified?.hint
-    || subscriptionBillingFallback(subscriptionBillingCodeFromError(unwrapGenericProjectError(error)))?.hint
+    || fastCapacityHint(error)
     || (classified?.category === 'insufficient_credits' ? SPARK_PACKS_PURCHASE_HINT : null);
   if (hint) console.error(`Hint: ${hint}`);
 }
@@ -5478,7 +5485,8 @@ Hosted API Modes:
   --api-base-url <url>  Sogni API base URL (default: ${DEFAULT_API_BASE_URL})
 
 General:
-  -t, --timeout <sec>   Stop waiting after this many seconds (default: 30, video: 1800, music: 600).
+  -t, --timeout <sec>   Stop waiting after this many seconds (default: 30, video: 1800, music: 600;
+                        at least 1800 on Relaxed).
                         Counted from submission; time the account's own plan concurrency limit
                         holds the project is not counted. The project is NOT cancelled; fetch it
                         later with --result

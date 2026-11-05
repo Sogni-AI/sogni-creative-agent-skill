@@ -173,6 +173,12 @@ const KNOWN_MODEL_CATALOG_TAGS = new Set([
 // covered job that cannot bill. Codes are the source of truth in
 // sogni-socket/constants/errorCodes.js (4078-4081, 4087, 4089).
 const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081', '4087', '4089']);
+// The socket's refusal for a model with no place on Relaxed. Its wording is the
+// only marker: the jobError carries just 4004, which also covers disabled models
+// and a catalog that is still updating, where retrying is right.
+const RELAXED_UNAVAILABLE_MESSAGE = /not currently available on the Relaxed Supernet|only available on the Fast Supernet/i;
+const RELAXED_UNAVAILABLE_HINT =
+  'This model does not run on Relaxed right now. Run --list-models --model-network relaxed to see what does, or rerun with --network fast.';
 const APP_ID_LIMIT_ERROR_CODE = '4061';
 const APP_ID_LIMIT_HINT =
   'This CLI persists and reuses one installation app ID. Keep ~/.config/sogni/app-id between sessions; for ephemeral/container homes, set one stable SOGNI_APP_ID or persist SOGNI_APP_ID_PATH. If the address is already blocked, preserve the stable ID and wait before retrying.';
@@ -216,18 +222,11 @@ function subscriptionBillingFallback(code) {
       // The plan's Fast capacity is used up until it resets (daily or monthly).
       return {
         retryable: false,
-        hint: 'Fast rendering on this plan is paused until it resets, so retrying on Fast will keep failing. Relaxed stays included: rerun with --network relaxed. Not every model runs there and the queue can take hours, so add --detach and collect the video with --result <id> --wait. Premium Spark keeps Fast available now.',
+        hint: 'Fast rendering on this plan is paused until it resets, so retrying on Fast will keep failing. Relaxed stays included: rerun with --network relaxed, or set defaultNetwork to relaxed in the plugin config. Not every model runs there (see --list-models --model-network relaxed) and the queue can take hours, so add --detach and collect the result with --result <id> --wait. To stay on Fast now, pay with Premium Spark using --billing-mode tokens.',
       };
     default:
       return null;
   }
-}
-
-// The socket's "not available on Relaxed" refusal asks the caller to switch
-// networks; name the flags that do that.
-function applyRelaxedAvailabilityHint(payload, code) {
-  if (String(code) !== '4004' || renderNetwork !== 'relaxed' || payload.hint) return;
-  payload.hint = 'This model is not available on Relaxed right now. Run --list-models --model-network relaxed to see what runs there, or rerun with --network fast.';
 }
 
 // Apply subscription-billing fallback enrichment to an error payload. Returns
@@ -718,15 +717,15 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   };
   if (classified.metadata) payload.metadata = classified.metadata;
   if (classified.metadata?.consentInstructions && !hint) payload.hint = classified.metadata.consentInstructions;
+  if (classified.hint && !hint) payload.hint = classified.hint;
   if (classified.technicalError && classified.technicalError !== payload.error) {
     payload.technicalError = classified.technicalError;
   }
   if (code) payload.errorCode = code;
   if (details) payload.errorDetails = details;
   if (hint) payload.hint = hint;
-  applyRelaxedAvailabilityHint(payload, code);
   if (applySubscriptionBillingEnrichment(payload, code)) {
-    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // Subscription-billing code (4078-4081, 4087, 4089) — handled with subscription-specific
     // guidance; skip the generic "Buy Spark Packs" credits branch.
   } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
@@ -819,6 +818,16 @@ function classifyHappyHorseCliError(error, rawMessage) {
 function classifyCliError(error, context = {}) {
   error = unwrapGenericProjectError(error);
   const rawMessage = cliErrorMessage(error);
+
+  if (RELAXED_UNAVAILABLE_MESSAGE.test(rawMessage)) {
+    return {
+      error_type: 'MODEL_UNAVAILABLE',
+      category: 'model_unavailable',
+      message: rawMessage,
+      retryable: false,
+      hint: RELAXED_UNAVAILABLE_HINT
+    };
+  }
 
   // HTTP 429: Sogni limits requests per network, and the browser of whoever runs
   // this shares that budget. Say how long to wait, never "try again".
@@ -982,13 +991,13 @@ function addCanonicalErrorFields(payload, error, context = {}) {
   payload.retryable = classified.retryable;
   if (classified.metadata) payload.metadata = classified.metadata;
   if (classified.metadata?.consentInstructions && !payload.hint) payload.hint = classified.metadata.consentInstructions;
+  if (classified.hint && !payload.hint) payload.hint = classified.hint;
   if (classified.technicalError && classified.technicalError !== classified.message) {
     payload.technicalError = classified.technicalError;
   }
   const subscriptionCode = subscriptionBillingCodeFromError(error);
-  applyRelaxedAvailabilityHint(payload, subscriptionCode);
   if (applySubscriptionBillingEnrichment(payload, subscriptionCode)) {
-    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // Subscription-billing code (4078-4081, 4087, 4089) — handled with subscription-specific
     // guidance; skip the generic "Buy Spark Packs" credits branch.
   } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
@@ -1013,6 +1022,8 @@ function printHumanError(error, context = {}) {
   }
   const hint = error?.hint
     || classified?.metadata?.consentInstructions
+    || classified?.hint
+    || subscriptionBillingFallback(subscriptionBillingCodeFromError(unwrapGenericProjectError(error)))?.hint
     || (classified?.category === 'insufficient_credits' ? SPARK_PACKS_PURCHASE_HINT : null);
   if (hint) console.error(`Hint: ${hint}`);
 }
@@ -6995,6 +7006,12 @@ if (options.network) {
       details: { flag: '--network', conflictsWith: unrouted[0] }
     });
   }
+}
+// Relaxed queues run far longer than Fast, so its renders get at least the wait a
+// queued video gets, unless the caller or the config chose one. Timing out leaves
+// the project running; --result <id> --wait collects it.
+if (!cliSet.timeout && !timeoutFromConfig && projectNetwork(options.model) === 'relaxed') {
+  options.timeout = Math.max(options.timeout, 1800000);
 }
 if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.liveModelNetwork || options.liveModelTags.length > 0)) {
   fatalCliError('--model-media, --model-network, and --model-tag require --list-models or --search-models.', {
@@ -15191,6 +15208,7 @@ async function main() {
           success: true,
           type: 'video-cost',
           model: options.model,
+          network: estimateParams.network,
           width: options.width,
           height: options.height,
           fps: options.fps,

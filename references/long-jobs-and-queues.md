@@ -10,10 +10,18 @@ connection open for its whole life.
 `--network relaxed` (or `defaultNetwork: "relaxed"` in the plugin config) sends a
 render to the Relaxed Supernet. It is included in Sogni Unlimited, including while
 Fast is paused at the plan's fair-use capacity. Relaxed has far fewer workers, so a
-video can wait for hours, and anything unfinished 24 hours after you submit it is
-cancelled. Always submit Relaxed video with `--detach` and collect it with
-`--result <id> --wait`. Check what runs there with
-`sogni-agent --list-models --model-network relaxed`.
+video can wait for hours. Anything unfinished 24 hours after you submit it is
+cancelled, and a project no online worker can run is cancelled much sooner. Always
+submit Relaxed video with `--detach` and collect it with `--result <id> --wait`.
+
+`sogni-agent --list-models --model-network relaxed` shows what runs there for
+Unlimited members; a job paid with Spark or SOGNI, or from a trial, can still be
+refused for a listed model. To stay on Fast once its capacity is used up, pay with
+Premium Spark using `--billing-mode tokens`.
+
+A plain render on Relaxed waits at least 30 minutes before the CLI stops waiting,
+and stopping leaves the project running. `--source-reel` waits the same time for
+each clip and fails if one takes longer, so pass a long `-t` to run a reel there.
 
 ## Commands
 

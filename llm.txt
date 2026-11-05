@@ -241,7 +241,8 @@ Subscription-billing failures use `errorCategory: "subscription_billing"` with
 (queue cap -> wait), 4080 (renewal retry, access paused -> pay with Spark/SOGNI,
 do NOT auto-retry the covered job), 4081 (higher plan -> upgrade to Pro), or 4087
 and 4089 (Fast capacity used up for the day or month -> offer `--network relaxed`,
-Premium Spark, or waiting for the reset; do NOT retry on Fast). Paid
+Premium Spark with `--billing-mode tokens`, or waiting for the reset; do NOT retry
+on Fast). Paid
 cancellation keeps access until period end; cancelling during the trial ends
 access immediately.
 

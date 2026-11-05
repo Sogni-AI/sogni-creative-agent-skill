@@ -54,7 +54,7 @@
         "type": "string",
         "enum": ["fast", "relaxed"],
         "default": "fast",
-        "description": "Default Sogni network for the client."
+        "description": "Default Sogni network for renders. Vendor models stay on Fast. --network overrides it for one run."
       },
       "defaultTokenType": {
         "type": "string",

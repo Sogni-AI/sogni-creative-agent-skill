@@ -171,8 +171,14 @@ const KNOWN_MODEL_CATALOG_TAGS = new Set([
 // message). Mirrors the `insufficient_credits` enrichment below: it adds an
 // actionable hint/category so an agent responds correctly instead of looping a
 // covered job that cannot bill. Codes are the source of truth in
-// sogni-socket/constants/errorCodes.js (4078-4081).
-const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081']);
+// sogni-socket/constants/errorCodes.js (4078-4081, 4087, 4089).
+const SUBSCRIPTION_BILLING_ERROR_CODES = new Set(['4078', '4079', '4080', '4081', '4087', '4089']);
+// The socket's refusal for a model with no place on Relaxed. Its wording is the
+// only marker: the jobError carries just 4004, which also covers disabled models
+// and a catalog that is still updating, where retrying is right.
+const RELAXED_UNAVAILABLE_MESSAGE = /not currently available on the Relaxed Supernet|only available on the Fast Supernet/i;
+const RELAXED_UNAVAILABLE_HINT =
+  'This model does not run on Relaxed right now. Run --list-models --model-network relaxed to see what does, or rerun with --network fast.';
 const APP_ID_LIMIT_ERROR_CODE = '4061';
 const APP_ID_LIMIT_HINT =
   'This CLI persists and reuses one installation app ID. Keep ~/.config/sogni/app-id between sessions; for ephemeral/container homes, set one stable SOGNI_APP_ID or persist SOGNI_APP_ID_PATH. If the address is already blocked, preserve the stable ID and wait before retrying.';
@@ -210,6 +216,13 @@ function subscriptionBillingFallback(code) {
         hint: `This feature requires a higher subscription plan. Upgrade to Unlimited Pro: ${UNLIMITED_PLAN_URL}`,
         purchaseLabel: 'Upgrade to Unlimited Pro',
         purchaseUrl: UNLIMITED_PLAN_URL,
+      };
+    case '4087':
+    case '4089':
+      // The plan's Fast capacity is used up until it resets (daily or monthly).
+      return {
+        retryable: false,
+        hint: 'Fast rendering on this plan is paused until it resets, so retrying on Fast will keep failing. Relaxed stays included: rerun with --network relaxed, or set defaultNetwork to relaxed in the plugin config until the reset. Not every model runs there (see --list-models --model-network relaxed) and the queue can take hours, so add --detach and collect the result with --result <id> --wait. To stay on Fast now, pay with Premium Spark using --billing-mode tokens.',
       };
     default:
       return null;
@@ -704,6 +717,7 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   };
   if (classified.metadata) payload.metadata = classified.metadata;
   if (classified.metadata?.consentInstructions && !hint) payload.hint = classified.metadata.consentInstructions;
+  if (classified.hint && !hint) payload.hint = classified.hint;
   if (classified.technicalError && classified.technicalError !== payload.error) {
     payload.technicalError = classified.technicalError;
   }
@@ -711,7 +725,7 @@ function buildCliErrorPayload({ message, code, details, hint, prompt }) {
   if (details) payload.errorDetails = details;
   if (hint) payload.hint = hint;
   if (applySubscriptionBillingEnrichment(payload, code)) {
-    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // Subscription-billing code (4078-4081, 4087, 4089) — handled with subscription-specific
     // guidance; skip the generic "Buy Spark Packs" credits branch.
   } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
@@ -804,6 +818,16 @@ function classifyHappyHorseCliError(error, rawMessage) {
 function classifyCliError(error, context = {}) {
   error = unwrapGenericProjectError(error);
   const rawMessage = cliErrorMessage(error);
+
+  if (RELAXED_UNAVAILABLE_MESSAGE.test(rawMessage)) {
+    return {
+      error_type: 'MODEL_UNAVAILABLE',
+      category: 'model_unavailable',
+      message: rawMessage,
+      retryable: false,
+      hint: RELAXED_UNAVAILABLE_HINT
+    };
+  }
 
   // HTTP 429: Sogni limits requests per network, and the browser of whoever runs
   // this shares that budget. Say how long to wait, never "try again".
@@ -967,12 +991,13 @@ function addCanonicalErrorFields(payload, error, context = {}) {
   payload.retryable = classified.retryable;
   if (classified.metadata) payload.metadata = classified.metadata;
   if (classified.metadata?.consentInstructions && !payload.hint) payload.hint = classified.metadata.consentInstructions;
+  if (classified.hint && !payload.hint) payload.hint = classified.hint;
   if (classified.technicalError && classified.technicalError !== classified.message) {
     payload.technicalError = classified.technicalError;
   }
   const subscriptionCode = subscriptionBillingCodeFromError(error);
   if (applySubscriptionBillingEnrichment(payload, subscriptionCode)) {
-    // Subscription-billing code (4078-4081) — handled with subscription-specific
+    // Subscription-billing code (4078-4081, 4087, 4089) — handled with subscription-specific
     // guidance; skip the generic "Buy Spark Packs" credits branch.
   } else if (classified.category === 'insufficient_credits') {
     payload.purchaseAction = true;
@@ -987,6 +1012,13 @@ function addCanonicalErrorFields(payload, error, context = {}) {
 // Human-facing twin of addCanonicalErrorFields: print the classified, friendly
 // message (with the raw message as a detail line when it differs) so human
 // users get the same quality of error JSON consumers already receive.
+// Only these two: the other subscription hints stay in the JSON payload, because
+// their generic wording can contradict the socket's more specific message.
+function fastCapacityHint(error) {
+  const code = String(subscriptionBillingCodeFromError(unwrapGenericProjectError(error)) ?? '');
+  return code === '4087' || code === '4089' ? subscriptionBillingFallback(code).hint : null;
+}
+
 function printHumanError(error, context = {}) {
   let classified = null;
   try { classified = classifyCliError(error, context); } catch { /* fall back to raw */ }
@@ -997,6 +1029,8 @@ function printHumanError(error, context = {}) {
   }
   const hint = error?.hint
     || classified?.metadata?.consentInstructions
+    || classified?.hint
+    || fastCapacityHint(error)
     || (classified?.category === 'insufficient_credits' ? SPARK_PACKS_PURCHASE_HINT : null);
   if (hint) console.error(`Hint: ${hint}`);
 }
@@ -1098,7 +1132,7 @@ function createSkillSogniClient(creds, appId) {
     appSource: SOGNI_APP_SOURCE,
     appId,
     attribution: clientAttribution(AGENT_ATTRIBUTION),
-    network: openclawConfig?.defaultNetwork || 'fast',
+    network: renderNetwork,
     autoConnect: false,
     apiKey: creds.SOGNI_API_KEY,
     authType: 'apiKey'
@@ -2328,9 +2362,19 @@ function requiresSparkOnlyToken(modelId) {
     || isWan3ModelSelectionLocal(modelId);
 }
 
+// Vendor models run on neither worker pool and the socket refuses them on
+// Relaxed, so a configured default leaves them on Fast. An explicit --network is
+// sent as asked, and the refusal says why.
+function projectNetwork(modelId) {
+  if (renderNetwork === 'relaxed' && !options.network && requiresSparkOnlyToken(modelId)) return 'fast';
+  return renderNetwork;
+}
+
 // Attach the user's explicit --billing-mode to a project config. Omitted by
 // default so the server keeps deciding coverage (Unlimited members get 'auto'
-// coverage server-side; token payers are unaffected).
+// coverage server-side; token payers are unaffected). The render network always
+// goes on the project: the socket routes on this field over the connection's
+// network, and the client wrapper fills in 'fast' when it is missing.
 function nextSemanticWorkloadAttribution(options = {}) {
   return semanticWorkloadAttribution(AGENT_ATTRIBUTION, INVOCATION_LINEAGE.next(options));
 }
@@ -2341,6 +2385,7 @@ function withBillingMode(config, attributionOptions = {}) {
     ...(!options.video && !options.upscaleVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
+    network: projectNetwork(config.modelId),
     attribution: nextSemanticWorkloadAttribution(attributionOptions),
   };
 }
@@ -3785,6 +3830,7 @@ const options = {
   quality: null, // Quality tier: fast|hq|pro — auto-selects model, steps, dimensions
   tokenType: null,
   billingMode: null, // auto|subscription|tokens — omitted by default so the server decides coverage
+  network: null, // fast|relaxed; defaults to the configured network, then fast
   steps: null,
   guidance: null,
   outputFormat: null,
@@ -4159,6 +4205,16 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.billingMode = raw;
     cliSet.billingMode = true;
+  } else if (arg === '--network') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    if (!['fast', 'relaxed'].includes(raw)) {
+      fatalCliError('--network must be fast or relaxed.', {
+        code: 'INVALID_ARGUMENT',
+        details: { flag: '--network', value: raw }
+      });
+    }
+    options.network = raw;
   } else if (arg === '--steps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -5429,7 +5485,8 @@ Hosted API Modes:
   --api-base-url <url>  Sogni API base URL (default: ${DEFAULT_API_BASE_URL})
 
 General:
-  -t, --timeout <sec>   Stop waiting after this many seconds (default: 30, video: 1800, music: 600).
+  -t, --timeout <sec>   Stop waiting after this many seconds (default: 30, video: 1800, music: 600;
+                        at least 1800 on Relaxed).
                         Counted from submission; time the account's own plan concurrency limit
                         holds the project is not counted. The project is NOT cancelled; fetch it
                         later with --result
@@ -5451,6 +5508,8 @@ General:
   --token-type <type>   Token type: spark|sogni|auto (default: spark, auto retries with alternate)
   --billing-mode <mode> Billing: auto|subscription|tokens (default: server decides; "subscription"
                         requires Sogni Unlimited coverage, "tokens" opts out of it)
+  --network <n>         Render on this Supernet: fast|relaxed (default: configured defaultNetwork, else fast).
+                        Relaxed queues can take hours; pair long renders with --detach
   --balance, --balances Show account, plan, and SPARK/SOGNI balances and exit
   --list-models [query] List live Supernet media models; optionally filter by query
   --search-models <q>   Search live models by ID or name (separator-insensitive)
@@ -5858,6 +5917,17 @@ if (options.billingMode) {
   }
   options.billingMode = mode;
 }
+
+// --network wins, then the configured default, then Fast.
+function resolveRenderNetwork() {
+  if (options.network) return options.network;
+  const configured = openclawConfig?.defaultNetwork;
+  if (!configured) return 'fast';
+  if (configured === 'fast' || configured === 'relaxed') return configured;
+  console.error(`Warning: defaultNetwork must be "fast" or "relaxed" (got ${JSON.stringify(configured)}); using fast.`);
+  return 'fast';
+}
+const renderNetwork = resolveRenderNetwork();
 
 if (options.apiTaskProfile) {
   const profile = String(options.apiTaskProfile).trim().toLowerCase();
@@ -6931,6 +7001,25 @@ if (apiWorkflowStartAction && apiWorkflowTemplate === 'generated_keyframe_video'
 }
 if (apiWorkflowStartAction && apiWorkflowTemplate === 'storyboard_video' && !options.prompt && !apiWorkflowStartHasExternalInput) {
   fatalCliError('--api-workflow storyboard-video preset requires a prompt or --workflow-input JSON.', { code: 'INVALID_ARGUMENT' });
+}
+if (options.network) {
+  const unrouted = [
+    ['--api-chat, which runs on hosted Fast', options.apiChat],
+    ['hosted workflows, which run on hosted Fast', options.apiWorkflowAction],
+    ['--list-models or --search-models (use --model-network)', liveModelUtilityAction]
+  ].find(([, applies]) => applies);
+  if (unrouted) {
+    fatalCliError(`--network cannot be combined with ${unrouted[0]}.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--network', conflictsWith: unrouted[0] }
+    });
+  }
+}
+// Relaxed queues run far longer than Fast, so its renders get at least the wait a
+// queued video gets, unless the caller or the config chose one. Timing out leaves
+// the project running; --result <id> --wait collects it.
+if (!cliSet.timeout && !timeoutFromConfig && projectNetwork(options.model) === 'relaxed') {
+  options.timeout = Math.max(options.timeout, 1800000);
 }
 if (!liveModelUtilityAction && (options.liveModelMedia !== 'all' || options.liveModelNetwork || options.liveModelTags.length > 0)) {
   fatalCliError('--model-media, --model-network, and --model-tag require --list-models or --search-models.', {
@@ -10100,7 +10189,7 @@ async function fetchLiveModelCatalog(network, media) {
 }
 
 async function runLiveModels() {
-  const network = options.liveModelNetwork || openclawConfig?.defaultNetwork || 'fast';
+  const network = options.liveModelNetwork || renderNetwork;
   const media = options.liveModelMedia || 'all';
   const query = options.liveModelQuery?.trim() || null;
   const normalizedQuery = normalizeLiveModelSearch(query);
@@ -12944,6 +13033,7 @@ function sourceReelChildArgs(baseArgs, outputPath, prompt, plan, duration) {
     ...baseArgs
   ];
   if (options.tokenType) args.push('--token-type', options.tokenType);
+  if (options.network) args.push('--network', options.network);
   if (options.steps !== null && options.steps !== undefined) args.push('--steps', String(options.steps));
   if (options.guidance !== null && options.guidance !== undefined) args.push('--guidance', String(options.guidance));
   if (options.noFilter) args.push('--no-filter');
@@ -14230,6 +14320,7 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
     fps: options.fps,
     numberOfMedia: options.count,
     tokenType,
+    network: projectNetwork(options.model),
     ...(Number.isFinite(steps) && steps > 0 ? { steps } : {}),
     ...(options.frames ? { frames: options.frames } : { duration: options.duration }),
     ...(referenceImageCount !== undefined ? { referenceImageCount } : {}),
@@ -14440,7 +14531,7 @@ async function runDoctor() {
         appSource: SOGNI_APP_SOURCE,
         appId: getOrCreateSogniAppId(),
         attribution: clientAttribution(AGENT_ATTRIBUTION),
-        network: openclawConfig?.defaultNetwork || 'fast',
+        network: renderNetwork,
         autoConnect: false,
         apiKey: creds.SOGNI_API_KEY,
         authType: 'apiKey'
@@ -15125,6 +15216,7 @@ async function main() {
           success: true,
           type: 'video-cost',
           model: options.model,
+          network: estimateParams.network,
           width: options.width,
           height: options.height,
           fps: options.fps,
@@ -16529,7 +16621,7 @@ async function main() {
             appSource: SOGNI_APP_SOURCE,
             appId: getOrCreateSogniAppId(),
             attribution: clientAttribution(AGENT_ATTRIBUTION),
-            network: openclawConfig?.defaultNetwork || 'fast',
+            network: renderNetwork,
             autoConnect: false,
             apiKey: creds.SOGNI_API_KEY,
             authType: 'apiKey'

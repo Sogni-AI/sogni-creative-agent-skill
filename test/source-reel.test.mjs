@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -123,4 +123,23 @@ test('Wan 2.2 reels refuse a --reel-target-resolution above 1024', async () => {
   assert.match(r.stderr + r.stdout, /Wan 2\.2 cannot render 1080p/);
   const ok = runCli(['--source-reel', dir, '--reel-plan-only', '--reel-target-resolution', '1024', '--no-update-check']);
   assert.equal(ok.exitCode, 0, `stderr: ${ok.stderr}`);
+});
+
+test('--network reaches the child renders a reel starts', async () => {
+  // Each clip is a child CLI process, so it only sees what the parent hands down.
+  // The stub's clip URL can't download, so the reel fails after the first submit;
+  // the submitted project is what this checks.
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-reel-network-'));
+  const screenshot = readFileSync(join(process.cwd(), 'docs', 'screenshot.jpg'));
+  writeFileSync(join(dir, 'a.jpg'), screenshot);
+  writeFileSync(join(dir, 'b.jpg'), screenshot);
+  const { env, loaderPath, cliPath } = prepareCliRun();
+  env.NODE_OPTIONS = `--loader ${loaderPath}`;
+  spawnSync(
+    process.execPath,
+    [cliPath, '--source-reel', dir, '--no-update-check', '--network', 'relaxed', '-q', '--json', '-o', join(dir, 'out.mp4')],
+    { env, encoding: 'utf8' },
+  );
+  const state = JSON.parse(readFileSync(env.SOGNI_AGENT_TEST_STATE_PATH, 'utf8'));
+  assert.equal(state.lastVideoProject?.network, 'relaxed');
 });

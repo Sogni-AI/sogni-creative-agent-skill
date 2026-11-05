@@ -7562,6 +7562,276 @@ test('--billing-mode rejects unknown values', () => {
   );
 });
 
+// Render network: the job's own `network` field is what the socket routes on,
+// so a setting that only reaches the connection leaves the job on Fast.
+function assertRenderNetwork(state, projectKey, expected) {
+  assert.equal(state?.[projectKey]?.network, expected, `${projectKey} network`);
+  assert.ok(state.clientConfigs.length > 0, 'a client was created');
+  for (const config of state.clientConfigs) {
+    assert.equal(config.network, expected, 'connection network');
+  }
+}
+
+for (const [label, args, projectKey] of [
+  ['image', ['a duck on a skateboard'], 'lastImageProject'],
+  ['image edit', ['-c', SCREENSHOT_FIXTURE, 'make the sky pink'], 'lastEditProject'],
+  ['video', ['--video', 'a cinematic skyline at dusk'], 'lastVideoProject'],
+  ['music', ['--music', '--duration', '30', 'calm ambient pads'], 'lastAudioProject'],
+]) {
+  test(`--network relaxed sends a ${label} project and its connection to Relaxed`, () => {
+    const { exitCode, state } = runCli(['--network', 'relaxed', ...args]);
+    assert.equal(exitCode, 0);
+    assertRenderNetwork(state, projectKey, 'relaxed');
+  });
+}
+
+test('without a network setting a render stays on Fast', () => {
+  const { exitCode, state } = runCli(['--video', 'a cinematic skyline at dusk']);
+  assert.equal(exitCode, 0);
+  assertRenderNetwork(state, 'lastVideoProject', 'fast');
+});
+
+test('defaultNetwork from OPENCLAW_PLUGIN_CONFIG sends the project to Relaxed', () => {
+  const { exitCode, state } = runCli(['--video', 'a cinematic skyline at dusk'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+  });
+  assert.equal(exitCode, 0);
+  assertRenderNetwork(state, 'lastVideoProject', 'relaxed');
+});
+
+test('defaultNetwork from the OpenClaw config file sends the project to Relaxed', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-network-'));
+  const configPath = join(tempDir, 'openclaw.json');
+  writeFileSync(configPath, JSON.stringify({
+    plugins: { entries: { 'sogni-creative-agent-skill': { config: { defaultNetwork: 'relaxed' } } } }
+  }));
+  const { exitCode, state } = runCli(['--video', 'a cinematic skyline at dusk'], {
+    OPENCLAW_CONFIG_PATH: configPath
+  });
+  assert.equal(exitCode, 0);
+  assertRenderNetwork(state, 'lastVideoProject', 'relaxed');
+});
+
+test('--network fast overrides a configured Relaxed default', () => {
+  const { exitCode, state } = runCli(['--network', 'fast', '--video', 'a cinematic skyline at dusk'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+  });
+  assert.equal(exitCode, 0);
+  assertRenderNetwork(state, 'lastVideoProject', 'fast');
+});
+
+test('an unknown defaultNetwork warns and stays on Fast', () => {
+  const { exitCode, state, stderr } = runCli(['--video', 'a cinematic skyline at dusk'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'mixed' })
+  });
+  assert.equal(exitCode, 0);
+  assert.match(stderr, /defaultNetwork/);
+  assertRenderNetwork(state, 'lastVideoProject', 'fast');
+});
+
+test('--network rejects unknown values', () => {
+  expectCliError(['--network', 'gold', 'a duck on a skateboard'], '--network must be fast or relaxed.');
+});
+
+for (const [label, args] of [
+  ['hosted chat', ['--api-chat', 'hello']],
+  ['hosted workflows', ['--api-workflow', 'list']],
+  ['model discovery', ['--list-models']],
+]) {
+  test(`--network is refused for ${label}, which it cannot route`, () => {
+    const { exitCode, stderr, state } = runCli(['--network', 'relaxed', ...args]);
+    assert.equal(exitCode, 1);
+    assert.match(stderr, /--network/);
+    assert.equal(state?.lastImageProject ?? null, null);
+    assert.equal(state?.lastVideoProject ?? null, null);
+  });
+}
+
+for (const [label, args, projectKey] of [
+  ['GPT Image', ['-m', 'gpt-image-2.6-sunburst', 'a duck on a skateboard'], 'lastImageProject'],
+  ['Seedance', ['--video', '-m', 'seedance-2-5', 'a cinematic skyline at dusk'], 'lastVideoProject'],
+  ['Seedream', ['-m', 'seedream-5-0-pro-uncensored', 'a duck on a skateboard'], 'lastImageProject'],
+  ['HappyHorse', ['--video', '-m', 'happyhorse-1.1-t2v', 'a cinematic skyline at dusk'], 'lastVideoProject'],
+  ['Wan 3', ['--video', '-m', 'wan3.0-video', 'a cinematic skyline at dusk'], 'lastVideoProject'],
+]) {
+  test(`a configured Relaxed default leaves ${label} on Fast, the only network it runs on`, () => {
+    const { exitCode, state } = runCli(args, {
+      OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+    });
+    assert.equal(exitCode, 0);
+    assert.equal(state?.[projectKey]?.network, 'fast');
+  });
+}
+
+test('an explicit --network relaxed is sent as asked for a Fast-only vendor model', () => {
+  const { exitCode, state } = runCli(['--network', 'relaxed', '-m', 'gpt-image-2.6-sunburst', 'a duck on a skateboard']);
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastImageProject?.network, 'relaxed');
+});
+
+function runWithProjectFailure(args, failure, envOverrides = {}) {
+  const { exitCode, stdout } = runCli(['--json', ...args], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({ event: 'PROJECT_FAILED', payload: failure }),
+    ...envOverrides
+  });
+  assert.equal(exitCode, 1);
+  return JSON.parse(stdout.trim().split('\n').pop());
+}
+
+for (const code of [4087, 4089]) {
+  test(`a Fast fair-use refusal from the socket (${code}) tells the caller how to render on Relaxed`, () => {
+    const message = "You've used up your plan's fair-use capacity on the Fast (Nvidia) network, so Fast rendering is paused.";
+    const payload = runWithProjectFailure(
+      ['--video', 'a cinematic skyline at dusk'],
+      { projectId: 'proj-1', code, message }
+    );
+    assert.equal(payload.error, message);
+    assert.equal(payload.retryable, false);
+    assert.match(payload.hint, /--network relaxed/);
+    assert.match(payload.hint, /--list-models --model-network relaxed/);
+    assert.match(payload.hint, /--billing-mode tokens/);
+  });
+
+  test(`a Fast fair-use refusal (${code}) shows the same guidance without --json`, () => {
+    const { exitCode, stderr } = runCli(['--video', 'a cinematic skyline at dusk'], {
+      SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+        event: 'PROJECT_FAILED',
+        payload: { projectId: 'proj-1', code, message: 'Fast rendering is paused.' }
+      })
+    });
+    assert.equal(exitCode, 1);
+    assert.match(stderr, /Hint: .*--network relaxed/);
+  });
+}
+
+for (const [reason, message] of [
+  ['no Relaxed workers', 'The selected model is not currently available on the Relaxed Supernet. Please select another model or switch networks and try again.'],
+  ['Fast-only', 'The selected model is only available on the Fast Supernet. Please switch to Fast and try again.'],
+]) {
+  test(`a Relaxed refusal for a ${reason} model is final and names the flags to move on`, () => {
+    const payload = runWithProjectFailure(
+      ['--network', 'relaxed', '--video', 'a cinematic skyline at dusk'],
+      { projectId: 'proj-1', code: 4004, message }
+    );
+    assert.equal(payload.error, message);
+    assert.equal(payload.retryable, false);
+    assert.equal(payload.errorCategory, 'model_unavailable');
+    assert.match(payload.hint, /--list-models --model-network relaxed/);
+    assert.match(payload.hint, /--network fast/);
+  });
+}
+
+test('a 4081 at the terminal keeps the server message without the generic upgrade hint', () => {
+  const message = 'Rendering with a LoRA requires a subscription, Premium Spark, or SOGNI';
+  const { exitCode, stderr } = runCli(['a duck on a skateboard'], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+      event: 'PROJECT_FAILED',
+      payload: { projectId: 'proj-1', code: 4081, message }
+    })
+  });
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.includes(message));
+  assert.doesNotMatch(stderr, /Upgrade to Unlimited Pro/);
+});
+
+test('a Relaxed refusal shows the same guidance without --json', () => {
+  const { exitCode, stderr } = runCli(['--network', 'relaxed', '--video', 'a cinematic skyline at dusk'], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify({
+      event: 'PROJECT_FAILED',
+      payload: {
+        projectId: 'proj-1',
+        code: 4004,
+        message: 'The selected model is not currently available on the Relaxed Supernet. Please select another model or switch networks and try again.'
+      }
+    })
+  });
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Hint: .*--network fast/);
+});
+
+test('a 4004 that is not about Relaxed gets no Relaxed guidance', () => {
+  const payload = runWithProjectFailure(
+    ['--network', 'relaxed', '--video', 'a cinematic skyline at dusk'],
+    { projectId: 'proj-1', code: 4004, message: 'Models list is updating, please try again in a few seconds' }
+  );
+  assert.equal(payload.errorCategory === 'model_unavailable', false);
+  assert.doesNotMatch(payload.hint ?? '', /--network fast/);
+});
+
+test('a model missing from Fast (4004) does not suggest going to Fast', () => {
+  const payload = runWithProjectFailure(
+    ['--video', 'a cinematic skyline at dusk'],
+    {
+      projectId: 'proj-1',
+      code: 4004,
+      message: 'The selected model is not currently available on the Fast Supernet. Please select another model or switch networks and try again.'
+    }
+  );
+  assert.doesNotMatch(payload.hint ?? '', /--network fast/);
+});
+
+test('--estimate-video-cost quotes the chosen network', () => {
+  const { exitCode, state } = runCli([
+    '--network', 'relaxed', '--video', '--estimate-video-cost', '--steps', '4', 'a cinematic skyline at dusk'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastEstimateVideoCost?.network, 'relaxed');
+});
+
+test('--estimate-video-cost --json says which network it quoted', () => {
+  const { exitCode, stdout } = runCli([
+    '--json', '--network', 'relaxed', '--video', '--estimate-video-cost', '--steps', '4', 'a cinematic skyline at dusk'
+  ]);
+  assert.equal(exitCode, 0);
+  assert.equal(JSON.parse(stdout.trim()).network, 'relaxed');
+});
+
+test('--list-models follows a configured Relaxed default', () => {
+  const { exitCode, stdout } = runCli(['--json', '--list-models'], {
+    SOGNI_AGENT_TEST_MODEL_CATALOG_JSON: testModelCatalog(TEST_LIVE_MODELS),
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+  });
+  assert.equal(exitCode, 0);
+  assert.equal(JSON.parse(stdout.trim()).network, 'relaxed');
+});
+
+test('--doctor checks the connection on the configured network', () => {
+  const { state } = runCli(['--doctor', '--json'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+  });
+  assert.ok(state?.clientConfigs?.length > 0, 'doctor created a client');
+  assert.equal(state.clientConfigs[0].network, 'relaxed');
+});
+
+test('a Relaxed image waits past the 30-second Fast default before giving up', async () => {
+  const { env, loaderPath, cliPath } = prepareCliRun({ SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1' });
+  const child = spawn(process.execPath, ['--loader', loaderPath, cliPath, '--network', 'relaxed', 'a duck'], { env });
+  let exited = false;
+  child.on('exit', () => { exited = true; });
+  await new Promise((resolve) => setTimeout(resolve, 33000));
+  const stillWaiting = !exited;
+  child.kill('SIGKILL');
+  assert.equal(stillWaiting, true);
+});
+
+for (const code of ['4087', '4089']) {
+  test(`Fast fair-use refusal (${code}) tells the caller how to render on Relaxed`, () => {
+    const { exitCode, stdout } = runCli(['--json', '--video', 'a cinematic skyline at dusk'], {
+      SOGNI_AGENT_TEST_VIDEO_PROJECT_RESULT_JSON: JSON.stringify({
+        error: "You've used up your plan's fair-use capacity on the Fast (Nvidia) network, so Fast rendering is paused.",
+        code
+      })
+    });
+    assert.equal(exitCode, 1);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, code);
+    assert.equal(payload.errorCategory, 'subscription_billing');
+    assert.equal(payload.retryable, false);
+    assert.match(payload.hint, /--network relaxed/);
+    assert.notEqual(payload.purchaseAction, true);
+  });
+}
+
 test('--doctor --json reports identity and the subscription plan check', () => {
   const { exitCode, stdout } = runCli(['--doctor', '--json'], {
     SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: JSON.stringify({ active: true, status: 'active', tier: 'unlimited_pro' })

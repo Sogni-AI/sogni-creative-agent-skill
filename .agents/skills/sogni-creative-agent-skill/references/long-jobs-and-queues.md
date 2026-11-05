@@ -5,6 +5,26 @@ going when the CLI stops waiting, when its connection drops, and when no agent
 is connected at all. These commands follow a project by id instead of holding a
 connection open for its whole life.
 
+## Rendering on Relaxed
+
+`--network relaxed` (or `defaultNetwork: "relaxed"` in the plugin config) sends a
+render to the Relaxed Supernet. It is included in Sogni Unlimited, including while
+Fast is paused at the plan's fair-use capacity. Relaxed has far fewer workers, so a
+video can wait for hours. Anything unfinished 24 hours after you submit it is
+cancelled, and a project no online worker can run is cancelled much sooner. Always
+submit Relaxed video with `--detach` and collect it with `--result <id> --wait`.
+
+`sogni-agent --list-models --model-network relaxed` shows what runs there for
+Unlimited members; a job paid with Spark or SOGNI, or from a trial, can still be
+refused for a listed model. To stay on Fast once its capacity is used up, pay with
+Premium Spark using `--billing-mode tokens`.
+
+A plain render on Relaxed waits at least 30 minutes before the CLI stops waiting,
+and stopping leaves the project running. `--source-reel` waits the same time for
+each clip and fails if one takes longer. To run a reel there, pick a model that runs
+on Relaxed and pass a long `-t`, for example
+`--reel-model minimax-h3-fastvideo-int8_i2v_turbo -t 14400`.
+
 ## Commands
 
 ```bash

@@ -720,6 +720,7 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--list-api-models`, `--get-api-model <id>` | Inspect Sogni Intelligence LLM models |
 | `--list-models [query]`, `--search-models <query>` | List or search currently available Supernet image, video, and audio models |
 | `--model-media <type>`, `--model-network <network>` | Filter live model discovery by media or Fast/Relaxed network |
+| `--network <fast\|relaxed>` | Render on this Supernet for one run; overrides the configured `defaultNetwork` (default: Fast) |
 | `--model-tag <tag>` | Filter by an official catalog tag such as `spicy` or `uncensored`; repeat for AND matching |
 | `--list-loras [query]`, `--search-loras <query>` | List or search the live LoRA catalog with each LoRA's hard range, recommended range, default, and slider direction |
 | `--lora-catalog-model <id>`, `--lora-category <category>` | Filter LoRA discovery to one model's compatible LoRAs or one catalog category |
@@ -1050,6 +1051,18 @@ Do not use `tokenType: "spark"` by itself to determine that Spark paid for a ren
 
 With an active subscription, the CLI also skips its client-side "insufficient SPARK" pre-flight for covered video renders — a low token balance no longer blocks jobs the plan pays for. Vendor models and `--billing-mode tokens` keep the pre-flight, and the server remains authoritative either way.
 
+### Rendering on Relaxed
+
+Fast plan rendering pauses when the plan's daily or monthly fair-use capacity is used up (errors 4087 and 4089). Relaxed stays included, so you can keep rendering there:
+
+```bash
+sogni-agent --video --network relaxed --billing-mode subscription --detach --json \
+  -m minimax-h3-fastvideo-int8_i2v_turbo_2stage --ref start.png "A slow push-in"
+sogni-agent --result <projectId> --wait -o clip.mp4 --json
+```
+
+Set `defaultNetwork` to `"relaxed"` in the plugin config to make it the default, or pass `--network fast` to override that for one run. Relaxed has far fewer workers, so a video can wait for hours, and anything unfinished 24 hours after you submit it is cancelled. Not every model runs there: `sogni-agent --list-models --model-network relaxed` shows which do for Unlimited members, and a job paid with Spark or SOGNI, or from a trial, can still be refused for a listed model. The CLI waits at least 30 minutes for a render on Relaxed by default. A render that takes longer keeps running, and `--result` collects it. With a configured default, a model with no Relaxed workers is refused rather than moved to Fast, except vendor models, which stay on Fast. Hosted chat and hosted workflows always run on Fast.
+
 ### Free-trial access
 
 Trials include evaluation limits on generation volume, media size, and API access. Full plan limits apply once the trial converts to paid. Cancelling during the trial prevents the first charge and keeps trial access, with the same trial limits, until the original trial end date.
@@ -1081,6 +1094,7 @@ When a generation cannot bill to the subscription, the CLI surfaces a structured
 | `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
 | `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
 | `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |
+| `4087`, `4089` | The plan's daily or monthly Fast capacity is used up. | Render on Relaxed with `--network relaxed`, pay with Premium Spark using `--billing-mode tokens`, or wait for the reset. Don't retry on Fast. |
 
 ### Worker revenue share
 
@@ -1092,7 +1106,7 @@ Sogni workers that power subscription-covered jobs earn from a separate monthly 
 
 - **Exit codes:** failures use a non-zero exit code with human-readable stderr.
 - **Structured output:** add `--json` when an agent needs machine-parseable success/error data, or `--last` to inspect the last render. JSON failures include canonical `errorType`, `errorCategory`, and `retryable` fields where the shared runtime can classify the error.
-- **Subscription billing errors:** subscription-billing failures carry `errorCode` `4078` / `4079` / `4080` / `4081`, `errorCategory: "subscription_billing"`, and an actionable `hint`. See [Subscription billing errors](#subscription-billing-errors) for what each means; in particular, do not auto-retry a `4080` (grace / renewal-retry) covered job — pay with Spark or SOGNI instead.
+- **Subscription billing errors:** subscription-billing failures carry `errorCode` `4078` / `4079` / `4080` / `4081` / `4087` / `4089`, `errorCategory: "subscription_billing"`, and an actionable `hint`. See [Subscription billing errors](#subscription-billing-errors) for what each means; in particular, do not auto-retry a `4080` (grace / renewal-retry) covered job — pay with Spark or SOGNI instead.
 - **stdout stays parseable in `--json` mode:** progress lines, SSE workflow frames, and warnings go to stderr; stdout carries exactly one JSON object. `--last --json` wraps the record in a `{ "success": true, ... }` envelope and exits 1 with `errorCode: "NO_LAST_RENDER"` when nothing has been rendered yet.
 - **Output files:** use `-o <path>` to save locally; otherwise the CLI prints a result URL.
 - **Quiet mode:** `-q` / `--quiet` suppresses progress output without changing exit semantics.

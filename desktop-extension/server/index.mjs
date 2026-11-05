@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TOOLS, getTool } from './tools.mjs';
+import { TOOLS, getTool, hardKillTimeoutMs } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
 import { collectInlineImages } from './inline-images.mjs';
 import { runImportMedia } from './import-media.mjs';
@@ -20,12 +20,6 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROTOCOL_FALLBACK = '2025-06-18';
-const MIN_HARD_KILL_MS = 15 * 60 * 1000;
-const HARD_KILL_GRACE_MS = 60 * 1000;
-const DEFAULT_TOOL_TIMEOUT_SECONDS = {
-  generate_video: 1800,
-  generate_music: 600,
-};
 const PROGRESS_INTERVAL_MS = 10_000;
 const MAX_RESULT_CHARS = 20_000;
 
@@ -65,17 +59,6 @@ function send(msg) {
 
 function textResult(text, isError = false) {
   return { content: [{ type: 'text', text }], isError };
-}
-
-function hardKillTimeoutMs(toolName, input) {
-  const explicitTimeoutSeconds = Number(input?.timeout_seconds);
-  const timeoutSeconds = Number.isFinite(explicitTimeoutSeconds) && explicitTimeoutSeconds > 0
-    ? explicitTimeoutSeconds
-    : DEFAULT_TOOL_TIMEOUT_SECONDS[toolName];
-  if (!timeoutSeconds) return MIN_HARD_KILL_MS;
-  // Let the CLI's own timeout run first so it can await the normal Sogni
-  // project cancellation protocol before this process-level safety valve.
-  return Math.max(MIN_HARD_KILL_MS, (timeoutSeconds * 1000) + HARD_KILL_GRACE_MS);
 }
 
 // Tools marked local in the registry run inside this process and must work

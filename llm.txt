@@ -239,7 +239,10 @@ unpublished scheduling mechanics or availability windows, and never call the pla
 Subscription-billing failures use `errorCategory: "subscription_billing"` with
 `errorCode` 4078 (vendor/no-entitlement -> use Premium Spark or reconnect), 4079
 (queue cap -> wait), 4080 (renewal retry, access paused -> pay with Spark/SOGNI,
-do NOT auto-retry the covered job), or 4081 (higher plan -> upgrade to Pro). Paid
+do NOT auto-retry the covered job), 4081 (higher plan -> upgrade to Pro), or 4087
+and 4089 (Fast capacity used up for the day or month -> offer `--network relaxed`,
+Premium Spark with `--billing-mode tokens`, or waiting for the reset; do NOT retry
+on Fast). Paid
 cancellation keeps access until period end; cancelling during the trial ends
 access immediately.
 

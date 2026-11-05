@@ -5,6 +5,26 @@
 
 const GEN_BASE = ['--json', '-q', '--no-update-check'];
 
+// Past the CLI's longest default wait (30 minutes, for any render on Relaxed), so
+// the CLI can report the project id before this process-level safety valve fires.
+const MIN_HARD_KILL_MS = 31 * 60 * 1000;
+const HARD_KILL_GRACE_MS = 60 * 1000;
+const DEFAULT_TOOL_TIMEOUT_SECONDS = {
+  generate_video: 1800,
+  generate_music: 600,
+};
+
+export function hardKillTimeoutMs(toolName, input) {
+  const explicitTimeoutSeconds = Number(input?.timeout_seconds);
+  const timeoutSeconds = Number.isFinite(explicitTimeoutSeconds) && explicitTimeoutSeconds > 0
+    ? explicitTimeoutSeconds
+    : DEFAULT_TOOL_TIMEOUT_SECONDS[toolName];
+  if (!timeoutSeconds) return MIN_HARD_KILL_MS;
+  // Let the CLI's own timeout run first so it can await the normal Sogni
+  // project cancellation protocol before this process-level safety valve.
+  return Math.max(MIN_HARD_KILL_MS, (timeoutSeconds * 1000) + HARD_KILL_GRACE_MS);
+}
+
 function push(args, flag, value) {
   if (value !== undefined && value !== null && value !== '') args.push(flag, String(value));
 }

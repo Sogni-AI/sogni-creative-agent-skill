@@ -823,6 +823,15 @@ guarantees pixel-exact preservation or exact choreography. `video continuation`
 still needs an actual continuation workflow. Use I2VA, L2VA, or FL2VA when an
 endpoint must be locked.
 
+**Inspect identity throughout motion transfer.** In a 2026-11-03 fifteen-second
+Balanced photo-plus-video canary, the output switched to the source video's
+performer midway through the shot even without reference-token compression.
+Completing the requested duration and retaining the replacement in the first
+and last frames did not establish quality. Inspect at least 24 native frames
+across the whole take and both sides of every identity switch or cut. When
+testing compression, include a matched uncompressed control before assigning
+the defect to compression; one seed does not establish equivalence.
+
 For voice references, bind the voice to the speaking subject by reusing that
 subject's `(Sx)` in `subject_definitions`; do not put the speaker ID in
 `retention_analysis`. A timbre/rhythm/emotion/delivery reference must not import

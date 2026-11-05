@@ -31,7 +31,8 @@ async function getSogniClientWrapper() {
 }
 
 // Paid integration tests are strictly opt-in: they submit real GPU jobs and
-// spend Spark. Run them with SOGNI_INTEGRATION=1 (npm run test:integration).
+// spend Spark. Only set SOGNI_INTEGRATION=1 after authorizing a bounded live run;
+// npm run test:integration does not set it for you.
 const integrationFlag = process.env.SOGNI_INTEGRATION;
 const shouldRun = integrationFlag === undefined
   ? false

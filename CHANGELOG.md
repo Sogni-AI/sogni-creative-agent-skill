@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Keep `test:all` offline and require an explicit environment opt-in for paid integration tests. Release checks never enable real GPU jobs automatically.
 - Add explicit `--priority` for covered Fast renders on paid Unlimited, with 1.5× daily and monthly fair-use consumption. The default stays ordinary Fast.
 - List account Personas with `--persona-list-account` and copy a selected one into the local library with `--persona-import-account`. Imports retain original photos, character sheets, audio voice recordings and descriptions; existing local Personas are preserved.
 - Desktop tools now forward Fast/Relaxed choices, Priority and GPT Image 2.6 GIF, complexity and annotation controls. Model references and prompt guides match the current SDK chain.

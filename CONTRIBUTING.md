@@ -28,8 +28,8 @@ npm test
 credentials and **without** the private repo. Test tiers:
 
 - `npm test` — offline unit tests (the CLI is spawned against a stubbed SDK via `test/loader.mjs`).
-- `npm run test:integration` — **submits real paid GPU jobs**; requires `SOGNI_API_KEY` (or `~/.config/sogni/credentials`) and sets `SOGNI_INTEGRATION=1` for you. Never runs implicitly.
-- `npm run test:all` — both.
+- `npm run test:integration` — live GPU tests, skipped unless you explicitly set `SOGNI_INTEGRATION=1`. Requires `SOGNI_API_KEY` (or `~/.config/sogni/credentials`). Before enabling it, obtain spending authorization and declare the environment, models, maximum calls, cost, concurrency and stop condition. Inspect child CLI calls and configured models: defaults can select paid vendors, and zero vendor fees still consume production capacity. Never enable it automatically for releases or CI.
+- `npm run test:all` — offline unit suites, like `npm test`; it never enables live integration tests.
 - `npm run test:coverage` — unit coverage gates for `sogni-agent.mjs`.
 
 ## The private runtime sync (maintainers only)
@@ -91,7 +91,7 @@ CI**; releases are cut by hand. (If you ever run it, note its git plugin only
 commits `package.json` + `CHANGELOG.md` — you must still run `sync:version` —
 and it will version from conventional-commit history, so coordinate first.)
 
-1. Ensure the private sibling repo is checked out and current; run `npm run test:all`.
+1. Ensure the private sibling repo is checked out and current; run `npm test` (offline). Reuse valid results for the same source. A remaining live-test need requires separate spending authorization and a bounded plan; release approval does not authorize it.
 2. Update `CHANGELOG.md` with a new `## [x.y.z] - YYYY-MM-DD` section.
 3. Bump the version: edit `package.json`, then `npm run sync:version`, then `npm install --package-lock-only`.
 4. Commit `chore(release): prepare skill x.y.z update` and push the release commit. Do not tag an unpublished build.

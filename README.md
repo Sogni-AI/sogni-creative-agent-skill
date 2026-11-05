@@ -48,6 +48,7 @@ With this skill, an agent can:
 
 ## Table of Contents
 
+- [Connecting with MCP](#connecting-with-mcp)
 - [Quick Start](#quick-start)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -85,6 +86,27 @@ With this skill, an agent can:
 - [License](#license)
 
 ---
+
+## Connecting with MCP
+
+The skill includes a **local MCP server**, `sogni-agent-mcp`, which runs the
+installed CLI on your computer. Use it when your MCP client needs local media,
+saved personas and memories, or video editing with ffmpeg. See the
+[Claude Desktop](#claude-desktop), [Codex](#also-works-in-openai-codex) and [Goose](#goose)
+instructions for local setup.
+
+Sogni also documents a separate **hosted MCP** integration for remote clients
+that support Streamable HTTP and Bearer-token authentication. Check the
+[MCP connection guide](https://docs.sogni.ai/agents/mcp/) for its current
+availability and configuration. Hosted tools do not require this skill or CLI,
+but they cannot read your local files or use your saved local personas and
+memories. References must be uploaded; a local path is not a hosted asset.
+
+MCP exposes callable tools. This skill supplies creative instructions and local
+workflows; the [Worlds Kit](https://github.com/Sogni-AI/sogni-worlds-kit) supplies
+the world-building pipeline and player. Connecting a hosted server does not
+install either. Existing CLI and local MCP users can keep their setup and their
+account's normal billing, including eligible Unlimited coverage.
 
 ## Quick Start
 

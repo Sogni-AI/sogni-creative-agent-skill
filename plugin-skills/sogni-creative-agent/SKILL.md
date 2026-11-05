@@ -14,6 +14,11 @@ preserves normal CLI behavior while attributing the request to Claude Code.
 
 ## Setup
 
+This plugin runs the local CLI. For local versus hosted MCP setup and hosted
+availability, read [the MCP guide](https://docs.sogni.ai/agents/mcp/).
+A hosted connection does not install this plugin or access its local files,
+personas or memories.
+
 1. Install the CLI (one-time): `npm install -g @sogni-ai/sogni-creative-agent-skill@latest`.
 2. Provide your Sogni API key (get one at https://dashboard.sogni.ai/api-key): either set `SOGNI_API_KEY` in the environment, or save it to `~/.config/sogni/credentials` as `SOGNI_API_KEY=<your-key>`.
 3. Verify with `sogni-agent doctor --json` and confirm `"success": true` before reporting the install as working. Run `doctor` only after an install or upgrade, or when a command fails, never as a preflight before generating: generation commands check the key, ffmpeg and balance themselves.

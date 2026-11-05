@@ -29,6 +29,11 @@ have identical flags and output; the Hermes launcher adds host attribution.
 
 ## Set up the CLI
 
+This skill runs the local CLI. For local versus hosted MCP setup and hosted
+availability, read [the MCP guide](https://docs.sogni.ai/agents/mcp/).
+A hosted connection does not install this skill or access its local files,
+personas or memories.
+
 Only perform setup when the user asks to install or upgrade the skill, or when
 a command fails because the CLI is missing.
 

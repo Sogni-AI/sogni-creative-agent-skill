@@ -25,7 +25,7 @@ metadata:
 
 # Sogni Image, Video & Music Generation
 
-Generate **images, videos, and music** using Sogni AI's decentralized GPU network through the `sogni-agent` CLI.
+Generate **images, videos, and music** using Sogni AI's decentralized GPU network through the `sogni-agent` CLI. For local and hosted MCP connection choices and availability, read [Connecting with MCP](./README.md#connecting-with-mcp).
 
 > **Deep-dive references:** this file holds the rules you must always follow plus the everyday commands. Detailed guides live in [`references/`](./references/) — read the matching file *before* acting on those tasks (table at the end of this file). If the `references/` directory is not present in your install, run `sogni-agent --help` for the full flag reference or fetch the guides from `https://raw.githubusercontent.com/Sogni-AI/sogni-creative-agent-skill/main/references/`.
 >

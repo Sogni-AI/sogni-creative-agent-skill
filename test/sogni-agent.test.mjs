@@ -10175,3 +10175,22 @@ test('a prompt-stated aspect keeps its orientation when --target-resolution sets
     assert.deepEqual([project.width, project.height], [width, height], args.join(' '));
   }
 });
+
+for (const model of ['gpt-image-2.6-sunburst', 'gpt-image-2.6-flare']) {
+  test(`GPT Image 2.6 CLI preserves ${model} GIF options`, () => {
+    const { exitCode, state, stderr } = runCli(['-m', model, '--output-format', 'gif', '--width', '320', '--height', '320', '--image-quality', 'medium', '--image-complexity', 'low', '--image-frame-count', '8', '--image-frame-duration-ms', '250', 'A lantern sways and returns to its starting pose.']);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastImageProject.modelId, model);
+    assert.equal(state.lastImageProject.outputFormat, 'gif');
+    assert.equal(state.lastImageProject.width, 320);
+    assert.equal(state.lastImageProject.gptImageFrameCount, 8);
+    assert.equal(state.lastImageProject.gptImageFrameDurationMs, 250);
+    assert.equal(state.lastImageProject.gptImageComplexity, 'low');
+  });
+}
+test('GPT Image 2.6 CLI chooses a valid default GIF frame size', () => {
+  const { exitCode, state, stderr } = runCli(['-m', 'gpt-image-2.6-flare', '--output-format', 'gif', 'A lantern sways in a loop.']);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastImageProject.width, 896);
+  assert.equal(state.lastImageProject.height, 896);
+});

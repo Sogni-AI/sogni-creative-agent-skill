@@ -157,7 +157,7 @@ function changelogSummary(changelog, version, sinceVersion) {
     if (sinceVersion && compareVersions(sectionVersion, sinceVersion) <= 0) break;
     const sentences = section
       .split('\n')
-      .filter((line) => line.startsWith('* '))
+      .filter((line) => line.startsWith('* ') || line.startsWith('- '))
       .map((line) => line.slice(2).replaceAll('**', '').trim())
       .map((text) => text.split(/(?<=[.!?])\s+(?=[A-Z0-9`(])/)[0]);
     if (sentences.length > 0) parts.push(`${sectionVersion}: ${sentences.join(' ')}`);

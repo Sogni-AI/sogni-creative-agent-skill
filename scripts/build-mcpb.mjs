@@ -15,7 +15,7 @@ export function stageMcpb(destination) {
     recursive: true,
     filter: (source) => !['node_modules', 'package-lock.json', '.DS_Store'].includes(source.split(/[\\/]/).at(-1)),
   });
-  for (const file of ['attribution.mjs', 'version.mjs', 'LICENSE']) {
+  for (const file of ['attribution.mjs', 'version.mjs', 'ssrf-guard.mjs', 'LICENSE']) {
     cpSync(join(ROOT, file), join(destination, file));
   }
   const manifest = JSON.parse(readFileSync(join(ROOT, 'desktop-extension', 'manifest.json'), 'utf8'));

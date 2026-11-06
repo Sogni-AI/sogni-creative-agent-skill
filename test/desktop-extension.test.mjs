@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import {
   resolveAgentPath, resolveFfmpegPath, buildChildEnv,
@@ -17,6 +18,13 @@ import { stageMcpb } from '../scripts/build-mcpb.mjs';
 
 function tempHome() {
   return mkdtempSync(join(tmpdir(), 'sogni-desktop-'));
+}
+
+// Route a public fixture URL to a local server without making external calls.
+function previewRequestTo(server) {
+  return (url, options, callback) => httpRequest(
+    new URL(url.pathname + url.search, `http://127.0.0.1:${server.address().port}`), options, callback,
+  );
 }
 
 test('desktop image tools forward explicit network, Priority and GPT Image 2.6 controls', () => {
@@ -592,17 +600,17 @@ test('collectInlineImages: localPath descriptor yields one PNG block', async () 
   assert.deepEqual(notes, []);
 });
 
-test('collectInlineImages: urls descriptor fetches bytes (http allowed for trusted CLI output)', async () => {
+test('collectInlineImages: public urls descriptor fetches bytes', async () => {
   const { createServer } = await import('node:http');
   const server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'image/png' });
     res.end(TINY_PNG);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const url = `http://127.0.0.1:${server.address().port}/img.png`;
+  const url = 'http://assets.example/img.png';
   try {
     const stdout = JSON.stringify({ type: 'image', localPath: null, urls: [url] });
-    const { blocks } = await collectInlineImages({ toolName: 'photobooth', input: {}, stdout, env: {} });
+    const { blocks } = await collectInlineImages({ toolName: 'photobooth', input: {}, stdout, env: {}, requestImpl: previewRequestTo(server) });
     assert.equal(blocks.length, 1);
     assert.ok(Buffer.from(blocks[0].data, 'base64').equals(TINY_PNG));
     assert.equal(blocks[0].mimeType, 'image/png');
@@ -619,10 +627,10 @@ test('collectInlineImages: caps inline images at 4', async () => {
   const { createServer } = await import('node:http');
   const server = createServer((req, res) => { res.writeHead(200, { 'content-type': 'image/png' }); res.end(TINY_PNG); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const base = 'http://assets.example';
   try {
     const urls = Array.from({ length: 6 }, (_, i) => `${base}/${i}.png`);
-    const { blocks } = await collectInlineImages({ toolName: 'generate_image', input: {}, stdout: JSON.stringify({ urls }), env: {} });
+    const { blocks } = await collectInlineImages({ toolName: 'generate_image', input: {}, stdout: JSON.stringify({ urls }), env: {}, requestImpl: previewRequestTo(server) });
     assert.equal(blocks.length, 4);
   } finally {
     server.close();
@@ -704,11 +712,12 @@ test('collectInlineImages: cumulative budget attaches the first image and skips 
   const payload = Buffer.alloc(500 * 1024, 7); // 500KB apiece, garbage bytes served as PNG
   const server = createServer((req, res) => { res.writeHead(200, { 'content-type': 'image/png' }); res.end(payload); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const base = 'http://assets.example';
   try {
     const urls = [`${base}/a.png`, `${base}/b.png`];
     const { blocks, notes } = await collectInlineImages({
       toolName: 'generate_image', input: {}, stdout: JSON.stringify({ urls }), env: {}, budgetRaw: 700 * 1024,
+      requestImpl: previewRequestTo(server),
     });
     // First fits (500KB ≤ 700KB) as-is; second (500KB > 200KB remaining, garbage → ladder fails) is skipped.
     assert.equal(blocks.length, 1);
@@ -723,7 +732,7 @@ test('collectInlineImages: stalled URL fetch aborts on fetchTimeoutMs and degrad
   const { createServer } = await import('node:http');
   const server = createServer(() => {}); // never responds — simulates a stalling CDN
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const url = `http://127.0.0.1:${server.address().port}/stall.png`;
+  const url = 'http://assets.example/stall.png';
   try {
     const result = await collectInlineImages({
       toolName: 'generate_image',
@@ -731,6 +740,7 @@ test('collectInlineImages: stalled URL fetch aborts on fetchTimeoutMs and degrad
       stdout: JSON.stringify({ type: 'image', localPath: null, urls: [url] }),
       env: {},
       fetchTimeoutMs: 100,
+      requestImpl: previewRequestTo(server),
     });
     assert.deepEqual(result, { blocks: [], notes: [] });
   } finally {

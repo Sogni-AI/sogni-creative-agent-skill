@@ -13,8 +13,8 @@
 // otherwise it is downscaled through a deterministic sharp ladder to the first
 // rung that fits. The text block always carries the full-resolution URL/path —
 // the inline block is only a preview.
-import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
+import { PREVIEW_SOURCE_MAX_BYTES, readPreviewFile, readPreviewUrl } from './preview-source.mjs';
 
 const INLINE_TOOLS = new Set(['generate_image', 'photobooth']);
 const FRAME_ACTIONS = new Set(['extract_first_frame', 'extract_last_frame']);
@@ -82,17 +82,15 @@ function sourceCandidates(toolName, input, stdout) {
   return [];
 }
 
-async function obtainBytes(candidate, fetchImpl, fetchTimeoutMs) {
+async function obtainBytes(candidate, requestImpl, fetchTimeoutMs, maxBytes) {
   if (candidate.kind === 'file') {
-    return { data: await readFile(candidate.ref), mime: mimeFromPath(candidate.ref) ?? 'image/png' };
+    return { data: await readPreviewFile(candidate.ref, maxBytes), mime: mimeFromPath(candidate.ref) ?? 'image/png' };
   }
-  // AbortSignal.timeout bounds headers AND body for undici fetch; an abort
-  // rejects the await, which the caller's per-image try/catch degrades silently.
-  const res = await fetchImpl(candidate.ref, { signal: AbortSignal.timeout(fetchTimeoutMs) });
-  if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
-  const headerMime = (res.headers.get('content-type') ?? '').split(';')[0].trim();
-  const mime = headerMime.startsWith('image/') ? headerMime : (mimeFromPath(candidate.ref) ?? 'image/png');
-  return { data: Buffer.from(await res.arrayBuffer()), mime };
+  const entry = await readPreviewUrl(candidate.ref, {
+    signal: AbortSignal.timeout(fetchTimeoutMs), requestImpl, maxBytes,
+  });
+  const mime = entry.mime.startsWith('image/') ? entry.mime : (mimeFromPath(candidate.ref) ?? 'image/png');
+  return { data: entry.data, mime };
 }
 
 // Fit one image into the REMAINING cumulative budget. If the original bytes
@@ -118,8 +116,9 @@ async function fitToBudget(entry, remaining) {
 }
 
 export async function collectInlineImages({
-  toolName, input, stdout, env = process.env, fetchImpl = fetch,
+  toolName, input, stdout, env = process.env, requestImpl,
   fetchTimeoutMs = FETCH_TIMEOUT_MS, budgetRaw = INLINE_BUDGET_RAW,
+  sourceMaxBytes = PREVIEW_SOURCE_MAX_BYTES,
 }) {
   const empty = { blocks: [], notes: [] };
   if (env.SOGNI_MCP_NO_INLINE_IMAGES === '1') return empty;
@@ -132,14 +131,15 @@ export async function collectInlineImages({
     if (blocks.length >= MAX_INLINE_IMAGES) break;
     try {
       const remaining = budgetRaw - attachedRawTotal;
-      const fitted = await fitToBudget(await obtainBytes(candidate, fetchImpl, fetchTimeoutMs), remaining);
+      const fitted = await fitToBudget(await obtainBytes(candidate, requestImpl, fetchTimeoutMs, sourceMaxBytes), remaining);
       if (!fitted) {
         if (!notes.includes(TOO_LARGE_NOTE)) notes.push(TOO_LARGE_NOTE);
         continue;
       }
       attachedRawTotal += fitted.data.length;
       blocks.push({ type: 'image', data: fitted.data.toString('base64'), mimeType: fitted.mime });
-    } catch {
+    } catch (error) {
+      if (error.code === 'PREVIEW_SOURCE_TOO_LARGE' && !notes.includes(TOO_LARGE_NOTE)) notes.push(TOO_LARGE_NOTE);
       // Silent per-image degradation: the text block still carries the link.
     }
   }

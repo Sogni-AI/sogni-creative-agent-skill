@@ -17,7 +17,7 @@ if (process.env.FAKE_AGENT_STDOUT_FILE) {
   line = JSON.stringify({
     argv: process.argv.slice(2),
     env: {
-      SOGNI_API_KEY: process.env.SOGNI_API_KEY ?? null,
+      SOGNI_API_KEY_PRESENT: Boolean(process.env.SOGNI_API_KEY),
       FFMPEG_PATH: process.env.FFMPEG_PATH ?? null,
       SOGNI_AGENT_FRAMEWORK: process.env.SOGNI_AGENT_FRAMEWORK ?? null,
       SOGNI_AGENT_FRAMEWORK_VERSION: process.env.SOGNI_AGENT_FRAMEWORK_VERSION ?? null,

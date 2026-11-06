@@ -183,6 +183,13 @@ The Claude Code plugin shells out to the `sogni-agent` CLI installed above, so b
 
 The first command registers a `sogni` marketplace with one plugin entry (`sogni-creative-agent`) backed by a lean Claude-Code-focused [`plugin-skills/sogni-creative-agent/SKILL.md`](./plugin-skills/sogni-creative-agent/SKILL.md); the second installs the plugin into Claude Code. The full skill spec still lives at the repository root [`SKILL.md`](./SKILL.md).
 
+The plugin invokes the local CLI with your Sogni credentials. Network generation
+sends your prompt, settings and selected reference media to Sogni for processing;
+results can be downloaded to your computer. Personas and memories use local
+files, and selected persona references may be sent with a generation request.
+See Sogni's [privacy policy](https://www.sogni.ai/privacy-policy) and
+[support page](https://www.sogni.ai/contact).
+
 > **Pick one registration per machine.** Install either this plugin **or** the personal skill that `npx setup-sogni-agent-skill --version=latest` writes to `~/.claude/skills/` — not both. With both installed, Claude Code lists two near-identical skills, which wastes context and makes skill selection ambiguous.
 
 ### OpenAI Codex CLI
@@ -972,7 +979,7 @@ Hosted API modes require `SOGNI_API_KEY`.
 - **`--api-workflow`** targets `/v1/creative-agent/workflows` for durable, async workflow records with event streaming and cancellation. Requests carry `input.steps` plus snake_case controls such as `token_type`, `media_references`, `max_estimated_capacity_units`, and `confirm_cost`.
 - **`--workflow-input`** forwards exact durable workflow JSON (`{ title?, steps: [...] }`). Use this when you need exact multi-step behavior such as repeated `replace_video_segment` steps with `replacementStartSeconds` / `replacementEndSeconds` for interleaved video slices.
 - **`--api-workflow storyboard-video`** generates a storyline, creates a single storyboard sheet with GPT Image 2.5 Sunburst, then passes that artifact into Seedance 2.5 for 1080p video generation. The `-Q fast|hq|pro` preset maps to GPT Image low/medium/high quality for that storyboard sheet; explicit model and resolution choices still win.
-- **Media references** from `-c`, `--ref`, `--ref-end`, `--keyframe`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests; `--api-chat` / `--durable-chat` also tell the hosted agent which upload to pin at which time as MiniMax H3 `keyframes`. API chat also attaches image refs as vision inputs. Local file references are uploaded to Sogni media storage first, then forwarded as retrievable URLs so durable executors do not depend on `data:` URI support. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Use direct CLI mode for private media that must not leave the local machine.
+- **Media references** from `-c`, `--ref`, `--ref-end`, `--keyframe`, `--ref-audio`, `--reference-audio-identity`, and `--ref-video` are forwarded as `media_references` metadata in hosted API requests; `--api-chat` / `--durable-chat` also tell the hosted agent which upload to pin at which time as MiniMax H3 `keyframes`. API chat also attaches image refs as vision inputs. Local file references are uploaded to Sogni media storage first, then forwarded as retrievable URLs so durable executors do not depend on `data:` URI support. Durable workflow JSON can bind those references into step arguments with `sourceStepId: "$input_media"`. Direct CLI generation also sends prompts and selected reference media to Sogni for remote processing.
 - **Cost controls** use `--workflow-max-cost <n>` to reject workflow starts above a capacity-unit ceiling, and `--confirm-cost` / `--no-confirm-cost` to forward explicit billing confirmation.
 - Manage runs with `--watch-workflow`, `--workflow-events`, `--stream-workflow`, `--list-workflows`, `--get-workflow`, `--cancel-workflow`, and `--resume-workflow`. Use `--workflow-input` to provide exact durable workflow JSON.
 - **Replay records** use `/v1/replay/records`: `--list-replays [limit]`, `--get-replay <runId>`, and `--ingest-replay <json|@path>` expose redacted RunRecord storage for Sogni Intelligence replay/debug viewers.

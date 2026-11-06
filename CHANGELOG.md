@@ -1,3 +1,8 @@
+## [3.65.1] - 2026-11-05
+
+- Improve optional inline image previews while keeping full-resolution result links available.
+- Refresh agent instructions and Claude plugin presentation, and clarify how network generation uses reference media.
+
 ## [3.65.0] - 2026-11-05
 
 - Keep `test:all` offline and require an explicit environment opt-in for paid integration tests. Release checks never enable real GPU jobs automatically.

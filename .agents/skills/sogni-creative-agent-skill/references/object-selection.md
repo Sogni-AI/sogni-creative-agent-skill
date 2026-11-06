@@ -1,5 +1,27 @@
 # SAM 3 object selection
 
+For a moving object, use video selection:
+
+```bash
+sogni-agent --segment-video clip.mp4 --segment-text "unicorn horn" --segment-frame 126 -o horn-mask.mp4
+sogni-agent --segment-video clip.mp4 --segment-point 0.45,0.6 --segment-exclude 0.1,0.1 -o object-mask.mp4
+```
+
+`--segment-video` uses `sam3_video_segment_fp16` and submits one paid project
+for the complete clip. The result is a lossless binary mask MP4 with the
+source's dimensions, frame count and frame rate. White selects the object.
+The zero-based `--segment-frame` says which source frame the prompt describes;
+tracking runs forward and backward from it. `--segment-object` chooses a
+text-detected candidate in confidence order, starting at zero. Click prompts
+select one object. Coordinates are normalized against the complete source frame.
+
+Video selection accepts a constant-frame-rate SDR source up to 30 seconds,
+900 frames, 2560 pixels on either edge and 100 MB. Inspect the mask over the
+original video at native size, including chunk boundaries and occlusions,
+before using it for compositing or moving hotspot outlines.
+
+## Still-image selection
+
 Use SAM 3 when a task needs an object mask from an existing still, for example
 selecting a door before directing an edit. Coordinates refer to the original
 image, normalized from 0 to 1, with the origin at the top left.

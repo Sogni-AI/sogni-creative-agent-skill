@@ -33,6 +33,7 @@ import {
   MESH_FLAGS, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
   prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
 } from './media-utilities.mjs';
+import { SAM3_VIDEO_MODEL_ID, videoSegmentationConfig } from './sam-video-segmentation.mjs';
 import { SAM3_MODEL_ID, segmentPoint, segmentBox, validateSegmentationPrompts, segmentationConfig } from './sam-segmentation.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
@@ -2387,7 +2388,7 @@ function nextSemanticWorkloadAttribution(options = {}) {
 function withBillingMode(config, attributionOptions = {}) {
   return {
     ...config,
-    ...(!options.video && !options.upscaleVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
+    ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
     ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
@@ -3920,6 +3921,9 @@ const options = {
   outpaintAspectRatio: null, // Optional target aspect ratio for outpaint canvas growth
   contextImages: [], // Context images for image editing
   upscaleImage: null, // Source image for promptless RTX VSR upscaling
+  segmentVideo: null,
+  segmentFrame: 0,
+  segmentObject: 0,
   segmentImage: null,
   segmentPoints: [],
   segmentBoxes: [],
@@ -4586,6 +4590,12 @@ for (let i = 0; i < args.length; i++) {
     options[key] = key === 'voiceReference' ? expandHomePath(value) : value;
   } else if (arg === '--speech-creativity') {
     options.speechCreativity = parseNumberValue(requireFlagValue(args, i++, arg), arg);
+  } else if (arg === '--segment-video') {
+    options.segmentVideo = expandHomePath(requireFlagValue(args, i++, arg));
+  } else if (arg === '--segment-frame' || arg === '--segment-object') {
+    const value = Number(requireFlagValue(args, i++, arg));
+    if (!Number.isSafeInteger(value) || value < 0) fatalCliError(`${arg} requires a non-negative integer.`, { code: 'INVALID_ARGUMENT' });
+    options[arg === '--segment-frame' ? 'segmentFrame' : 'segmentObject'] = value;
   } else if (arg === '--segment') {
     options.segmentImage = expandHomePath(requireFlagValue(args, i++, arg));
   } else if (arg === '--segment-point' || arg === '--segment-exclude') {
@@ -5324,6 +5334,9 @@ Image Options:
   --upscale <path|url>  Promptless NVIDIA RTX VSR upscale, up to 16K (one source image)
   --upscale-scale <n>   Enlarge longest edge by 2, 3, or 4 (default: 2)
   --target-longest-edge <px>  Explicit output longest edge, up to 15360 (overrides scale)
+  --segment-video <path|url>  Track one selected object; return a lossless, frame-aligned mask MP4
+  --segment-frame <index>     Zero-based frame the selection refers to (default: 0)
+  --segment-object <index>    Candidate in confidence order (default: 0)
   --upscale-video <path|url>  Promptless FlashVSR upscale of one video to 1080p/1440p (keeps frames, fps, audio)
   --upscale-resolution <p>    Output short edge for --upscale-video: 1080 or 1440 (default: 1440; 1080 below 720p)
 
@@ -6163,7 +6176,7 @@ if (options.outputFormat) {
         details: { outputFormat: options.outputFormat }
       });
     }
-  } else if (options.video || options.upscaleVideo) {
+  } else if (options.video || options.upscaleVideo || options.segmentVideo) {
     if (!['mp4', ...(options.video && isSeedance25ModelSelectionLocal(options.model) ? ['mov'] : [])].includes(options.outputFormat)) {
       fatalCliError('Video output format must be "mp4" (Seedance 2.5 also supports "mov").', {
         code: 'INVALID_ARGUMENT',
@@ -6841,6 +6854,10 @@ if (options.music) {
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 1800000; // 30 min for queued video work
   }
+} else if (options.segmentVideo) {
+  if (options.model && options.model !== SAM3_VIDEO_MODEL_ID) fatalCliError(`--segment-video requires model ${SAM3_VIDEO_MODEL_ID}.`, { code: 'INVALID_ARGUMENT' });
+  options.model = SAM3_VIDEO_MODEL_ID;
+  if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 1800000;
 } else if (options.segmentImage) {
   if (options.model && options.model !== SAM3_MODEL_ID) fatalCliError(`--segment requires model ${SAM3_MODEL_ID}.`, { code: 'INVALID_ARGUMENT' });
   options.model = SAM3_MODEL_ID;
@@ -7012,7 +7029,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.remixAudio &&
   !options.upscaleImage &&
   !options.upscaleVideo &&
-  !options.segmentImage && !options.imageTo3d && !options.removeBackground &&
+  !options.segmentImage && !options.segmentVideo && !options.imageTo3d && !options.removeBackground &&
   !options.listMedia &&
   !options.memoryAction &&
   !options.personalityAction &&
@@ -7087,7 +7104,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !options.projectLookup && !options.seedanceFinalize && !wan3HasMediaInput && !options.segmentImage && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.projectLookup && !options.seedanceFinalize && !wan3HasMediaInput && !options.segmentImage && !options.segmentVideo && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -7128,7 +7145,14 @@ if (options.apiChat && !options.prompt && getApiModeMediaReferences().length ===
   fatalCliError('--api-chat requires a prompt or media reference for planning.', { code: 'INVALID_ARGUMENT' });
 }
 
-if (options.segmentImage) {
+if (options.segmentVideo) {
+  if (options.prompt || options.video || options.music || options.segmentImage || options.upscaleImage || options.upscaleVideo || options.photobooth || options.contextImages.length || options.refImage || options.refImageEnd
+    || options.apiChat || options.apiWorkflowAction || options.multiAngle || options.count !== 1 || cliSet.width || cliSet.height || cliSet.frames || cliSet.fps) {
+    fatalCliError('--segment-video accepts one complete source video with selection points, boxes or text; its dimensions and timing come from the source.', { code: 'INVALID_ARGUMENT' });
+  }
+  try { validateSegmentationPrompts(options.segmentPoints, options.segmentText, options.segmentBoxes); }
+  catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
+} else if (options.segmentImage) {
   if (options.prompt || options.video || options.music || options.upscaleImage || options.upscaleVideo || options.photobooth || options.contextImages.length || options.refImage || options.refImageEnd
     || options.apiChat || options.apiWorkflowAction || options.multiAngle || options.noFilter || options.count !== 1 || cliSet.width || cliSet.height) {
     fatalCliError('--segment requires one original image with selection points or --segment-text; omit generation prompts, resize, other generation modes and --no-filter.', { code: 'INVALID_ARGUMENT' });
@@ -7136,7 +7160,7 @@ if (options.segmentImage) {
   try { validateSegmentationPrompts(options.segmentPoints, options.segmentText, options.segmentBoxes); }
   catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
 } else if (options.segmentPoints.length || options.segmentBoxes.length || options.segmentText !== null) {
-  fatalCliError('Selection prompts require --segment <path|url>.', { code: 'INVALID_ARGUMENT' });
+  fatalCliError('Selection prompts require --segment <path|url> or --segment-video <path|url>.', { code: 'INVALID_ARGUMENT' });
 }
 
 if (options.upscaleImage) {
@@ -15235,7 +15259,7 @@ async function main() {
 
     // Video catalog data is loaded before model-aware dimension planning.
     // Other media types retain the connected-stage lookup used previously.
-    if (!options.video && !options.upscaleVideo) {
+    if (!options.video && !options.upscaleVideo && !options.segmentVideo) {
       await loadLiveModelDefaults(options.model);
     }
     await ensureSufficientVideoBalance(client, log);
@@ -15331,7 +15355,7 @@ async function main() {
         const jobData = data.job?.data || {};
         const withheld = data.job?.isWithheld === true;
         results.push({
-          resultUrl: withheld ? null : data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo) ? data.videoUrl : data.imageUrl),
+          resultUrl: withheld ? null : data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo || options.segmentVideo) ? data.videoUrl : data.imageUrl),
           lastFrameUrl: withheld ? null : data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
@@ -15342,7 +15366,7 @@ async function main() {
           ...(withheld ? { urlUnavailable: 'sensitiveContent' } : {})
         });
         completedJobs++;
-        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
+        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
         
         if (completedJobs >= options.count) {
           projectWait.stop();
@@ -15373,7 +15397,7 @@ async function main() {
       });
       
       // Progress for longer-running media jobs.
-      if (options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.upscaleVideo) {
+      if (options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.upscaleVideo || options.segmentVideo) {
         client.on(ClientEvent.PROJECT_PROGRESS, (data) => {
           if (data.percentage && data.percentage > 0) {
             log(`Progress: ${Math.round(data.percentage)}%`);
@@ -16115,6 +16139,15 @@ async function main() {
       if (audioResult?.error || audioResult?.message) {
         throw buildProjectResultError(audioResult);
       }
+    } else if (options.segmentVideo) {
+      log(`Tracking the selected object with ${SAM3_VIDEO_MODEL_ID}...`);
+      const bytes = await fetchMediaBuffer(options.segmentVideo);
+      const source = await probeVideoUpscaleSource(bytes, options.segmentVideo);
+      const config = videoSegmentationConfig(bytes, source, { points: options.segmentPoints, boxes: options.segmentBoxes, text: options.segmentText,
+        frameIndex: options.segmentFrame, objectIndex: options.segmentObject, tokenType: options.tokenType || 'spark' });
+      Object.assign(options, { width: source.width, height: source.height, frames: source.frames, fps: source.fps, outputFormat: 'mp4' });
+      const result = trackProjectResult(await client.createVideoProject(withBillingMode(config)));
+      if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.upscaleVideo) {
       log(`Upscaling video with ${FLASHVSR_MODEL_ID}...`);
       const sourceBuffer = await fetchMediaBuffer(options.upscaleVideo);
@@ -16504,7 +16537,7 @@ async function main() {
       const seeds = results.map(r => r.seed ?? options.seed);
       const renderInfo = {
         timestamp: new Date().toISOString(),
-        type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
+        type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : 'image',
         prompt: options.prompt,
         model: options.model,
         width: (options.music || options.speech || options.imageTo3d) ? null : options.width,
@@ -16755,7 +16788,7 @@ async function main() {
           await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
           log(`Saved looping video to ${options.output}`);
         } else {
-          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo) ? 'video' : (options.music || options.speech) ? 'audio' : options.imageTo3d ? 'model' : 'image');
+          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : (options.music || options.speech) ? 'audio' : options.imageTo3d ? 'model' : 'image');
           log(`Saved to ${options.output}`);
         }
       }
@@ -16787,7 +16820,7 @@ async function main() {
       if (options.json) {
         const output = {
           success: true,
-          type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo) ? 'video' : 'image',
+          type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : 'image',
           prompt: options.prompt,
           model: options.model,
           width: (options.music || options.speech || options.imageTo3d) ? null : options.width,

@@ -27,7 +27,8 @@ Two-Stage delivered 720p/1080p/2K, FastH3 audio-to-video from an uploaded track
 `-flfa2v-turbo` / `-a2v-turbo`), MiniMax H3 keyframes that pin extra images at
 chosen times (repeatable `--keyframe image.png@3.5`, up to 8, on H3 i2v/flf2v,
 Sound to Video, and Ref2VA), GPT Image 2.5 Sunburst/Flare, SAM 3 object
-masks, and promptless FlashVSR video upscaling to 1080p/1440p.
+masks for stills and complete video clips, and promptless FlashVSR video upscaling to 1080p/1440p.
+Video selection: `sogni-agent --segment-video clip.mp4 --segment-text "person" --segment-frame 60 -o mask.mp4`.
 Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb` (add
 `--left-view`, `--back-view`, `--right-view` for multi-view); BiRefNet
 uses `--remove-background original.png -o cutout.png` (add `--matte` for a mask).

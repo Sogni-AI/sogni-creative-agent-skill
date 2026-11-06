@@ -988,6 +988,31 @@ const VIDEO_UPSCALE_720P_STREAM = {
   sample_aspect_ratio: '1:1'
 };
 
+test('SAM 3 video tracks a middle-frame object at native source timing', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1920, height: 1080, nb_read_frames: '255' });
+  const { exitCode, state, stderr } = runCli(['--segment-video', video, '--segment-text', 'unicorn horn', '--segment-frame', '126', '--segment-object', '1'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(exitCode, 0, stderr);
+  const config = state.lastVideoProject;
+  assert.equal(config.modelId, 'sam3_video_segment_fp16');
+  assert.deepEqual([config.width, config.height, config.frames, config.fps], [1920, 1080, 255, 24]);
+  assert.deepEqual(config.sam3VideoPrompt, { text: 'unicorn horn', frameIndex: 126, objectIndex: 1, output: 'mask', edges: 'hard' });
+  assert.equal(config.autoResizeVideoAssets, false);
+  assert.equal(config.outputFormat, 'mp4');
+  assert.equal(config.numberOfMedia, 1);
+});
+
+test('SAM 3 video preserves fractional fps and refuses out-of-range frames and generation controls', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, nb_read_frames: '300', avg_frame_rate: '30000/1001', r_frame_rate: '30000/1001' });
+  const good = runCli(['--segment-video', video, '--segment-point', '0.4,0.6'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(good.exitCode, 0, good.stderr);
+  assert.equal(good.state.lastVideoProject.fps, 30000 / 1001);
+  for (const extra of [['--segment-frame', '300'], ['--segment-frame', '1.5'], ['--video'], ['--frames', '240'], ['--width', '512']]) {
+    const bad = runCli(['--segment-video', video, '--segment-text', 'horn', ...extra], { FFPROBE_PATH: fakeFfprobe });
+    assert.equal(bad.exitCode, 1);
+    assert.ok(!bad.state?.lastVideoProject);
+  }
+});
+
 test('FlashVSR --upscale-video is promptless and sends the exact source timing', () => {
   const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
   const { exitCode, state, stderr } = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });

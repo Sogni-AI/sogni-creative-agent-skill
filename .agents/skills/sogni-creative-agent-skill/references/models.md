@@ -289,6 +289,16 @@ BiRefNet are flat-priced; Pixal3D pricing depends on `shapeResolution`. None of
 the usual generation controls apply either: leave steps, guidance, sampler,
 scheduler, and the negative prompt unset for every one of them.
 
+### SAM 3 video selection (`sam3_video_segment_fp16`)
+
+Use `--segment-video clip.mp4 --segment-text "unicorn horn" --segment-frame 126`
+for an object that moves across a clip. One project returns a lossless binary
+mask MP4 with the source timing and dimensions. SDK callers use `referenceVideo`
+and `sam3VideoPrompt`, with normalized points/boxes or a short object description.
+`frameIndex` is zero-based and tracking runs in both directions from it.
+Inputs are constant-frame-rate SDR video, up to 30 seconds, 900 frames,
+2560 pixels on either edge and 100 MB. See [object selection](object-selection.md).
+
 ### SAM 3 segmentation (`sam3_image_segment_bf16`)
 
 Flat $0.005 (1 Spark) per request at any source size. Returns exactly one

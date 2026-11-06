@@ -30,6 +30,7 @@ With this skill, an agent can:
 
 - generate images from prompts and edit/restyle existing images
 - select an object in an original image and return its SAM 3 mask (`--segment`; see the [object selection guide](references/object-selection.md))
+- track an object across a video and return a frame-aligned mask (`--segment-video`; see the [object selection guide](references/object-selection.md))
 - create videos from text, images, first/last frames, audio, or source video (LTX-2.5), with LTX-2.3 retained for voice ID, transition, and 10Eros workflows
 - turn an image folder into a visually deduplicated, music-backed seamless loop with one plugin skill invocation
 - generate instrumental music or full songs with lyrics

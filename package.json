@@ -102,6 +102,7 @@
     "sogni-agent.mjs",
     "sam-segmentation.mjs",
     "media-utilities.mjs",
+    "sam-video-segmentation.mjs",
     "account-personas.mjs"
   ],
   "dependencies": {

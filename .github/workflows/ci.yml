@@ -5,10 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# Keep one bounded offline run per branch rather than billing for stale pushes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Unit tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -22,16 +28,19 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install media probe for voice-reference tests
+        timeout-minutes: 5
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       # The private sogni-creative-agent sibling is not available in CI;
       # check:creative-agent-runtime skips with a warning and the suite runs
       # against the committed generated runtime. Paid integration tests are
       # opt-in (SOGNI_INTEGRATION=1) and never run here.
       - run: npm test
+        timeout-minutes: 12
 
   package:
     name: Package contents
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

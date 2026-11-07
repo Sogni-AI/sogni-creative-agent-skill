@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { claimSogniAppIdSlot, getOrCreateSogniAppId } from '../sogni-app-id.mjs';
 
@@ -38,6 +40,60 @@ test('SOGNI_APP_ID-style value override wins without touching the file', () => {
 
   assert.equal(result, 'fixed-deployment-id');
   assert.throws(() => readFileSync(appIdPath, 'utf8'), { code: 'ENOENT' });
+});
+
+test('overlapping first launches never expose an incomplete saved identity', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-overlap-'));
+  const appIdPath = join(dir, 'app-id');
+  const blocked = join(dir, 'blocked');
+  const release = join(dir, 'release');
+  const moduleUrl = new URL('../sogni-app-id.mjs', import.meta.url).href;
+  const childCode = `
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    const [file, blocked, release, moduleUrl] = process.argv.slice(1);
+    const write = fs.writeFileSync, open = fs.openSync;
+    let held = false;
+    function hold(path) {
+      if (held || typeof path !== 'string' || !(path === file || path.startsWith(file + '.'))) return;
+      held = true;
+      write(blocked, 'ready');
+      const deadline = Date.now() + 10000;
+      while (!fs.existsSync(release)) {
+        if (Date.now() > deadline) throw Error('Parent did not release the writer');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      }
+    }
+    fs.openSync = (path, ...args) => { const fd = open(path, ...args); hold(path); return fd; };
+    fs.writeFileSync = (path, ...args) => { hold(path); return write(path, ...args); };
+    syncBuiltinESMExports();
+    const { getOrCreateSogniAppId } = await import(moduleUrl);
+    console.log(getOrCreateSogniAppId({ appIdPath: file, generateUuid: () => 'first' }));
+  `;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', childCode, appIdPath, blocked, release, moduleUrl]);
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const ended = new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); });
+  try {
+    const deadline = Date.now() + 5000;
+    while (!existsSync(blocked)) {
+      assert.ok(Date.now() < deadline, 'first writer must reach the controlled overlap');
+      await delay(5);
+    }
+    const second = spawnSync(process.execPath, ['--input-type=module', '-e',
+      `import { getOrCreateSogniAppId } from ${JSON.stringify(moduleUrl)}; console.log(getOrCreateSogniAppId({appIdPath: process.argv[1], generateUuid: () => 'second'}));`,
+      appIdPath], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(second.status, 0, second.stderr);
+    writeFileSync(release, 'go');
+    assert.equal(await ended, 0, stderr);
+    assert.equal(stdout.trim(), second.stdout.trim());
+    assert.equal(readFileSync(appIdPath, 'utf8').trim(), second.stdout.trim());
+  } finally {
+    writeFileSync(release, 'go');
+    if (child.exitCode === null) child.kill();
+    await ended;
+  }
 });
 
 test('rejects a corrupt persisted app ID instead of silently rotating it', () => {

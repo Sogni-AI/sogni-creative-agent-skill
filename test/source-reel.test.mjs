@@ -137,7 +137,9 @@ test('--network reaches the child renders a reel starts', async () => {
   env.NODE_OPTIONS = `--loader ${loaderPath}`;
   spawnSync(
     process.execPath,
-    [cliPath, '--source-reel', dir, '--no-update-check', '--network', 'relaxed', '-q', '--json', '-o', join(dir, 'out.mp4')],
+    // This assertion inspects one child through the stub's single state file.
+    // Parallel children would overwrite that fixture's journal independently.
+    [cliPath, '--source-reel', dir, '--reel-concurrency', '1', '--no-update-check', '--network', 'relaxed', '-q', '--json', '-o', join(dir, 'out.mp4')],
     { env, encoding: 'utf8' },
   );
   const state = JSON.parse(readFileSync(env.SOGNI_AGENT_TEST_STATE_PATH, 'utf8'));

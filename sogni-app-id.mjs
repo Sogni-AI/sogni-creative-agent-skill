@@ -19,6 +19,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   closeSync,
+  linkSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -35,8 +36,6 @@ const DEFAULT_APP_ID_POOL_DIR = join(homedir(), '.config', 'sogni', 'app-ids');
 const DEFAULT_APP_ID_POOL_MAX = 32;
 const GENERATED_APP_ID_PREFIX = 'sogni-agent-';
 const MAX_APP_ID_LENGTH = 256;
-const APP_ID_CREATE_RETRIES = 20;
-const APP_ID_CREATE_RETRY_MS = 5;
 
 function expandHomePath(rawPath) {
   if (rawPath === '~') return homedir();
@@ -63,14 +62,6 @@ function validateAppId(value, source) {
   return appId;
 }
 
-function waitForConcurrentWriter() {
-  // Another process can observe the file in the tiny interval between its
-  // exclusive creation and first write. Atomics.wait gives that writer a few
-  // milliseconds without introducing an async API into client construction.
-  const signal = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(signal, 0, 0, APP_ID_CREATE_RETRY_MS);
-}
-
 function readPersistedAppId(appIdPath) {
   return validateAppId(readFileSync(appIdPath, 'utf8'), `Sogni app-id file ${appIdPath}`);
 }
@@ -85,7 +76,7 @@ function appIdPersistenceError(error, appIdPath) {
 
 /**
  * Create-once/read-forever identity file. Concurrent first launches race on
- * exclusive create; losers reuse the winner's value.
+ * atomic publication; losers reuse the winner's complete value.
  */
 function getOrCreateAppIdFile(resolvedPath, generateUuid) {
   try {
@@ -99,39 +90,20 @@ function getOrCreateAppIdFile(resolvedPath, generateUuid) {
     `${GENERATED_APP_ID_PREFIX}${generateUuid()}`,
     'Generated Sogni app ID',
   );
-  let descriptor;
-  let createdFile = false;
+  const temporaryPath = `${resolvedPath}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    descriptor = openSync(resolvedPath, 'wx', 0o600);
-    createdFile = true;
-    writeFileSync(descriptor, `${candidate}\n`, 'utf8');
-    return candidate;
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error;
-
-    // A concurrent first launch won the exclusive create. Reuse its value
-    // once the short write window closes.
-    let lastError = error;
-    for (let attempt = 0; attempt < APP_ID_CREATE_RETRIES; attempt += 1) {
-      try {
-        return readPersistedAppId(resolvedPath);
-      } catch (readError) {
-        lastError = readError;
-        if (attempt + 1 < APP_ID_CREATE_RETRIES) waitForConcurrentWriter();
-      }
+    writeFileSync(temporaryPath, `${candidate}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    try {
+      // A hard link publishes complete bytes atomically without replacing an
+      // existing identity. Concurrent readers never see an empty first write.
+      linkSync(temporaryPath, resolvedPath);
+      return candidate;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      return readPersistedAppId(resolvedPath);
     }
-    throw lastError;
   } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-    // Do not strand an empty/corrupt identity if this process created the
-    // file but could not finish writing it.
-    if (createdFile) {
-      try {
-        readPersistedAppId(resolvedPath);
-      } catch {
-        try { unlinkSync(resolvedPath); } catch { /* best effort */ }
-      }
-    }
+    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
   }
 }
 

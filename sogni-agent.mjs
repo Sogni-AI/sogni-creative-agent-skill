@@ -1747,8 +1747,11 @@ function resolveRelayVsrOutput(sourceWidth, sourceHeight, requestedResolution = 
   });
 }
 
-// Read the exact source geometry, frame count, and frame rate with ffprobe so
-// the request matches what the server verifies after upload.
+// Read the source geometry, frame count, and frame rate with ffprobe so the
+// request matches what the server verifies after upload. The server conforms a
+// clip that is off its average cadence, rotated, or not square-pixel, so its
+// timing is the server's to settle: `conform` marks those, and the size is the
+// upright picture the server judges.
 async function probeVideoUpscaleSource(buffer, sourceLabel) {
   if (buffer.length > VIDEO_UPSCALE_MAX_BYTES) {
     fatalCliError('Video upscaling accepts source files up to 100 MB.', {
@@ -1766,8 +1769,9 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
       '-v', 'error',
       '-select_streams', 'v:0',
       '-count_frames',
+      '-show_frames',
       '-show_entries',
-      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation',
+      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation:frame=best_effort_timestamp_time',
       '-of', 'json',
       inputPath,
     ], { captureOutput: true });
@@ -1784,17 +1788,18 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
     err.details = { ffprobePath, reason: result.error.code };
     throw err;
   }
-  let stream = null;
+  let probe = null;
   try {
-    stream = JSON.parse(result?.stdout || '{}')?.streams?.[0] ?? null;
+    probe = JSON.parse(result?.stdout || '{}');
   } catch {
-    stream = null;
+    probe = null;
   }
-  const width = Number(stream?.width);
-  const height = Number(stream?.height);
+  const stream = probe?.streams?.[0] ?? null;
+  const codedWidth = Number(stream?.width);
+  const codedHeight = Number(stream?.height);
   const frames = Number(stream?.nb_read_frames);
-  const fps = parseFrameRate(stream?.avg_frame_rate);
-  if (result?.status !== 0 || ![width, height, frames].every((value) => Number.isSafeInteger(value) && value > 0) || !fps) {
+  const average = parseFrameRate(stream?.avg_frame_rate);
+  if (result?.status !== 0 || ![codedWidth, codedHeight, frames].every((value) => Number.isSafeInteger(value) && value > 0) || !average) {
     // -count_frames decodes every frame, so a damaged file can print an error
     // per frame; keep the tail, where ffprobe names the file-level failure.
     // ffprobe names the temporary copy, so show the user's source instead.
@@ -1808,24 +1813,35 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
       ...(ffprobeError ? { hint: `ffprobe reported: ${ffprobeError.split('\n').at(-1).trim()}` } : {})
     });
   }
-  if (fps < VIDEO_UPSCALE_MIN_FPS || fps > VIDEO_UPSCALE_MAX_FPS) {
-    fatalCliError(`This video runs at ${Number(fps.toFixed(3))} fps; video upscaling accepts ${VIDEO_UPSCALE_MIN_FPS}-${VIDEO_UPSCALE_MAX_FPS} fps.`, {
+  const times = (probe?.frames ?? [])
+    .map((frame) => Number(frame?.best_effort_timestamp_time))
+    .sort((a, b) => a - b);
+  const onCadence = times.every((time, index) => Math.abs(time - times[0] - index / average) <= 0.001);
+  if (onCadence && (average < VIDEO_UPSCALE_MIN_FPS || average > VIDEO_UPSCALE_MAX_FPS)) {
+    fatalCliError(`This video runs at ${Number(average.toFixed(3))} fps; video upscaling accepts ${VIDEO_UPSCALE_MIN_FPS}-${VIDEO_UPSCALE_MAX_FPS} fps.`, {
       code: 'INVALID_UPSCALE_SOURCE',
-      details: { fps }
-    });
-  }
-  // The server owns the maximum clip length; submit the exact source count.
-  const rotated = Array.isArray(stream?.side_data_list)
-    && stream.side_data_list.some((item) => Number(item?.rotation || 0) % 360 !== 0);
-  if (!['1:1', 'N/A', undefined].includes(stream?.sample_aspect_ratio) || rotated) {
-    fatalCliError('Export the video with square pixels and its rotation applied before upscaling.', {
-      code: 'INVALID_UPSCALE_SOURCE'
+      details: { fps: average }
     });
   }
   if (['smpte2084', 'arib-std-b67'].includes(stream?.color_transfer ?? '')) {
     fatalCliError('Convert HDR video to SDR before upscaling.', { code: 'INVALID_UPSCALE_SOURCE' });
   }
-  return { width, height, frames, fps, sizeBytes: buffer.length };
+  const aspect = stream?.sample_aspect_ratio;
+  const square = ['1:1', 'N/A', '0:1', undefined].includes(aspect);
+  const [aspectWidth, aspectHeight] = square ? [1, 1] : aspect.split(':').map(Number);
+  const uprightWidth = square ? codedWidth : Math.round(codedWidth * aspectWidth / aspectHeight / 2) * 2;
+  const rotation = Number(stream?.side_data_list?.find((item) => 'rotation' in item)?.rotation ?? 0);
+  const turned = rotation % 180 !== 0;
+  const conform = !onCadence || rotation % 360 !== 0 || !square;
+  // The server owns the maximum clip length; submit the exact source count.
+  return {
+    width: turned ? codedHeight : uprightWidth,
+    height: turned ? uprightWidth : codedHeight,
+    frames,
+    fps: Math.min(Math.max(average, VIDEO_UPSCALE_MIN_FPS), VIDEO_UPSCALE_MAX_FPS),
+    sizeBytes: buffer.length,
+    ...(conform ? { conform } : {}),
+  };
 }
 
 // The server's own refusal of a source longer than it accepts. Only the server
@@ -16276,17 +16292,16 @@ async function main() {
         `output ${target.width}x${target.height} (${target.resolution}p), every frame and the audio kept.`
       );
 
-      // The exact frame count and rate satisfy the SDK's upscale validation;
-      // the server re-probes the upload and adopts its verified size, so the
-      // output width/height are not sent.
+      // The server re-probes the upload and adopts its verified size, so the
+      // output width/height are not sent; a conformed source's timing is left
+      // to it too, since anything sent that differs refuses the project.
       const upscaleVideoConfig = {
         modelId: options.model,
         positivePrompt: '',
         numberOfMedia: 1,
         referenceVideo: sourceBuffer,
         upscaleResolution: target.resolution,
-        frames: source.frames,
-        fps: source.fps,
+        ...(source.conform ? {} : { frames: source.frames, fps: source.fps }),
         tokenType: options.tokenType || 'spark',
         waitForCompletion: false,
         autoResizeVideoAssets: false

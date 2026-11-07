@@ -775,6 +775,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Image editing, chosen by what the request means (never Qwen Image Edit unless the user names it) | a person's likeness: `krea2_identity_edit_v1_2` (the `-c` default for 1-2 references); type, logos and graphic design: `flux3_image_klein_sd_int8_convrot` (the default for 3-10); NSFW: `dark_beast_krea2_identity_edit_v1_2`; the best result with Premium Spark: `gpt-image-2.5-sunburst` |
 | Deterministic image upscaling through 16K | `rtx_vsr_pro` via `--upscale` |
 | Promptless video upscaling to 1080p/1440p | `flashvsr_v1.1_tiny_long_bf16` via `--upscale-video` |
+| Promptless video upscaling up to 2160p | `relayvsr_x2_lightx2v_int8_convrot`, `relayvsr_x4_int8_convrot` via `--upscale-video --upscale-model relayvsr` |
 | Object masks from points, boxes, or a description | `sam3_image_segment_bf16` via `--segment` |
 | Dark Beast Krea 2 images | `dark_beast_krea2_fp8` |
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |

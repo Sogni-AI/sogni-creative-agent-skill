@@ -1035,6 +1035,83 @@ test('FlashVSR --upscale-video is promptless and sends the exact source timing',
   assert.match(stderr, /output 2560x1440 \(1440p\)/);
 });
 
+test('RelayVSR is opt-in and resolves X2 for a target within twice the source', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1920, height: 1080 });
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  const project = state?.lastVideoProject;
+  assert.equal(project.modelId, 'relayvsr_x2_lightx2v_int8_convrot');
+  assert.equal(project.upscaleResolution, 2160);
+  assert.equal(project.positivePrompt, '');
+  assert.equal(project.seed, undefined);
+  assert.equal(project.detailPreference, undefined);
+  assert.equal(project.processingSpeed, undefined);
+  assert.match(stderr, /output 3840x2160 \(2160p\)/);
+});
+
+test('RelayVSR resolves X4 past twice the source and accepts the flags in either order', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 960, height: 540 });
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-resolution', '2160', '--upscale-model', 'relayvsr'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state?.lastVideoProject?.modelId, 'relayvsr_x4_int8_convrot');
+  assert.match(stderr, /output 3840x2160 \(2160p\)/);
+});
+
+test('RelayVSR defaults to 1440p and takes sources FlashVSR refuses', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1920, height: 1080 });
+  const { exitCode, state, stderr } = runCli(['--upscale-video', video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: fakeFfprobe });
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state?.lastVideoProject?.modelId, 'relayvsr_x2_lightx2v_int8_convrot');
+  assert.equal(state?.lastVideoProject?.upscaleResolution, 1440);
+});
+
+test('RelayVSR explains a target its tiers cannot reach before upload', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /2160p is more than twice the size of this 1280×720 video/);
+  assert.equal(state?.lastVideoProject, null);
+});
+
+test('2160 stays refused without RelayVSR, with the FlashVSR message', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, stderr } = runCli(['--upscale-video', video, '--upscale-resolution', '2160'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /--upscale-resolution must be 1080 or 1440\./);
+
+  const flash = runCli(['--upscale-video', video, '--upscale-model', 'flashvsr', '--upscale-resolution', '2160'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(flash.exitCode, 1);
+  assert.match(flash.stderr, /--upscale-resolution must be 1080 or 1440\./);
+});
+
+test('--upscale-model refuses unknown upscalers, an explicit model, and a missing source', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const unknown = runCli(['--upscale-video', video, '--upscale-model', 'seedvr'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(unknown.exitCode, 1);
+  assert.match(unknown.stderr, /--upscale-model must be flashvsr or relayvsr\./);
+
+  const explicit = runCli(['--upscale-video', video, '--upscale-model', 'relayvsr', '-m', 'relayvsr_x4_int8_convrot'], { FFPROBE_PATH: fakeFfprobe });
+  assert.equal(explicit.exitCode, 1);
+  assert.match(explicit.stderr, /omit -m\/--model/);
+
+  const noSource = runCli(['--upscale-model', 'relayvsr', 'a prompt']);
+  assert.equal(noSource.exitCode, 1);
+  assert.match(noSource.stderr, /--upscale-model requires --upscale-video/);
+});
+
 test('FlashVSR falls back to 1080p below 720p and keeps a fractional frame rate', () => {
   const { video, fakeFfprobe } = createVideoUpscaleFixture({
     ...VIDEO_UPSCALE_720P_STREAM,
@@ -1246,6 +1323,18 @@ test('--upscale-video explains the FlashVSR availability refusal', () => {
 
   assert.equal(exitCode, 1);
   assert.match(stderr, /FlashVSR video upscaling is not available yet/);
+  assert.match(stderr, /nothing was charged/);
+});
+
+test('--upscale-video explains the RelayVSR availability refusal', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { exitCode, stderr } = runCli(['--upscale-video', video, '--upscale-model', 'relayvsr'], {
+    FFPROBE_PATH: fakeFfprobe,
+    SOGNI_AGENT_TEST_VIDEO_PROJECT_ERROR: 'RelayVSR video upscaling is not available right now. Please try again later.'
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /RelayVSR video upscaling is not available right now/);
   assert.match(stderr, /nothing was charged/);
 });
 

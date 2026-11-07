@@ -120,6 +120,9 @@ sogni-agent-hermes --upscale ./source.png -o ./upscaled.png
 # Promptless FlashVSR video upscale to 1440p (or --upscale-resolution 1080)
 sogni-agent-hermes --upscale-video ./clip.mp4 -o ./clip-1440p.mp4
 
+# Promptless RelayVSR video upscale to 4K
+sogni-agent-hermes --upscale-video ./clip.mp4 --upscale-model relayvsr --upscale-resolution 2160 -o ./clip-2160p.mp4
+
 # Generate or animate video
 sogni-agent-hermes --video -o ./video.mp4 "a paper dragon takes flight"
 sogni-agent-hermes --video --ref ./start.png -o ./animated.mp4 "the cyclist stands on the pedals and sprints out of frame as the camera whip-pans to follow"

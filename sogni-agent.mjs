@@ -1593,14 +1593,21 @@ function resolveRtxVsrDimensions(sourceWidth, sourceHeight, { scale = 2, targetL
   };
 }
 
-// Promptless FlashVSR video upscaling (--upscale-video). The server probes the
+// Promptless FlashVSR and RelayVSR video upscaling (--upscale-video). The server probes the
 // uploaded source and stays authoritative; these public geometry, frame-rate
 // and file-size limits let the CLI explain an unsupported clip before any
 // upload. There is deliberately no frame-count or duration limit here: the
 // server's admission check alone sets the maximum clip length and refuses a
 // source that is too long (see annotateVideoUpscaleError).
 const FLASHVSR_MODEL_ID = 'flashvsr_v1.1_tiny_long_bf16';
+const RELAYVSR_X2_MODEL_ID = 'relayvsr_x2_lightx2v_int8_convrot';
+const RELAYVSR_X4_MODEL_ID = 'relayvsr_x4_int8_convrot';
+const VIDEO_UPSCALE_MODELS = ['flashvsr', 'relayvsr'];
 const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
+const RELAYVSR_RESOLUTIONS = [1080, 1440, 2160];
+// Portrait mirrors these. Each tier's limit times its scale is 3840 px, the largest output.
+const RELAYVSR_X2_SOURCE = { scale: 2, maxShortEdge: 1080, maxLongEdge: 1920 };
+const RELAYVSR_X4_SOURCE = { scale: 4, maxShortEdge: 540, maxLongEdge: 960 };
 const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
 const VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE = 768;
 // Source area counted in 64-pixel blocks: about 1344x768, or 768x1344 in portrait.
@@ -1611,13 +1618,26 @@ const VIDEO_UPSCALE_MAX_BYTES = 100 * 1024 * 1024;
 const VIDEO_UPSCALE_MAX_OUTPUT_LONG_EDGE = 2560;
 const VIDEO_UPSCALE_MAX_OUTPUT_PIXELS = 2560 * 1440;
 const FLASHVSR_UNAVAILABLE_MESSAGE = 'FlashVSR video upscaling is not available yet. Please try again later.';
+const RELAYVSR_UNAVAILABLE_MESSAGE = 'RelayVSR video upscaling is not available right now. Please try again later.';
 
-function parseVideoUpscaleResolutionValue(raw, flag) {
+function parseVideoUpscaleResolutionValue(raw, flag, relayVsr = false) {
   const value = Number(String(raw ?? '').trim().toLowerCase().replace(/p$/, ''));
-  if (!VIDEO_UPSCALE_RESOLUTIONS.includes(value)) {
-    fatalCliError(`${flag} must be 1080 or 1440.`, {
+  const allowed = relayVsr ? RELAYVSR_RESOLUTIONS : VIDEO_UPSCALE_RESOLUTIONS;
+  if (!allowed.includes(value)) {
+    fatalCliError(`${flag} must be ${relayVsr ? '1080, 1440, or 2160' : '1080 or 1440'}.`, {
       code: 'INVALID_ARGUMENT',
-      details: { flag, value: raw, allowed: VIDEO_UPSCALE_RESOLUTIONS }
+      details: { flag, value: raw, allowed }
+    });
+  }
+  return value;
+}
+
+function parseVideoUpscaleModelValue(raw, flag) {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (!VIDEO_UPSCALE_MODELS.includes(value)) {
+    fatalCliError(`${flag} must be flashvsr or relayvsr.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag, value: raw, allowed: VIDEO_UPSCALE_MODELS }
     });
   }
   return value;
@@ -1670,6 +1690,57 @@ function resolveVideoUpscaleOutput(sourceWidth, sourceHeight, requestedResolutio
     code: 'INVALID_UPSCALE_SIZE',
     details: { sourceWidth, sourceHeight, requestedResolution },
     ...(requestedResolution === 1440 ? { hint: 'Use --upscale-resolution 1080 for this source.' } : {})
+  });
+}
+
+function relayVsrOutputFor(sourceWidth, sourceHeight, resolution) {
+  const shortEdge = Math.min(sourceWidth, sourceHeight);
+  const longEdge = Math.max(sourceWidth, sourceHeight);
+  const ratio = resolution / shortEdge;
+  if (ratio <= 1) {
+    return { problem: `This ${sourceWidth}×${sourceHeight} video is already ${resolution}p or larger.` };
+  }
+  if (ratio > RELAYVSR_X4_SOURCE.scale) {
+    return {
+      problem: `${resolution}p needs a source at least ${Math.ceil(resolution / RELAYVSR_X4_SOURCE.scale)}px on its short edge; this video is ${sourceWidth}×${sourceHeight}.`
+    };
+  }
+  const useX2 = ratio <= RELAYVSR_X2_SOURCE.scale;
+  if (!useX2 && (shortEdge > RELAYVSR_X4_SOURCE.maxShortEdge || longEdge > RELAYVSR_X4_SOURCE.maxLongEdge)) {
+    return {
+      problem: `${resolution}p is more than twice the size of this ${sourceWidth}×${sourceHeight} video; RelayVSR goes past twice the size only for sources up to ${RELAYVSR_X4_SOURCE.maxLongEdge}×${RELAYVSR_X4_SOURCE.maxShortEdge} pixels, or ${RELAYVSR_X4_SOURCE.maxShortEdge}×${RELAYVSR_X4_SOURCE.maxLongEdge} in portrait.`
+    };
+  }
+  return {
+    modelId: useX2 ? RELAYVSR_X2_MODEL_ID : RELAYVSR_X4_MODEL_ID,
+    resolution,
+    width: Math.round((sourceWidth * ratio) / 2) * 2,
+    height: Math.round((sourceHeight * ratio) / 2) * 2
+  };
+}
+
+// X2 when the target is at most twice the source's short edge, otherwise X4.
+// Without an explicit resolution, 1440p is used when the source allows it and 1080p otherwise.
+function resolveRelayVsrOutput(sourceWidth, sourceHeight, requestedResolution = null) {
+  if (
+    Math.min(sourceWidth, sourceHeight) > RELAYVSR_X2_SOURCE.maxShortEdge
+    || Math.max(sourceWidth, sourceHeight) > RELAYVSR_X2_SOURCE.maxLongEdge
+  ) {
+    fatalCliError(
+      `This video is ${sourceWidth}×${sourceHeight}; RelayVSR accepts sources up to ${RELAYVSR_X2_SOURCE.maxLongEdge}×${RELAYVSR_X2_SOURCE.maxShortEdge} pixels, or ${RELAYVSR_X2_SOURCE.maxShortEdge}×${RELAYVSR_X2_SOURCE.maxLongEdge} in portrait.`,
+      { code: 'INVALID_UPSCALE_SOURCE', details: { sourceWidth, sourceHeight } }
+    );
+  }
+  const candidates = requestedResolution ? [requestedResolution] : [VIDEO_UPSCALE_DEFAULT_RESOLUTION, 1080];
+  let lastProblem = '';
+  for (const resolution of candidates) {
+    const output = relayVsrOutputFor(sourceWidth, sourceHeight, resolution);
+    if (!output.problem) return output;
+    lastProblem = output.problem;
+  }
+  fatalCliError(lastProblem, {
+    code: 'INVALID_UPSCALE_SIZE',
+    details: { sourceWidth, sourceHeight, requestedResolution }
   });
 }
 
@@ -1764,6 +1835,10 @@ function annotateVideoUpscaleError(error) {
   if (error && typeof error === 'object' && message.includes(FLASHVSR_UNAVAILABLE_MESSAGE)) {
     if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'MODEL_UNAVAILABLE';
     error.hint = 'FlashVSR upscaling workers are not online yet, so nothing was charged. Try again later.';
+  }
+  if (error && typeof error === 'object' && message.includes(RELAYVSR_UNAVAILABLE_MESSAGE)) {
+    if (!error.code || error.code === 'PROJECT_ERROR') error.code = 'MODEL_UNAVAILABLE';
+    error.hint = 'No RelayVSR worker is online right now, so nothing was charged. Try again later.';
   }
   const tooLong = [error?.message, error?.originalError?.message]
     .map((text) => String(text || '').match(VIDEO_UPSCALE_TOO_LONG_PATTERN)?.[0].trim())
@@ -3930,8 +4005,9 @@ const options = {
   segmentText: null,
   upscaleScale: 2,
   upscaleTargetLongestEdge: null,
-  upscaleVideo: null, // Source video for promptless FlashVSR upscaling
-  upscaleResolution: null, // FlashVSR output short edge (1080 | 1440)
+  upscaleVideo: null, // Source video for promptless FlashVSR or RelayVSR upscaling
+  upscaleModel: null, // Video upscaler selector; omitted means FlashVSR
+  upscaleResolution: null, // Upscale output short edge (1080 | 1440, or 2160 on RelayVSR)
   looping: false, // Create looping video (i2v only): generate A→B then B→A and concatenate
   photobooth: false, // Photobooth mode (InstantID face transfer)
   cnStrength: null, // ControlNet strength override
@@ -4130,6 +4206,7 @@ const cliSet = {
   upscaleScale: false,
   upscaleTargetLongestEdge: false,
   upscaleVideo: false,
+  upscaleModel: false,
   upscaleResolution: false,
   looping: false,
   photobooth: false,
@@ -4634,8 +4711,18 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === '--upscale-resolution') {
     const raw = requireFlagValue(args, i, arg);
     i++;
-    options.upscaleResolution = parseVideoUpscaleResolutionValue(raw, arg);
+    const upscaleModelFlag = args.lastIndexOf('--upscale-model');
+    options.upscaleResolution = parseVideoUpscaleResolutionValue(
+      raw,
+      arg,
+      upscaleModelFlag !== -1 && String(args[upscaleModelFlag + 1]).trim().toLowerCase() === 'relayvsr'
+    );
     cliSet.upscaleResolution = true;
+  } else if (arg === '--upscale-model') {
+    const raw = requireFlagValue(args, i, arg);
+    i++;
+    options.upscaleModel = parseVideoUpscaleModelValue(raw, arg);
+    cliSet.upscaleModel = true;
   } else if (arg === '--photobooth') {
     options.photobooth = true;
     cliSet.photobooth = true;
@@ -5338,7 +5425,8 @@ Image Options:
   --segment-frame <index>     Zero-based frame the selection refers to (default: 0)
   --segment-object <index>    Candidate in confidence order (default: 0)
   --upscale-video <path|url>  Promptless FlashVSR upscale of one video to 1080p/1440p (keeps frames, fps, audio)
-  --upscale-resolution <p>    Output short edge for --upscale-video: 1080 or 1440 (default: 1440; 1080 below 720p)
+  --upscale-model <m>         Upscaler for --upscale-video: flashvsr (default) or relayvsr (reaches 2160p)
+  --upscale-resolution <p>    Output short edge for --upscale-video: 1080 or 1440, or 2160 with relayvsr (default: 1440; 1080 below 720p)
 
 Photobooth (Face Transfer):
   --photobooth            Face transfer mode (InstantID + SDXL Turbo)
@@ -6844,13 +6932,24 @@ if (options.music) {
     options.timeout = 1800000; // 30 min for queued and long-running video jobs
   }
 } else if (options.upscaleVideo) {
-  if (options.model && options.model !== FLASHVSR_MODEL_ID) {
-    fatalCliError(`--upscale-video requires model ${FLASHVSR_MODEL_ID}.`, {
-      code: 'INVALID_ARGUMENT',
-      details: { model: options.model, requiredModel: FLASHVSR_MODEL_ID }
-    });
+  if (options.upscaleModel === 'relayvsr') {
+    if (options.model) {
+      fatalCliError('--upscale-model relayvsr picks its own model from the source; omit -m/--model.', {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model }
+      });
+    }
+    // Replaced by the X2 or X4 id once the source has been probed.
+    options.model = RELAYVSR_X2_MODEL_ID;
+  } else {
+    if (options.model && options.model !== FLASHVSR_MODEL_ID) {
+      fatalCliError(`--upscale-video requires model ${FLASHVSR_MODEL_ID}.`, {
+        code: 'INVALID_ARGUMENT',
+        details: { model: options.model, requiredModel: FLASHVSR_MODEL_ID }
+      });
+    }
+    options.model = FLASHVSR_MODEL_ID;
   }
-  options.model = FLASHVSR_MODEL_ID;
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 1800000; // 30 min for queued video work
   }
@@ -7219,6 +7318,12 @@ if (options.upscaleVideo) {
 
 if (!options.upscaleVideo && cliSet.upscaleResolution) {
   fatalCliError('--upscale-resolution requires --upscale-video <path|url>.', {
+    code: 'INVALID_ARGUMENT'
+  });
+}
+
+if (!options.upscaleVideo && cliSet.upscaleModel) {
+  fatalCliError('--upscale-model requires --upscale-video <path|url>.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -16149,10 +16254,14 @@ async function main() {
       const result = trackProjectResult(await client.createVideoProject(withBillingMode(config)));
       if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.upscaleVideo) {
-      log(`Upscaling video with ${FLASHVSR_MODEL_ID}...`);
+      const relayVsr = options.upscaleModel === 'relayvsr';
+      log(`Upscaling video with ${relayVsr ? 'RelayVSR' : FLASHVSR_MODEL_ID}...`);
       const sourceBuffer = await fetchMediaBuffer(options.upscaleVideo);
       const source = await probeVideoUpscaleSource(sourceBuffer, options.upscaleVideo);
-      const target = resolveVideoUpscaleOutput(source.width, source.height, options.upscaleResolution);
+      const target = relayVsr
+        ? resolveRelayVsrOutput(source.width, source.height, options.upscaleResolution)
+        : resolveVideoUpscaleOutput(source.width, source.height, options.upscaleResolution);
+      if (relayVsr) options.model = target.modelId;
       options.width = target.width;
       options.height = target.height;
       options.frames = source.frames;
@@ -16164,11 +16273,11 @@ async function main() {
         `output ${target.width}x${target.height} (${target.resolution}p), every frame and the audio kept.`
       );
 
-      // The exact frame count and rate satisfy the SDK's FlashVSR validation;
+      // The exact frame count and rate satisfy the SDK's upscale validation;
       // the server re-probes the upload and adopts its verified size, so the
       // output width/height are not sent.
       const upscaleVideoConfig = {
-        modelId: FLASHVSR_MODEL_ID,
+        modelId: options.model,
         positivePrompt: '',
         numberOfMedia: 1,
         referenceVideo: sourceBuffer,

@@ -122,6 +122,17 @@ fits the result inside the requested box without cropping or stretching. Both
 | Model | Kind | Use Case |
 |-------|------|----------|
 | `flashvsr_v1.1_tiny_long_bf16` | Video job | Promptless FlashVSR v1.1 upscale of one finished video to 1080p or 1440p |
+| `relayvsr_x2_lightx2v_int8_convrot` | Video job | Promptless RelayVSR 2x upscale of one finished video to 1080p, 1440p, or 2160p |
+| `relayvsr_x4_int8_convrot` | Video job | Promptless RelayVSR 4x upscale of one finished video to 1080p, 1440p, or 2160p |
+
+RelayVSR is opt-in: invoke it with `sogni-agent --upscale-video <path|url>
+--upscale-model relayvsr` (optionally `--upscale-resolution 1080|1440|2160`), or
+set `model: "relayvsr"` on the hosted `upscale_video` tool. It uses 2x when the
+target is at most twice the source's short edge and 4x otherwise. 2x takes a
+source up to 1920x1080 pixels (1080x1920 in portrait) and 4x one up to 960x540
+(540x960 in portrait), so 2160p needs a source short edge of exactly 1080px or
+540px. Frame rate, file size, and format limits match FlashVSR's. It takes no
+`detailPreference`, `processingSpeed`, or `seed`.
 
 FlashVSR is not a generation model. Invoke it with
 `sogni-agent --upscale-video <path|url>` (optionally

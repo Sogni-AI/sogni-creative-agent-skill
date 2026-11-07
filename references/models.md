@@ -129,9 +129,9 @@ RelayVSR is opt-in: invoke it with `sogni-agent --upscale-video <path|url>
 --upscale-model relayvsr` (optionally `--upscale-resolution 1080|1440|2160`), or
 set `model: "relayvsr"` on the hosted `upscale_video` tool. It uses 2x when the
 target is at most twice the source's short edge and 4x otherwise. 2x takes a
-source up to 1920x1080 pixels (1080x1920 in portrait) and 4x one up to 960x540
-(540x960 in portrait), so 2160p needs a source short edge of exactly 1080px or
-540px. Frame rate, file size, and format limits match FlashVSR's. It takes no
+source up to 1920x1080 pixels (1080x1920 in portrait) and 4x one up to 1344x768
+(768x1344 in portrait), so 2160p needs a source short edge of 540-768px or exactly
+1080px. Frame rate, file size, and format limits match FlashVSR's. It takes no
 `detailPreference`, `processingSpeed`, or `seed`.
 
 FlashVSR is not a generation model. Invoke it with

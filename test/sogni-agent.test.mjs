@@ -1065,6 +1065,30 @@ test('RelayVSR resolves X4 past twice the source and accepts the flags in either
   assert.match(stderr, /output 3840x2160 \(2160p\)/);
 });
 
+test('RelayVSR takes its largest X4 source to 2160p', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1344, height: 768 });
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state?.lastVideoProject?.modelId, 'relayvsr_x4_int8_convrot');
+  assert.match(stderr, /output 3780x2160 \(2160p\)/);
+});
+
+test('RelayVSR refuses a source inside the X4 limit whose output would pass 3840', () => {
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 600, height: 1344 });
+  const { exitCode, state, stderr } = runCli(
+    ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
+    { FFPROBE_PATH: fakeFfprobe }
+  );
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /At 2160p this 600×1344 video would be 2160×4838, past the 3840px long-edge upscale output limit/);
+  assert.equal(state?.lastVideoProject, null);
+});
+
 test('RelayVSR defaults to 1440p and takes sources FlashVSR refuses', () => {
   const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1920, height: 1080 });
   const { exitCode, state, stderr } = runCli(['--upscale-video', video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: fakeFfprobe });
@@ -1075,14 +1099,14 @@ test('RelayVSR defaults to 1440p and takes sources FlashVSR refuses', () => {
 });
 
 test('RelayVSR explains a target its tiers cannot reach before upload', () => {
-  const { video, fakeFfprobe } = createVideoUpscaleFixture(VIDEO_UPSCALE_720P_STREAM);
+  const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1600, height: 900 });
   const { exitCode, state, stderr } = runCli(
     ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
     { FFPROBE_PATH: fakeFfprobe }
   );
 
   assert.equal(exitCode, 1);
-  assert.match(stderr, /2160p is more than twice the size of this 1280×720 video/);
+  assert.match(stderr, /2160p is more than twice the size of this 1600×900 video/);
   assert.equal(state?.lastVideoProject, null);
 });
 

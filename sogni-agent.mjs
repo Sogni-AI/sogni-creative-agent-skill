@@ -1605,9 +1605,10 @@ const RELAYVSR_X4_MODEL_ID = 'relayvsr_x4_int8_convrot';
 const VIDEO_UPSCALE_MODELS = ['flashvsr', 'relayvsr'];
 const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
 const RELAYVSR_RESOLUTIONS = [1080, 1440, 2160];
-// Portrait mirrors these. Each tier's limit times its scale is 3840 px, the largest output.
+// Portrait mirrors these.
 const RELAYVSR_X2_SOURCE = { scale: 2, maxShortEdge: 1080, maxLongEdge: 1920 };
-const RELAYVSR_X4_SOURCE = { scale: 4, maxShortEdge: 540, maxLongEdge: 960 };
+const RELAYVSR_X4_SOURCE = { scale: 4, maxShortEdge: 768, maxLongEdge: 1344 };
+const RELAYVSR_MAX_OUTPUT_LONG_EDGE = 3840;
 const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;
 const VIDEO_UPSCALE_MAX_SOURCE_SHORT_EDGE = 768;
 // Source area counted in 64-pixel blocks: about 1344x768, or 768x1344 in portrait.
@@ -1711,12 +1712,14 @@ function relayVsrOutputFor(sourceWidth, sourceHeight, resolution) {
       problem: `${resolution}p is more than twice the size of this ${sourceWidth}×${sourceHeight} video; RelayVSR goes past twice the size only for sources up to ${RELAYVSR_X4_SOURCE.maxLongEdge}×${RELAYVSR_X4_SOURCE.maxShortEdge} pixels, or ${RELAYVSR_X4_SOURCE.maxShortEdge}×${RELAYVSR_X4_SOURCE.maxLongEdge} in portrait.`
     };
   }
-  return {
-    modelId: useX2 ? RELAYVSR_X2_MODEL_ID : RELAYVSR_X4_MODEL_ID,
-    resolution,
-    width: Math.round((sourceWidth * ratio) / 2) * 2,
-    height: Math.round((sourceHeight * ratio) / 2) * 2
-  };
+  const width = Math.round((sourceWidth * ratio) / 2) * 2;
+  const height = Math.round((sourceHeight * ratio) / 2) * 2;
+  if (Math.max(width, height) > RELAYVSR_MAX_OUTPUT_LONG_EDGE) {
+    return {
+      problem: `At ${resolution}p this ${sourceWidth}×${sourceHeight} video would be ${width}×${height}, past the ${RELAYVSR_MAX_OUTPUT_LONG_EDGE}px long-edge upscale output limit.`
+    };
+  }
+  return { modelId: useX2 ? RELAYVSR_X2_MODEL_ID : RELAYVSR_X4_MODEL_ID, resolution, width, height };
 }
 
 // X2 when the target is at most twice the source's short edge, otherwise X4.

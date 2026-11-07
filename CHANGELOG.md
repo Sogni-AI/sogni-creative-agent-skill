@@ -1,3 +1,7 @@
+## [3.66.0] - 2026-11-07
+
+- Select an object across a video from a point, box or text description and download its animated mask with the source frame count and timing. Existing image selection stays available.
+
 ## [3.65.1] - 2026-11-05
 
 - Improve optional inline image previews while keeping full-resolution result links available.

@@ -6877,7 +6877,7 @@ if (options.music) {
 if (!options.video && !options.music && isGptImage2ModelSelection(options.model)) {
   options.model = normalizeGptImageModelAlias(options.model);
   if (options.outputFormat === 'gif') {
-    if (options.contextImages.length || options.imageMask || options.imageMarkupUrl) fatalCliError('GIF output requires text-to-image generation without references, mask or markup.', { code: 'INVALID_ARGUMENT' });
+    if (options.imageMask || options.imageMarkupUrl) fatalCliError('GIF output cannot combine with masks or markup.', { code: 'INVALID_ARGUMENT' });
     try {
       Object.assign(options, gptImageGifDimensions(
         cliSet.width || widthFromConfig || widthFromPrompt ? options.width : undefined,

@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "4.25.5",
+    "@sogni-ai/sogni-intelligence-client": "4.25.6",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.5"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.78.0"
+    "@sogni-ai/sogni-client": "5.79.0"
   }
 }

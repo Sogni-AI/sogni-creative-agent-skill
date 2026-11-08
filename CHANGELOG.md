@@ -1,6 +1,7 @@
 ## [3.66.0] - 2026-11-07
 
 - Select an object across a video from a point, box or text description and download its animated mask with the source frame count and timing. Existing image selection stays available.
+- Animate reference images with GPT Image 2.6 Sunburst or Flare: combine `-c` with `--output-format gif` and describe the motion. GIFs continue to exclude masks and annotations.
 - Use Sogni SDK 5.79.0, intelligence-client 4.25.6 and the synchronized creative-agent 2.29.4 runtime.
 
 ## [3.65.1] - 2026-11-05

@@ -1668,8 +1668,6 @@ initial Flare canaries; inspect native output against a contrasting background.
 
 Select `-m gpt-image-2.6-sunburst` or `-m gpt-image-2.6-flare`; existing image defaults stay the same. Both support the 2.5 still-image controls above, plus `--image-complexity low|medium|high`. Use `--output-format gif` for an animation, `--image-frame-count 2..16` (default 9), and `--image-frame-duration-ms 20..2000` (default 200). Describe the motion in the prompt. GIF sizing depends on the frame count; let the CLI fit a supported sheet and quote the actual settings.
 
-Add up to 16 original still images with `-c` for a reference-guided GIF. Describe the motion and preserve the supplied references in their intended order. GIFs cannot combine with masks or annotation markup.
-
 For a still-image edit, supply the original as the first `-c` reference and its aligned transparent annotation PNG URL with `--image-markup-url`. The marks guide the changes and are separate from an alpha mask. The CLI accepts a prepared annotation image; it has no drawing canvas.
 
 ```bash

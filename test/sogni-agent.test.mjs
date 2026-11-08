@@ -10566,23 +10566,6 @@ for (const model of ['gpt-image-2.6-sunburst', 'gpt-image-2.6-flare']) {
     assert.equal(state.lastImageProject.gptImageFrameDurationMs, 250);
     assert.equal(state.lastImageProject.gptImageComplexity, 'low');
   });
-  test(`GPT Image 2.6 CLI forwards ordered references for ${model} GIF edits`, () => {
-    const { exitCode, state, stderr } = runCli(['-m', model, '--output-format', 'gif', '-c', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE, '--width', '320', '--height', '320', '--image-frame-count', '8', '--image-frame-duration-ms', '250', 'Animate the reference character in a seamless loop.']);
-    assert.equal(exitCode, 0, stderr);
-    assert.equal(state.lastImageProject.modelId, model);
-    assert.equal(state.lastImageProject.outputFormat, 'gif');
-    assert.equal(state.lastImageProject.contextImages.length, 2);
-    assert.equal(state.lastImageProject.gptImageFrameCount, 8);
-    assert.equal(state.lastImageProject.gptImageFrameDurationMs, 250);
-  });
-  for (const extra of [['--image-mask', SCREENSHOT_FIXTURE], ['--image-markup-url', 'https://example.test/markup.png']]) {
-    test(`GPT Image 2.6 CLI refuses ${extra[0]} for ${model} GIF edits`, () => {
-      const { exitCode, state, stderr } = runCli(['-m', model, '--output-format', 'gif', '-c', SCREENSHOT_FIXTURE, ...extra, 'Animate the reference character.']);
-      assert.equal(exitCode, 1);
-      assert.match(stderr, /GIF output cannot combine with masks or markup/);
-      assert.equal(state?.lastImageProject ?? null, null);
-    });
-  }
 }
 test('GPT Image 2.6 CLI chooses a valid default GIF frame size', () => {
   const { exitCode, state, stderr } = runCli(['-m', 'gpt-image-2.6-flare', '--output-format', 'gif', 'A lantern sways in a loop.']);

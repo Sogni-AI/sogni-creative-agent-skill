@@ -20,6 +20,69 @@ Video selection accepts a constant-frame-rate SDR source up to 30 seconds,
 original video at native size, including chunk boundaries and occlusions,
 before using it for compositing or moving hotspot outlines.
 
+### Video selection options (JavaScript SDK only)
+
+`sam3VideoPrompt` has four optional fields. The CLI has no flags for them: do
+not invent any. Send them through the JavaScript SDK (5.80.0 or later) in
+`sam3VideoPrompt`. A prompt without them runs and is priced exactly as before.
+
+- `mask` selects a drawn region instead of text, points or boxes. `polygons`
+  holds 1 to 64 rings of normalized `[x, y]` points (3 to 2048 per ring, 8192
+  per region); a ring inside another ring is a hole. The region starts the
+  tracker on its prompt frame, as a click does, so that frame's mask is the
+  tracker's shape of the region, not the exact drawing. Draw it tight: any
+  background or foreground object inside it stays in the mask for several
+  frames. It cannot be combined with `text`, `points`, `boxes`, `threshold` or
+  `multimask`, and `objectIndex` must be 0 or left out.
+
+  ```json
+  { "frameIndex": 0, "mask": { "polygons": [[[0.42, 0.18], [0.58, 0.18], [0.61, 0.55], [0.39, 0.55]]] } }
+  ```
+
+- `objects` tracks 2 to 16 things together, one selection each, and requires
+  `combine: "union"`. Every output frame is the union of their masks, all
+  selected on the top-level `frameIndex`. Use it for a crowd or several
+  separate things: one selection that covers several similar things settles on
+  just one of them. Top-level selection fields are refused alongside it.
+
+  ```json
+  { "combine": "union", "objects": [
+    { "points": [{ "x": 0.21, "y": 0.48, "label": "positive" }] },
+    { "points": [{ "x": 0.52, "y": 0.45, "label": "positive" }] }
+  ] }
+  ```
+
+- `frames` gives the same selection on 2 to 8 different frames, each entry
+  with its own `frameIndex`. Each output frame follows the nearest prompted
+  frame (ties go to the earlier one). For a loop whose first and last frames
+  are the same still, select the same thing on frame 0 and on the last frame.
+  It cannot be combined with `objects` or with a top-level `frameIndex` or
+  selection.
+
+  ```json
+  { "frames": [
+    { "frameIndex": 0, "points": [{ "x": 0.47, "y": 0.62, "label": "positive" }] },
+    { "frameIndex": 120, "points": [{ "x": 0.47, "y": 0.62, "label": "positive" }] }
+  ] }
+  ```
+
+- `memory` sets how tracking carries between 32-frame chunks. `"chunk"`, the
+  default, starts each chunk from the previous chunk's last mask; an object
+  lost at the end of a chunk is not found again. `"anchor"` starts each chunk
+  again from the prompt frame: errors do not carry over and a lost object can
+  be found again, but the mask can shift where a chunk starts.
+
+  ```json
+  { "text": "unicorn horn", "frameIndex": 127, "memory": "anchor" }
+  ```
+
+A prompt holds at most 16384 region points and 1 MiB in all. Each object after
+the first adds 8% of a one-object job's price; anchor memory adds 1/31;
+`frames` and `mask` add nothing. Pass the job's `sam3VideoPrompt` to
+`estimateVideoCost()` for the quote. These options run on Comfy worker
+1.0.253 or newer; when none is online the request is refused at once with
+error 4044, before any charge.
+
 ## Still-image selection
 
 Use SAM 3 when a task needs an object mask from an existing still, for example

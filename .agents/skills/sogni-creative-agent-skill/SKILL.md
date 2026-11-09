@@ -23,6 +23,7 @@ Generate images, video, and music through Sogni AI's decentralized GPU network.
 For SAM 3 object masks, read [references/object-selection.md](references/object-selection.md).
 Use `--segment` with an original still and normalized points or an object description.
 Use `--segment-video` with a video and `--segment-frame` for the selection's source frame; the result is a lossless mask MP4 with the source's dimensions and timing.
+Drawn regions, several objects in one mask, several prompt frames and tracking memory are JavaScript SDK fields with no CLI flags; the reference shows them.
 
 Invoke `sogni-agent-hermes` for every command in this skill. Fall back to
 `sogni-agent` only when the Hermes launcher is not on `PATH`. The two commands

@@ -298,6 +298,11 @@ and `sam3VideoPrompt`, with normalized points/boxes or a short object descriptio
 `frameIndex` is zero-based and tracking runs in both directions from it.
 Inputs are constant-frame-rate SDR video, up to 30 seconds, 900 frames,
 2560 pixels on either edge and 100 MB. See [object selection](object-selection.md).
+SDK callers can also send the optional `mask` (a drawn region), `objects`
+(2 to 16 things merged into one mask), `frames` (the same selection on 2 to 8
+frames, such as frame 0 and the last frame of a loop) and `memory` fields; the
+CLI has no flags for them. The object-selection reference has examples and
+limits.
 
 ### SAM 3 segmentation (`sam3_image_segment_bf16`)
 

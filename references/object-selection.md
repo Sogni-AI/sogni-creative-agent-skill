@@ -20,14 +20,14 @@ Video selection accepts a constant-frame-rate SDR source up to 30 seconds,
 original video at native size, including chunk boundaries and occlusions,
 before using it for compositing or moving hotspot outlines.
 
-### Video selection options (JavaScript SDK only)
+### Video selection options (SDK only)
 
 `sam3VideoPrompt` has four optional fields. The CLI has no flags for them: do
-not invent any. Send them through the JavaScript SDK (5.80.0 or later) in
-`sam3VideoPrompt`. A prompt without them runs and is priced exactly as before.
+not invent any. Send them through the JavaScript or Python SDK (5.80.0 or
+later) in `sam3VideoPrompt`. A prompt without them runs and is priced exactly as before.
 
 - `mask` selects a drawn region instead of text, points or boxes. `polygons`
-  holds 1 to 64 rings of normalized `[x, y]` points (3 to 2048 per ring, 8192
+  holds 1 to 64 rings of normalized `[x, y]` points (3 to 2048 per ring, 4096
   per region); a ring inside another ring is a hole. The region starts the
   tracker on its prompt frame, as a click does, so that frame's mask is the
   tracker's shape of the region, not the exact drawing. Draw it tight: any
@@ -76,10 +76,11 @@ not invent any. Send them through the JavaScript SDK (5.80.0 or later) in
   { "text": "unicorn horn", "frameIndex": 127, "memory": "anchor" }
   ```
 
-A prompt holds at most 16384 region points and 1 MiB in all. Each object after
-the first adds 8% of a one-object job's price; anchor memory adds 1/31;
-`frames` and `mask` add nothing. Pass the job's `sam3VideoPrompt` to
-`estimateVideoCost()` for the quote. These options run on Comfy worker
+A prompt holds at most 4096 region points across all its objects and frames.
+Each object after the first adds 8% of a one-object job's price; anchor memory
+adds 1/31; `frames` and `mask` add nothing. Pass the job's `sam3VideoPrompt`
+to `estimateVideoCost()` (Python: `sam3_video_prompt` to
+`estimate_video_cost()`) for the quote. These options run on Comfy worker
 1.0.253 or newer; when none is online the request is refused at once with
 error 4044, before any charge.
 

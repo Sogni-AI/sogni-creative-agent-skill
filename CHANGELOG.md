@@ -1,3 +1,8 @@
+## [3.66.1] - 2026-11-10
+
+- Document the SAM 3.1 video selection options for SDK callers: a drawn region, 2 to 16 objects tracked together, the same selection on several frames, and how tracking carries between 32-frame chunks. They need the JavaScript or Python SDK 5.80.0 or later; the CLI has no flags for them.
+- Use Sogni SDK 5.80.0 and intelligence-client 4.26.0.
+
 ## [3.66.0] - 2026-11-07
 
 - Select an object across a video from a point, box or text description and download its animated mask with the source frame count and timing. Existing image selection stays available.

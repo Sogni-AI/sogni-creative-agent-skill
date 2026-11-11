@@ -156,14 +156,15 @@ aligns both output edges to 8px, and returns JPG when the target exceeds 8K.
 
 For a pure resolution increase of a video, call `upscale_video` with
 `sourceVideoIndex` (generated results are 0-based; -1 is the first upload) and
-an optional `targetResolution` of 1080 or 1440. The promptless FlashVSR path
-keeps every frame, the frame rate, the aspect ratio, and the audio; the server
-reads the source metadata itself, so the model never supplies frames or fps.
-FlashVSR cannot produce 4K, and neither upscaler is a substitute for
+explicit `model: "relayvsr"`, recommended for new upscales, and an optional
+`targetResolution` of 1080, 1440 or 2160. The server reads the source metadata;
+the model never supplies frames or fps. Use `model: "flashvsr"` when requested
+or for its `detailPreference`, `processingSpeed` or `seed` controls. Omitting
+`model` retains FlashVSR for compatibility. Neither upscaler is a substitute for
 `video_to_video` when the user asks a generative model such as Seedance to
-re-render the clip. Set `model: "relayvsr"` when the user asks for RelayVSR or
-for 4K or 2160p; `targetResolution` then also takes 2160, and
-`detailPreference`, `processingSpeed`, and `seed` are refused.
+re-render the clip. For 4K or 2160p set `targetResolution: 2160` with RelayVSR;
+FlashVSR stops at 1440p. RelayVSR refuses `detailPreference`, `processingSpeed`
+and `seed`.
 
 ## --durable-chat (`POST /v1/chat/runs`)
 

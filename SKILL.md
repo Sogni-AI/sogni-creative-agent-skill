@@ -167,9 +167,9 @@ sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 4096 -o ./upsc
 sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 7680 -o ./upscaled-8k.png
 sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 15360 -o ./upscaled-16k.jpg
 
-# FlashVSR video upscale (promptless; 1440p by default, 1080p below 720p sources; keeps every frame, fps, audio)
-sogni-agent -q --upscale-video /path/to/clip.mp4 -o ./clip-1440p.mp4
-sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-resolution 1080 -o ./clip-1080p.mp4
+# Recommended RelayVSR video upscale (promptless; preserves source aspect ratio and audio)
+sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-model relayvsr -o ./clip-1440p.mp4
+sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-model relayvsr --upscale-resolution 2160 -o ./clip-4k.mp4
 
 # Photobooth (face transfer — new portrait from a face photo)
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"
@@ -271,8 +271,8 @@ sogni-agent doctor --json
 | `--upscale <path\|url>` | Promptless deterministic RTX VSR upscale | - |
 | `--upscale-scale 2\|3\|4` | Upscale factor when no explicit target is supplied | 2 |
 | `--target-longest-edge <px>` | RTX VSR target longest edge, preserving aspect ratio | 512–15360 box |
-| `--upscale-video <path\|url>` | Promptless FlashVSR video upscale (needs local ffprobe) | - |
-| `--upscale-model flashvsr\|relayvsr` | Video upscaler; relayvsr reaches 2160p | flashvsr |
+| `--upscale-video <path\|url>` | Promptless video upscale (needs local ffprobe) | - |
+| `--upscale-model flashvsr\|relayvsr` | Explicitly choose recommended relayvsr for new upscales | flashvsr (compatibility) |
 | `--upscale-resolution 1080\|1440\|2160` | Upscale output short edge; 2160 needs relayvsr | 1440 (1080 below 720p) |
 | `-m <id>` | Explicit model | `z_image_turbo_bf16` |
 | `-w` / `-h` | Width / height | 512×512 |
@@ -309,7 +309,7 @@ sogni-agent doctor --json
 ### Upscaling vs. generative editing
 
 - For a pure resolution increase that must preserve the source composition, use `--upscale` in direct CLI mode or `upscale_image` on hosted tool surfaces. RTX VSR is deterministic and promptless: never invent a prompt, and never route this request through `restore_photo`, `refine_result`, or `edit_image`.
-- For a pure resolution increase of an existing video (upscale, sharpen, HD/1080p/1440p/2K copy), use `--upscale-video` in direct CLI mode or `upscale_video` on hosted tool surfaces. FlashVSR is promptless and keeps every frame, the frame rate, the aspect ratio, and the audio. Never route it through `video_to_video` or `generate_video` unless the user names a generative model such as Seedance for a re-render. FlashVSR output is 1080p or 1440p only; for 4K or 2160p, or when the user asks for RelayVSR, add `--upscale-model relayvsr` (`model: "relayvsr"` on the hosted tool). FlashVSR sources must be ≤768px on the short edge (1440p needs ≥720px, 1080p ≥540px) and at most about 1344×768 pixels (768×1344 portrait). RelayVSR doubles a source up to 1920×1080 pixels (1080×1920 portrait) or quadruples one up to 1344×768 (768×1344 portrait), so 2160p needs a source short edge of 540-768px or exactly 1080px. It refuses `detailPreference`, `processingSpeed`, and `seed`. Sources must also be 1–60 fps and ≤100 MB. The server sets the maximum clip length; relay its error if a source is too long, without quoting a fixed limit.
+- For a pure resolution increase of an existing video (upscale, sharpen, HD/1080p/1440p/2K copy), use `--upscale-video` in direct CLI mode or `upscale_video` on hosted tool surfaces. FlashVSR is promptless and keeps every frame, the frame rate, the aspect ratio, and the audio. Never route it through `video_to_video` or `generate_video` unless the user names a generative model such as Seedance for a re-render. Explicitly select recommended RelayVSR for new upscales with `--upscale-model relayvsr` (`model: "relayvsr"` on hosted tools). Keep FlashVSR when requested or for its detail, speed or seed controls; omitted model preserves FlashVSR compatibility. FlashVSR stops at 1440p; 4K/2160p uses RelayVSR. FlashVSR sources must be ≤768px on the short edge (1440p needs ≥720px, 1080p ≥540px) and at most about 1344×768 pixels (768×1344 portrait). RelayVSR doubles a source up to 1920×1080 pixels (1080×1920 portrait) or quadruples one up to 1344×768 (768×1344 portrait), so 2160p needs a source short edge of 540-768px or exactly 1080px. It refuses `detailPreference`, `processingSpeed`, and `seed`. Sources must also be 1–60 fps and ≤100 MB. The server sets the maximum clip length; relay its error if a source is too long, without quoting a fixed limit.
 - `--upscale-scale` accepts 2, 3, or 4; `--target-longest-edge` overrides it. The CLI derives an aspect-preserving target box and aligns both edges to the worker's 8-pixel step. Both output edges must remain within 512–15360px. Targets above 7680px use JPG so 16K results remain practical to transfer and display. If a scale would make the short edge smaller than 512px, the CLI reports the minimum valid `--target-longest-edge` instead of stretching the image; aspect ratios that cannot fit the box are rejected.
 
 ### Segmentation and 3D reconstruction

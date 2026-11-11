@@ -121,11 +121,11 @@ fits the result inside the requested box without cropping or stretching. Both
 
 | Model | Kind | Use Case |
 |-------|------|----------|
-| `flashvsr_v1.1_tiny_long_bf16` | Video job | Promptless FlashVSR v1.1 upscale of one finished video to 1080p or 1440p |
-| `relayvsr_x2_lightx2v_int8_convrot` | Video job | Promptless RelayVSR 2x upscale of one finished video to 1080p, 1440p, or 2160p |
+| `relayvsr_x2_lightx2v_int8_convrot` | Video job | Recommended promptless RelayVSR 2x upscale of one finished video to 1080p, 1440p, or 2160p |
 | `relayvsr_x4_int8_convrot` | Video job | Promptless RelayVSR 4x upscale of one finished video to 1080p, 1440p, or 2160p |
+| `flashvsr_v1.1_tiny_long_bf16` | Video job | Alternative FlashVSR v1.1 upscale to 1080p or 1440p; existing callers remain supported |
 
-RelayVSR is opt-in: invoke it with `sogni-agent --upscale-video <path|url>
+RelayVSR is recommended for new upscales. Explicitly invoke it with `sogni-agent --upscale-video <path|url>
 --upscale-model relayvsr` (optionally `--upscale-resolution 1080|1440|2160`), or
 set `model: "relayvsr"` on the hosted `upscale_video` tool. It uses 2x when the
 target is at most twice the source's short edge and 4x otherwise. 2x takes a
@@ -134,10 +134,11 @@ source up to 1920x1080 pixels (1080x1920 in portrait) and 4x one up to 1344x768
 1080px. Frame rate, file size, and format limits match FlashVSR's. It takes no
 `detailPreference`, `processingSpeed`, or `seed`.
 
-FlashVSR is not a generation model. Invoke it with
-`sogni-agent --upscale-video <path|url>` (optionally
+Keep FlashVSR when requested or for its detail, speed or seed controls. Invoke it with
+`sogni-agent --upscale-video <path|url> --upscale-model flashvsr` (optionally
 `--upscale-resolution 1080|1440`), or use the hosted `upscale_video` tool with
-`sourceVideoIndex` and an optional `targetResolution`. The output short edge
+`model: "flashvsr"`, `sourceVideoIndex` and an optional `targetResolution`.
+Omitting the model still uses FlashVSR for compatibility. The output short edge
 becomes 1080 or 1440 (default 1440; 1080 when the source is below 720p) while
 the aspect ratio, every frame, the exact frame rate, and the original audio are
 kept; nothing is trimmed, cropped, restyled, or interpolated. Sources must be

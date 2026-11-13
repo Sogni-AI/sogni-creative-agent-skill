@@ -8059,6 +8059,7 @@ for (const [label, args, projectKey] of [
   ['GPT Image', ['-m', 'gpt-image-2.6-sunburst', 'a duck on a skateboard'], 'lastImageProject'],
   ['Seedance', ['--video', '-m', 'seedance-2-5', 'a cinematic skyline at dusk'], 'lastVideoProject'],
   ['Seedream', ['-m', 'seedream-5-0-pro-uncensored', 'a duck on a skateboard'], 'lastImageProject'],
+  ['Seedream 5.5', ['-m', 'seedream-5-5-uncensored', 'a duck on a skateboard'], 'lastImageProject'],
   ['HappyHorse', ['--video', '-m', 'happyhorse-1.1-t2v', 'a cinematic skyline at dusk'], 'lastVideoProject'],
   ['Wan 3', ['--video', '-m', 'wan3.0-video', 'a cinematic skyline at dusk'], 'lastVideoProject'],
 ]) {
@@ -10365,6 +10366,85 @@ test('Seedream 5.0 Pro Uncensored consent refusal (4103) links its agreement pag
     'Seedream 5.0 Pro Uncensored requires a one-time likeness and consent agreement. Review and accept it in the Sogni app, then try again.');
   assert.equal(payload.metadata.error, 'model_consent_required');
   assert.equal(payload.metadata.consentUrl, 'https://app.sogni.ai/account/model-consents/seedream-5-0-pro-uncensored?account=stub-user');
+});
+
+test('Seedream 5.5 Uncensored is chosen only by its own names; Seedream Uncensored stays on 5.0 Pro', () => {
+  for (const model of ['seedream-5-5-uncensored', 'Seedream 5.5 Uncensored', 'Seedream 5.5', 'seedream_5.5_spicy', 'Seedream 5.5 Spicy']) {
+    const { exitCode, state, stderr } = runCli(['-m', model, '--token-type', 'sogni', 'a neon city at night']);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastImageProject.modelId, 'seedream-5-5-uncensored', model);
+    assert.equal(state.lastImageProject.tokenType, 'spark');
+    assert.equal(state.lastImageProject.width, 1536);
+    assert.equal(state.lastImageProject.height, 1536);
+  }
+  for (const model of ['Seedream Uncensored', 'Seedream 5 Pro Uncensored']) {
+    const { exitCode, state, stderr } = runCli(['-m', model, 'a neon city at night']);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastImageProject.modelId, 'seedream-5-0-pro-uncensored', model);
+  }
+});
+
+test('Seedream 5.5 Uncensored takes its larger native sizes; 5.0 Pro still refuses them', () => {
+  const wide = runCli(['-m', 'seedream-5-5-uncensored', '-w', '2816', '-h', '1584', 'a desert road']);
+  assert.equal(wide.exitCode, 0, wide.stderr);
+  assert.equal(wide.state.lastImageProject.width, 2816);
+  assert.equal(wide.state.lastImageProject.height, 1584);
+  const pro = runCli(['-m', 'seedream-5-0-pro-uncensored', '-w', '2816', '-h', '1584', 'a desert road']);
+  assert.equal(pro.exitCode, 1);
+  assert.match(pro.stderr, /Seedream 5\.0 Pro Uncensored cannot render 2816x1584/);
+  assert.ok(!pro.state?.lastImageProject);
+  for (const size of [['512', '512'], ['2160', '2160'], ['4096', '4096']]) {
+    const { exitCode, state, stderr } = runCli(['-m', 'seedream-5-5-uncensored', '-w', size[0], '-h', size[1], 'a cat']);
+    assert.equal(exitCode, 1, size.join('x'));
+    assert.match(stderr, /Seedream 5\.5 Uncensored cannot render/);
+    assert.match(stderr, /921,600-4,624,220 total pixels/);
+    assert.ok(!state?.lastImageProject);
+  }
+});
+
+test('Seedream 5.5 Uncensored edits take up to ten context images', () => {
+  const { exitCode, state, stderr } = runCli([
+    '-m', 'Seedream 5.5', '--context', SCREENSHOT_FIXTURE, 'Restyle the first image as a film still'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(state.lastEditProject.modelId, 'seedream-5-5-uncensored');
+  assert.equal(state.lastEditProject.contextImages.length, 1);
+  assert.equal(state.lastEditProject.tokenType, 'spark');
+  const eleven = Array.from({ length: 11 }, () => ['--context', SCREENSHOT_FIXTURE]).flat();
+  expectCliError(['-m', 'seedream-5-5-uncensored', ...eleven, 'Combine these'],
+    'supports max 10 context images, got 11');
+});
+
+test('Seedream 5.5 Uncensored consent refusal (4103) links its agreement page and is not retried', () => {
+  const failure = {
+    event: 'PROJECT_FAILED',
+    payload: {
+      code: 4103,
+      message: 'Seedream 5.5 Uncensored requires a one-time likeness and consent agreement. Review and accept it in the Sogni app, then try again.',
+      consentRequired: { key: 'seedance-2-5-uncensored', version: 2, modelId: 'seedream-5-5-uncensored' }
+    }
+  };
+  const { exitCode, stdout } = runCli(['--json', '-m', 'seedream-5-5-uncensored', 'a quiet bookshop'], {
+    SOGNI_AGENT_TEST_FAILURE_EVENT_JSON: JSON.stringify(failure)
+  });
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim().split('\n').pop());
+  assert.equal(payload.errorType, 'PERMISSION_REQUIRED');
+  assert.equal(payload.retryable, false);
+  assert.equal(payload.error,
+    'Seedream 5.5 Uncensored requires a one-time likeness and consent agreement. Review and accept it in the Sogni app, then try again.');
+  assert.equal(payload.metadata.consentUrl, 'https://app.sogni.ai/account/model-consents/seedream-5-5-uncensored?account=stub-user');
+  assert.match(payload.metadata.consentInstructions, /covers Seedream 5\.5 Uncensored, Seedream 5\.0 Pro Uncensored and both Uncensored Seedance models/);
+});
+
+test('--help lists Seedream 5.5 Uncensored after Seedream 5.0 Pro Uncensored', () => {
+  const { exitCode, stdout } = runCli(['--help']);
+  assert.equal(exitCode, 0);
+  const pro = stdout.indexOf('  seedream-5-0-pro-uncensored      Seedream 5.0 Pro Uncensored');
+  const v55 = stdout.indexOf('  seedream-5-5-uncensored          Seedream 5.5 Uncensored');
+  assert.ok(pro >= 0 && v55 > pro);
+  assert.match(stdout, /921,600-4,624,220 pixels up to 16:1/);
+  assert.doesNotMatch(stdout.slice(v55, v55 + 500), /\b4K\b/);
 });
 
 test('Seedance 2.0 Mini Uncensored keeps its own model id with the Seedance 2.0 Mini limits', () => {

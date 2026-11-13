@@ -106,8 +106,9 @@ import {
   gptImageGifDimensions,
   isGptImageModel,
   isKreaIdentityEditModel,
-  // Seedream 5.0 Pro Uncensored: external-API image model (text-to-image and
-  // 1-10 reference edits), Spark only, gated by the Seedance Uncensored agreement.
+  // Seedream 5.0 Pro Uncensored and Seedream 5.5 Uncensored: external-API image
+  // models (text-to-image and 1-10 reference edits), Spark only, gated by the
+  // Seedance Uncensored agreement.
   getSeedreamImageSizeRefusal,
   isSeedreamImageModel,
   normalizeSeedreamModelAlias,
@@ -856,8 +857,8 @@ function classifyCliError(error, context = {}) {
     return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message: rawMessage, retryable: true };
   }
 
-  // Socket 4103: Seedance 2.5 Uncensored, Seedance 2.0 Mini Uncensored and
-  // Seedream 5.0 Pro Uncensored refuse every job until the account accepts their
+  // Socket 4103: Seedance 2.5 Uncensored, Seedance 2.0 Mini Uncensored, Seedream
+  // 5.0 Pro Uncensored and Seedream 5.5 Uncensored refuse every job until the account accepts their
   // shared one-time likeness and consent agreement in the Sogni app. The message
   // names the refused model. It must win over the Seedance failure matchers
   // below, never be retried, and never be accepted by the CLI.
@@ -5840,6 +5841,10 @@ Image Models:
                                      text-to-image and edits (1-10 context images), 921,600-4,194,304 pixels up to 16:1,
                                      default 1536x1536. Use it only when asked for. It shares the Seedance 2.5 Uncensored
                                      likeness agreement (error 4103 until accepted in the Sogni app). Premium Spark only.
+  seedream-5-5-uncensored          Seedream 5.5 Uncensored (also "Seedream 5.5", "Seedream 5.5 Spicy"):
+                                     text-to-image and edits (1-10 context images), 921,600-4,624,220 pixels up to 16:1,
+                                     default 1536x1536. Use it only when asked for by name; "Seedream Uncensored" stays on
+                                     5.0 Pro. Same likeness agreement (error 4103 until accepted). Premium Spark only.
   flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 10 context images)
   krea2_turbo_fp8_scaled          Krea 2 Turbo text-to-image
   moss_image_sft_int8_convrot     MOSS-Image SFT text-to-image (50 steps, no reference editing)
@@ -7150,12 +7155,13 @@ if (!options.video && !options.music && isGptImage2ModelSelection(options.model)
 }
 
 // Seedream 5.0 Pro Uncensored renders 921,600-4,194,304 pixels up to 16:1 and
-// defaults to 1536x1536. Refuse a size the vendor would reject before paying.
+// Seedream 5.5 Uncensored 921,600-4,624,220; both default to 1536x1536. Refuse
+// a size the model's vendor would reject before paying.
 if (!options.video && !options.music && isSeedreamImageModel(normalizeSeedreamModelAlias(options.model))) {
   options.model = normalizeSeedreamModelAlias(options.model);
   if (!cliSet.width && !widthFromConfig && !widthFromPrompt) options.width = SEEDREAM_DEFAULT_WIDTH;
   if (!cliSet.height && !heightFromConfig && !heightFromPrompt) options.height = SEEDREAM_DEFAULT_HEIGHT;
-  const sizeRefusal = getSeedreamImageSizeRefusal(options.width, options.height);
+  const sizeRefusal = getSeedreamImageSizeRefusal(options.width, options.height, options.model);
   if (sizeRefusal) fatalCliError(sizeRefusal, { code: 'INVALID_ARGUMENT' });
   if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 }

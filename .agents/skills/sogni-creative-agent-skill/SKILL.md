@@ -113,6 +113,7 @@ sogni-agent-hermes --speech --speech-voice ryan -o ./speech.wav "Welcome to the 
 sogni-agent-hermes -o ./image.png "cinematic moonlit mountain lake"
 sogni-agent-hermes -c ./source.png -o ./edited.png "make it night; add fireflies"
 sogni-agent-hermes -m seedream-5-0-pro-uncensored -c ./portrait.png -o ./seedream.png "the person in Image 1 on a rooftop at dusk"
+sogni-agent-hermes -m seedream-5-5-uncensored -w 2816 -h 1584 -o ./seedream55.png "a neon street market at night, wide photo"
 
 # Promptless RTX VSR upscale
 sogni-agent-hermes --upscale ./source.png -o ./upscaled.png
@@ -200,7 +201,9 @@ Uncensored (`seedance2-5-uncensored`) has the same limits and Seedance 2.0 Mini
 Uncensored (`seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only
 when asked. Seedream 5.0 Pro Uncensored (`seedream-5-0-pro-uncensored`) makes
 images and edits from 1-10 references, also only when asked, and shares their
-agreement. On error 4103, show the returned `consentUrl` and
+agreement. Seedream 5.5 Uncensored (`seedream-5-5-uncensored`) does the same up
+to 4,624,220 pixels, only when the user names Seedream 5.5 ("Seedream Uncensored"
+stays on 5.0 Pro), under the same agreement. On error 4103, show the returned `consentUrl` and
 `consentInstructions`: sign in with the same account as the agent/API key,
 accept the shared agreement, then return and retry the original request.
 Never accept for the user or retry while acceptance is pending. FastH3 Two-Stage

@@ -11,6 +11,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Quality presets (images)
 - Image models
 - Seedream 5.0 Pro Uncensored
+- Seedream 5.5 Uncensored
 - Utility and 3D models
 - Music models
 - Speech models (and what to do when a cloned line sounds flat)
@@ -89,6 +90,7 @@ dimensions. "high quality" / "best quality" / "pro" â†’ `-Q pro`; quick drafts â
 | `gpt-image-2.6-sunburst` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
 | `gpt-image-2.6-flare` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
 | `seedream-5-0-pro-uncensored` | Slow (~35-95s) | Seedream 5.0 Pro Uncensored: text-to-image and edits from 1-10 context images; only when asked for; needs the Seedance Uncensored likeness agreement |
+| `seedream-5-5-uncensored` | Medium (~15-40s) | Seedream 5.5 Uncensored: text-to-image and edits from 1-10 context images, up to 4,624,220 pixels; only when the user names Seedream 5.5; needs the Seedance Uncensored likeness agreement |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
@@ -287,6 +289,42 @@ render takes about 35-95 seconds.
 ```bash
 sogni-agent -m seedream-5-0-pro-uncensored -c portrait.jpg \
   "the person in Image 1 on a rooftop at dusk, warm city light, 35mm photo"
+```
+
+## Seedream 5.5 Uncensored
+
+`seedream-5-5-uncensored` is **Seedream 5.5 Uncensored**: ByteDance's Seedream
+5.5 image model on the same uncensored account as Seedream 5.0 Pro Uncensored.
+The same id is the CLI `-m` value and the hosted `generate_image` /
+`edit_image` selector. It generates from a prompt alone and edits or composes
+from 1-10 context images (`-c`, repeatable; refer to them as Image 1, Image 2,
+and so on). Output is any size with 921,600-4,624,220 total pixels and an
+aspect ratio up to 16:1. Its native sizes are 1024x1024, 1152x864, 864x1152,
+1424x800, 800x1424, 1248x832, 832x1248, 1568x672 (1K); 1536x1536 (the
+default), 1792x1344, 1344x1792, 2048x1152, 1152x2048, 1872x1248, 1248x1872,
+2352x1008 (1.5K); and 2048x2048, 2368x1776, 1776x2368, 2816x1584, 1584x2816,
+2496x1664, 1664x2496, 3136x1344 (2K). The CLI refuses other sizes before
+submitting. There is no 4K size. It takes no seed, steps, guidance, LoRAs or
+negative prompt.
+
+- **Names**: `-m seedream-5-5-uncensored`, or "Seedream 5.5 Uncensored",
+  "Seedream 5.5" and "Seedream 5.5 Spicy". "Seedream Uncensored" and every other
+  Seedream 5.0 Pro name still select Seedream 5.0 Pro Uncensored.
+- **When to use**: only when the user names Seedream 5.5; never in place of
+  another image model.
+- **Price**: 6 Spark per image up to 2,601,123 pixels (1536x1536) and 10.5
+  Spark per larger image, plus 2.4 Spark for each context image (no context
+  image is included). Premium Spark only; Sogni Unlimited does not cover it.
+- **Likeness and consent agreement**: the same one-time agreement as Seedance
+  2.5 Uncensored and Seedream 5.0 Pro Uncensored. Until the account accepts it
+  every job fails with error `4103`, which the CLI reports as a non-retryable
+  `PERMISSION_REQUIRED` error naming Seedream 5.5 Uncensored. Show the returned
+  clickable `consentUrl` and `consentInstructions`. Never accept for the user or
+  retry while acceptance is pending.
+
+```bash
+sogni-agent -m seedream-5-5-uncensored -w 2816 -h 1584 \
+  "a rain-soaked neon street market at night, wide cinematic photo"
 ```
 
 ## Utility and 3D models
@@ -1606,6 +1644,7 @@ model recommendations.
 | Text-to-image, image-to-image, or edits from up to ten references in one model | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
 | Seedream 5.0 Pro Uncensored images or edits, only when the user asks for it | `seedream-5-0-pro-uncensored` |
+| Seedream 5.5 Uncensored images or edits, only when the user names Seedream 5.5 | `seedream-5-5-uncensored` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Select or cut out an object in an image | `sam3_image_segment_bf16` |
 | Remove a background | `--remove-background original.png` (BiRefNet); add `--matte` for a soft mask |

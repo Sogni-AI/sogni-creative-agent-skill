@@ -210,6 +210,11 @@ retrying.
   or add up to ten `-c <image>` references for edits; 921,600-4,194,304 pixels
   up to 16:1 (default 1536x1536); Premium Spark only; shares the Seedance 2.5
   Uncensored likeness agreement (error 4103 until accepted in the Sogni app).
+- Seedream 5.5 Uncensored, only when the user names Seedream 5.5:
+  `-m seedream-5-5-uncensored` (also "Seedream 5.5", "Seedream 5.5 Spicy";
+  "Seedream Uncensored" stays on 5.0 Pro) for text-to-image, or add up to ten
+  `-c <image>` references for edits; 921,600-4,624,220 pixels up to 16:1
+  (default 1536x1536, no 4K); Premium Spark only; same agreement (error 4103).
 - Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.
 - JSON errors include canonical `errorType`, `errorCategory`, and `retryable`.
 

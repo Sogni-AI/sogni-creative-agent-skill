@@ -2972,6 +2972,95 @@ test('bare MiniMax H3 Balanced selector infers frame modes and accepts explicit 
   assert.equal(r2v.state.lastVideoProject.height, 768);
 });
 
+test('MiniMax H3 Prism resolves to its own reference-to-video id with --no-filter', () => {
+  for (const model of ['minimax-h3-r2v-prism', 'minimax-h3-prism-int8_r2v', 'MINIMAX-H3-R2V-PRISM']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--no-filter', '--duration', '5', '-c', SCREENSHOT_FIXTURE,
+      'Use <Picture 1> for identity.'
+    ]);
+    assert.equal(exitCode, 0, stderr);
+    const project = state.lastVideoProject;
+    assert.equal(project.modelId, 'minimax-h3-prism-int8_r2v', model);
+    assert.equal(project.width, 1344, model);
+    assert.equal(project.height, 768, model);
+    assert.equal(project.frames, 124, model);
+    assert.equal(project.fps, 24, model);
+    // The worker fixes Prism's recipe, as for Balanced: the CLI sends no steps or sampler.
+    assert.equal(project.steps, undefined, model);
+    assert.equal(project.sampler, undefined, model);
+    assert.equal(project.disableNSFWFilter, true, model);
+  }
+  const longest = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--duration', '15', '--ref', SCREENSHOT_FIXTURE,
+    'Use <Picture 1> for identity.'
+  ]);
+  assert.equal(longest.exitCode, 0, longest.stderr);
+  assert.equal(longest.state.lastVideoProject.frames, 362);
+});
+
+test('MiniMax H3 Prism requires --no-filter, from -m and from a configured default', () => {
+  for (const model of ['minimax-h3-r2v-prism', 'minimax-h3-prism-int8_r2v']) {
+    const { exitCode, state, stderr } = runCli(['--video', '-m', model, '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+    assert.equal(exitCode, 1, model);
+    assert.match(stderr, /MiniMax H3 Prism is an opt-in mature-theme model and requires --no-filter/, model);
+    assert.equal(state?.lastVideoProject ?? null, null, model);
+  }
+  const configured = runCli(['--video', 'A quiet room.'], {
+    OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ videoModels: { t2v: 'minimax-h3-prism-int8_r2v' } })
+  });
+  assert.equal(configured.exitCode, 1);
+  assert.match(configured.stderr, /MiniMax H3 Prism requires explicit --no-filter acknowledgement/);
+  assert.equal(configured.state?.lastVideoProject ?? null, null);
+});
+
+test('MiniMax H3 Prism is reference-to-video only: one-stage, no sampler, keyframes allowed', () => {
+  const twoK = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--target-resolution', '2K',
+    '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ]);
+  assert.equal(twoK.exitCode, 1);
+  assert.match(twoK.stderr, /--target-resolution 2K is the MiniMax H3 Two-Stage delivered size/);
+
+  const sampler = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--sampler', 'euler',
+    '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ]);
+  assert.equal(sampler.exitCode, 1);
+  assert.match(sampler.stderr, /--sampler is supported for video only with MiniMax H3 Turbo/);
+
+  const otherWorkflow = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--workflow', 'i2v', '--ref', SCREENSHOT_FIXTURE, 'x'
+  ]);
+  assert.equal(otherWorkflow.exitCode, 1);
+  assert.match(otherWorkflow.stderr, /Workflow "i2v" does not match model "minimax-h3-prism-int8_r2v"/);
+
+  const noReference = runCli(['--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', 'x']);
+  assert.equal(noReference.exitCode, 1);
+  assert.match(noReference.stderr, /needs at least one visual reference/);
+
+  const keyframed = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--duration', '8', '--ref', SCREENSHOT_FIXTURE,
+    '--keyframe', `${SCREENSHOT_FIXTURE}@2.5`, 'Use <Picture 1>; the keyframe is <Picture 2>.'
+  ]);
+  assert.equal(keyframed.exitCode, 0, keyframed.stderr);
+  assert.equal(keyframed.state.lastVideoProject.modelId, 'minimax-h3-prism-int8_r2v');
+  assert.equal(keyframed.state.lastVideoProject.keyframes.length, 1);
+});
+
+test('no family selector or default resolves to MiniMax H3 Prism', () => {
+  for (const [args, expected] of [
+    [['-m', 'minimax-h3', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-fastvideo-omni-int8_r2v_turbo'],
+    [['-m', 'minimax-h3-balanced', '--workflow', 'r2v', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced'],
+    [['-m', 'minimax-h3-r2v-balanced', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced'],
+    [['-m', 'minimax-h3-r2v-balanced', '--no-filter', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced'],
+    [['-m', 'minimax-h3-r2v', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v'],
+  ]) {
+    const { exitCode, state, stderr } = runCli(['--video', ...args, 'Use <Picture 1>.']);
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state.lastVideoProject.modelId, expected, args.join(' '));
+  }
+});
+
 test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
   expectCliError(
     [
@@ -8783,6 +8872,10 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('minimax-h3-r2v'), 'Help should include the MiniMax H3 r2v selector');
   assert.ok(stdout.includes('minimax-h3-t2v-balanced'), 'Help should include the MiniMax H3 Balanced selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-balanced'), 'Help should include the MiniMax H3 Ref2VA Balanced selector');
+  assert.ok(
+    /minimax-h3-r2v-prism\s+Optional Ref2VA model for mature themes[\s\S]{0,160}requires --no-filter/.test(stdout),
+    'Help should list MiniMax H3 Prism with its --no-filter requirement'
+  );
   assert.ok(stdout.includes('minimax-h3-r2v-2stage'), 'Help should include the MiniMax H3 Ref2VA Two-Stage selector');
   assert.ok(stdout.includes('minimax-h3-r2v-balanced-2stage'), 'Help should include the MiniMax H3 Balanced Ref2VA Two-Stage selector');
   assert.ok(stdout.includes('minimax-h3-fasth3-r2v-turbo'), 'Help should include the MiniMax H3 FastH3 Reference selector');

@@ -170,6 +170,39 @@ test('10Eros prompting guidance preserves start-frame and cinematic performance 
   assert.match(text, /Do not\s+emit section labels such as `Performance:` or `Dialogue:`/);
 });
 
+test('MiniMax H3 Prism docs stay discreet and the climax wording stays in the mature reference', () => {
+  const skill = read('SKILL.md');
+  const mature = read('references/private-mature-video.md');
+  assert.match(skill, /Whenever the creator explicitly requests 10Eros or MiniMax H3 Prism/);
+  assert.match(skill, /`minimax-h3-r2v-prism`[^\n]*only when the user picks it or asks for it by name[^\n]*requires `--no-filter`/);
+  for (const docFile of ['references/models.md', 'references/h3-video-loras.md', 'README.md']) {
+    const text = read(docFile);
+    assert.match(text, /minimax-h3-r2v-prism/, `${docFile}: missing the Prism selector`);
+    const row = text.split('\n').find(line => line.includes('minimax-h3-r2v-prism'));
+    assert.ok(row?.includes('--no-filter'), `${docFile}: Prism row must name --no-filter`);
+  }
+  assert.match(mature, /## MiniMax H3 Prism/);
+  assert.match(mature, /--keyframe \.\/climax\.png@/);
+  // Mark, 2026-11-14: the climax wording applies to every model used with the filter off, not only Prism.
+  assert.match(mature, /## Writing a climax\n\nThis applies to every model used with `--no-filter`\./);
+  for (const phrase of [
+    'the very tip of his penis',
+    'a couple of spoonfuls',
+    'mostly see-through with a faint cloudy white tint',
+    'until the first\\s+squirt has visibly left',
+    "the climax keyframe shows at that keyframe's time",
+  ]) {
+    assert.match(mature, new RegExp(phrase), phrase);
+  }
+  for (const color of ['yellow', 'pure white', 'opaque', 'egg']) {
+    assert.doesNotMatch(mature.slice(mature.indexOf('## MiniMax H3 Prism'), mature.indexOf('## Specialized prompt vocabulary')),
+      new RegExp(color, 'i'), `Prism and climax sections must not name ${color}`);
+  }
+  for (const docFile of ['SKILL.md', 'README.md', 'references/models.md', 'references/video-prompting.md', 'references/h3-video-loras.md']) {
+    assert.doesNotMatch(read(docFile), /spoonful|squirt|ejaculat/i, `${docFile}: climax wording belongs only in private-mature-video.md`);
+  }
+});
+
 test('Krea identity routing follows typed shared policy without prose parsing', () => {
   const skill = read('SKILL.md');
   const models = read('references/models.md');

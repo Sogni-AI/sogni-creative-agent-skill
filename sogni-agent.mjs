@@ -3060,6 +3060,7 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_i2v_balanced', 'i2v'],
   ['minimax-h3-fl2va-fp8_flf2v_balanced', 'flf2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v'],
+  ['minimax-h3-prism-int8_r2v', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_2stage', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced_2stage', 'r2v'],
   ['minimax-h3-fastvideo-omni-int8_r2v_turbo', 'r2v'],
@@ -3145,6 +3146,13 @@ const MINIMAX_H3_TURBO_SAMPLER_SET = new Set(MINIMAX_H3_TURBO_SAMPLERS);
 const MINIMAX_H3_R2V_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v';
 const MINIMAX_H3_R2V_TURBO_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_turbo';
 const MINIMAX_H3_R2V_BALANCED_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced';
+// MiniMax H3 Prism: an optional reference-to-video model for mature themes on
+// Balanced R2V's graph, with its recipe fixed in the worker (8 Euler steps), so
+// the CLI sends no steps or sampler, as for Balanced. 768p class only (no
+// two-stage), Balanced's references, keyframes and LoRAs. It requires
+// --no-filter and is never a default, a fallback or what a family alias picks.
+const MINIMAX_H3_R2V_PRISM_MODEL_ID = 'minimax-h3-prism-int8_r2v';
+const MINIMAX_H3_R2V_PRISM_SELECTOR = 'minimax-h3-r2v-prism';
 // Ref2VA Two-Stage: the Standard (20-step) or Balanced (8-step) R2V request on
 // its own id, rendered on the FastH3 Two-Stage canvas (384, 544 or 768 px short
 // edge) and delivered at exactly twice it. Never Turbo; references, durations
@@ -3386,6 +3394,7 @@ function resolveSkillVideoModelAlias(
   if (normalized === 'minimax-h3-r2v-balanced') {
     return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
   }
+  if (normalized === MINIMAX_H3_R2V_PRISM_SELECTOR) return MINIMAX_H3_R2V_PRISM_MODEL_ID;
   if (normalized === 'minimax-h3-r2v-2stage') return MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-fasth3-r2v-turbo') return MINIMAX_H3_FASTH3_R2V_MODEL_ID;
@@ -3455,6 +3464,7 @@ function isMiniMaxH3R2vModel(modelId) {
   return normalized === MINIMAX_H3_R2V_MODEL_ID
     || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
     || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_PRISM_MODEL_ID
     || normalized === MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID
     || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
     || isMiniMaxH3FastH3R2vModel(normalized);
@@ -3470,6 +3480,12 @@ function miniMaxH3R2vTwoStageSelector(modelId) {
     || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized)
     ? 'minimax-h3-r2v-balanced-2stage'
     : 'minimax-h3-r2v-2stage';
+}
+
+// MiniMax H3 Prism by its selector or worker id: the model that needs --no-filter.
+function isMiniMaxH3PrismSelectionLocal(modelId) {
+  const normalized = String(modelId || '').trim().toLowerCase();
+  return normalized === MINIMAX_H3_R2V_PRISM_SELECTOR || normalized === MINIMAX_H3_R2V_PRISM_MODEL_ID;
 }
 
 function isMiniMaxH3R2vTurboSelectionLocal(modelId, workflow = null) {
@@ -3531,6 +3547,7 @@ function isMiniMaxH3ModelSelectionLocal(modelId) {
     || normalized === 'minimax-h3-i2v-balanced'
     || normalized === 'minimax-h3-flf2v-balanced'
     || normalized === 'minimax-h3-r2v-balanced'
+    || normalized === MINIMAX_H3_R2V_PRISM_SELECTOR
     || normalized === 'minimax-h3-r2v-2stage'
     || normalized === 'minimax-h3-r2v-balanced-2stage'
     || normalized === 'minimax-h3-fasth3-r2v-turbo'
@@ -3577,6 +3594,7 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-i2v-balanced') return 'i2v';
   if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
   if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
+  if (normalized === MINIMAX_H3_R2V_PRISM_SELECTOR) return 'r2v';
   if (normalized === 'minimax-h3-r2v-2stage') return 'r2v';
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return 'r2v';
   if (normalized === 'minimax-h3-fasth3-r2v-turbo') return 'r2v';
@@ -5904,6 +5922,8 @@ state negatives in the structured prompt.):
   minimax-h3-i2v-balanced           Balanced I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-balanced         Balanced first-frame -> last-frame (--ref plus --ref-end)
   minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references
+  minimax-h3-r2v-prism              Optional Ref2VA model for mature themes on Balanced's graph: 768p class,
+                                     Balanced's references, keyframes and LoRAs; requires --no-filter
   minimax-h3-r2v-2stage             Ref2VA Two-Stage: the minimax-h3-r2v request (20 steps), delivered at twice the
                                      canvas, 2K by default (1344x768 -> 2688x1536); --target-resolution 1080 or 720
   minimax-h3-r2v-balanced-2stage    Balanced Ref2VA Two-Stage: the minimax-h3-r2v-balanced request (8 steps),
@@ -6410,6 +6430,12 @@ if (options.video) {
       { code: 'INVALID_ARGUMENT' }
     );
   }
+  if (isMiniMaxH3PrismSelectionLocal(options.model) && !options.noFilter) {
+    fatalCliError(
+      'MiniMax H3 Prism is an opt-in mature-theme model and requires --no-filter.',
+      { code: 'INVALID_ARGUMENT' }
+    );
+  }
 }
 
 if (options.loraStrengths.length > 0 && options.loras.length === 0) {
@@ -6896,6 +6922,15 @@ if (options.music) {
     options.model = LTX23_WORKFLOW_MODELS[options.videoWorkflow];
   }
   options.model = resolveVideoModelAlias(options.model, options.videoWorkflow);
+  // A configured default (OpenClaw videoModels) reaches here without the -m
+  // check above, so Prism's --no-filter requirement is checked again.
+  if (isMiniMaxH3PrismSelectionLocal(options.model) && !options.noFilter) {
+    fatalCliError('MiniMax H3 Prism requires explicit --no-filter acknowledgement.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model, requiredFlag: '--no-filter' },
+      hint: 'Retry with --video -m minimax-h3-r2v-prism --ref <image> --no-filter'
+    });
+  }
   try {
     await loadLiveModelDefaults(options.model);
   } catch (error) {

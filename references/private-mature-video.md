@@ -76,6 +76,61 @@ or `1080`. Seedance bills premium per-second rates from Premium Spark, which
 no Unlimited plan covers. Use `--estimate-video-cost` with the intended
 settings before rendering.
 
+## MiniMax H3 Prism
+
+`minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`) is a community
+merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
+more realistically. Use it only when the creator picks it or asks for it by
+name, never as a default or a fallback; it requires `--no-filter`. It takes
+Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
+files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
+prompt contract. It renders the 768p class only (1344×768 by default,
+5.17-15.08 s, no Two-Stage) on a recipe fixed in the worker, so pass no
+`--sampler`. It bills Balanced R2V's per-second rate; quote it with
+`--estimate-video-cost`.
+
+Its climax only works with a still of the climax pinned as a keyframe. Draw
+that still first (see the Seedance section above for drawing an explicit
+still), then pin it at the moment it shows with `--keyframe <image>@<seconds>`.
+Given only as a plain reference, the same still renders far worse. A keyframe is not a
+reference: it is the next `<Picture N>` after the reference images, and the
+prompt names it in the Ref2VA keyframe format (its picture entry, the
+`keyframe completion` task, its retention line; see
+[Intermediate keyframes](./video-prompting.md#intermediate-keyframes)).
+
+```bash
+sogni-agent --video -m minimax-h3-r2v-prism --no-filter \
+  --ref ./identity-woman.png -c ./identity-man.png \
+  --keyframe ./climax.png@6.5 --duration 8 \
+  -o ./scene.mp4 "<six-field Ref2VA prompt>"
+```
+
+## Writing a climax
+
+This applies to every model used with `--no-filter`. When the request includes
+ejaculation, keep the creator's own amount, look and framing, and otherwise
+write it like this:
+
+- Write it as visible pulses: his penis throbs with each pulse, and each pulse
+  pushes a short squirt out of the very tip of his penis, travelling the way the
+  penis points. A few short squirts with a brief gap between them, each weaker
+  than the one before, then a last drop at the tip. Each squirt is small and
+  does not carry far; never one continuous stream or a long jet.
+- Keep the amount realistic, about a couple of spoonfuls in all. Drips on the
+  chin or chest are fine.
+- Describe the fluid by its properties: thin, watery, slippery, slightly
+  stringy, mostly see-through with a faint cloudy white tint. Never name a
+  color it should not be (naming one made the model render it) and never
+  compare it to food.
+- Nothing appears on anyone's mouth, tongue, face or skin until the first
+  squirt has visibly left the very tip of his penis; the fluid shows up only
+  where a squirt lands.
+- Use the plain words a person would write, such as "the very tip of his penis"
+  or "the small opening at the tip", never "the tip of the glans" or "a thick
+  rope".
+- With a climax keyframe (on MiniMax H3 Prism, for example), place the squirt
+  the climax keyframe shows at that keyframe's time, in the shot on screen then.
+
 ## Specialized prompt vocabulary
 
 The LoRA is one multi-concept adapter. Each token selects an action concept:

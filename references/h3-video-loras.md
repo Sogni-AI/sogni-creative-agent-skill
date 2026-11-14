@@ -26,6 +26,7 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | Image-to-video | `-m minimax-h3-i2v` (`-turbo`) | `minimax-h3-fl2va-fp8_i2v` |
 | First+last frame | `-m minimax-h3-flf2v` (`-turbo`) | `minimax-h3-fl2va-fp8_flf2v` |
 | Balanced reference-to-video (default) | `-m minimax-h3-r2v-balanced` | `minimax-h3-ref2va-fp8_r2v_balanced` |
+| Prism reference-to-video (optional, mature themes; `--no-filter`) | `-m minimax-h3-r2v-prism` | `minimax-h3-prism-int8_r2v` |
 | Standard reference-to-video (explicit choice) | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
 | FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
 | FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |

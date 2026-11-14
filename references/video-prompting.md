@@ -244,7 +244,8 @@ Applies to Standard `minimax-h3` / `minimax-h3-t2v`, `minimax-h3-i2v` for both
 opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 8-step
 Balanced `*-balanced` and 4-step Turbo `*-turbo` variants; and—with its own
 six-field contract—to `minimax-h3-r2v`, `minimax-h3-r2v-balanced`,
-`minimax-h3-r2v-turbo`, and FastH3 Reference `minimax-h3-fasth3-r2v-turbo`. The
+`minimax-h3-r2v-turbo`, and FastH3 Reference `minimax-h3-fasth3-r2v-turbo`
+(the optional `minimax-h3-r2v-prism` writes Balanced's Ref2VA contract too). The
 exact FL2VA worker ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an
 optional `_balanced` or `_turbo` suffix; Ref2VA uses `minimax-h3-ref2va-fp8_r2v`
 with the same tier suffixes, and FastH3 Reference uses

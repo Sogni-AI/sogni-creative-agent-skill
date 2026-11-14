@@ -1193,7 +1193,7 @@ test('FlashVSR refuses sources outside the public limits before upload', () => {
 
 });
 
-test('--upscale-video leaves a source the server conforms for it to settle', () => {
+test('RelayVSR leaves a source the server conforms for it to settle', () => {
   const even = Array.from({ length: 124 }, (_, index) => ({ best_effort_timestamp_time: (index / 24).toFixed(6) }));
   const uneven = even.map(({ best_effort_timestamp_time: time }, index) => ({
     best_effort_timestamp_time: (Number(time) + (index % 2) * 0.01).toFixed(6)
@@ -1207,32 +1207,57 @@ test('--upscale-video leaves a source the server conforms for it to settle', () 
   ];
   for (const [name, stream, frames] of cases) {
     const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, ...stream }, { frames });
-    const { exitCode, state, stderr } = runCli(['--upscale-video', video], { FFPROBE_PATH: fakeFfprobe });
+    const { exitCode, state, stderr } = runCli(['--upscale-video', video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: fakeFfprobe });
     assert.equal(exitCode, 0, `${name}: ${stderr}`);
     assert.equal(state.lastVideoProject.frames, undefined, name);
     assert.equal(state.lastVideoProject.fps, undefined, name);
   }
 });
 
-test('--upscale-video sizes a rotated or non-square source as it plays', () => {
+test('RelayVSR sizes a rotated or non-square source as it plays', () => {
   const rotated = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, side_data_list: [{ rotation: 90 }] });
-  assert.match(runCli(['--upscale-video', rotated.video], { FFPROBE_PATH: rotated.fakeFfprobe }).stderr, /Source 720x1280, .*output 1440x2560 \(1440p\)/);
+  assert.match(runCli(['--upscale-video', rotated.video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: rotated.fakeFfprobe }).stderr, /Source 720x1280, .*output 1440x2560 \(1440p\)/);
   const wide = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 960, sample_aspect_ratio: '4:3' });
-  assert.match(runCli(['--upscale-video', wide.video], { FFPROBE_PATH: wide.fakeFfprobe }).stderr, /Source 1280x720, /);
+  assert.match(runCli(['--upscale-video', wide.video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: wide.fakeFfprobe }).stderr, /Source 1280x720, /);
 });
 
-test('--upscale-video still refuses HDR and an even clip outside 1-60 fps', () => {
+test('RelayVSR still refuses HDR and an even clip outside 1-60 fps', () => {
   const hdr = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, color_transfer: 'smpte2084', side_data_list: [{ rotation: 90 }] });
-  const hdrResult = runCli(['--json', '--upscale-video', hdr.video], { FFPROBE_PATH: hdr.fakeFfprobe });
+  const hdrResult = runCli(['--json', '--upscale-video', hdr.video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: hdr.fakeFfprobe });
   assert.equal(hdrResult.exitCode, 1);
   assert.match(JSON.parse(hdrResult.stdout).error, /Convert HDR video to SDR/);
   const fast = createVideoUpscaleFixture(
     { ...VIDEO_UPSCALE_720P_STREAM, avg_frame_rate: '120/1', r_frame_rate: '120/1' },
     { frames: Array.from({ length: 158 }, (_, index) => ({ best_effort_timestamp_time: (index / 120).toFixed(6) })) }
   );
-  const fastResult = runCli(['--json', '--upscale-video', fast.video], { FFPROBE_PATH: fast.fakeFfprobe });
+  const fastResult = runCli(['--json', '--upscale-video', fast.video, '--upscale-model', 'relayvsr'], { FFPROBE_PATH: fast.fakeFfprobe });
   assert.equal(fastResult.exitCode, 1);
   assert.match(JSON.parse(fastResult.stdout).error, /This video runs at 120 fps/);
+});
+
+// FlashVSR and SAM 3 video keep 3.66.1's local refusals: only RelayVSR sources are conformed
+// by the server (sogni-api 749384bb), so these clips never upload on those paths.
+test('FlashVSR and --segment-video refuse rotated, non-square and off-range fps clips as before', () => {
+  const cases = [
+    ['a rotated clip', { side_data_list: [{ rotation: 90 }] }, 'Export the video with square pixels and its rotation applied before upscaling.'],
+    ['a non-square clip', { width: 960, sample_aspect_ratio: '4:3' }, 'Export the video with square pixels and its rotation applied before upscaling.'],
+    ['an off-range fps clip', { avg_frame_rate: '120/1', r_frame_rate: '120/1' }, 'This video runs at 120 fps; video upscaling accepts 1-60 fps.'],
+  ];
+  const paths = [
+    ['FlashVSR', (video) => ['--json', '--upscale-video', video]],
+    ['--segment-video', (video) => ['--json', '--segment-video', video, '--segment-text', 'horn']],
+  ];
+  for (const [label, args] of paths) {
+    for (const [name, stream, message] of cases) {
+      const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, ...stream });
+      const { exitCode, stdout, state } = runCli(args(video), { FFPROBE_PATH: fakeFfprobe });
+      assert.equal(exitCode, 1, `${label}, ${name}`);
+      const payload = JSON.parse(stdout.trim());
+      assert.equal(payload.error, message, `${label}, ${name}`);
+      assert.equal(payload.errorCode, 'INVALID_UPSCALE_SOURCE', `${label}, ${name}`);
+      assert.equal(state?.lastVideoProject ?? null, null, `${label}, ${name}`);
+    }
+  }
 });
 
 test('FlashVSR submits exact clip timing without a fixed local length limit', () => {

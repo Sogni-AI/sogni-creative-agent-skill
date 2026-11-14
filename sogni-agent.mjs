@@ -1747,12 +1747,94 @@ function resolveRelayVsrOutput(sourceWidth, sourceHeight, requestedResolution = 
   });
 }
 
-// Read the source geometry, frame count, and frame rate with ffprobe so the
-// request matches what the server verifies after upload. The server conforms a
-// clip that is off its average cadence, rotated, or not square-pixel, so its
-// timing is the server's to settle: `conform` marks those, and the size is the
-// upright picture the server judges.
+// Read the exact source geometry, frame count, and frame rate with ffprobe so
+// the request matches what the server verifies after upload.
 async function probeVideoUpscaleSource(buffer, sourceLabel) {
+  if (buffer.length > VIDEO_UPSCALE_MAX_BYTES) {
+    fatalCliError('Video upscaling accepts source files up to 100 MB.', {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { sizeBytes: buffer.length, maxBytes: VIDEO_UPSCALE_MAX_BYTES }
+    });
+  }
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
+  const tempDir = createTrackedTempDir('sogni-video-upscale-probe-');
+  const inputPath = mediaTempInputPath(tempDir, sourceLabel, '.mp4');
+  let result;
+  try {
+    writeFileSync(inputPath, buffer);
+    result = await runCommand(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-count_frames',
+      '-show_entries',
+      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation',
+      '-of', 'json',
+      inputPath,
+    ], { captureOutput: true });
+  } finally {
+    try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
+    try { rmdirSync(tempDir); } catch {}
+  }
+  // A signal means ffprobe started and then crashed on this file; that is
+  // reported with the unreadable-source error below, not as a missing ffprobe.
+  if (result?.error && result.status === null && !result.error.signal) {
+    const err = new Error(`ffprobe is required for --upscale-video, but "${ffprobePath}" could not be started (${result.error.code}).`);
+    err.code = 'MISSING_FFPROBE';
+    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary. If ffprobe runs in your shell, set FFPROBE_PATH to the full path from `command -v ffprobe`.';
+    err.details = { ffprobePath, reason: result.error.code };
+    throw err;
+  }
+  let stream = null;
+  try {
+    stream = JSON.parse(result?.stdout || '{}')?.streams?.[0] ?? null;
+  } catch {
+    stream = null;
+  }
+  const width = Number(stream?.width);
+  const height = Number(stream?.height);
+  const frames = Number(stream?.nb_read_frames);
+  const fps = parseFrameRate(stream?.avg_frame_rate);
+  if (result?.status !== 0 || ![width, height, frames].every((value) => Number.isSafeInteger(value) && value > 0) || !fps) {
+    // -count_frames decodes every frame, so a damaged file can print an error
+    // per frame; keep the tail, where ffprobe names the file-level failure.
+    // ffprobe names the temporary copy, so show the user's source instead.
+    const ffprobeError = [
+      String(result?.stderr || '').split(inputPath).join(sourceLabel).trim().slice(-500),
+      result?.error?.signal ? `ffprobe was stopped by ${result.error.signal}.` : '',
+    ].filter(Boolean).join('\n');
+    fatalCliError('The source video dimensions, frame count, or frame rate could not be read. Use an MP4 or MOV file of 100 MB or less.', {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { source: sourceLabel, ...(ffprobeError ? { ffprobeError } : {}) },
+      ...(ffprobeError ? { hint: `ffprobe reported: ${ffprobeError.split('\n').at(-1).trim()}` } : {})
+    });
+  }
+  if (fps < VIDEO_UPSCALE_MIN_FPS || fps > VIDEO_UPSCALE_MAX_FPS) {
+    fatalCliError(`This video runs at ${Number(fps.toFixed(3))} fps; video upscaling accepts ${VIDEO_UPSCALE_MIN_FPS}-${VIDEO_UPSCALE_MAX_FPS} fps.`, {
+      code: 'INVALID_UPSCALE_SOURCE',
+      details: { fps }
+    });
+  }
+  // The server owns the maximum clip length; submit the exact source count.
+  const rotated = Array.isArray(stream?.side_data_list)
+    && stream.side_data_list.some((item) => Number(item?.rotation || 0) % 360 !== 0);
+  if (!['1:1', 'N/A', undefined].includes(stream?.sample_aspect_ratio) || rotated) {
+    fatalCliError('Export the video with square pixels and its rotation applied before upscaling.', {
+      code: 'INVALID_UPSCALE_SOURCE'
+    });
+  }
+  if (['smpte2084', 'arib-std-b67'].includes(stream?.color_transfer ?? '')) {
+    fatalCliError('Convert HDR video to SDR before upscaling.', { code: 'INVALID_UPSCALE_SOURCE' });
+  }
+  return { width, height, frames, fps, sizeBytes: buffer.length };
+}
+
+// RelayVSR only (--upscale-model relayvsr): read the source geometry, frame
+// count, and frame rate with ffprobe so the request matches what the server
+// verifies after upload. The server conforms a RelayVSR clip that is off its
+// average cadence, rotated, or not square-pixel, so its timing is the server's
+// to settle: `conform` marks those, and the size is the upright picture the
+// server judges. FlashVSR and --segment-video keep probeVideoUpscaleSource.
+async function probeConformedVideoUpscaleSource(buffer, sourceLabel) {
   if (buffer.length > VIDEO_UPSCALE_MAX_BYTES) {
     fatalCliError('Video upscaling accepts source files up to 100 MB.', {
       code: 'INVALID_UPSCALE_SOURCE',
@@ -16276,7 +16358,9 @@ async function main() {
       const relayVsr = options.upscaleModel === 'relayvsr';
       log(`Upscaling video with ${relayVsr ? 'RelayVSR' : FLASHVSR_MODEL_ID}...`);
       const sourceBuffer = await fetchMediaBuffer(options.upscaleVideo);
-      const source = await probeVideoUpscaleSource(sourceBuffer, options.upscaleVideo);
+      const source = relayVsr
+        ? await probeConformedVideoUpscaleSource(sourceBuffer, options.upscaleVideo)
+        : await probeVideoUpscaleSource(sourceBuffer, options.upscaleVideo);
       const target = relayVsr
         ? resolveRelayVsrOutput(source.width, source.height, options.upscaleResolution)
         : resolveVideoUpscaleOutput(source.width, source.height, options.upscaleResolution);

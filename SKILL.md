@@ -168,8 +168,7 @@ sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 7680 -o ./upsc
 sogni-agent -q --upscale /path/to/input.jpg --target-longest-edge 15360 -o ./upscaled-16k.jpg
 
 # Recommended RelayVSR video upscale (promptless; preserves source aspect ratio and audio)
-sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-model relayvsr -o ./clip-1440p.mp4
-sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-model relayvsr --upscale-resolution 2160 -o ./clip-4k.mp4
+sogni-agent -q --upscale-video /path/to/clip.mp4 --upscale-model relayvsr -o ./clip-1440p.mp4  # add --upscale-resolution 2160 for 4K
 
 # Photobooth (face transfer — new portrait from a face photo)
 sogni-agent -q --photobooth --ref /path/to/face.jpg -o ./stylized.png "80s fashion portrait"

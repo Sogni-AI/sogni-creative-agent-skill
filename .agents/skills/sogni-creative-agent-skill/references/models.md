@@ -131,7 +131,9 @@ set `model: "relayvsr"` on the hosted `upscale_video` tool. It uses 2x when the
 target is at most twice the source's short edge and 4x otherwise. 2x takes a
 source up to 1920x1080 pixels (1080x1920 in portrait) and 4x one up to 1344x768
 (768x1344 in portrait), so 2160p needs a source short edge of 540-768px or exactly
-1080px. Frame rate, file size, and format limits match FlashVSR's. It takes no
+1080px. It takes 1-60 fps, SDR, and 100 MB or less. Variable-frame-rate, rotated
+and non-square-pixel clips need no re-export: the server conforms them, and
+every limit applies to the clip as it plays. It takes no
 `detailPreference`, `processingSpeed`, or `seed`.
 
 Keep FlashVSR when requested or for its detail, speed or seed controls. Invoke it with
@@ -143,10 +145,9 @@ becomes 1080 or 1440 (default 1440; 1080 when the source is below 720p) while
 the aspect ratio, every frame, the exact frame rate, and the original audio are
 kept; nothing is trimmed, cropped, restyled, or interpolated. Sources must be
 at most 768px on the short edge and about 1344x768 pixels overall (768x1344 in
-portrait), 1-60 fps, SDR, and 100 MB or less; 1440p needs a source short edge of
-at least 720px and 1080p at least 540px. 4K is not available. Variable-frame-rate,
-rotated and non-square-pixel clips need no re-export: the server conforms them,
-and every limit applies to the clip as it plays. The direct CLI reads the source
+portrait), 1-60 fps at a constant frame rate, SDR with square pixels and any
+rotation applied, and 100 MB or less; 1440p needs a source short edge of
+at least 720px and 1080p at least 540px. 4K is not available. The direct CLI reads the source
 with a local ffprobe. The server sets the
 maximum clip length; do not quote a fixed limit. Relay a server rejection if
 the source is too long, without trimming it or switching to a generative tool.

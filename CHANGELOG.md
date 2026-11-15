@@ -1,3 +1,10 @@
+## [3.67.0] - 2026-11-14
+
+- Upscale videos with RelayVSR in `--upscale-video`: 2× and 4× models up to 2160p, recommended for new upscales. Without a model, upscales still use FlashVSR.
+- Use `minimax-h3-r2v-prism`, an opt-in MiniMax H3 reference-to-video model that requires `--no-filter`.
+- Refresh prompt guidance in an existing reference doc.
+- Use Sogni SDK 5.84.0, intelligence-client 4.29.0 and the synchronized creative-agent 2.32.0 runtime.
+
 ## [3.66.1] - 2026-11-10
 
 - Document the SAM 3.1 video selection options for SDK callers: a drawn region, 2 to 16 objects tracked together, the same selection on several frames, and how tracking carries between 32-frame chunks. They need the JavaScript or Python SDK 5.80.0 or later; the CLI has no flags for them.

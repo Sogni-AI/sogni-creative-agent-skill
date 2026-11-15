@@ -1098,6 +1098,36 @@ test('RelayVSR defaults to 1440p and takes sources FlashVSR refuses', () => {
   assert.equal(state?.lastVideoProject?.upscaleResolution, 1440);
 });
 
+test('RelayVSR X2 takes a 1920x1088 two-stage render to 2160p and 1440p, in either orientation', () => {
+  for (const [width, height, resolution, output] of [
+    [1920, 1088, '2160', '3812x2160 (2160p)'],
+    [1920, 1088, '1440', '2542x1440 (1440p)'],
+    [1088, 1920, '2160', '2160x3812 (2160p)'],
+  ]) {
+    const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width, height });
+    const { exitCode, state, stderr } = runCli(
+      ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', resolution],
+      { FFPROBE_PATH: fakeFfprobe }
+    );
+    assert.equal(exitCode, 0, stderr);
+    assert.equal(state?.lastVideoProject?.modelId, 'relayvsr_x2_lightx2v_int8_convrot');
+    assert.ok(stderr.includes(`output ${output}`), stderr);
+  }
+});
+
+test('RelayVSR refuses a source past 1920x1088 before upload', () => {
+  for (const [width, height] of [[1920, 1090], [1090, 1920], [1922, 1080]]) {
+    const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width, height });
+    const { exitCode, state, stderr } = runCli(
+      ['--upscale-video', video, '--upscale-model', 'relayvsr', '--upscale-resolution', '2160'],
+      { FFPROBE_PATH: fakeFfprobe }
+    );
+    assert.equal(exitCode, 1);
+    assert.ok(stderr.includes(`This video is ${width}×${height}; RelayVSR accepts sources up to 1920×1088 pixels, or 1088×1920 in portrait.`), stderr);
+    assert.equal(state?.lastVideoProject, null);
+  }
+});
+
 test('RelayVSR explains a target its tiers cannot reach before upload', () => {
   const { video, fakeFfprobe } = createVideoUpscaleFixture({ ...VIDEO_UPSCALE_720P_STREAM, width: 1600, height: 900 });
   const { exitCode, state, stderr } = runCli(

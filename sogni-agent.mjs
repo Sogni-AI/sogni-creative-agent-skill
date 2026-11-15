@@ -1605,8 +1605,9 @@ const RELAYVSR_X4_MODEL_ID = 'relayvsr_x4_int8_convrot';
 const VIDEO_UPSCALE_MODELS = ['flashvsr', 'relayvsr'];
 const VIDEO_UPSCALE_RESOLUTIONS = [1080, 1440];
 const RELAYVSR_RESOLUTIONS = [1080, 1440, 2160];
-// Portrait mirrors these.
-const RELAYVSR_X2_SOURCE = { scale: 2, maxShortEdge: 1080, maxLongEdge: 1920 };
+// Portrait mirrors these. X2's 1088 short edge admits 1920x1088 renders
+// (two-stage 1080p MiniMax H3, LTX 2.5 1080p).
+const RELAYVSR_X2_SOURCE = { scale: 2, maxShortEdge: 1088, maxLongEdge: 1920 };
 const RELAYVSR_X4_SOURCE = { scale: 4, maxShortEdge: 768, maxLongEdge: 1344 };
 const RELAYVSR_MAX_OUTPUT_LONG_EDGE = 3840;
 const VIDEO_UPSCALE_DEFAULT_RESOLUTION = 1440;

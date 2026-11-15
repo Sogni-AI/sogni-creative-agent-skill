@@ -1,3 +1,7 @@
+## [3.68.1] - 2026-11-15
+
+- Use Sogni SDK 5.84.1, intelligence-client 4.30.1 and the synchronized creative-agent 2.34.1 runtime.
+
 ## [3.68.0] - 2026-11-15
 
 - Upscale 1920×1088 videos, such as two-stage 1080p MiniMax H3 and LTX 2.5 1080p renders, with RelayVSR in `--upscale-video`: they reach 1440p or 4K (3812×2160). They were refused before.

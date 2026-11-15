@@ -1,3 +1,7 @@
+## [3.68.0] - 2026-11-15
+
+- Upscale 1920×1088 videos, such as two-stage 1080p MiniMax H3 and LTX 2.5 1080p renders, with RelayVSR in `--upscale-video`: they reach 1440p or 4K (3812×2160). They were refused before.
+
 ## [3.67.0] - 2026-11-14
 
 - Upscale videos with RelayVSR in `--upscale-video`: 2× and 4× models up to 2160p, recommended for new upscales. Without a model, upscales still use FlashVSR.

@@ -80,8 +80,12 @@ settings before rendering.
 
 `minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`) is a community
 merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
-more realistically. Use it only when the creator picks it or asks for it by
-name, never as a default or a fallback; it requires `--no-filter`. It takes
+more realistically, the most consistent MiniMax H3 model for mature themes.
+For a lawful adult reference-to-video request on MiniMax H3, use it instead of
+Balanced R2V unless the creator names another tier or asks for 1080p or 2K
+(then use `minimax-h3-r2v-balanced-2stage`). Otherwise use it only when the
+creator picks it or asks for it by name, never as a fallback for other work;
+it requires `--no-filter`. It takes
 Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
 files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
 prompt contract. It renders the 768p class only (1344×768 by default,

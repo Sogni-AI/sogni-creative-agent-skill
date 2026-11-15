@@ -1156,8 +1156,9 @@ is an optional reference-to-video model for mature themes. It runs Balanced
 R2V's graph with a fixed recipe (8 Euler steps; no `--sampler`, steps or
 scheduler), takes Balanced R2V's references, keyframes and prompt contract, and
 renders the 768p class only (1344×768 by default, 5.17-15.08 s, no Two-Stage).
-It requires `--no-filter`, is never inferred or picked as a default, and is
-used only when the user picks it or asks for it by name; see
+It requires `--no-filter` and is never a general default: it is used when the
+user picks it or asks for it by name, or for a lawful adult reference-to-video
+request, where it is the most consistent MiniMax H3 model; see
 [private mature-theme video](./private-mature-video.md#minimax-h3-prism).
 
 | Model | Mode | Use Case |
@@ -1622,7 +1623,7 @@ model recommendations.
 | Audio-to-video | `ltx25-a2v` |
 | Video-to-video with ControlNet/edit templates | `ltx25-v2v` |
 | Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
-| Optional mature-theme reference-to-video, only when the user picks it or asks for it | `minimax-h3-r2v-prism` with `--no-filter` |
+| Mature-theme reference-to-video, for an adult request or when the user names it (the most consistent MiniMax H3 model for it) | `minimax-h3-r2v-prism` with `--no-filter` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p/1080p, MP4/MOV and last-frame export) | `seedance2-5` |

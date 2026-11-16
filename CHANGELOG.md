@@ -1,3 +1,7 @@
+## [3.69.0] - 2026-11-16
+
+- Generate and edit images with Seedream 5.5 Uncensored by asking for it with `-m seedream-5-5-uncensored` or "Seedream 5.5". It takes sizes up to about 4.6 megapixels, such as 2816×1584, and up to 10 reference images for edits. "Seedream Uncensored" still selects Seedream 5.0 Pro.
+
 ## [3.68.1] - 2026-11-15
 
 - The bundled `upscale_video` tool now tells agents that RelayVSR 2× takes sources up to 1920×1088 (1088×1920 in portrait), matching `--upscale-video` in 3.68.0.

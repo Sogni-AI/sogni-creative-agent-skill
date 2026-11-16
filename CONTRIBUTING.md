@@ -92,7 +92,7 @@ commits `package.json` + `CHANGELOG.md` â€” you must still run `sync:version` â€
 and it will version from conventional-commit history, so coordinate first.)
 
 1. Ensure the private sibling repo is checked out and current; run `npm test` (offline). Reuse valid results for the same source. A remaining live-test need requires separate spending authorization and a bounded plan; release approval does not authorize it.
-2. Update `CHANGELOG.md` with a new `## [x.y.z] - YYYY-MM-DD` section.
+2. Update `CHANGELOG.md` with a new `## [x.y.z] - YYYY-MM-DD` section. Its first bullet is what the Sogni changelog (sogni.ai/changelog), its daily email and its Discord post show for the release, so say there what a user can do now or what stopped failing. Put dependency versions in the last bullet and name only published packages (the Sogni SDK and intelligence-client). When a release changes nothing a user would notice, such as a dependency sync, add `<!-- changelog: skip -->` to its GitHub release notes in step 9 so it gets no changelog entry.
 3. Bump the version: edit `package.json`, then `npm run sync:version`, then `npm install --package-lock-only`.
 4. Commit `chore(release): prepare skill x.y.z update` and push the release commit. Do not tag an unpublished build.
 5. Publish with `npm publish` (prepack enforces the strict private-source + runtime-freshness gates).

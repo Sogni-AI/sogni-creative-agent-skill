@@ -1,6 +1,7 @@
 ## [3.68.1] - 2026-11-15
 
-- Use Sogni SDK 5.84.1, intelligence-client 4.30.1 and the synchronized creative-agent 2.34.1 runtime.
+- The bundled `upscale_video` tool now tells agents that RelayVSR 2× takes sources up to 1920×1088 (1088×1920 in portrait), matching `--upscale-video` in 3.68.0.
+- Use Sogni SDK 5.84.1 and intelligence-client 4.30.1.
 
 ## [3.68.0] - 2026-11-15
 

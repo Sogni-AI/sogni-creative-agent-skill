@@ -808,9 +808,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-balanced-2stage` (preferred Balanced R2V; Standard and FastH3 Reference only when explicitly requested): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by your own voice or song (FastH3 audio-to-video) | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); `minimax-h3-fasth3-turbo` with `--ref-audio` picks the mode; add `-2stage` for Two-Stage; `--lora` works as on the frame modes |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
-| Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
-| Optional mature-theme reference-to-video (MiniMax H3 Prism) | `minimax-h3-r2v-prism` with `--no-filter` |
-| Optional mature-theme 1080p or 2K reference-to-video (MiniMax H3 Prism Two-Stage) | `minimax-h3-r2v-prism-2stage` with `--no-filter`; 2K default, `--target-resolution 1080` or `720` |
+| LTX-2.3 10Eros, only when you name it (older uncensored image-to-video on 30GB+ GPUs) | `ltx23-eros` with `--no-filter` |
+| Mature-theme video (default: MiniMax H3 Prism reference-to-video) | `minimax-h3-r2v-prism` with `--no-filter` |
+| Mature-theme 1080p or 2K video (MiniMax H3 Prism Two-Stage) | `minimax-h3-r2v-prism-2stage` with `--no-filter`; 2K default, `--target-resolution 1080` or `720` |
 | Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |
 | Image+audio-to-video | `ltx25-ia2v` |
 | Audio-to-video | `ltx25-a2v` |

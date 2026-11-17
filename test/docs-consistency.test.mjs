@@ -170,6 +170,27 @@ test('10Eros prompting guidance preserves start-frame and cinematic performance 
   assert.match(text, /Do not\s+emit section labels such as `Performance:` or `Dialogue:`/);
 });
 
+// Mark, 2026-11-17: mature-theme video defaults to MiniMax H3 Prism; the older
+// LTX-2.3 10Eros is used only when the creator asks for it by name.
+test('mature-theme video defaults to MiniMax H3 Prism and 10Eros stays name-only', () => {
+  const mature = read('references/private-mature-video.md');
+  const routing = mature.slice(mature.indexOf('## Routing'), mature.indexOf('## MiniMax H3 Prism'));
+  assert.match(routing, /default to MiniMax H3 Prism for every lawful adult mature-theme\nvideo request/);
+  assert.match(routing, /an older model, only when the creator names it\. Never choose it because a\n\s*request is mature/);
+  assert.doesNotMatch(routing, /Prefer `ltx23-22b-10eros/);
+  assert.match(mature, /## LTX-2\.3 10Eros \(only when named\)/);
+  assert.match(read('SKILL.md'), /Use it only when the user asks for 10Eros by name/);
+  for (const docFile of ['references/models.md', 'README.md']) {
+    const rows = read(docFile).split('\n').filter(line => line.startsWith('|') && /10eros|ltx23-eros/i.test(line));
+    assert.ok(rows.length > 0, `${docFile}: expected 10Eros rows`);
+    for (const row of rows) {
+      // The alias table only maps names; every other row must keep 10Eros name-only.
+      if (row.startsWith('| `ltx23-eros`, `10eros` |')) continue;
+      assert.match(row, /only when (?:the user|you) names? (?:it|10Eros)/, `${docFile}: 10Eros row must stay name-only: ${row}`);
+    }
+  }
+});
+
 test('MiniMax H3 Prism docs stay discreet and the climax wording stays in the mature reference', () => {
   const skill = read('SKILL.md');
   const mature = read('references/private-mature-video.md');

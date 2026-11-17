@@ -5890,11 +5890,11 @@ Recommended LTX 2.5 Video Models:
 LTX 2.3 rollback-only capabilities:
   ltx23-22b-fp8_t2v_distilled     Text-to-video with native dialogue/audio
   ltx23-22b-fp8_i2v_distilled     Image-to-video; transition LoRA only when both frames are supplied
-  ltx23-eros                       Explicit uncensored I2V (30GB+ worker; requires --no-filter)
+  ltx23-eros                       Older uncensored I2V, only when asked by name (30GB+ worker; requires --no-filter)
   ltx23-22b-fp8_ia2v_distilled    Image+audio-to-video
   ltx23-22b-fp8_a2v_distilled     Audio-to-video
   ltx23-22b-fp8_v2v_distilled     Video-to-video rollback
-  ltx23-22b-10eros-v1.4-fp8mixed_i2v  Private mature-theme I2V; first and/or last frame; requires --no-filter
+  ltx23-22b-10eros-v1.4-fp8mixed_i2v  Older mature-theme I2V, only when asked by name; first and/or last frame; requires --no-filter
 
 Video Upscale Model:
   flashvsr_v1.1_tiny_long_bf16    Promptless FlashVSR upscale to 1080p/1440p (--upscale-video)

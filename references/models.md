@@ -681,11 +681,11 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `ltx23-22b-fp8_t2v_distilled` | Fast (~2-3min) | Explicit LTX-2.3 text-to-video with native dialogue/audio; current default is LTX-2.5 |
 | `ltx23-22b-fp8_i2v_distilled` | Fast (~2-3min) | Explicit LTX-2.3 image-to-video; current first/last-frame default is LTX-2.5, with no transition LoRA |
 | `ltx23-22b-fp8_{t2v,i2v,ia2v,a2v,v2v}_dev` | Dev/HQ | Explicit older LTX-2.3 modes; use the matching LTX-2.5 model for new requests without a version preference |
-| `ltx23-eros` → `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast | Explicit uncensored I2V; 30GB+ GPU and `--no-filter` required |
+| `ltx23-eros` → `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast | Older uncensored I2V, only when the user names 10Eros; 30GB+ GPU and `--no-filter` required |
 | `ltx23-22b-fp8_ia2v_distilled` | Fast (~2-3min) | Image+audio-to-video |
 | `ltx23-22b-fp8_a2v_distilled` | Fast (~2-3min) | Audio-to-video |
 | `ltx23-22b-fp8_v2v_distilled` | Fast (~3min) | Video-to-video with ControlNet, plus canvas outpaint and masked inpaint |
-| `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast, 32GB+ Fast workers | Opt-in mature-theme image-to-video with native audio |
+| `ltx23-22b-10eros-v1.4-fp8mixed_i2v` | Fast, 32GB+ Fast workers | Older mature-theme image-to-video with native audio, only when the user names 10Eros |
 | `seedance2` | Variable | Seedance 2.0 text-to-video, 4-15s, native audio, up to native 4K |
 | `seedance2-mini` | Variable | Seedance 2.0 Mini text-to-video, lower-cost 720p path |
 | `seedance2-mini-uncensored` | Variable | Seedance 2.0 Mini Uncensored: every Seedance 2.0 Mini mode and limit under its own model id; shares the Seedance 2.5 Uncensored likeness and consent agreement |
@@ -709,7 +709,7 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `minimax-h3-i2v-balanced` | 8-step | H3 Balanced first-frame image-to-video |
 | `minimax-h3-flf2v-balanced` | 8-step | H3 Balanced first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-balanced` | 8-step | H3 Balanced reference-to-video from a whole reference set |
-| `minimax-h3-r2v-prism` → `minimax-h3-prism-int8_r2v` | 8-step | Optional model for mature themes: reference-to-video on Balanced's graph, 768p class; requires `--no-filter` |
+| `minimax-h3-r2v-prism` → `minimax-h3-prism-int8_r2v` | 8-step | Default model for mature-theme video: reference-to-video on Balanced's graph, 768p class; requires `--no-filter` |
 | `minimax-h3-r2v-prism-2stage` → `minimax-h3-prism-int8_r2v_2stage` | 8-step | Prism Two-Stage, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`); requires `--no-filter` |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 LightX2V Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
 | `minimax-h3-i2v-turbo` | 4-step | H3 LightX2V Turbo first-frame image-to-video |
@@ -1192,16 +1192,17 @@ FastH3 tier's reference-to-video model, with the two-stage form
 `--sampler`.
 
 MiniMax H3 Prism, `minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`),
-is an optional reference-to-video model for mature themes. It runs Balanced
+is the default model for lawful adult mature-theme video. It runs Balanced
 R2V's graph with a fixed recipe (8 Euler steps; no `--sampler`, steps or
 scheduler), takes Balanced R2V's references, keyframes and prompt contract, and
 renders the 768p class (1344×768 by default, 5.17-15.08 s). Its two-stage form,
 `minimax-h3-r2v-prism-2stage` (worker id `minimax-h3-prism-int8_r2v_2stage`),
 delivers 1080p or 2K like Balanced Ref2VA Two-Stage (see "Ref2VA Two-Stage"
 below). Both require `--no-filter` and are never a general default: they are
-used when the user picks one or asks for it by name, or for a lawful adult
-reference-to-video request, where Prism is the most consistent MiniMax H3
-model; see [private mature-theme video](./private-mature-video.md#minimax-h3-prism).
+used for lawful adult mature-theme video, including a request that starts from
+a supplied photo, where Prism is the most consistent MiniMax H3 model, or when
+the user picks one or asks for it by name; see
+[private mature-theme video](./private-mature-video.md#routing).
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -1213,7 +1214,7 @@ model; see [private mature-theme video](./private-mature-video.md#minimax-h3-pri
 | `minimax-h3-i2v-balanced` | Balanced image-to-video | Fixed 8-step animation from one first frame |
 | `minimax-h3-flf2v-balanced` | Balanced first → last frame | Fixed 8-step interpolation between `--ref` and `--ref-end` |
 | `minimax-h3-r2v-balanced` | Balanced reference-to-video | Fixed 8-step Euler/simple Ref2VA from a labelled reference set |
-| `minimax-h3-r2v-prism` | Prism reference-to-video | Optional model for mature themes with Balanced's reference set on a fixed 8-step recipe; 768p class; requires `--no-filter` |
+| `minimax-h3-r2v-prism` | Prism reference-to-video | Default model for mature-theme video with Balanced's reference set on a fixed 8-step recipe; 768p class; requires `--no-filter` |
 | `minimax-h3-r2v-2stage` | Ref2VA Two-Stage | The `minimax-h3-r2v` request (20 steps) on a half-size canvas, delivered at twice it (2K default, 1080p or 720p) |
 | `minimax-h3-r2v-balanced-2stage` | Balanced Ref2VA Two-Stage | The `minimax-h3-r2v-balanced` request (8 steps), delivered at twice the canvas |
 | `minimax-h3-r2v-prism-2stage` | Prism Two-Stage | The `minimax-h3-r2v-prism` request, delivered at twice the canvas; requires `--no-filter` |
@@ -1605,8 +1606,10 @@ markers and detailed field semantics.
 
 ### LTX-2.3 10Eros
 
-Use `-m ltx23-eros` only when the user explicitly requests 10Eros/the
-uncensored model and explicitly permits disabling the content filter. It is
+10Eros is an older model. Use `-m ltx23-eros` only when the user asks for
+10Eros by name and explicitly permits disabling the content filter; mature-theme
+video otherwise defaults to MiniMax H3 Prism (see
+[`private-mature-video.md`](private-mature-video.md)). It is
 image-to-video only and requires `--ref`, `--no-filter`, and a worker with at
 least 30GB VRAM. The CLI resolves it to
 `ltx23-22b-10eros-v1.4-fp8mixed_i2v` and pins 9 steps, guidance 1,
@@ -1635,7 +1638,8 @@ for mature themes. These options are opt-in and should not be foregrounded in
 general recommendations. When an adult user explicitly requests mature
 content, read
 [`private-mature-video.md`](private-mature-video.md) for the compatible model,
-LoRA, filter, and specialized prompt-token contract.
+LoRA, filter, and specialized prompt-token contract. Its default is MiniMax H3
+Prism; LTX-2.3 10Eros is used only when the user names it.
 
 Keep specialized prompt tokens in the scoped reference rather than general
 model recommendations.
@@ -1666,12 +1670,11 @@ model recommendations.
 | Text-to-video with native dialogue/audio | `ltx25` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
 | Animate two images together (first frame → last frame) | `ltx25-i2v` with `--ref A --ref-end B` (FLF template, no transition LoRA) |
-| Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
+| LTX-2.3 10Eros, only when the user names it (older uncensored image-to-video on 30GB+ GPUs) | `ltx23-eros` with `--no-filter` |
 | Image+audio-to-video | `ltx25-ia2v` |
 | Audio-to-video | `ltx25-a2v` |
 | Video-to-video with ControlNet/edit templates | `ltx25-v2v` |
-| Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
-| Mature-theme reference-to-video, for an adult request or when the user names it (the most consistent MiniMax H3 model for it) | `minimax-h3-r2v-prism` with `--no-filter`; `minimax-h3-r2v-prism-2stage` for 1080p or 2K |
+| Mature-theme video for an adult request, including from a supplied photo (the most consistent MiniMax H3 model for it; Balanced only where the mature reference says) | `minimax-h3-r2v-prism` with `--no-filter`; `minimax-h3-r2v-prism-2stage` for 1080p or 2K |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p/1080p/4K, MP4/MOV and last-frame export) | `seedance2-5` |

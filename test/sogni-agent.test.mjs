@@ -2037,6 +2037,26 @@ test('a plan-limit queue is explained and does not count toward --timeout', asyn
   assert.ok(elapsedMs >= 2300, `waited ${elapsedMs} ms; the plan hold must not count toward the timeout`);
 });
 
+test('seedance draft final lookup preserves explicit resolution and keeps legacy omission unchanged', () => {
+  const legacyJob = { id: 'job-final', status: 'completed', url: 'https://example.com/final.mp4', seedanceDraftJobId: 'job-draft' };
+  for (const command of ['--status', '--result']) {
+    for (const seedanceDraftFinalResolution of [undefined, '1080p', '4k', '720p']) {
+      const { exitCode, stdout, stderr } = runCli([command, 'proj-9', '--json'], {
+        SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+          id: 'proj-9', status: 'completed', finished: true,
+          jobs: [{ ...legacyJob, ...(seedanceDraftFinalResolution === undefined ? {} : { seedanceDraftFinalResolution }) }],
+        }),
+      });
+      assert.equal(exitCode, 0, stderr);
+      const output = JSON.parse(stdout.trim().split('\n').pop());
+      assert.deepEqual(output.jobs[0], {
+        ...legacyJob,
+        ...(['1080p', '4k'].includes(seedanceDraftFinalResolution) ? { seedanceDraftFinalResolution } : {}),
+      });
+    }
+  }
+});
+
 test('--status reports a queued project and why it is waiting', () => {
   const { exitCode, state, stdout } = runCli(['--status', 'proj-9', '--json'], {
     SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({

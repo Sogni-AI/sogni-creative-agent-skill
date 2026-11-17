@@ -13773,7 +13773,10 @@ function projectLookupSummary(result) {
       ...(job.urlUnavailable ? { urlUnavailable: job.urlUnavailable } : {}),
       // Seedance 2.5 draft mode: finalize before expiry; omit the final resolution for 1080p or request --target-resolution 2160 for 4K.
       ...(job.seedanceDraft === true ? { seedanceDraft: true, seedanceDraftExpiresAt: job.seedanceDraftExpiresAt ?? null } : {}),
-      ...(job.seedanceDraftJobId ? { seedanceDraftJobId: job.seedanceDraftJobId } : {})
+      ...(job.seedanceDraftJobId ? { seedanceDraftJobId: job.seedanceDraftJobId } : {}),
+      ...(['1080p', '4k'].includes(job.seedanceDraftFinalResolution)
+        ? { seedanceDraftFinalResolution: job.seedanceDraftFinalResolution }
+        : {})
     }))
   };
 }

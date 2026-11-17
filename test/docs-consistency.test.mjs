@@ -181,6 +181,14 @@ test('MiniMax H3 Prism docs stay discreet and the climax wording stays in the ma
     const row = text.split('\n').find(line => line.includes('minimax-h3-r2v-prism'));
     assert.ok(row?.includes('--no-filter'), `${docFile}: Prism row must name --no-filter`);
   }
+  // Prism Two-Stage carries every Prism rule, so its rows name --no-filter too.
+  for (const docFile of ['references/models.md', 'README.md']) {
+    const row = read(docFile).split('\n').find(line => line.startsWith('|') && line.includes('minimax-h3-r2v-prism-2stage'));
+    assert.ok(row?.includes('--no-filter'), `${docFile}: Prism Two-Stage row must name --no-filter`);
+  }
+  assert.match(skill, /`minimax-h3-r2v-prism-2stage`[^\n]*requires `--no-filter`/);
+  // Mature 1080p/2K reference-to-video goes to Prism Two-Stage, not Balanced Two-Stage.
+  assert.match(mature, /for 1080p or 2K use its\s+two-stage form, `minimax-h3-r2v-prism-2stage`/);
   assert.match(mature, /## MiniMax H3 Prism/);
   assert.match(mature, /--keyframe \.\/climax\.png@/);
   // Mark, 2026-11-14: the climax wording applies to every model used with the filter off, not only Prism.

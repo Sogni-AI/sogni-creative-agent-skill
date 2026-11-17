@@ -82,16 +82,24 @@ settings before rendering.
 merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
 more realistically, the most consistent MiniMax H3 model for mature themes.
 For a lawful adult reference-to-video request on MiniMax H3, use it instead of
-Balanced R2V unless the creator names another tier or asks for 1080p or 2K
-(then use `minimax-h3-r2v-balanced-2stage`). Otherwise use it only when the
-creator picks it or asks for it by name, never as a fallback for other work;
-it requires `--no-filter`. It takes
+Balanced R2V unless the creator names another tier; for 1080p or 2K use its
+two-stage form, `minimax-h3-r2v-prism-2stage`. Otherwise use either only when
+the creator picks it or asks for it by name, never as a fallback for other
+work; both require `--no-filter`. It takes
 Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
 files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
-prompt contract. It renders the 768p class only (1344×768 by default,
-5.17-15.08 s, no Two-Stage) on a recipe fixed in the worker, so pass no
+prompt contract. It renders the 768p class (1344×768 by default,
+5.17-15.08 s) on a recipe fixed in the worker, so pass no
 `--sampler`. It bills Balanced R2V's per-second rate; quote it with
 `--estimate-video-cost`.
+
+`minimax-h3-r2v-prism-2stage` (worker id `minimax-h3-prism-int8_r2v_2stage`)
+sends the same request (references, keyframes, LoRAs, durations and prompt) on
+a half-size canvas and delivers twice it, as `minimax-h3-r2v-balanced-2stage`
+does. `--target-resolution` names the delivered size: `2K` (or omitted)
+renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
+renders 672×384 → 1344×768. It bills Balanced Ref2VA Two-Stage's rate for the
+delivered class; quote it with `--estimate-video-cost`.
 
 Its climax only works with a still of the climax pinned as a keyframe. Draw
 that still first (see the Seedance section above for drawing an explicit
@@ -107,6 +115,10 @@ sogni-agent --video -m minimax-h3-r2v-prism --no-filter \
   --ref ./identity-woman.png -c ./identity-man.png \
   --keyframe ./climax.png@6.5 --duration 8 \
   -o ./scene.mp4 "<six-field Ref2VA prompt>"
+sogni-agent --video -m minimax-h3-r2v-prism-2stage --no-filter \
+  --target-resolution 1080 --ref ./identity-woman.png -c ./identity-man.png \
+  --keyframe ./climax.png@6.5 --duration 8 \
+  -o ./scene-1080p.mp4 "<six-field Ref2VA prompt>"
 ```
 
 ## Writing a climax

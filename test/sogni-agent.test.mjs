@@ -3050,6 +3050,8 @@ test('MiniMax H3 Prism is reference-to-video only: one-stage, no sampler, keyfra
   ]);
   assert.equal(twoK.exitCode, 1);
   assert.match(twoK.stderr, /--target-resolution 2K is the MiniMax H3 Two-Stage delivered size/);
+  assert.match(twoK.stderr, /Use -m minimax-h3-r2v-prism-2stage --no-filter for 2K MiniMax H3 Prism/);
+  assert.equal(twoK.state?.lastVideoProject ?? null, null);
 
   const sampler = runCli([
     '--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '--sampler', 'euler',
@@ -3084,11 +3086,165 @@ test('no family selector or default resolves to MiniMax H3 Prism', () => {
     [['-m', 'minimax-h3-r2v-balanced', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced'],
     [['-m', 'minimax-h3-r2v-balanced', '--no-filter', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced'],
     [['-m', 'minimax-h3-r2v', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v'],
+    [['-m', 'minimax-h3-r2v-balanced-2stage', '--no-filter', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-ref2va-fp8_r2v_balanced_2stage'],
+    [['-m', 'minimax-h3-fasth3-turbo-2stage', '--workflow', 'r2v', '--no-filter', '-c', SCREENSHOT_FIXTURE], 'minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage'],
   ]) {
     const { exitCode, state, stderr } = runCli(['--video', ...args, 'Use <Picture 1>.']);
     assert.equal(exitCode, 0, stderr);
     assert.equal(state.lastVideoProject.modelId, expected, args.join(' '));
   }
+});
+
+test('MiniMax H3 Prism Two-Stage sends the Prism request on its 2stage id with --no-filter', () => {
+  for (const model of ['minimax-h3-r2v-prism-2stage', 'minimax-h3-prism-int8_r2v_2stage', 'MINIMAX-H3-R2V-PRISM-2STAGE']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', model, '--no-filter', '--duration', '5', '--ref', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE,
+      '<Picture 1> controls identity. <Picture 2> controls wardrobe.'
+    ]);
+    assert.equal(exitCode, 0, `${model}: ${stderr}`);
+    const project = state.lastVideoProject;
+    assert.equal(project.modelId, 'minimax-h3-prism-int8_r2v_2stage', model);
+    assert.ok(project.referenceImage, model);
+    assert.equal(project.contextImages.length, 1, model);
+    // Omitted --target-resolution is 2K: the 768p canvas, delivered at twice it.
+    assert.deepEqual([project.width, project.height], [1344, 768], model);
+    assert.equal(project.frames, 124, model);
+    assert.equal(project.fps, 24, model);
+    // Prism's recipe is fixed in the worker: no steps, guidance or sampler sent.
+    assert.equal(project.steps, undefined, model);
+    assert.equal(project.guidance, undefined, model);
+    assert.equal(project.sampler, undefined, model);
+    assert.equal(project.disableNSFWFilter, true, model);
+    assert.equal('outputScale' in project, false, model);
+    assert.match(stderr, /Generating video \(r2v\)/, model);
+    assert.match(stderr, /MiniMax H3 Ref2VA Two-Stage: delivered at 2688x1536 \(twice the 1344x768 canvas\)/, model);
+  }
+
+  // The same request as one-stage Prism: only the id differs (the prompt-hash
+  // seed and per-run attribution vary with it).
+  const oneStage = runCli(['--video', '-m', 'minimax-h3-r2v-prism', '--no-filter', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+  const twoStage = runCli(['--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+  assert.equal(oneStage.exitCode, 0, oneStage.stderr);
+  assert.equal(twoStage.exitCode, 0, twoStage.stderr);
+  const { modelId: oneStageId, attribution: _a, seed: _c, ...oneStageRest } = oneStage.state.lastVideoProject;
+  const { modelId: twoStageId, attribution: _b, seed: _d, ...twoStageRest } = twoStage.state.lastVideoProject;
+  assert.equal(oneStageId, 'minimax-h3-prism-int8_r2v');
+  assert.equal(twoStageId, 'minimax-h3-prism-int8_r2v_2stage');
+  assert.deepEqual(twoStageRest, oneStageRest);
+  assert.doesNotMatch(oneStage.stderr, /Two-Stage/);
+});
+
+test('MiniMax H3 Prism Two-Stage requires --no-filter, from -m and from a configured default', () => {
+  for (const model of ['minimax-h3-r2v-prism-2stage', 'minimax-h3-prism-int8_r2v_2stage']) {
+    const { exitCode, state, stderr } = runCli(['--video', '-m', model, '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.']);
+    assert.equal(exitCode, 1, model);
+    assert.match(stderr, /MiniMax H3 Prism is an opt-in mature-theme model and requires --no-filter/, model);
+    assert.equal(state?.lastVideoProject ?? null, null, model);
+  }
+  // A configured default is not resolved by the CLI's selector table, so both
+  // spellings must trip the guard.
+  for (const configuredModel of ['minimax-h3-prism-int8_r2v_2stage', 'minimax-h3-r2v-prism-2stage']) {
+    const configured = runCli(['--video', 'A quiet room.'], {
+      OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ videoModels: { t2v: configuredModel } })
+    });
+    assert.equal(configured.exitCode, 1, configuredModel);
+    assert.match(configured.stderr, /MiniMax H3 Prism requires explicit --no-filter acknowledgement/, configuredModel);
+    assert.match(
+      configured.stderr,
+      /Retry with --video -m minimax-h3-r2v-prism-2stage --ref <image> --no-filter/,
+      configuredModel
+    );
+    assert.equal(configured.state?.lastVideoProject ?? null, null, configuredModel);
+  }
+});
+
+test('--target-resolution picks the Prism Two-Stage delivered class, and estimates quote its 2stage id', () => {
+  for (const [value, canvas, delivered] of [
+    ['720', [672, 384], [1344, 768]],
+    ['1080', [960, 544], [1920, 1088]],
+    ['2K', [1344, 768], [2688, 1536]],
+    ['1440', [1344, 768], [2688, 1536]]
+  ]) {
+    const render = runCli([
+      '--json', '--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--target-resolution', value,
+      '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+    ]);
+    assert.equal(render.exitCode, 0, `${value}: ${render.stderr}`);
+    const project = render.state.lastVideoProject;
+    assert.equal(project.modelId, 'minimax-h3-prism-int8_r2v_2stage', value);
+    assert.deepEqual([project.width, project.height], canvas, value);
+    const output = JSON.parse(render.stdout.trim().split('\n').pop());
+    assert.equal(output.workflow, 'r2v', value);
+    assert.deepEqual([output.width, output.height], canvas, value);
+    assert.deepEqual([output.deliveredWidth, output.deliveredHeight], delivered, value);
+  }
+
+  for (const value of ['768', '480']) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--target-resolution', value,
+      '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+    ]);
+    assert.equal(exitCode, 1, value);
+    assert.match(stderr, /targetResolution must be 720, 1080, or 1440/, value);
+    assert.equal(state?.lastVideoProject ?? null, null, value);
+  }
+
+  // The estimate prices the 2stage id on the canvas it renders, with the live
+  // card's steps; the CLI quotes it and never carries a price of its own.
+  const estimate = runCli([
+    '--json', '--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--target-resolution', '1080',
+    '--duration', '8', '--estimate-video-cost', '--ref', SCREENSHOT_FIXTURE, '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'
+  ], {
+    SOGNI_AGENT_TEST_MODEL_TIERS_JSON: JSON.stringify({
+      data: {
+        model: {
+          id: 'minimax-h3-prism-int8_r2v_2stage',
+          parameters: {
+            steps: { min: 8, max: 8, default: 8 },
+            width: { min: 384, max: 1344, step: 32, default: 1344 },
+            height: { min: 384, max: 1344, step: 32, default: 768 },
+            defaultSize: '1344x768'
+          }
+        }
+      }
+    })
+  });
+  assert.equal(estimate.exitCode, 0, estimate.stderr);
+  const params = estimate.state.lastEstimateVideoCost;
+  assert.equal(params.modelId, 'minimax-h3-prism-int8_r2v_2stage');
+  assert.deepEqual([params.width, params.height], [960, 544]);
+  assert.equal(params.steps, 8);
+  assert.equal(params.referenceImageCount, 2);
+  const report = JSON.parse(estimate.stdout.trim().split('\n').pop());
+  assert.equal(report.model, 'minimax-h3-prism-int8_r2v_2stage');
+  assert.deepEqual([report.deliveredWidth, report.deliveredHeight], [1920, 1088]);
+});
+
+test('MiniMax H3 Prism Two-Stage keeps every Prism rule: r2v only, no sampler, keyframes allowed', () => {
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--sampler', 'euler', '-c', SCREENSHOT_FIXTURE, 'Use <Picture 1>.'],
+    '--sampler is supported for video only with MiniMax H3 Turbo.'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--workflow', 'i2v', '--ref', SCREENSHOT_FIXTURE, 'x'],
+    'Workflow "i2v" does not match model "minimax-h3-prism-int8_r2v_2stage"'
+  );
+  expectCliError(
+    ['--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--ref-audio', 'voice.m4a', 'Use <Audio 1> for the voice.'],
+    'needs at least one visual reference'
+  );
+
+  const keyframed = runCli([
+    '--video', '-m', 'minimax-h3-r2v-prism-2stage', '--no-filter', '--target-resolution', '1080', '--duration', '8',
+    '--ref', SCREENSHOT_FIXTURE, '--keyframe', `${SCREENSHOT_FIXTURE}@2.5`,
+    'Use <Picture 1>; the keyframe is <Picture 2>.'
+  ]);
+  assert.equal(keyframed.exitCode, 0, keyframed.stderr);
+  const project = keyframed.state.lastVideoProject;
+  assert.equal(project.modelId, 'minimax-h3-prism-int8_r2v_2stage');
+  assert.deepEqual([project.width, project.height], [960, 544]);
+  assert.equal(project.keyframes.length, 1);
+  assert.match(keyframed.stderr, /delivered at 1920x1088 \(twice the 960x544 canvas\)/);
 });
 
 test('MiniMax H3 Turbo backend tiers reject off-grid explicit frame counts', () => {
@@ -8906,6 +9062,10 @@ test('new utility flags appear in --help output', () => {
   assert.ok(
     /minimax-h3-r2v-prism\s+Optional Ref2VA model for mature themes[\s\S]{0,160}requires --no-filter/.test(stdout),
     'Help should list MiniMax H3 Prism with its --no-filter requirement'
+  );
+  assert.ok(
+    /minimax-h3-r2v-prism-2stage\s+Prism Two-Stage[\s\S]{0,160}requires --no-filter/.test(stdout),
+    'Help should list MiniMax H3 Prism Two-Stage with its --no-filter requirement'
   );
   assert.ok(stdout.includes('minimax-h3-r2v-2stage'), 'Help should include the MiniMax H3 Ref2VA Two-Stage selector');
   assert.ok(stdout.includes('minimax-h3-r2v-balanced-2stage'), 'Help should include the MiniMax H3 Balanced Ref2VA Two-Stage selector');

@@ -245,7 +245,8 @@ opening-frame I2VA and closing-frame L2VA, and `minimax-h3-flf2v`; their 8-step
 Balanced `*-balanced` and 4-step Turbo `*-turbo` variants; and—with its own
 six-field contract—to `minimax-h3-r2v`, `minimax-h3-r2v-balanced`,
 `minimax-h3-r2v-turbo`, and FastH3 Reference `minimax-h3-fasth3-r2v-turbo`
-(the optional `minimax-h3-r2v-prism` writes Balanced's Ref2VA contract too). The
+(the optional `minimax-h3-r2v-prism` and `minimax-h3-r2v-prism-2stage` write
+Balanced's Ref2VA contract too). The
 exact FL2VA worker ids are `minimax-h3-fl2va-fp8_{t2v,i2v,flf2v}` with an
 optional `_balanced` or `_turbo` suffix; Ref2VA uses `minimax-h3-ref2va-fp8_r2v`
 with the same tier suffixes, and FastH3 Reference uses
@@ -290,8 +291,10 @@ This guidance follows MiniMax's official H3 prompt-writing skill from
   render the half-size canvas and deliver twice it. `--target-resolution` reads as above (2K default, `1080`,
   `720`); a reference image never sets the canvas aspect. Each bills its
   tier's reference rate plus the two-stage surcharge of the delivered class;
-  quote it with `--estimate-video-cost`. Keep ordinary 768p reference video on
-  the one-stage R2V selectors.
+  quote it with `--estimate-video-cost`. The optional
+  `-m minimax-h3-r2v-prism-2stage` does the same for `minimax-h3-r2v-prism` and
+  requires `--no-filter`. Keep ordinary 768p reference video on the one-stage
+  R2V selectors.
 - **20 steps for Standard; 8 for Balanced; 4 for both Turbo engines; guidance/CFG 1.** Do not
   send steps, guidance, scheduler, or a **negative prompt**. Standard and
   Balanced accept no sampler override; Balanced is fixed to Euler/simple.

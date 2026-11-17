@@ -3063,6 +3063,7 @@ const MINIMAX_H3_MODEL_MODES = new Map([
   ['minimax-h3-fl2va-fp8_flf2v_balanced', 'flf2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced', 'r2v'],
   ['minimax-h3-prism-int8_r2v', 'r2v'],
+  ['minimax-h3-prism-int8_r2v_2stage', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_2stage', 'r2v'],
   ['minimax-h3-ref2va-fp8_r2v_balanced_2stage', 'r2v'],
   ['minimax-h3-fastvideo-omni-int8_r2v_turbo', 'r2v'],
@@ -3150,11 +3151,22 @@ const MINIMAX_H3_R2V_TURBO_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_turbo';
 const MINIMAX_H3_R2V_BALANCED_MODEL_ID = 'minimax-h3-ref2va-fp8_r2v_balanced';
 // MiniMax H3 Prism: an optional reference-to-video model for mature themes on
 // Balanced R2V's graph, with its recipe fixed in the worker (8 Euler steps), so
-// the CLI sends no steps or sampler, as for Balanced. 768p class only (no
-// two-stage), Balanced's references, keyframes and LoRAs. It requires
-// --no-filter and is never a default, a fallback or what a family alias picks.
+// the CLI sends no steps or sampler, as for Balanced. 768p class, Balanced's
+// references, keyframes and LoRAs. It requires --no-filter and is never a
+// default, a fallback or what a family alias picks.
 const MINIMAX_H3_R2V_PRISM_MODEL_ID = 'minimax-h3-prism-int8_r2v';
 const MINIMAX_H3_R2V_PRISM_SELECTOR = 'minimax-h3-r2v-prism';
+// Prism Two-Stage: the Prism request on its own id, rendered on the Ref2VA
+// Two-Stage canvas and delivered at exactly twice it, as Balanced Two-Stage is.
+// Every Prism rule applies. The pinned Intelligence Client does not list it yet
+// (MINIMAX_H3_PRISM_TWO_STAGE_SELECTOR), so the CLI adds its id and selector
+// until the pin carries them.
+const MINIMAX_H3_R2V_PRISM_TWO_STAGE_MODEL_ID = 'minimax-h3-prism-int8_r2v_2stage';
+const MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR = 'minimax-h3-r2v-prism-2stage';
+const MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTIONS = new Set([
+  MINIMAX_H3_R2V_PRISM_TWO_STAGE_MODEL_ID,
+  MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR
+]);
 // Ref2VA Two-Stage: the Standard (20-step) or Balanced (8-step) R2V request on
 // its own id, rendered on the FastH3 Two-Stage canvas (384, 544 or 768 px short
 // edge) and delivered at exactly twice it. Never Turbo; references, durations
@@ -3397,6 +3409,7 @@ function resolveSkillVideoModelAlias(
     return MINIMAX_H3_R2V_BALANCED_MODEL_ID;
   }
   if (normalized === MINIMAX_H3_R2V_PRISM_SELECTOR) return MINIMAX_H3_R2V_PRISM_MODEL_ID;
+  if (normalized === MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR) return MINIMAX_H3_R2V_PRISM_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-r2v-2stage') return MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID;
   if (normalized === 'minimax-h3-fasth3-r2v-turbo') return MINIMAX_H3_FASTH3_R2V_MODEL_ID;
@@ -3418,7 +3431,8 @@ function isMiniMaxH3TwoStageModel(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
   return isMinimaxH3TwoStageModelId(modelId)
     || MINIMAX_H3_AUDIO_GUIDE_TWO_STAGE_SELECTIONS.has(normalized)
-    || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized);
+    || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized)
+    || MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTIONS.has(normalized);
 }
 
 function isMiniMaxH3FastH3R2vModel(modelId) {
@@ -3467,27 +3481,33 @@ function isMiniMaxH3R2vModel(modelId) {
     || normalized === MINIMAX_H3_R2V_TURBO_MODEL_ID
     || normalized === MINIMAX_H3_R2V_BALANCED_MODEL_ID
     || normalized === MINIMAX_H3_R2V_PRISM_MODEL_ID
+    || normalized === MINIMAX_H3_R2V_PRISM_TWO_STAGE_MODEL_ID
     || normalized === MINIMAX_H3_R2V_TWO_STAGE_MODEL_ID
     || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
     || isMiniMaxH3FastH3R2vModel(normalized);
 }
 
 // The Intelligence Client selector for a Ref2VA Two-Stage selector or id. FastH3
-// Reference Two-Stage renders the same 384/544/768 px canvases, so it sizes on
-// the Balanced table until the pinned client carries its own selector.
+// Reference Two-Stage and Prism Two-Stage render the same 384/544/768 px
+// canvases, so they size on the Balanced table until the pinned client carries
+// their own selectors.
 function miniMaxH3R2vTwoStageSelector(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
   return normalized === 'minimax-h3-r2v-balanced-2stage'
     || normalized === MINIMAX_H3_R2V_BALANCED_TWO_STAGE_MODEL_ID
     || MINIMAX_H3_FASTH3_R2V_TWO_STAGE_SELECTIONS.has(normalized)
+    || MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTIONS.has(normalized)
     ? 'minimax-h3-r2v-balanced-2stage'
     : 'minimax-h3-r2v-2stage';
 }
 
-// MiniMax H3 Prism by its selector or worker id: the model that needs --no-filter.
+// MiniMax H3 Prism or Prism Two-Stage by selector or worker id: the models that
+// need --no-filter.
 function isMiniMaxH3PrismSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase();
-  return normalized === MINIMAX_H3_R2V_PRISM_SELECTOR || normalized === MINIMAX_H3_R2V_PRISM_MODEL_ID;
+  return normalized === MINIMAX_H3_R2V_PRISM_SELECTOR
+    || normalized === MINIMAX_H3_R2V_PRISM_MODEL_ID
+    || MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTIONS.has(normalized);
 }
 
 function isMiniMaxH3R2vTurboSelectionLocal(modelId, workflow = null) {
@@ -3597,6 +3617,7 @@ function miniMaxH3ModeFromModelId(modelId) {
   if (normalized === 'minimax-h3-flf2v-balanced') return 'flf2v';
   if (normalized === 'minimax-h3-r2v-balanced') return 'r2v';
   if (normalized === MINIMAX_H3_R2V_PRISM_SELECTOR) return 'r2v';
+  if (normalized === MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR) return 'r2v';
   if (normalized === 'minimax-h3-r2v-2stage') return 'r2v';
   if (normalized === 'minimax-h3-r2v-balanced-2stage') return 'r2v';
   if (normalized === 'minimax-h3-fasth3-r2v-turbo') return 'r2v';
@@ -5930,6 +5951,8 @@ state negatives in the structured prompt.):
   minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references
   minimax-h3-r2v-prism              Optional Ref2VA model for mature themes on Balanced's graph: 768p class,
                                      Balanced's references, keyframes and LoRAs; requires --no-filter
+  minimax-h3-r2v-prism-2stage       Prism Two-Stage: the minimax-h3-r2v-prism request, delivered at twice the
+                                     canvas like minimax-h3-r2v-balanced-2stage; requires --no-filter
   minimax-h3-r2v-2stage             Ref2VA Two-Stage: the minimax-h3-r2v request (20 steps), delivered at twice the
                                      canvas, 2K by default (1344x768 -> 2688x1536); --target-resolution 1080 or 720
   minimax-h3-r2v-balanced-2stage    Balanced Ref2VA Two-Stage: the minimax-h3-r2v-balanced request (8 steps),
@@ -6934,7 +6957,9 @@ if (options.music) {
     fatalCliError('MiniMax H3 Prism requires explicit --no-filter acknowledgement.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model, requiredFlag: '--no-filter' },
-      hint: 'Retry with --video -m minimax-h3-r2v-prism --ref <image> --no-filter'
+      hint: `Retry with --video -m ${isMiniMaxH3TwoStageModel(options.model)
+        ? MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR
+        : MINIMAX_H3_R2V_PRISM_SELECTOR} --ref <image> --no-filter`
     });
   }
   try {
@@ -7011,9 +7036,11 @@ if (options.music) {
     fatalCliError(`--target-resolution 2K is the MiniMax H3 Two-Stage delivered size; ${options.model} takes a short side in pixels.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--target-resolution', value: '2K', model: options.model },
-      hint: isMiniMaxH3R2vModel(options.model)
-        ? 'Use -m minimax-h3-fasth3-r2v-turbo-2stage for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
-        : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
+      hint: isMiniMaxH3PrismSelectionLocal(options.model)
+        ? `Use -m ${MINIMAX_H3_R2V_PRISM_TWO_STAGE_SELECTOR} --no-filter for 2K MiniMax H3 Prism, or pass the short side in pixels.`
+        : isMiniMaxH3R2vModel(options.model)
+          ? 'Use -m minimax-h3-fasth3-r2v-turbo-2stage for 2K MiniMax H3 reference-to-video, or pass the short side in pixels.'
+          : 'Use -m minimax-h3-fasth3-turbo-2stage for 2K MiniMax H3 video, or pass the short side in pixels.'
     });
   }
   // Seedance 2.5 drafts render at 480p only, so a draft with no size asked for

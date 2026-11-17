@@ -1,3 +1,8 @@
+## [3.70.0] - 2026-11-16
+
+- Render MiniMax H3 Prism at 2K, 1080p or two-stage 768p with `-m minimax-h3-r2v-prism-2stage --no-filter`: the Prism reference-to-video request, delivered at twice the canvas (2K by default, `--target-resolution 1080` or `720` for the smaller sizes). It is priced like Balanced two-stage.
+- Use Sogni SDK 5.85.0 and intelligence-client 4.31.0.
+
 ## [3.69.0] - 2026-11-16
 
 - Generate and edit images with Seedream 5.5 Uncensored by asking for it with `-m seedream-5-5-uncensored` or "Seedream 5.5". It takes sizes up to about 4.6 megapixels, such as 2816×1584, and up to 10 reference images for edits. "Seedream Uncensored" still selects Seedream 5.0 Pro.

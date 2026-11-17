@@ -1,6 +1,7 @@
-## Unreleased
+## [3.71.0] - 2026-11-17
 
-- Generate Seedance 2.5 and Uncensored videos at explicitly requested 4K across text, frame, reference, audio, edit and extend workflows. Finalize an unchanged kept draft with --seedance-finalize <jobId> --target-resolution 2160 for 4K; omission retains 1080p.
+- Render Seedance 2.5 and Seedance 2.5 Uncensored videos in 4K with `-m seedance2-5 --target-resolution 2160` (or `-m seedance2-5-uncensored`), in text, image, reference, audio, edit and extend workflows. A kept draft finishes in 4K with `--seedance-finalize <jobId> --target-resolution 2160`; without the flag it still finishes at 1080p.
+- Use Sogni SDK 5.86.0 and intelligence-client 4.32.0.
 
 ## [3.70.0] - 2026-11-16
 

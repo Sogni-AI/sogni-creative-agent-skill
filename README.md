@@ -810,6 +810,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | Explicit uncensored image-to-video on 30GB+ GPUs | `ltx23-eros` with `--no-filter` |
 | Optional mature-theme reference-to-video (MiniMax H3 Prism) | `minimax-h3-r2v-prism` with `--no-filter` |
+| Optional mature-theme 1080p or 2K reference-to-video (MiniMax H3 Prism Two-Stage) | `minimax-h3-r2v-prism-2stage` with `--no-filter`; 2K default, `--target-resolution 1080` or `720` |
 | Image or first/last frames to video | `ltx25-i2v` (FLF shares the I2V model ID) |
 | Image+audio-to-video | `ltx25-ia2v` |
 | Audio-to-video | `ltx25-a2v` |

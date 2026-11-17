@@ -710,6 +710,7 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `minimax-h3-flf2v-balanced` | 8-step | H3 Balanced first-frame → last-frame video; pass both `--ref` and `--ref-end` |
 | `minimax-h3-r2v-balanced` | 8-step | H3 Balanced reference-to-video from a whole reference set |
 | `minimax-h3-r2v-prism` → `minimax-h3-prism-int8_r2v` | 8-step | Optional model for mature themes: reference-to-video on Balanced's graph, 768p class; requires `--no-filter` |
+| `minimax-h3-r2v-prism-2stage` → `minimax-h3-prism-int8_r2v_2stage` | 8-step | Prism Two-Stage, delivered at twice the canvas (2K by default; `--target-resolution 1080` or `720`); requires `--no-filter` |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | 4-step | H3 LightX2V Turbo text-to-video; the generic selector also infers i2v/flf2v from supplied frames |
 | `minimax-h3-i2v-turbo` | 4-step | H3 LightX2V Turbo first-frame image-to-video |
 | `minimax-h3-flf2v-turbo` | 4-step | H3 LightX2V Turbo first-frame → last-frame video; pass both `--ref` and `--ref-end` |
@@ -1194,11 +1195,13 @@ MiniMax H3 Prism, `minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`)
 is an optional reference-to-video model for mature themes. It runs Balanced
 R2V's graph with a fixed recipe (8 Euler steps; no `--sampler`, steps or
 scheduler), takes Balanced R2V's references, keyframes and prompt contract, and
-renders the 768p class only (1344×768 by default, 5.17-15.08 s, no Two-Stage).
-It requires `--no-filter` and is never a general default: it is used when the
-user picks it or asks for it by name, or for a lawful adult reference-to-video
-request, where it is the most consistent MiniMax H3 model; see
-[private mature-theme video](./private-mature-video.md#minimax-h3-prism).
+renders the 768p class (1344×768 by default, 5.17-15.08 s). Its two-stage form,
+`minimax-h3-r2v-prism-2stage` (worker id `minimax-h3-prism-int8_r2v_2stage`),
+delivers 1080p or 2K like Balanced Ref2VA Two-Stage (see "Ref2VA Two-Stage"
+below). Both require `--no-filter` and are never a general default: they are
+used when the user picks one or asks for it by name, or for a lawful adult
+reference-to-video request, where Prism is the most consistent MiniMax H3
+model; see [private mature-theme video](./private-mature-video.md#minimax-h3-prism).
 
 | Model | Mode | Use Case |
 |-------|------|----------|
@@ -1213,6 +1216,7 @@ request, where it is the most consistent MiniMax H3 model; see
 | `minimax-h3-r2v-prism` | Prism reference-to-video | Optional model for mature themes with Balanced's reference set on a fixed 8-step recipe; 768p class; requires `--no-filter` |
 | `minimax-h3-r2v-2stage` | Ref2VA Two-Stage | The `minimax-h3-r2v` request (20 steps) on a half-size canvas, delivered at twice it (2K default, 1080p or 720p) |
 | `minimax-h3-r2v-balanced-2stage` | Balanced Ref2VA Two-Stage | The `minimax-h3-r2v-balanced` request (8 steps), delivered at twice the canvas |
+| `minimax-h3-r2v-prism-2stage` | Prism Two-Stage | The `minimax-h3-r2v-prism` request, delivered at twice the canvas; requires `--no-filter` |
 | `minimax-h3-turbo` / `minimax-h3-t2v-turbo` | Turbo text-to-video | 4-step prompt-only path; generic `minimax-h3-turbo` infers the frame workflow |
 | `minimax-h3-i2v-turbo` | Turbo image-to-video | 4-step animation from one first frame |
 | `minimax-h3-flf2v-turbo` | Turbo first → last frame | 4-step interpolation between `--ref` and `--ref-end` |
@@ -1259,8 +1263,9 @@ with the FastH3 request shape on a half-size canvas. Every output class (720p,
 1080p and 2K) uses the same `_2stage` id; `--target-resolution 720` sends it
 with the 384 px canvas. Ref2VA Two-Stage likewise has one id per tier,
 `minimax-h3-ref2va-fp8_r2v_2stage` (Standard),
-`minimax-h3-ref2va-fp8_r2v_balanced_2stage` (Balanced) and
-`minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage` (FastH3 Reference).
+`minimax-h3-ref2va-fp8_r2v_balanced_2stage` (Balanced),
+`minimax-h3-fastvideo-omni-int8_r2v_turbo_2stage` (FastH3 Reference) and
+`minimax-h3-prism-int8_r2v_2stage` (Prism).
 
 The **fl2va** modes (t2v / i2v / flf2v) take image references only — they do not
 accept reference video or reference audio, because audio is generated natively.
@@ -1313,8 +1318,8 @@ video-conditioned R2V requires a worker above 40 GB.
   still delivered at twice. Any other value, 768 included, is refused. Other
   canvases up to a 544 px short edge add 6 Spark/s, and larger ones 12. Prices
   follow measured GPU time. Ordinary 768p output stays on the regular
-  FastH3 selectors; of the other H3 tiers only Standard, Balanced and FastH3
-  Reference have a two-stage path (next item). The summary
+  FastH3 selectors; of the other H3 tiers only Standard, Balanced, FastH3
+  Reference and Prism have a two-stage path (next item). The summary
   line and `--json` (`deliveredWidth`, `deliveredHeight`) report the delivered
   size. If the server is not serving two-stage, it refuses before charging and
   the CLI prints its message unchanged. This is Sogni's own path; MiniMax's
@@ -1335,7 +1340,10 @@ video-conditioned R2V requires a worker above 40 GB.
   canvas aspect, and explicit `-w`/`-h` are used as given. Each bills its
   tier's reference rate plus the two-stage surcharge of the delivered class;
   `--estimate-video-cost` quotes the `_2stage` id on the canvas it renders, and
-  the summary line and `--json` report the delivered size.
+  the summary line and `--json` report the delivered size. The optional
+  `-m minimax-h3-r2v-prism-2stage` (Prism, `minimax-h3-prism-int8_r2v_2stage`)
+  does the same with the `minimax-h3-r2v-prism` request, requires `--no-filter`,
+  and bills Balanced Ref2VA Two-Stage's rates.
 
 ```bash
 sogni-agent -q --video -m minimax-h3 --duration 10 -w 1344 -h 768 -o ./video.mp4 "<three-field H3 prompt>"
@@ -1415,7 +1423,7 @@ clip, in addition to `--ref` / `--ref-end`.
 |-----------|-----------|
 | `minimax-h3-i2v`, `minimax-h3-flf2v`, and their `-balanced`, `-turbo`, `-fasth3-…-turbo`, and FastH3 Two-Stage forms (including generic selectors that resolve to them) | Yes, between the first and last frame |
 | `minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`, and their `-2stage` forms | Yes; the uploaded audio still drives the clip |
-| `minimax-h3-r2v`, `-r2v-balanced`, `-r2v-prism`, `-r2v-turbo`, `-r2v-2stage`, `-r2v-balanced-2stage`, `minimax-h3-fasth3-r2v-turbo` and its `-2stage` form | Yes; keyframes travel in their own upload slots and are not references |
+| `minimax-h3-r2v`, `-r2v-balanced`, `-r2v-prism`, `-r2v-prism-2stage`, `-r2v-turbo`, `-r2v-2stage`, `-r2v-balanced-2stage`, `minimax-h3-fasth3-r2v-turbo` and its `-2stage` form | Yes; keyframes travel in their own upload slots and are not references |
 | Text-to-video (`minimax-h3-t2v`, or any generic selector with no frame, audio, or reference) | No; the CLI refuses the flag |
 
 - **Times:** each keyframe lands on frame `round(seconds × 24)`, which must be
@@ -1663,7 +1671,7 @@ model recommendations.
 | Audio-to-video | `ltx25-a2v` |
 | Video-to-video with ControlNet/edit templates | `ltx25-v2v` |
 | Private mature-theme image-to-video | `ltx23-22b-10eros-v1.4-fp8mixed_i2v` |
-| Mature-theme reference-to-video, for an adult request or when the user names it (the most consistent MiniMax H3 model for it) | `minimax-h3-r2v-prism` with `--no-filter` |
+| Mature-theme reference-to-video, for an adult request or when the user names it (the most consistent MiniMax H3 model for it) | `minimax-h3-r2v-prism` with `--no-filter`; `minimax-h3-r2v-prism-2stage` for 1080p or 2K |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p/1080p/4K, MP4/MOV and last-frame export) | `seedance2-5` |

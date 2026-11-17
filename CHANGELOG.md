@@ -1,6 +1,7 @@
 ## [3.70.0] - 2026-11-16
 
 - Render MiniMax H3 Prism at 2K, 1080p or two-stage 768p with `-m minimax-h3-r2v-prism-2stage --no-filter`: the Prism reference-to-video request, delivered at twice the canvas (2K by default, `--target-resolution 1080` or `720` for the smaller sizes). It is priced like Balanced two-stage.
+- Mature-theme video requests now go to MiniMax H3 Prism by default (`minimax-h3-r2v-prism`, or `minimax-h3-r2v-prism-2stage` for 1080p and 2K), including a request to animate a supplied photo, which Prism takes as a reference. MiniMax H3 Balanced is used when there is no image at all or a photo must be the exact first or last frame. LTX-2.3 10Eros (`10eros`, `ltx23-eros`) is used only when you ask for it by name.
 - Use Sogni SDK 5.85.0 and intelligence-client 4.31.0.
 
 ## [3.69.0] - 2026-11-16

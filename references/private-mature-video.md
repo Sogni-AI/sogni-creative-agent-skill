@@ -4,28 +4,81 @@ Use this reference for lawful adult mature-theme video requests.
 
 ## Routing
 
-Prefer `ltx23-22b-10eros-v1.4-fp8mixed_i2v` (`10eros`) for this use case. It
-is a fast LTX image-to-video model with generated audio. It accepts a first
-frame, a last frame, or both, and requires `--no-filter`.
+As of 2026-11, default to MiniMax H3 Prism for every lawful adult mature-theme
+video request: `minimax-h3-r2v-prism`, or `minimax-h3-r2v-prism-2stage` for
+1080p or 2K, both with `--no-filter`. That includes a request that starts from
+a supplied photo or still: pass each image as a reference (`--ref`, then `-c`)
+and give it its job in the six-field Ref2VA prompt
+([Ref2VA contract](./video-prompting.md#minimax-h3-reference-to-video-r2v)).
 
-Use `dr34ml4y-v3` at strength 1 with 10Eros by default. It improves mature-theme
-prompt adherence, motion, and physical behavior even when no action token is
-needed. Omit it only when the creator requests the base 10Eros model alone or
-when comparing/troubleshooting the model and LoRA separately.
+Prism is reference-to-video, so it pins no first or last frame. Use Balanced,
+with `--no-filter`, only where Prism cannot do the job:
 
-The LoRA supports:
+- No image or video to reference: `minimax-h3-t2v-balanced`.
+- The creator says a photo must be the exact first frame, or the exact first
+  and last frames (an exact loop included): `minimax-h3-i2v-balanced` with
+  `--ref`, or `minimax-h3-flf2v-balanced` with `--ref A --ref-end B`.
 
-- `ltx23-22b-fp8_i2v`
-- `ltx23-22b-fp8_i2v_dev`
-- `ltx23-22b-10eros-v1.4-fp8mixed_i2v` (preferred)
+Balanced renders explicit content far more reliably than the Turbo and FastH3
+tiers; use another H3 tier only when the creator names it.
 
-Sogni installs the LT3X v3 LoRA, not the separately trained WAN release. Do not
-use this LoRA ID with WAN models.
+Other models:
+
+- [Seedance 2.5 Uncensored](#seedance-25-uncensored)
+  (`seedance-2-5-uncensored`) when the creator asks for it or for film-quality
+  explicit scenes; it bills Premium Spark.
+- [LTX-2.3 10Eros](#ltx-23-10eros-only-when-named) (`10eros`, `ltx23-eros`),
+  an older model, only when the creator names it. Never choose it because a
+  request is mature, and never as a fallback when another model refuses or
+  fails.
+
+## MiniMax H3 Prism
+
+`minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`) is a community
+merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
+more realistically, the most consistent MiniMax H3 model for mature themes
+and the default here (see [Routing](#routing)); for 1080p or 2K use its
+two-stage form, `minimax-h3-r2v-prism-2stage`. Never use either as a fallback
+for other work; both require `--no-filter`. It takes
+Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
+files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
+prompt contract. It renders the 768p class (1344×768 by default,
+5.17-15.08 s) on a recipe fixed in the worker, so pass no
+`--sampler`. It bills Balanced R2V's per-second rate; quote it with
+`--estimate-video-cost`.
+
+`minimax-h3-r2v-prism-2stage` (worker id `minimax-h3-prism-int8_r2v_2stage`)
+sends the same request (references, keyframes, LoRAs, durations and prompt) on
+a half-size canvas and delivers twice it, as `minimax-h3-r2v-balanced-2stage`
+does. `--target-resolution` names the delivered size: `2K` (or omitted)
+renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
+renders 672×384 → 1344×768. It bills Balanced Ref2VA Two-Stage's rate for the
+delivered class; quote it with `--estimate-video-cost`.
+
+Its climax only works with a still of the climax pinned as a keyframe. Draw
+that still first (see the Seedance section below for drawing an explicit
+still), then pin it at the moment it shows with `--keyframe <image>@<seconds>`.
+Given only as a plain reference, the same still renders far worse. A keyframe is not a
+reference: it is the next `<Picture N>` after the reference images, and the
+prompt names it in the Ref2VA keyframe format (its picture entry, the
+`keyframe completion` task, its retention line; see
+[Intermediate keyframes](./video-prompting.md#intermediate-keyframes)).
+
+```bash
+sogni-agent --video -m minimax-h3-r2v-prism --no-filter \
+  --ref ./identity-woman.png -c ./identity-man.png \
+  --keyframe ./climax.png@6.5 --duration 8 \
+  -o ./scene.mp4 "<six-field Ref2VA prompt>"
+sogni-agent --video -m minimax-h3-r2v-prism-2stage --no-filter \
+  --target-resolution 1080 --ref ./identity-woman.png -c ./identity-man.png \
+  --keyframe ./climax.png@6.5 --duration 8 \
+  -o ./scene-1080p.mp4 "<six-field Ref2VA prompt>"
+```
 
 ## Seedance 2.5 Uncensored
 
-For explicit scenes at film quality, prefer `seedance-2-5-uncensored` over
-10Eros: it is a premium loose-reference model that can start from a clothed,
+For explicit scenes at film quality, `seedance-2-5-uncensored` is a premium
+loose-reference model that can start from a clothed,
 world-consistent frame and go explicit at the story beat you choose. It
 requires `--no-filter` for the workflow described here. The author reported
 "Sensitive content detected" errors or more restricted results when that
@@ -76,50 +129,21 @@ or `1080`. Seedance bills premium per-second rates from Premium Spark, which
 no Unlimited plan covers. Use `--estimate-video-cost` with the intended
 settings before rendering.
 
-## MiniMax H3 Prism
+## Writing the scene
 
-`minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`) is a community
-merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
-more realistically, the most consistent MiniMax H3 model for mature themes.
-For a lawful adult reference-to-video request on MiniMax H3, use it instead of
-Balanced R2V unless the creator names another tier; for 1080p or 2K use its
-two-stage form, `minimax-h3-r2v-prism-2stage`. Otherwise use either only when
-the creator picks it or asks for it by name, never as a fallback for other
-work; both require `--no-filter`. It takes
-Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
-files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
-prompt contract. It renders the 768p class (1344×768 by default,
-5.17-15.08 s) on a recipe fixed in the worker, so pass no
-`--sampler`. It bills Balanced R2V's per-second rate; quote it with
-`--estimate-video-cost`.
+This applies to every model used with `--no-filter`.
 
-`minimax-h3-r2v-prism-2stage` (worker id `minimax-h3-prism-int8_r2v_2stage`)
-sends the same request (references, keyframes, LoRAs, durations and prompt) on
-a half-size canvas and delivers twice it, as `minimax-h3-r2v-balanced-2stage`
-does. `--target-resolution` names the delivered size: `2K` (or omitted)
-renders 1344×768 → 2688×1536, `1080` renders 960×544 → 1920×1088, and `720`
-renders 672×384 → 1344×768. It bills Balanced Ref2VA Two-Stage's rate for the
-delivered class; quote it with `--estimate-video-cost`.
-
-Its climax only works with a still of the climax pinned as a keyframe. Draw
-that still first (see the Seedance section above for drawing an explicit
-still), then pin it at the moment it shows with `--keyframe <image>@<seconds>`.
-Given only as a plain reference, the same still renders far worse. A keyframe is not a
-reference: it is the next `<Picture N>` after the reference images, and the
-prompt names it in the Ref2VA keyframe format (its picture entry, the
-`keyframe completion` task, its retention line; see
-[Intermediate keyframes](./video-prompting.md#intermediate-keyframes)).
-
-```bash
-sogni-agent --video -m minimax-h3-r2v-prism --no-filter \
-  --ref ./identity-woman.png -c ./identity-man.png \
-  --keyframe ./climax.png@6.5 --duration 8 \
-  -o ./scene.mp4 "<six-field Ref2VA prompt>"
-sogni-agent --video -m minimax-h3-r2v-prism-2stage --no-filter \
-  --target-resolution 1080 --ref ./identity-woman.png -c ./identity-man.png \
-  --keyframe ./climax.png@6.5 --duration 8 \
-  -o ./scene-1080p.mp4 "<six-field Ref2VA prompt>"
-```
+Be specific and literal. Do not substitute euphemisms or generalizations for
+the requested visible action. Fit every action the creator names into the
+clip, in order; if they cannot all finish on screen, say so and suggest a
+longer clip or one clip per action rather than dropping one. Avoid
+contradictory positions, unrelated cuts, generic quality tags, and repeating
+the same action in several different ways. Give the motion one logical,
+physically continuous evolution. Play the action at the intensity and pace the
+creator asked for, natural and cinematic, with realistic weight and physically
+coherent motion; add slapstick or comic exaggeration only when asked.
+Do not introduce extra characters unless they are clearly visible in the
+supplied image or explicitly requested.
 
 ## Writing a climax
 
@@ -147,7 +171,28 @@ write it like this:
 - With a climax keyframe (on MiniMax H3 Prism, for example), place the squirt
   the climax keyframe shows at that keyframe's time, in the shot on screen then.
 
-## Specialized prompt vocabulary
+## LTX-2.3 10Eros (only when named)
+
+`ltx23-22b-10eros-v1.4-fp8mixed_i2v` (`10eros`, `ltx23-eros`) is an older, fast
+LTX image-to-video model with generated audio. Use it only when the creator
+asks for 10Eros by name. It accepts a first frame, a last frame, or both, and
+requires `--no-filter`.
+
+Use `dr34ml4y-v3` at strength 1 with 10Eros by default. It improves mature-theme
+prompt adherence, motion, and physical behavior even when no action token is
+needed. Omit it only when the creator requests the base 10Eros model alone or
+when comparing/troubleshooting the model and LoRA separately.
+
+The LoRA supports:
+
+- `ltx23-22b-fp8_i2v`
+- `ltx23-22b-fp8_i2v_dev`
+- `ltx23-22b-10eros-v1.4-fp8mixed_i2v` (preferred)
+
+Sogni installs the LT3X v3 LoRA, not the separately trained WAN release. Do not
+use this LoRA ID with WAN models.
+
+### Specialized prompt vocabulary
 
 The LoRA is one multi-concept adapter. Each token selects an action concept:
 
@@ -167,7 +212,7 @@ When a single continuous transition is preferred, keep the sequence short,
 describe it chronologically, and place each token beside its corresponding
 action.
 
-## Prompt construction for 10Eros + DR34ML4Y
+### Prompt construction for 10Eros + DR34ML4Y
 
 Write the prompt solely to produce the result the creator requested. Use one
 unbroken, chronological LTX paragraph of 4-8 present-tense sentences. Do not
@@ -191,18 +236,6 @@ prompt; fold those details into cinematic prose instead.
 6. Integrate the audio design with the action: voice delivery, dialogue, foley,
    environmental sound, and music only when the creator asks for it.
 
-Be specific and literal. Do not substitute euphemisms or generalizations for
-the requested visible action. Fit every action the creator names into the
-clip, in order; if they cannot all finish on screen, say so and suggest a
-longer clip or one clip per action rather than dropping one. Avoid
-contradictory positions, unrelated cuts, generic quality tags, and repeating
-the same action in several different ways. Give the motion one logical,
-physically continuous evolution. Play the action at the intensity and pace the
-creator asked for, natural and cinematic, with realistic weight and physically
-coherent motion; add slapstick or comic exaggeration only when asked.
-Do not introduce extra characters unless they are clearly visible in the
-supplied image or explicitly requested.
-
 When an image is attached and the creator says "one for this image", "make one
 for this", or similar, treat the image as the start-frame authority and build
 the complete purpose-written prompt from what is visibly present plus the
@@ -224,7 +257,7 @@ Action tokens are optional: attach the LoRA for its broader domain improvement
 even when none of its specialized concepts apply. Generate multiple seeds for
 difficult poses, transitions, or multi-action clips.
 
-## Frame modes and loops
+### Frame modes and loops
 
 - First-frame animation: `--ref ./first.png`
 - Last-frame-directed animation: `--ref-end ./last.png`

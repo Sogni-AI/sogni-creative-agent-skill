@@ -5601,9 +5601,9 @@ Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
   --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
-  --seedance-draft      Seedance 2.5: render a 480p draft that --seedance-finalize can render at 1080p
-  --seedance-finalize <draft-job-id> Seedance 2.5: render that draft at 1080p with its own prompt, media,
-                        length, ratio, seed and audio (send none of them; the final is billed at 1080p)
+  --seedance-draft      Seedance 2.5: render a 480p draft that --seedance-finalize can render at 1080p or 4K
+  --seedance-finalize <draft-job-id> Seedance 2.5: render that draft at 1080p by default; --target-resolution 2160 selects 4K.
+                        Its prompt, media, length, ratio, seed and audio are inherited; send none of them.
   --wan3-ratio <ratio>  Wan 3 ratio: adaptive|16:9|4:3|1:1|3:4|9:16
   --smart-duration, --no-smart-duration  Let Wan 3 choose 2-30s, or use --duration
   --reference-file-url <url> Wan 3 public HTTPS document context (one, up to 100 MB; supported paged formats up to 50 pages)
@@ -5612,7 +5612,7 @@ Video Options:
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720 or 1080; Wan 3: 480, 720 (default) or 1080).
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720, 1080 or 2160 (4K); Wan 3: 480, 720 (default) or 1080).
                          MiniMax H3 FastH3 and Ref2VA Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
                          rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
@@ -5896,7 +5896,7 @@ Seedance Video Model Selectors:
   seedance2-ia2v                    Image+audio-to-video
   seedance2-v2v                     Video-to-video without ControlNet
   seedance2-5                       Seedance 2.5 text-to-video (alias seedance2-5-t2v): 4-30s single clips,
-                                     480p/720p/1080p (no 4K), MP4/MOV and last-frame export, native audio, first/last frame via
+                                     480p/720p/1080p/4K, MP4/MOV and last-frame export, native audio, first/last frame via
                                      --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (50 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
@@ -7559,18 +7559,21 @@ if (options.video) {
       [cliSet.seed || options.lastSeed, '--seed/--last-seed'],
       [options.apiGenerateAudio !== null, '--generate-audio/--no-generate-audio'],
       [cliSet.seedanceTaskType || cliSet.workflow, '--seedance-task-type/--workflow'],
-      [cliSet.width || cliSet.height || cliSet.targetResolution, '-w/-h/--target-resolution'],
+      [cliSet.width || cliSet.height, '-w/-h'],
       [cliSet.count && options.count !== 1, '-n']
     ].filter(([present]) => present).map(([, flag]) => flag);
     if (inherited.length > 0) {
       fatalCliError(
-        `A Seedance 2.5 finalize renders its draft at 1080p with the draft's own prompt, media, length, ratio, seed and audio; remove ${inherited.join(', ')}.`,
+        `A Seedance 2.5 finalize uses the draft's own prompt, media, length, ratio, seed and audio; remove ${inherited.join(', ')}.`,
         {
           code: 'INVALID_ARGUMENT',
           details: { seedanceFinalize: options.seedanceFinalize, inherited },
           hint: `sogni-agent --video -m ${options.model} --seedance-finalize ${options.seedanceFinalize} -o final.mp4`
         }
       );
+    }
+    if (cliSet.targetResolution && ![1080, 2160].includes(options.targetResolution)) {
+      fatalCliError('Seedance 2.5 finalization --target-resolution must be 1080 or 2160 (4K).', { code: 'INVALID_ARGUMENT' });
     }
     options.count = 1;
   }
@@ -7664,7 +7667,7 @@ if (options.video) {
     (cliSet.width || cliSet.height)
   ) {
     fatalCliError(
-      `Seedance 2.5 ${options.seedanceTaskType} inherits @Video1's aspect ratio; use --target-resolution 480, 720 or 1080 instead of --width/--height.`,
+      `Seedance 2.5 ${options.seedanceTaskType} inherits @Video1's aspect ratio; use --target-resolution 480, 720, 1080 or 2160 instead of --width/--height.`,
       {
         code: 'INVALID_ARGUMENT',
         details: { seedanceTaskType: options.seedanceTaskType }
@@ -7674,9 +7677,9 @@ if (options.video) {
   if (
     isSeedance25Video &&
     cliSet.targetResolution &&
-    ![480, 720, 1080].includes(options.targetResolution)
+    ![480, 720, 1080, 2160].includes(options.targetResolution)
   ) {
-    fatalCliError('Seedance 2.5 --target-resolution must be 480, 720 or 1080.', {
+    fatalCliError('Seedance 2.5 --target-resolution must be 480, 720, 1080 or 2160 (4K).', {
       code: 'INVALID_ARGUMENT',
       details: { targetResolution: options.targetResolution }
     });
@@ -13768,7 +13771,7 @@ function projectLookupSummary(result) {
       ...(job.kind ? { kind: job.kind } : {}),
       ...(job.url ? { url: job.url } : {}),
       ...(job.urlUnavailable ? { urlUnavailable: job.urlUnavailable } : {}),
-      // Seedance 2.5 draft mode: render a draft at 1080p with --seedance-finalize <id> before it expires.
+      // Seedance 2.5 draft mode: finalize before expiry; omit the final resolution for 1080p or request --target-resolution 2160 for 4K.
       ...(job.seedanceDraft === true ? { seedanceDraft: true, seedanceDraftExpiresAt: job.seedanceDraftExpiresAt ?? null } : {}),
       ...(job.seedanceDraftJobId ? { seedanceDraftJobId: job.seedanceDraftJobId } : {})
     }))
@@ -14613,6 +14616,12 @@ function miniMaxH3R2vReferenceImageCount() {
     + (Array.isArray(options.contextImages) ? options.contextImages.length : 0);
 }
 
+function seedanceFinalResolutionOptions() {
+  return options.seedanceFinalize !== null && cliSet.targetResolution
+    ? { seedanceDraftFinalResolution: options.targetResolution === 2160 ? '4k' : '1080p' }
+    : {};
+}
+
 async function buildVideoEstimateParams({ tokenType, steps }) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isWan3Video = isWan3ModelLocal(options.model);
@@ -14636,7 +14645,8 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
     // Seedance 2.5 draft mode: a draft is quoted as its 480p job, a finalize
     // from its draft (the server ignores this request's size and length).
     ...(options.seedanceDraft ? { seedanceDraft: true } : {}),
-    ...(options.seedanceFinalize !== null ? { seedanceDraftJobId: options.seedanceFinalize } : {})
+    ...(options.seedanceFinalize !== null ? { seedanceDraftJobId: options.seedanceFinalize } : {}),
+    ...seedanceFinalResolutionOptions()
   };
 
   if ((isSeedanceVideo || isWan3Video || isMiniMaxH3R2v) && videoSources.length > 0) {
@@ -15558,10 +15568,10 @@ async function main() {
           count: options.count,
           ...(delivered ? { deliveredWidth: delivered.width, deliveredHeight: delivered.height } : {}),
           ...(options.keyframes.length > 0 ? { keyframeCount: options.keyframes.length } : {}),
-          // A finalize is quoted from its draft: 1080p in the draft's ratio, for
-          // the draft's length, not this request's defaults.
+          // A finalize is quoted at the selected final resolution in the
+          // draft's ratio and length, rather than this request's defaults.
           ...(options.seedanceFinalize !== null
-            ? { width: null, height: null, frames: null, duration: null, seedanceDraftJobId: options.seedanceFinalize }
+            ? { width: null, height: null, frames: null, duration: null, seedanceDraftJobId: options.seedanceFinalize, ...seedanceFinalResolutionOptions() }
             : {}),
           ...(options.seedanceDraft ? { seedanceDraft: true } : {}),
           estimate
@@ -16306,13 +16316,14 @@ async function main() {
       }
 
       if (options.seedanceFinalize !== null) {
-        // The final is its draft at 1080p: Sogni takes the prompt, media, length,
+        // Sogni takes the final's prompt, media, length,
         // ratio, seed and audio from the draft and refuses them sent again. The
         // flags that set them are refused up front; the default length is not.
         delete projectConfig.duration;
         projectConfig.positivePrompt = '';
         projectConfig.seedanceDraftJobId = options.seedanceFinalize;
-        log(`Rendering Seedance draft ${options.seedanceFinalize} at 1080p...`);
+        Object.assign(projectConfig, seedanceFinalResolutionOptions());
+        log(`Rendering Seedance draft ${options.seedanceFinalize} at ${projectConfig.seedanceDraftFinalResolution === '4k' ? '4K' : '1080p'}...`);
       }
 
       await warnAboutInFlightProjects(client, log);
@@ -17204,11 +17215,12 @@ async function main() {
           };
         }
         if (options.seedanceFinalize !== null) {
-          // The final's size and length are its draft's, at 1080p, not this
-          // request's defaults.
+          // The final uses its draft's ratio and length at the selected
+          // resolution, rather than this request's default canvas and length.
           output.width = null;
           output.height = null;
           output.duration = null;
+          Object.assign(output, seedanceFinalResolutionOptions());
         }
         console.log(JSON.stringify(output));
       } else {

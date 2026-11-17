@@ -1576,7 +1576,7 @@ LENGTH: About 80–160 words for a single-beat shot, plus about 30 words for eac
 
 When the user asks for video in **"hd"**, **"1080p"**, **"4k"**, **"uhd"**, or **"high-res"**, do not use the default WAN video models.
 
-- For **native Seedance 4K / UHD**, use full Seedance with `-m seedance2 --target-resolution 2160`. This is a Premium Spark vendor path; do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K — Mini and Fast cap at 720p, and Seedance 2.5 renders up to 1080p.
+- For **native Seedance 4K / UHD**, keep `-m seedance2 --target-resolution 2160` when no model is selected. Preserve an explicitly requested Seedance 2.5 or Uncensored model with `--target-resolution 2160`. This is a Premium Spark vendor path; Mini and Fast cap at 720p.
 - For **Seedance 2.5 HD / 1080p**, preserve the requested model with `-m seedance2-5 --target-resolution 1080`. Its frame, loose-reference, edit, and extend workflows also accept 1080p; edit/extend inherit the source video's aspect ratio.
 - For **non-vendor HD / 1080p text-to-video**, use `-m ltx25`.
 - For **non-vendor HD / 1080p image-to-video**, use `-m ltx25-i2v`.
@@ -1604,7 +1604,7 @@ sogni-agent --video --reference-audio-identity voice.webm 'A medium close-up fra
 # Seedance 2.0 standard (4-15s vendor video path with native audio)
 sogni-agent --video -m seedance2 --duration 8 "<Seedance prompt with time-coded beats>"
 
-# Seedance 2.5 (4-30s single clips, 480p/720p/1080p — the one Seedance that renders past 15s in one call)
+# Seedance 2.5 (4-30s single clips, 480p/720p/1080p/4K — the one Seedance that renders past 15s in one call)
 sogni-agent --video -m seedance2-5 --duration 24 "<Seedance prompt whose time-coded beats cover all 24 s>"
 
 # Seedance 2.5 edit (duration must match @Video1; aspect ratio is inherited)

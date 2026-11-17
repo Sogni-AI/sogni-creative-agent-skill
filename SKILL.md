@@ -196,7 +196,7 @@ sogni-agent --music --lyrics $'[Verse]\nRise with the morning light\n[Chorus]\nW
 # Seedance 2.0 4K (4-15s vendor video with native audio)
 sogni-agent --video -m seedance2 --target-resolution 2160 --duration 8 "<Seedance prompt with time-coded beats>"
 
-# Seedance 2.5 loose-reference operations: fixed 24fps, 480p/720p/1080p; edit inherits source ratio/duration, extend source ratio and requested continuation duration. Same for -m seedance2-5-uncensored; -m seedance2-mini-uncensored follows seedance2-mini.
+# Seedance 2.5 loose-reference operations: fixed 24fps, 480p/720p/1080p/4K; edit inherits source ratio/duration, extend source ratio and requested continuation duration. Same for -m seedance2-5-uncensored; -m seedance2-mini-uncensored follows seedance2-mini.
 sogni-agent --video -m seedance2-5 --target-resolution 1080 --seedance-task-type reference --ref-audio voice.m4a "<one job for @Audio1, then the Seedance prompt>"
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type edit --ref-video source.mp4 --duration 8 --target-resolution 720 "Edit @Video1. Replace <what changes>. Keep the subject, camera path, and timing."
 sogni-agent --video -m seedance2-5-v2v --seedance-task-type extend --ref-video source.mp4 --duration 8 --target-resolution 720 "Extend @Video1. <the new footage after its ending, in time-coded beats>"
@@ -279,7 +279,7 @@ sogni-agent doctor --json
 | `--video`, `--music` | Generate video / music instead of image | - |
 | `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v; `--keyframe <image>@<sec>` pins an H3 keyframe (repeat, up to 8) | - |
-| `--seedance-task-type reference\|edit\|extend`; `--seedance-draft`, `--seedance-finalize <jobId>` | Seedance 2.5 loose-reference operation (v2v defaults to edit). Drafts require user consent after explaining their added cost; finalize an unchanged kept draft at 1080p before `seedanceDraftExpiresAt` (~3 h). See `references/models.md` § Seedance 2.5 | - |
+| `--seedance-task-type reference\|edit\|extend`; `--seedance-draft`, `--seedance-finalize <jobId>` | Seedance 2.5 loose-reference operation (v2v defaults to edit). Drafts require user consent after explaining their added cost; finalize an unchanged kept draft at 1080p by default or 4K with `--target-resolution 2160`, before `seedanceDraftExpiresAt`. See `references/models.md` § Seedance 2.5 | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |
 | `--reference-file-url`, `--reference-link-url` | One public Wan 3 document or webpage context URL (mutually exclusive) | - |
 | `--expand-prompt`, `--no-expand-prompt`, `--watermark`, `--no-watermark` | Local video prompt guardrails (quote and duration checks, storyboard fallback) plus Sogni's server-side Wan 3 rewrite; `--no-expand-prompt` sends the prompt literally. Wan 3 watermark control | on / watermark off |
@@ -363,7 +363,7 @@ H3 r2v accepts up to **9 images** (`--ref` then repeatable `-c`), **3 videos** (
 
 For an H3 prompt-only request, the general prompt-authoring rule above requires returning only the applicable ordered-field contract. The fields themselves are the directly runnable deliverable; do not wrap them in commentary.
 
-For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, use full Seedance: `-m seedance2 --target-resolution 2160`. Do not use `seedance2-mini`, `seedance2-fast`, or `seedance2-5` for 4K; Mini and Fast remain capped to the 720p lower-resolution path, and Seedance 2.5 renders up to 1080p. When the user requests Seedance 2.5 at 1080p, keep `-m seedance2-5 --target-resolution 1080`, including its frame, reference, edit, and extend workflows. For "hd" / "1080p" requests with no model selected, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" on LTX/WAN 2.2 without orientation, prefer `--target-resolution 768`; Seedance uses `720`.
+For "4k" / "uhd" requests where the user accepts the Premium Spark vendor path or asks for Seedance/native audio/multimodal references, keep `-m seedance2 --target-resolution 2160` when no model is selected. Preserve an explicitly requested Seedance 2.5 or Uncensored model with `--target-resolution 2160`. Mini and Fast remain capped at 720p. When the user requests Seedance 2.5 at 1080p, keep `-m seedance2-5 --target-resolution 1080`, including its frame, reference, edit, and extend workflows. For "hd" / "1080p" requests with no model selected, or when avoiding vendor models, use `-m ltx25` (text) or `-m ltx25-i2v` (image), prefer `-w 1920 -h 1088` (or the orientation mapping in the reference), and rewrite the prompt per the LTX rule. For bare "720p" on LTX/WAN 2.2 without orientation, prefer `--target-resolution 768`; Seedance uses `720`.
 
 ### Video editing, stitching, 360 turnarounds
 

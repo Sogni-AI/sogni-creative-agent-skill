@@ -1,3 +1,7 @@
+## Unreleased
+
+- Generate Seedance 2.5 and Uncensored videos at explicitly requested 4K across text, frame, reference, audio, edit and extend workflows. Finalize an unchanged kept draft with --seedance-finalize <jobId> --target-resolution 2160 for 4K; omission retains 1080p.
+
 ## [3.69.0] - 2026-11-16
 
 - Generate and edit images with Seedream 5.5 Uncensored by asking for it with `-m seedream-5-5-uncensored` or "Seedream 5.5". It takes sizes up to about 4.6 megapixels, such as 2816×1584, and up to 10 reference images for edits. "Seedream Uncensored" still selects Seedream 5.0 Pro.

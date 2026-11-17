@@ -692,7 +692,7 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `seedance2-fast` | Variable | Legacy fast Seedance 2.0 text-to-video, 720p path |
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
-| `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p/1080p, MP4/MOV and last-frame export |
+| `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p/1080p/4K, MP4/MOV and last-frame export |
 | `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
 | `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `seedance2-5-uncensored` | Variable | Seedance 2.5 Uncensored: every Seedance 2.5 mode and limit under its own model id; needs the account's one-time likeness and consent agreement |
@@ -795,8 +795,8 @@ no negative prompt and no ControlNet.
   renders past 15 s in a single call. Prefer `seedance2-5` over splitting and
   stitching 2.0 segments when the user wants one continuous Seedance clip
   longer than 15 s.
-- **Resolution**: 480p/720p/1080p (up to 2206 pixels on the long side;
-  default 1280×720). Keep full `seedance2` for 4K requests.
+- **Resolution**: 480p/720p/1080p/4K (up to 4398 pixels on the long side;
+  default 1280×720). Request 4K explicitly with `--target-resolution 2160`.
 - **Exports**: MP4 or MOV with `--output-format`, plus an optional final-frame
   image with `--return-last-frame` for the first frame of a subsequent clip.
 - **Workflows**: text-to-video, image-to-video from a first frame, first- and
@@ -818,7 +818,7 @@ no negative prompt and no ControlNet.
   continuation or `reference` when a video is only a loose creative reference.
   Edit requires `--duration` equal to the source video's duration. Extend uses
   the requested 4-30 second continuation duration. For edit/extend, select only
-  `--target-resolution 480|720|1080`; the provider inherits `@Video1`'s aspect ratio.
+  `--target-resolution 480|720|1080|2160`; the provider inherits `@Video1`'s aspect ratio.
   Untyped automatic classification is rejected before billing because it can
   fail asynchronously after inferring the task.
 - **Audio-only reference**: unlike 2.0, Seedance 2.5 accepts standalone audio as
@@ -843,16 +843,17 @@ no negative prompt and no ControlNet.
   An explicit draft request or agreed draft plan supplies consent within its
   scope; approval of one draft does not authorize an unbounded series of drafts.
   If the user already requested final quality, render it directly without adding
-  a draft. If final resolution is unclear, ask whether they prefer 720p or 1080p.
+  a draft. If final resolution is unclear, ask which supported resolution they want.
   `--seedance-draft` renders a 480p draft at the
   480p price; any normal Seedance 2.5 input works, and the size must be 480p
   (the CLI picks it when you give none). An ordinary 480p render cannot be
   finalized later. Only a job submitted as a draft can. `--seedance-finalize
-  <job-id>`, with the same `-m`, renders that draft at 1080p in its ratio, with
+  <job-id>`, with the same `-m`, renders that draft at 1080p by default. Add
+  `--target-resolution 2160` for 4K (or `1080` explicitly). It retains its ratio, with
   its prompt, media, length, seed and audio setting, so it takes none of them.
   `--json` reports the draft's `jobId` and `seedanceDraftExpiresAt`: finalize
-  before then (about three hours, own account only). Each finalize is billed
-  again at 1080p for the draft's length, at the video-input rate when the draft
+  before then (own account only). Each finalize is billed
+  again at its selected final resolution for the draft's length, at the video-input rate when the draft
   had a video input. Judge the draft before finalizing: the final is the same
   video, not a new take.
   A higher-quality/final request after a draft supersedes draft-first iteration:
@@ -956,7 +957,7 @@ Learned on Sogni's own productions (Sogni Meme World, 2026-10 and 2026-11). They
 `seedance2-5-uncensored` (Sogni model `seedance-2-5-uncensored`) is **Seedance 2.5
 Uncensored**: the same BytePlus model as `seedance2-5`, run on a separate
 uncensored account. Everything in [Seedance 2.5](#seedance-25) applies to it
-unchanged: 4-30 s at 24 fps, 480p/720p/1080p (no 4K), MP4/MOV and
+unchanged: 4-30 s at 24 fps, 480p/720p/1080p/4K, MP4/MOV and
 `--return-last-frame`, first/last frames, `--seedance-task-type`, audio-only
 references, the 30 / 10 / 10 / 50 reference budget and Premium Spark only. It
 comes at a premium rate above Seedance 2.5; quote a render with
@@ -1665,7 +1666,7 @@ model recommendations.
 | Mature-theme reference-to-video, for an adult request or when the user names it (the most consistent MiniMax H3 model for it) | `minimax-h3-r2v-prism` with `--no-filter` |
 | Seedance text-to-video | `seedance2`, `seedance2-mini`, or `seedance2-fast` |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
-| Seedance 2.5 single clip up to 30s (480p/720p/1080p, MP4/MOV and last-frame export) | `seedance2-5` |
+| Seedance 2.5 single clip up to 30s (480p/720p/1080p/4K, MP4/MOV and last-frame export) | `seedance2-5` |
 | Seedance 2.5 video-to-video, editing, or extension | `seedance2-5-v2v` |
 | Seedance 2.5 Uncensored, only when the user asks for it | `seedance2-5-uncensored` |
 | Seedance 2.0 Mini Uncensored, only when the user asks for it | `seedance2-mini-uncensored` |
@@ -1702,7 +1703,7 @@ model recommendations.
 - **Wan 3.0 Enhanced** uses fixed 30 fps, fixed or smart 2–30 s output, 480P/720P/1080P buckets, and `adaptive`, `16:9`, `9:16`, `1:1`, `4:3`, or `3:4`; see [Wan 3.0 Enhanced](#wan-30-enhanced).
 - **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (Ref2VA Turbo: 522,240, its own 960×544 canvas; the CLI fits larger requests inside it). Standard, Balanced, LightX2V FL2VA Turbo, FastH3, and FastH3 Reference default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine; FastH3 Reference is its reference-to-video model and takes no sampler override. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
-- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-mini-uncensored`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini`, `seedance2-mini-uncensored` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p output (no 4K). Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
+- **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-mini-uncensored`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini`, `seedance2-mini-uncensored` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p/4K output. Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
 - **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.

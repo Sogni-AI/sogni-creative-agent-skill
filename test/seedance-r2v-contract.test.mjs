@@ -123,3 +123,21 @@ test('pinned SDK keeps frame mode separate from typed R2V operations', () => {
     /omit it for first\/last-frame generation/
   );
 });
+
+test('pinned SDK transports explicit 4K and preserves the omitted draft-final contract', () => {
+  for (const modelId of ['seedance-2-5', 'seedance-2-5-uncensored']) {
+    const fourK = request({ modelId, width: 3840, height: 2160 });
+    assert.equal(fourK.keyFrames[0].width, 3840);
+    assert.equal(fourK.keyFrames[0].height, 2160);
+    for (const seedanceDraftFinalResolution of [undefined, '1080p', '4k']) {
+      const final = request({
+        modelId, positivePrompt: '', duration: undefined, seedanceDraftJobId: 'kept',
+        ...(seedanceDraftFinalResolution === undefined ? {} : { seedanceDraftFinalResolution }),
+      }).keyFrames[0];
+      assert.equal(final.seedanceDraftFinalResolution, seedanceDraftFinalResolution);
+      assert.equal(Object.hasOwn(final, 'seedanceDraftFinalResolution'), seedanceDraftFinalResolution !== undefined);
+      assert.equal(final.seedanceDraftJobId, 'kept');
+      for (const field of ['duration', 'frames', 'seed', 'generateAudio', 'seedanceTaskType']) assert.equal(final[field], undefined, field);
+    }
+  }
+});

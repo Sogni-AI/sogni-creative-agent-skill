@@ -3718,6 +3718,25 @@ test('seedance 2.5 --seedance-finalize refuses the inputs it inherits from its d
   assert.equal(state?.lastVideoProject, undefined);
 });
 
+test('seedance 2.5 explicit final resolution reaches the quote and render while omission stays absent', () => {
+  for (const target of ['1080', '2160']) {
+    const args = ['--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--target-resolution', target, '--json'];
+    const render = runCli(args);
+    assert.equal(render.exitCode, 0, render.stderr);
+    assert.equal(render.state.lastVideoProject.seedanceDraftFinalResolution, target === '2160' ? '4k' : '1080p');
+    assert.equal(JSON.parse(render.stdout.trim().split('\n').pop()).seedanceDraftFinalResolution, target === '2160' ? '4k' : '1080p');
+    for (const key of ['duration', 'frames', 'seed', 'generateAudio', 'seedanceTaskType']) assert.equal(render.state.lastVideoProject[key], undefined, key);
+    const quote = runCli([...args, '--estimate-video-cost']);
+    assert.equal(quote.exitCode, 0, quote.stderr);
+    assert.equal(quote.state.lastEstimateVideoCost.seedanceDraftFinalResolution, target === '2160' ? '4k' : '1080p');
+  }
+  const old = runCli(['--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1']);
+  assert.equal(old.state.lastVideoProject.seedanceDraftFinalResolution, undefined);
+  const invalid = runCli(['--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1', '--target-resolution', '720']);
+  assert.notEqual(invalid.exitCode, 0);
+  assert.match(invalid.stderr, /finalization --target-resolution must be 1080 or 2160/);
+});
+
 test('seedance draft mode quotes a draft and a finalize with their own estimate fields', () => {
   const draft = runCli(['--video', '-m', 'seedance2-5', '--seedance-draft', '--estimate-video-cost', 'A storm rolls in.']);
   assert.equal(draft.exitCode, 0, draft.stderr);
@@ -3826,16 +3845,16 @@ test('seedance 2.5 task modes reject frame anchors and explicit aspect dimension
   );
 });
 
-test('seedance 2.5 accepts only its 480p, 720p and 1080p target resolution tiers', () => {
+test('seedance 2.5 rejects unsupported target resolution tiers', () => {
   expectCliError(
     [
       '--video', '-m', 'seedance2-5-v2v',
       '--seedance-task-type', 'extend',
       '--ref-video', 'https://example.com/source.mp4',
-      '--target-resolution', '2160',
+      '--target-resolution', '1440',
       'Extend @Video1.'
     ],
-    'Seedance 2.5 --target-resolution must be 480, 720 or 1080'
+    'Seedance 2.5 --target-resolution must be 480, 720, 1080 or 2160'
   );
 });
 
@@ -10164,6 +10183,25 @@ test('Seedance 2.5 transports 1080p MOV and last-frame export', () => {
   assert.equal(state.lastVideoProject.outputFormat, 'mov');
   assert.equal(state.lastVideoProject.returnLastFrame, true);
   assert.equal(Math.min(state.lastVideoProject.width, state.lastVideoProject.height), 1080);
+});
+
+test('Seedance 2.5 explicit 4K reaches text, frame, audio, edit and extend workflows', () => {
+  const modes = [
+    [], ['--ref', SCREENSHOT_FIXTURE], ['--ref-end', SCREENSHOT_FIXTURE],
+    ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE],
+    ['-c', 'https://example.com/reference.png'],
+    ['--ref-audio', 'https://example.com/voice.mp3'],
+    ['--seedance-task-type', 'edit', '--ref-video', 'https://example.com/source.mp4', '--duration', '8'],
+    ['--seedance-task-type', 'extend', '--ref-video', 'https://example.com/source.mp4', '--duration', '8'],
+  ];
+  for (const model of ['seedance2-5', 'seedance2-5-uncensored']) {
+    for (const extra of modes) {
+      const render = runCli(['--video', '-m', model, '--target-resolution', '2160', ...extra, 'A quiet bookshop.'], { SOGNI_AGENT_TEST_REAL_VIDEO_DIMENSION_RULES: '1' });
+      assert.equal(render.exitCode, 0, `${model} ${extra}: ${render.stderr}`);
+      assert.equal(render.state.lastVideoProject.modelId, model === 'seedance2-5' ? 'seedance-2-5' : 'seedance-2-5-uncensored');
+      assert.equal(Math.min(render.state.lastVideoProject.width, render.state.lastVideoProject.height), 2160);
+    }
+  }
 });
 
 test('Seedance 2.5 Uncensored keeps its own model id with every Seedance 2.5 option', () => {

@@ -197,6 +197,9 @@ test('generate_video maps Seedance 2.5 draft mode, and a finalize sends no promp
     '--json', '-q', '--no-update-check', '--video', '-o', '/tmp/final.mp4', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1',
   ]);
   assert.throws(() => tool.buildArgs({ model: 'seedance2-5' }), /prompt is required/);
+  const final4k = tool.buildArgs({ model: 'seedance2-5', seedance_finalize: 'job-draft-1', target_resolution: 2160 });
+  assert.equal(final4k[final4k.indexOf('--target-resolution') + 1], '2160');
+  assert.equal(final4k[final4k.indexOf('--seedance-finalize') + 1], 'job-draft-1');
 });
 
 test('generate_video exposes MiniMax H3 r2v reference arrays and audio control', () => {

@@ -1,3 +1,8 @@
+## [3.71.1] - 2026-11-19
+
+- Seedance videos made from a first or last frame (`--ref`, `--ref-end`) now render at the resolution you ask for. A 16:9 still at 480p (including Seedance 2.5 drafts), a portrait still at 720p and a 21:9 still at 480p were refused, and a portrait or square still at 1080p rendered and was billed at a lower resolution; it now renders at 1080p at the 1080p price. Seedance 2.5 gets the frames at full size, up to 4K, so a draft's 1080p or 4K final is made from them.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.32.1.
+
 ## [3.71.0] - 2026-11-17
 
 - Render Seedance 2.5 and Seedance 2.5 Uncensored videos in 4K with `-m seedance2-5 --target-resolution 2160` (or `-m seedance2-5-uncensored`), in text, image, reference, audio, edit and extend workflows. A kept draft finishes in 4K with `--seedance-finalize <jobId> --target-resolution 2160`; without the flag it still finishes at 1080p.

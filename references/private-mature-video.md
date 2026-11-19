@@ -38,8 +38,7 @@ Other models:
 merge of two MiniMax H3 reference-to-video finetunes that renders adult scenes
 more realistically, the most consistent MiniMax H3 model for mature themes
 and the default here (see [Routing](#routing)); for 1080p or 2K use its
-two-stage form, `minimax-h3-r2v-prism-2stage`. Never use either as a fallback
-for other work; both require `--no-filter`. It takes
+two-stage form, `minimax-h3-r2v-prism-2stage`. Both require explicit approval to use the filter off (`--no-filter`). It takes
 Balanced R2V's references (up to 9 images, 3 videos and 3 audio clips, 12
 files, at least one image or video), keyframes, LoRAs and six-field Ref2VA
 prompt contract. It renders the 768p class (1344×768 by default,

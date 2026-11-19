@@ -227,7 +227,7 @@ Preserve requested visual style and production value without adding new objects,
 
 ## MiniMax H3 Prompting
 
-For MiniMax reference-to-video, default to **Balanced R2V** (`minimax-h3-r2v-balanced`), the tier that passes the quality bar for mature content and holds Mystic X at full strength (as of 2026-10). Use `minimax-h3-r2v-balanced-2stage` for two-stage, 1080p or 2K output. Keep Standard, LightX2V Turbo, or FastH3 Omni R2V only when explicitly requested.
+When MiniMax H3 is selected for loose visual references and the creator has opted to use the Sensitive Content Filter off, prefer **Prism** (`minimax-h3-r2v-prism`) or `minimax-h3-r2v-prism-2stage` for two-stage, 1080p or 2K. Both require `--no-filter`. Otherwise use `minimax-h3-r2v-balanced` or `minimax-h3-r2v-balanced-2stage`. Keep the requested model and check compatibility with any requested LoRA.
 
 Write every H3 prompt using MiniMax's official structured rewrite contract. Do
 not substitute an unstructured prompt for the required fields. The field names,
@@ -1059,7 +1059,7 @@ FINAL ASSESSMENT: silently verify the exact field order, required alignment line
 - Use stable (S1) speaker IDs and wrap exact spoken words in <d>[Language] ...</d>; keep visible text in exact double quotes.
 - overall_soundscape owns diegetic ambience and effects; non_diegetic_music owns audience-only score and is N/A when there is none.
 - Standard runs 20 steps with res_multistep/simple. Balanced uses fixed 8-step Euler/simple acceleration: LightX2V for FL2VA and Larry v4 for Ref2VA. FL2VA Turbo runs 4 steps with simple scheduling; er_sde is the default sampler, with euler and sa_solver available as explicit A/B variants. Ref2VA Turbo uses the exact upstream 4-step euler/simple recipe. All run at fixed 24 fps and guidance 1.
-- Default MiniMax reference-to-video to Balanced R2V (minimax-h3-r2v-balanced), or minimax-h3-r2v-balanced-2stage for two-stage, 1080p or 2K output. Preserve an explicitly requested Standard, LightX2V Turbo, or FastH3 Omni R2V tier.
+- For MiniMax video from loose references, honor a specified model first, then the eligible tier recommended by the session. Otherwise use minimax-h3-r2v-balanced, or minimax-h3-r2v-balanced-2stage for two-stage, 1080p or 2K.
 - Standard, Balanced, and Turbo Ref2VA use exactly six ordered fields: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music. The two-stage Ref2VA selectors (minimax-h3-r2v-2stage at 20 steps, minimax-h3-r2v-balanced-2stage at 8 steps) write the same six-field contract with the same references; only the delivered size changes. FastH3 Reference (minimax-h3-fasth3-r2v-turbo and its -2stage form, the FastH3 tier's reference-to-video) writes the same six-field contract.
 - Ref2VA uses <Subject N> for reusable visible content, <Picture N> only for concrete keyframe/composition anchors, <Video N> for whole-video relationships, and <Audio N> for copied or referenced signals. It requires at least one image or video; audio alone is invalid.
 - The FastH3 audio guide on sound_to_video (minimax-h3-fasth3-ia2v-turbo, minimax-h3-fasth3-flfa2v-turbo, minimax-h3-fasth3-a2v-turbo and their -2stage forms) writes the Base contract of its mode: image + audio as I2V, first/last frame + audio as FLF2V, audio only as T2V. The uploaded audio drives the picture from frame 0 and is the soundtrack, so describe what it contains and never add other dialogue or music. Use these selectors only when the user asks for MiniMax H3 or FastH3.

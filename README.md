@@ -539,7 +539,7 @@ sogni-agent --video -m wan3-enhanced --target-resolution 1080 --duration 8 \
 sogni-agent --video -m wan3-enhanced --workflow i2v --ref first.png --ref-end last.png \
   -c wardrobe.png "Keep the endpoint frames and use Image 1 for wardrobe detail"
 
-# MiniMax R2V default: Balanced (minimax-h3-r2v-balanced); other tiers only when requested.
+# With the filter off, use minimax-h3-r2v-prism with --no-filter. This example uses filter-on Balanced.
 # MiniMax H3 Standard, 8-step Balanced, 4-step LightX2V Turbo, FastH3 Turbo, FastH3 Reference, and FastH3 and Ref2VA Two-Stage (1080p/2K) video
 sogni-agent --video -m minimax-h3 --duration 10 "<three-field H3 prompt>"
 sogni-agent --video -m minimax-h3-i2v --ref first.png --duration 8 "<I2V preamble plus three-field H3 prompt>"
@@ -803,9 +803,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | MiniMax H3 FastH3 Turbo text-to-video | `minimax-h3-fasth3-turbo` or `minimax-h3-fasth3-t2v-turbo` |
 | MiniMax H3 FastH3 Turbo image-to-video | `minimax-h3-fasth3-i2v-turbo` with `--ref` |
 | MiniMax H3 FastH3 Turbo first-frame → last-frame video | `minimax-h3-fasth3-flf2v-turbo` with `--ref A --ref-end B` |
-| MiniMax H3 reference-to-video (default: Balanced R2V) | `minimax-h3-r2v-balanced` with up to 9 images, 3 videos, 3 audios / 12 files total; catalog and Personal LoRAs |
+| MiniMax H3 reference-to-video (filter-on default: Balanced R2V) | `minimax-h3-r2v-balanced` with up to 9 images, 3 videos, 3 audios / 12 files total; catalog and Personal LoRAs |
 | MiniMax H3 1080p or 2K video (FastH3 Two-Stage, delivered at twice the canvas) | `minimax-h3-fasth3-turbo-2stage` (infers the frame mode; 2K default, `--target-resolution 1080` or `720`), or `minimax-h3-fasth3-t2v-turbo-2stage` / `-i2v-turbo-2stage` / `-flf2v-turbo-2stage` |
-| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-balanced-2stage` (preferred Balanced R2V; Standard and FastH3 Reference only when explicitly requested): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`; 2K default, `--target-resolution 1080` or `720` |
+| MiniMax H3 1080p or 2K reference-to-video (Ref2VA Two-Stage, delivered at twice the canvas) | `minimax-h3-r2v-balanced-2stage` (Balanced with the filter on; use `minimax-h3-r2v-prism-2stage` with `--no-filter` when the filter is off): the same references, durations and LoRAs as `minimax-h3-r2v` / `minimax-h3-r2v-balanced` / `minimax-h3-fasth3-r2v-turbo`; 2K default, `--target-resolution 1080` or `720` |
 | MiniMax H3 video driven by your own voice or song (FastH3 audio-to-video) | `minimax-h3-fasth3-ia2v-turbo` (`--ref` + `--ref-audio`), `minimax-h3-fasth3-flfa2v-turbo` (`--ref` + `--ref-end` + `--ref-audio`), or `minimax-h3-fasth3-a2v-turbo` (`--ref-audio`); `minimax-h3-fasth3-turbo` with `--ref-audio` picks the mode; add `-2stage` for Two-Stage; `--lora` works as on the frame modes |
 | Text-to-video with native dialogue/audio | `ltx25` (Distilled) or `ltx25-22b-int8_t2v_dev` (Dev/HQ) |
 | LTX-2.3 10Eros, only when you name it (older uncensored image-to-video on 30GB+ GPUs) | `ltx23-eros` with `--no-filter` |
@@ -865,7 +865,7 @@ sogni-agent --video -m seedance2-5 --seedance-finalize <job-id> -o final.mp4
 - Natural-language aspect requests like "portrait", "square", "16:9", or "9:16" are inferred when width/height aren't explicitly set. Combined requests like "720p 9:16" keep the requested short side while applying the requested shape.
 - For i2v (and any workflow using `--ref` / `--ref-end`), the client wrapper resizes the reference image with strict aspect-fit (`fit: inside`) and uses the *resized* dimensions as the final video size. Because that resize uses rounding, a "valid" requested size can still produce an invalid final size (example: `1024×1536` requested, but ref becomes `1024×1535`). `sogni-agent` detects this for local refs and auto-adjusts to a nearby safe size.
 - **LTX-2.5 first/last-frame default:** `--ref` + `--ref-end` with no `-m` uses `ltx25-22b-int8_i2v_distilled` and the dedicated FLF workflow template. It shares the I2V public model ID and does not attach the LTX-2.3 transition LoRA. Pin `ltx23-22b-fp8_i2v_distilled` explicitly only when the legacy transition-LoRA behavior is required.
-- **Private mature-theme creativity:** optional uncensored LTX-2.3 video models and the optional MiniMax H3 Prism reference-to-video model are available for adults who explicitly want them. They remain opt-in and are not part of ordinary model recommendations; the agent loads their specialized guidance only for a relevant request.
+- **Private mature-theme creativity:** optional uncensored LTX-2.3 video models and the optional MiniMax H3 Prism reference-to-video model are available for adults who explicitly want them. They require opt-in; the agent loads their specialized guidance only for a relevant request.
 - Pass `--strict-size` to fail instead — the script will print a suggested size.
 
 V2V defaults mirror Sogni Chat workflow tuning: `canny`, `pose`, and `depth` use ControlNet strength `0.85` with detailer assist; `detailer` uses strength `1.0`. LTX 2.5 `pose` requires both `--ref-video` for the motion/pose sequence and `--ref` for the subject appearance; explicit LTX 2.3 rollback keeps its existing optional-image behavior. Use `-m seedance2-v2v` for Seedance V2V without ControlNet. Seedance accepts public HTTPS image, video, and audio references that pass CLI URL safety checks; localhost and private-network URLs are rejected before forwarding. The 2.0 family requires audio references to be paired with an image or video; Seedance 2.5 reference mode permits audio-only input.

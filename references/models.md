@@ -798,6 +798,10 @@ no negative prompt and no ControlNet.
   longer than 15 s.
 - **Resolution**: 480p/720p/1080p/4K (up to 4398 pixels on the long side;
   default 1280×720). Request 4K explicitly with `--target-resolution 2160`.
+  With `--ref`/`--ref-end` frames and no `-w`/`-h`, the CLI uses Seedance 2.5's
+  own size for the first frame's shape at the requested resolution (854×480 for
+  a 16:9 still at 480p, 1080×1920 for a portrait still at 1080p) and sends the
+  frames at full size (up to 4K).
 - **Exports**: MP4 or MOV with `--output-format`, plus an optional final-frame
   image with `--return-last-frame` for the first frame of a subsequent clip.
 - **Workflows**: text-to-video, image-to-video from a first frame, first- and
@@ -847,9 +851,8 @@ no negative prompt and no ControlNet.
   a draft. If final resolution is unclear, ask which supported resolution they want.
   `--seedance-draft` renders a 480p draft at the
   480p price; any normal Seedance 2.5 input works, and the size must be 480p
-  (the CLI picks it when you give none). With `--ref`/`--ref-end` frames, that
-  480p size follows the first frame's shape (854x480 for a 16:9 still) and the
-  frames are sent at full size (up to 4K), so the final is made from them.
+  (the CLI picks it when you give none). With `--ref`/`--ref-end` frames, the
+  frames are sent at full size, so the final is made from them.
   An ordinary 480p render cannot be
   finalized later. Only a job submitted as a draft can. `--seedance-finalize
   <job-id>`, with the same `-m`, renders that draft at 1080p by default. Add

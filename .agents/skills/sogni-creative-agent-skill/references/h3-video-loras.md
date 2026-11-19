@@ -16,7 +16,7 @@ Video LoRAs are a different shape from the Krea 2 image sliders:
 
 ## Selecting a compatible model
 
-For MiniMax reference-to-video, prefer Balanced R2V (minimax-h3-r2v-balanced), including LoRA requests; it holds Mystic X v5 at full strength. Use minimax-h3-r2v-balanced-2stage for two-stage, 1080p or 2K output. Keep other R2V tiers only when explicitly requested.
+When MiniMax H3 is selected for loose visual references and the creator has opted to use the Sensitive Content Filter off, prefer **Prism** (`minimax-h3-r2v-prism`) or `minimax-h3-r2v-prism-2stage` for two-stage, 1080p or 2K. Both require `--no-filter`. Otherwise use `minimax-h3-r2v-balanced` or `minimax-h3-r2v-balanced-2stage`. Keep the requested model and check compatibility with any requested LoRA. For Personal LoRAs, use a tier listed in the authenticated catalog for that LoRA.
 
 LoRAs attach to the resolved H3 model, so name the mode in the same command:
 
@@ -25,8 +25,8 @@ LoRAs attach to the resolved H3 model, so name the mode in the same command:
 | Text-to-video | `-m minimax-h3-t2v` (`-turbo`) | `minimax-h3-fl2va-fp8_t2v` |
 | Image-to-video | `-m minimax-h3-i2v` (`-turbo`) | `minimax-h3-fl2va-fp8_i2v` |
 | First+last frame | `-m minimax-h3-flf2v` (`-turbo`) | `minimax-h3-fl2va-fp8_flf2v` |
-| Balanced reference-to-video (default) | `-m minimax-h3-r2v-balanced` | `minimax-h3-ref2va-fp8_r2v_balanced` |
-| Prism reference-to-video (optional, mature themes; `--no-filter`) | `-m minimax-h3-r2v-prism` (`-2stage`) | `minimax-h3-prism-int8_r2v` |
+| Balanced reference-to-video (filter-on default) | `-m minimax-h3-r2v-balanced` | `minimax-h3-ref2va-fp8_r2v_balanced` |
+| Prism reference-to-video (filter-off default; `--no-filter`) | `-m minimax-h3-r2v-prism` (`-2stage`) | `minimax-h3-prism-int8_r2v` |
 | Standard reference-to-video (explicit choice) | `-m minimax-h3-r2v` (`-turbo`) | `minimax-h3-ref2va-fp8_r2v` |
 | FastH3 text-to-video | `-m minimax-h3-fasth3-t2v-turbo` | `minimax-h3-fastvideo-int8_t2v_turbo` |
 | FastH3 image-to-video | `-m minimax-h3-fasth3-i2v-turbo` | `minimax-h3-fastvideo-int8_i2v_turbo` |

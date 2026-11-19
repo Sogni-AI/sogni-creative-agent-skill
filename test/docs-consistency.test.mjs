@@ -195,7 +195,7 @@ test('MiniMax H3 Prism docs stay discreet and the climax wording stays in the ma
   const skill = read('SKILL.md');
   const mature = read('references/private-mature-video.md');
   assert.match(skill, /Whenever the creator explicitly requests 10Eros or MiniMax H3 Prism/);
-  assert.match(skill, /`minimax-h3-r2v-prism`[^\n]*only when the user picks it or asks for it by name[^\n]*requires `--no-filter`/);
+  assert.match(skill, /Sensitive Content Filter off[^\n]*prefer \*\*Prism\*\*[^\n]*`minimax-h3-r2v-prism`[^\n]*require `--no-filter`/);
   for (const docFile of ['references/models.md', 'references/h3-video-loras.md', 'README.md']) {
     const text = read(docFile);
     assert.match(text, /minimax-h3-r2v-prism/, `${docFile}: missing the Prism selector`);

@@ -2421,6 +2421,56 @@ function wan3FrameCanvas(frameWidth, frameHeight, tier) {
   return landscape ? { width: longSide, height: shortSide } : { width: shortSide, height: longSide };
 }
 
+// A Seedance 2.5 draft with a first/last frame (--seedance-draft --ref/--ref-end)
+// renders at 480p, and its final (1080p or 4K) is made from the draft's own
+// frames. The wrapper's frame fit shrank both: it fitted the frame inside the
+// 480p canvas, then took the fitted frame's size as the canvas, so a 2048x1152
+// still in the 848x480 canvas went out as 848x477 and the SDK refused it (every
+// video side must be at least 480). A draft therefore takes a 480p canvas in its
+// frame's shape, the short side 480 and the long side rounded up (2048x1152 gives
+// 854x480, Seedance 2.5's own 16:9 480p size), and sends its frames as given.
+const SEEDANCE_DRAFT_SHORT_SIDE = 480;
+// A draft frame is never sent larger than a 4K render's (short side 2160).
+const SEEDANCE_DRAFT_FRAME_MAX_SHORT_SIDE = 2160;
+
+function seedanceDraftFrameCanvas(frameWidth, frameHeight) {
+  return frameWidth >= frameHeight
+    ? { width: Math.ceil((SEEDANCE_DRAFT_SHORT_SIDE * frameWidth) / frameHeight), height: SEEDANCE_DRAFT_SHORT_SIDE }
+    : { width: SEEDANCE_DRAFT_SHORT_SIDE, height: Math.ceil((SEEDANCE_DRAFT_SHORT_SIDE * frameHeight) / frameWidth) };
+}
+
+// The frames a Seedance 2.5 draft sends: each at its own size (shrunk only past
+// a 4K render's), and the last frame cover-cropped to the first frame's size as
+// the wrapper does, so the final at 1080p or 4K is made from full-size pictures.
+async function prepareSeedanceDraftFrames(first, last) {
+  const capped = async (buffer) => {
+    const dims = buffer ? await getVideoImageDimensionsFromBuffer(buffer) : null;
+    if (!dims?.width || !dims?.height || Math.min(dims.width, dims.height) <= SEEDANCE_DRAFT_FRAME_MAX_SHORT_SIDE) {
+      return buffer;
+    }
+    return sharp(buffer)
+      .resize(dims.width >= dims.height
+        ? { height: SEEDANCE_DRAFT_FRAME_MAX_SHORT_SIDE }
+        : { width: SEEDANCE_DRAFT_FRAME_MAX_SHORT_SIDE })
+      .toBuffer();
+  };
+  const sentFirst = await capped(first);
+  let sentLast = await capped(last);
+  if (sentFirst && sentLast) {
+    const [firstDims, lastDims] = await Promise.all([
+      getVideoImageDimensionsFromBuffer(sentFirst),
+      getVideoImageDimensionsFromBuffer(sentLast)
+    ]);
+    if (firstDims?.width && firstDims?.height && lastDims?.width && lastDims?.height &&
+      (firstDims.width !== lastDims.width || firstDims.height !== lastDims.height)) {
+      sentLast = await sharp(sentLast)
+        .resize(firstDims.width, firstDims.height, { fit: 'cover', position: 'center' })
+        .toBuffer();
+    }
+  }
+  return { first: sentFirst, last: sentLast };
+}
+
 function isWan3ModelSelectionLocal(modelId) {
   const normalized = String(modelId || '').trim().toLowerCase().replace(/_/g, '-');
   return WAN3_REGULAR_MODEL_SELECTIONS.has(normalized) || WAN3_ENHANCED_MODEL_SELECTIONS.has(normalized);
@@ -8528,9 +8578,23 @@ if (options.video) {
     });
   }
 
+  // A Seedance 2.5 draft with a local first/last frame takes the 480p canvas in
+  // the frame's shape, sent exactly (no grid rounding: 854 is not a multiple of
+  // 8). A URL frame is measured once it is downloaded, at the render.
+  const seedanceDraftFrames = seedanceDraftFramesAsGiven();
+  if (seedanceDraftFrames) {
+    const framePath = options.refImage || options.refImageEnd;
+    if (!isHttpUrl(framePath) && existsSync(framePath)) {
+      const dims = getImageDimensionsFromBuffer(readFileSync(framePath));
+      if (dims?.width && dims?.height) Object.assign(options, seedanceDraftFrameCanvas(dims.width, dims.height));
+    }
+  }
+
   const originalVideoWidth = options.width;
   const originalVideoHeight = options.height;
-  const normalizedVideoDims = normalizeVideoDimensionsLikeWrapper(options.width, options.height, videoDimensionRules);
+  const normalizedVideoDims = seedanceDraftFrames
+    ? { width: options.width, height: options.height, adjusted: false }
+    : normalizeVideoDimensionsLikeWrapper(options.width, options.height, videoDimensionRules);
   // Wan 2.2 renders at most 1,048,576 pixels per frame, with each side between
   // 480 and 1536. Since 2026-09-26 the network scales a larger request down to
   // about 1 MP (a side below 480 is still refused, error 4101). A size the user
@@ -8566,7 +8630,7 @@ if (options.video) {
     );
   }
 
-  if (videoWorkflowHasFrameAnchors() && (options.refImage || options.refImageEnd)) {
+  if (!seedanceDraftFrames && videoWorkflowHasFrameAnchors() && (options.refImage || options.refImageEnd)) {
     const references = [
       {
         key: 'refImage',
@@ -14611,6 +14675,18 @@ function videoWorkflowHasFrameAnchors() {
     || (options.videoWorkflow === 'ia2v' && isMiniMaxH3AudioGuideModel(options.model));
 }
 
+// A Seedance 2.5 draft whose --ref/--ref-end are its first/last frames takes the
+// 480p canvas in the frame's shape and sends the frames as given
+// (seedanceDraftFrameCanvas). A size asked for in pixels, or an explicit
+// --auto-resize-assets choice, keeps the wrapper's frame fit.
+function seedanceDraftFramesAsGiven() {
+  return options.seedanceDraft === true
+    && !options.seedanceTaskType
+    && Boolean(options.refImage || options.refImageEnd)
+    && options.autoResizeVideoAssets === null
+    && !cliSet.width && !cliSet.height && !exactPixelsFromPrompt;
+}
+
 // The keyframes a render pinned, for --json output and render info.
 function describeKeyframesForOutput() {
   return options.keyframes.map(({ image, seconds, frameIndex }) => ({
@@ -16093,10 +16169,21 @@ async function main() {
         }
       }
 
+      // Seedance 2.5 draft: the frames go out as given and the 480p canvas takes
+      // the shape of the first frame actually sent (seedanceDraftFrameCanvas).
+      const sendSeedanceDraftFramesAsGiven = seedanceDraftFramesAsGiven() && Boolean(imageBuffer || endImageBuffer);
+      if (sendSeedanceDraftFramesAsGiven) {
+        ({ first: imageBuffer, last: endImageBuffer } = await prepareSeedanceDraftFrames(imageBuffer, endImageBuffer));
+        const frameDims = await getVideoImageDimensionsFromBuffer(imageBuffer || endImageBuffer);
+        if (frameDims?.width && frameDims?.height) {
+          Object.assign(options, seedanceDraftFrameCanvas(frameDims.width, frameDims.height));
+        }
+      }
+
       // Pre-resize reference images to model-compatible dimensions if needed for i2v workflow.
       // The earlier preflight can inspect local files, but HTTPS references are downloaded only
       // here. Re-check the actual buffer so remote and local inputs follow the same grid rules.
-      if (videoWorkflowHasFrameAnchors() && imageBuffer) {
+      if (!sendSeedanceDraftFramesAsGiven && videoWorkflowHasFrameAnchors() && imageBuffer) {
         const dims = await getVideoImageDimensionsFromBuffer(imageBuffer);
         if (dims?.width && dims?.height) {
           const predicted = predictSharpInsideResizeDims(dims.width, dims.height, options.width, options.height);
@@ -16136,7 +16223,7 @@ async function main() {
           }
         }
       }
-      if (videoWorkflowHasFrameAnchors() && endImageBuffer && options._needsRefEndResize) {
+      if (!sendSeedanceDraftFramesAsGiven && videoWorkflowHasFrameAnchors() && endImageBuffer && options._needsRefEndResize) {
         const dims = getImageDimensionsFromBuffer(endImageBuffer);
         if (dims?.width && dims?.height) {
           const resizedBuffer = await resizeImageBufferForVideo(endImageBuffer, dims.width, dims.height, videoDimensionRules);
@@ -16210,7 +16297,7 @@ async function main() {
         projectConfig.autoResizeVideoAssets = false;
       } else if (options.autoResizeVideoAssets !== null) {
         projectConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;
-      } else if (options._ltxReferencePassthrough) {
+      } else if (options._ltxReferencePassthrough || sendSeedanceDraftFramesAsGiven) {
         projectConfig.autoResizeVideoAssets = false;
       }
 

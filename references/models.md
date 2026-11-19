@@ -847,7 +847,10 @@ no negative prompt and no ControlNet.
   a draft. If final resolution is unclear, ask which supported resolution they want.
   `--seedance-draft` renders a 480p draft at the
   480p price; any normal Seedance 2.5 input works, and the size must be 480p
-  (the CLI picks it when you give none). An ordinary 480p render cannot be
+  (the CLI picks it when you give none). With `--ref`/`--ref-end` frames, that
+  480p size follows the first frame's shape (854x480 for a 16:9 still) and the
+  frames are sent at full size (up to 4K), so the final is made from them.
+  An ordinary 480p render cannot be
   finalized later. Only a job submitted as a draft can. `--seedance-finalize
   <job-id>`, with the same `-m`, renders that draft at 1080p by default. Add
   `--target-resolution 2160` for 4K (or `1080` explicitly). It retains its ratio, with

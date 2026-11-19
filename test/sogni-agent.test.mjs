@@ -3856,6 +3856,94 @@ test('seedance 2.5 drafts refuse a size other than 480p', () => {
   assert.match(stderr, /drafts render at 480p only, not 720p/);
 });
 
+// Seedance 2.5's live catalog card: an 8 px step, which rounded the 853x480 draft
+// canvas down to 848x480 before the wrapper fitted a 16:9 frame inside it (848x477).
+const SEEDANCE_25_LIVE_TIERS_JSON = JSON.stringify(Object.fromEntries(
+  ['seedance-2-5', 'seedance-2-5-uncensored'].map((id) => [id, {
+    width: { min: 480, max: 4398, default: 1280, step: 8 },
+    height: { min: 432, max: 3840, default: 720, step: 8 }
+  }])
+));
+
+async function seedanceDraftFrameRun(frames, extraArgs = []) {
+  const require = createRequire(import.meta.url);
+  const sharp = require('sharp');
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-draft-frames-'));
+  const paths = [];
+  for (const [index, [width, height]] of frames.entries()) {
+    const path = join(dir, `frame-${index}.png`);
+    await sharp({ create: { width, height, channels: 3, background: { r: 200, g: 60 * index, b: 40 } } }).png().toFile(path);
+    paths.push(path);
+  }
+  const run = await runCliAsync([
+    '--video', '-m', 'seedance2-5', '--seedance-draft', '--duration', '4',
+    '--ref', paths[0], ...(paths[1] ? ['--ref-end', paths[1]] : []), ...extraArgs,
+    'The two nurses hold their poses as the camera slowly pushes in.'
+  ], { SOGNI_AGENT_TEST_MODEL_TIERS_JSON: SEEDANCE_25_LIVE_TIERS_JSON });
+  const project = run.state?.lastVideoProject;
+  const size = async (serialized) => {
+    if (serialized?.type !== 'Buffer') return null;
+    const { width, height } = await sharp(Buffer.from(serialized.data)).metadata();
+    return `${width}x${height}`;
+  };
+  return { ...run, project, first: await size(project?.referenceImage), last: await size(project?.referenceImageEnd) };
+}
+
+test('seedance 2.5 drafts with 16:9 first/last frames render at 854x480 and send the frames at full size', async () => {
+  const run = await seedanceDraftFrameRun([[2048, 1152], [2048, 1152]]);
+  assert.equal(run.exitCode, 0, run.stderr);
+  assert.equal(`${run.project.width}x${run.project.height}`, '854x480');
+  assert.equal(run.project.seedanceDraft, true);
+  assert.equal(run.project.autoResizeVideoAssets, false);
+  assert.equal(run.first, '2048x1152');
+  assert.equal(run.last, '2048x1152');
+
+  // The pinned wrapper and SDK take that request unchanged. Before, the wrapper
+  // made it 848x477 and the SDK refused it: "Video height must greater or equal 480, got 477".
+  const require = createRequire(import.meta.url);
+  const { SogniClientWrapper } = require('@sogni-ai/sogni-intelligence-client');
+  const createJobRequestMessage = require(
+    '../node_modules/@sogni-ai/sogni-client/dist/Projects/createJobRequestMessage.js'
+  ).default;
+  const toBuffer = (value) => (value?.type === 'Buffer' ? Buffer.from(value.data) : value);
+  const prepared = await new SogniClientWrapper({ apiKey: 'test-api-key', autoConnect: false }).prepareProjectConfig({
+    ...run.project,
+    type: 'video',
+    referenceImage: toBuffer(run.project.referenceImage),
+    referenceImageEnd: toBuffer(run.project.referenceImageEnd)
+  });
+  assert.equal(`${prepared.width}x${prepared.height}`, '854x480');
+  const message = createJobRequestMessage('00000000-0000-4000-8000-000000000001', prepared, {
+    type: 'video',
+    width: { min: 480, max: 4398, step: 8, default: 1280 },
+    height: { min: 432, max: 3840, step: 8, default: 720 },
+    sampler: { allowed: [], default: null },
+    scheduler: { allowed: [], default: null }
+  });
+  assert.equal(`${message.keyFrames[0].width}x${message.keyFrames[0].height}`, '854x480');
+});
+
+test('seedance 2.5 draft frames set a 480p canvas in their own shape and are sent no larger than 4K', async () => {
+  for (const [frames, canvas, first, last] of [
+    [[[1152, 2048], [1152, 2048]], '480x854', '1152x2048', '1152x2048'],
+    [[[1800, 1000], [1800, 1000]], '864x480', '1800x1000', '1800x1000'],
+    [[[1024, 1024]], '480x480', '1024x1024', null],
+    [[[4096, 2304], [2048, 2048]], '854x480', '3840x2160', '3840x2160']
+  ]) {
+    const run = await seedanceDraftFrameRun(frames);
+    assert.equal(run.exitCode, 0, run.stderr);
+    assert.deepEqual(
+      [`${run.project.width}x${run.project.height}`, run.first, run.last],
+      [canvas, first, last],
+      JSON.stringify(frames)
+    );
+  }
+  // A size asked for in pixels keeps the wrapper's frame fit.
+  const explicit = await seedanceDraftFrameRun([[2048, 1152], [2048, 1152]], ['-w', '854', '-h', '480']);
+  assert.equal(explicit.exitCode, 0, explicit.stderr);
+  assert.equal(explicit.project.autoResizeVideoAssets, undefined);
+});
+
 test('seedance draft mode is refused on models other than Seedance 2.5', () => {
   const { exitCode, stderr } = runCli(['--video', '-m', 'ltx25', '--seedance-draft', 'A storm rolls in.']);
   assert.notEqual(exitCode, 0);

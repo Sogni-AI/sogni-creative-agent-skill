@@ -89,9 +89,10 @@ export function isPlanCovered({ plan, partnerModel, billingMode, tokenType }) {
 }
 
 /**
- * What a member pays for a partner model: Sogni takes `bps` basis points off
- * the quoted Spark, SOGNI and USD amounts when it admits the project. Null when
- * there is no discount.
+ * The quote for a partner model after a member's discount: Sogni takes `bps`
+ * basis points off the Spark, SOGNI and USD amounts when it admits the project.
+ * Sogni settles some partner models from the vendor's actual usage, so the
+ * recorded charge can differ slightly. Null when there is no discount.
  */
 export function memberPrice(price, bps) {
   if (!(bps > 0) || bps >= 10000) return null;

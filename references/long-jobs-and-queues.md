@@ -136,8 +136,10 @@ size, count, steps, frames or duration, fps, network, token type) and prints
 "price", "partnerModel", "planCovered", "plan", "time", "dailyFairUsePct",
 "balance" }`. `price` is Sogni's quote for all outputs; on partner models
 (Seedance, Seedream, GPT Image, HappyHorse, Wan 3) a member with a plan
-discount also gets `memberPrice`, which is what Sogni charges them. Partner
-models are never plan-covered. `planCovered` is the CLI's reading of the
+discount also gets `memberPrice`, the quote after that discount. Sogni settles
+some partner models from the vendor's actual usage, so the charge it records
+(`--receipt`) can differ slightly from the quote. Partner models are never
+plan-covered. `planCovered` is the CLI's reading of the
 account; Sogni decides again when the render is submitted. `time` holds Sogni's
 own estimate (`renderSeconds`, `queueSeconds`, `totalSeconds`) and is absent
 when Sogni has none for these settings; `dailyFairUsePct` and `balance` appear

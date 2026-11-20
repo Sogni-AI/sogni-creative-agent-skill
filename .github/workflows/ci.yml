@@ -14,7 +14,7 @@ jobs:
   test:
     name: Unit tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -34,8 +34,10 @@ jobs:
       # check:creative-agent-runtime skips with a warning and the suite runs
       # against the committed generated runtime. Paid integration tests are
       # opt-in (SOGNI_INTEGRATION=1) and never run here.
+      # The full suite ran past 12 minutes on Node 22.11.0 (3.72.0 run 44764031979,
+      # 2026-11-20), so the step gets 25 and the job 35.
       - run: npm test
-        timeout-minutes: 12
+        timeout-minutes: 25
 
   package:
     name: Package contents

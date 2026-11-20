@@ -103,7 +103,9 @@
     "sam-segmentation.mjs",
     "media-utilities.mjs",
     "sam-video-segmentation.mjs",
-    "account-personas.mjs"
+    "account-personas.mjs",
+    "render-accounting.mjs",
+    "progress-events.mjs"
   ],
   "dependencies": {
     "@sogni-ai/sogni-intelligence-client": "4.32.1",

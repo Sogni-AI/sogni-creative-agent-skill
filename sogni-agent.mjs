@@ -30,10 +30,14 @@ import {
 } from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
 import {
-  MESH_FLAGS, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
+  MESH_FLAGS, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
   prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
 } from './media-utilities.mjs';
 import { SAM3_VIDEO_MODEL_ID, videoSegmentationConfig } from './sam-video-segmentation.mjs';
+import {
+  QUOTE_UNAVAILABLE, buildQuoteResult, chargeFromProjectRecords, quoteUnavailableError
+} from './render-accounting.mjs';
+import { attachProgressEvents, createProgressEventWriter } from './progress-events.mjs';
 import { SAM3_MODEL_ID, segmentPoint, segmentBox, validateSegmentationPrompts, segmentationConfig } from './sam-segmentation.mjs';
 import {
   INTERNAL_FLAG as UPDATE_CHECK_INTERNAL_FLAG,
@@ -4198,6 +4202,9 @@ const options = {
   targetResolution: null, // Short-side target for video, preserving aspect ratio
   autoResizeVideoAssets: null,
   estimateVideoCost: false,
+  quote: false,
+  receipt: false,
+  progressEvents: false,
   showBalance: false,
   showVersion: false,
   doctor: false,
@@ -5582,6 +5589,12 @@ for (let i = 0; i < args.length; i++) {
     options.quiet = true;
   } else if (arg === '--estimate-video-cost') {
     options.estimateVideoCost = true;
+  } else if (arg === '--quote') {
+    options.quote = true;
+  } else if (arg === '--receipt') {
+    options.receipt = true;
+  } else if (arg === '--progress-events') {
+    options.progressEvents = true;
   } else if (arg === '--balance' || arg === '--balances') {
     options.showBalance = true;
   } else if (arg === '--version' || arg === '-V') {
@@ -5842,6 +5855,16 @@ General:
                         instead of re-running --status in a loop
   --recent [hours]      List this account's completed projects from the last N hours
                         (default 24, max 168); fetch one with --result
+  --quote               Price this exact request and exit without rendering: Sogni's quote for the
+                        settings the render would send, plan coverage, Sogni's time estimate when it
+                        has one, and the balance (JSON with --json). Plan coverage is the CLI's
+                        reading of the account; Sogni decides again when the render is submitted
+  --receipt             Add what Sogni recorded as the charge ("charge") to a finished render's
+                        result and to --result; "charge": null with "chargeUnavailable" when the
+                        record does not say. One extra read per project after it finishes
+  --progress-events     Also write one "SOGNI_EVENT <json>" line to stderr per queue, model-loading,
+                        start, progress, time-left and retry event while a render waits or runs,
+                        including --result --wait and -q runs
   --steps <num>         Override steps (model-dependent)
   --guidance <num>      Override guidance (model-dependent)
   --moss-rope-scale-x <num>  MOSS horizontal composition scale (0–100; neutral 1)
@@ -7480,6 +7503,53 @@ if (options.detach) {
     fatalCliError(`--detach cannot be combined with ${multiStage[0]}, which submits more than one project in sequence.`, {
       code: 'INVALID_ARGUMENT',
       details: { flag: '--detach', conflictsWith: multiStage[0] }
+    });
+  }
+}
+
+// --quote prices the one project a render submits up front, then exits.
+if (options.quote) {
+  if (options.estimateVideoCost) {
+    fatalCliError('--quote and --estimate-video-cost both price the request; use --quote.', {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--quote', conflictsWith: '--estimate-video-cost' }
+    });
+  }
+  const startsNoRender = [
+    ['--status, --result and --recent', options.projectLookup],
+    ['--balance', options.showBalance],
+    ['--version', options.showVersion],
+    ['--doctor', options.doctor],
+    ['model and LoRA listings', apiModelUtilityAction || liveModelUtilityAction || loraCatalogUtilityAction],
+    ['workflow and replay commands', apiWorkflowUtilityAction || apiReplayUtilityAction],
+    ['contract and storyboard-plan commands', contractUtilityAction || storyboardPlanUtilityAction],
+    ['local video tools', options.extractLastFrame || options.extractFirstFrame || options.extractFrameAt
+      || options.trimVideo || options.verifyVideo || options.concatVideos || options.remixAudio],
+    ['--list-media', options.listMedia],
+    ['memory, personality and persona commands', options.memoryAction || options.personalityAction || personaUtilityAction]
+  ].find(([, applies]) => applies);
+  if (startsNoRender) {
+    fatalCliError(`--quote prices a render; ${startsNoRender[0]} start none.`, {
+      code: 'INVALID_ARGUMENT',
+      details: { flag: '--quote', conflictsWith: startsNoRender[0] }
+    });
+  }
+  const unquotable = [
+    ['--looping renders its return clip only after the first clip finishes', options.looping
+      && options.video && options.videoWorkflow === 'i2v' && options.refImage && options.output,
+    'Quote the clip without --looping; the return clip is a second render with the same settings.'],
+    ['--multi-angle submits one project per angle', options.multiAngle],
+    ['--source-reel submits one render per transition', options.sourceReelDir],
+    ['--api-chat lets the hosted agent choose the renders', options.apiChat],
+    ['a hosted workflow chooses its renders on the server', options.apiWorkflowAction],
+    ['--smart-duration lets Wan 3 choose the length after the quote', options.wan3SmartDuration,
+      'Pass --duration (and --no-smart-duration) to quote a fixed length.']
+  ].find(([, applies]) => applies);
+  if (unquotable) {
+    fatalCliError(`Sogni has no quote for this request: ${unquotable[0]}.`, {
+      code: QUOTE_UNAVAILABLE,
+      ...(unquotable[2] ? { hint: unquotable[2] } : {}),
+      details: { flag: '--quote' }
     });
   }
 }
@@ -9545,6 +9615,8 @@ async function uploadVendorReferenceMedia(ref, index, apiKey, file) {
     throw err;
   }
   assertVendorReferenceUploadAllowed(ref, file);
+  // --quote prepares and checks the reference like a render, but uploads nothing.
+  if (options.quote) return { url: QUOTE_SKIPPED_UPLOAD_URL };
   return uploadPreparedApiMediaReference(ref, index, apiKey, file);
 }
 
@@ -13923,12 +13995,12 @@ function printProjectStatus(result) {
   if (summary.finished && done > 0) console.log(`Fetch the media with: ${resultCommandFor(summary.projectId)}`);
 }
 
-/** --result: the project's media, saved to -o like a normal run when given. */
-async function saveProjectResult(result) {
+/** --result: the project's media, saved to -o like a normal run when given; `receipt` is --receipt's charge. */
+async function saveProjectResult(result, receipt = null) {
   const summary = projectLookupSummary(result);
   if (!summary.finished) {
     if (options.json) {
-      console.log(JSON.stringify({ success: true, ...summary, note: 'Not finished yet; it is still running on Sogni. Check again later; do not resubmit it.' }));
+      console.log(JSON.stringify({ success: true, ...summary, note: 'Not finished yet; it is still running on Sogni. Check again later; do not resubmit it.', ...receipt }));
     } else {
       console.log(`Project ${summary.projectId} is not finished yet (${summary.status}); it is still running on Sogni.`);
       if (summary.message) console.log(summary.message);
@@ -13949,10 +14021,11 @@ async function saveProjectResult(result) {
     }
   }
   if (options.json) {
-    console.log(JSON.stringify({ success: true, ...summary, urls, ...(localPaths.length ? { localPaths } : {}) }));
+    console.log(JSON.stringify({ success: true, ...summary, urls, ...(localPaths.length ? { localPaths } : {}), ...receipt }));
     return;
   }
   console.log(`Project ${summary.projectId}: ${summary.status}`);
+  if (receipt) console.log(describeCharge(receipt));
   if (summary.failure?.message) console.log(`Why it failed: ${summary.failure.message}`);
   if (localPaths.length) {
     for (const path of localPaths) console.log(`Saved to ${path}`);
@@ -13991,6 +14064,7 @@ function printRecentProjects(projects, hours) {
  * it never blocks the run.
  */
 async function warnAboutInFlightProjects(client, log) {
+  if (options.quote) return;
   const projectsApi = sdkClientOf(client)?.projects;
   if (typeof projectsApi?.listProjectsElsewhere !== 'function') return;
   let inFlight;
@@ -14026,8 +14100,16 @@ async function runProjectLookup(client, lookup, { log = () => {}, creds } = {}) 
     await followProjectToEnd(client, lookup.projectId, { log, creds, timeoutMs });
   }
   const result = await projectsApi.getResult(lookup.projectId);
-  if (lookup.action === 'status') printProjectStatus(result);
-  else await saveProjectResult(result);
+  if (lookup.action === 'status') {
+    printProjectStatus(result);
+    return;
+  }
+  const receipt = !options.receipt
+    ? null
+    : result.finished
+      ? await readRunCharge(client, [lookup.projectId])
+      : { charge: null, chargeUnavailable: 'The project has not finished.' };
+  await saveProjectResult(result, receipt);
 }
 
 const PROJECT_WAIT_DEFAULT_TIMEOUT_MS = 1800 * 1000;
@@ -14065,8 +14147,10 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
   }
   const deadline = Date.now() + timeoutMs;
   let tracked = await trackedProjectAfterSync(projectsApi, projectId);
+  let trackingClient = client;
   let sideClient = null;
   let claim = null;
+  let stopProgressEvents = () => {};
   try {
     if (!tracked) {
       const inFlight = await projectsApi.listProjectsElsewhere();
@@ -14078,6 +14162,7 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
         sideClient = createSkillSogniClient(creds, claim.appId);
         await connectSogniClient(sideClient);
         tracked = await trackedProjectAfterSync(sdkClientOf(sideClient).projects, projectId);
+        trackingClient = sideClient;
       }
       if (!tracked) {
         log(claim?.heldByPid
@@ -14087,8 +14172,15 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
         return;
       }
     }
+    if (options.progressEvents) {
+      stopProgressEvents = attachProgressEvents(sdkClientOf(trackingClient), {
+        allow: (id) => id === projectId,
+        writer: createSogniEventWriter()
+      });
+    }
     await settleTrackedProject(tracked, { log, deadline, timeoutMs });
   } finally {
+    stopProgressEvents();
     if (sideClient) {
       try { await sideClient.disconnect(); } catch { /* already closed */ }
     }
@@ -14280,6 +14372,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
     const projectResult = await client.createImageEditProject(withBillingMode(editConfig));
     activeProject = projectResult?.project || null;
     projectId = projectResult?.project?.id || projectId;
+    if (projectId) runProjectIds.add(projectId);
 
     // Check for errors in the response (e.g., insufficient tokens)
     if (projectResult?.error || projectResult?.message) {
@@ -14840,7 +14933,7 @@ function buildMiniMaxH3EstimateUnavailableError(cause) {
 }
 
 async function ensureSufficientVideoBalance(client, log) {
-  if (!options.video || options.estimateVideoCost) return;
+  if (!options.video || options.estimateVideoCost || options.quote) return;
   // Wan 3.0 Enhanced launch credits live in the server-side model ledger and
   // cannot be inferred from wallet balance. Let the socket apply credit first,
   // then enforce PAYG balance for any remainder.
@@ -14904,6 +14997,404 @@ async function ensureSufficientVideoBalance(client, log) {
       { tokenType, available, required }
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// --quote: price the config a render was about to submit, then exit.
+// ---------------------------------------------------------------------------
+
+// Stands in for a reference upload --quote skips: no price depends on the URL.
+const QUOTE_SKIPPED_UPLOAD_URL = 'https://quote.invalid/reference-not-uploaded';
+
+// GPT Image options that change an image quote, as the SDK's estimate names them.
+const IMAGE_ESTIMATE_PASSTHROUGH = [
+  'gptImageQuality', 'gptImageFrameCount', 'gptImageFrameDurationMs', 'gptImageComplexity'
+];
+const IMAGE_ESTIMATE_OUTPUT_FORMATS = new Set(['png', 'jpg', 'webp', 'gif']);
+
+// A refusal of the request itself (400 or 404 from the estimate endpoint, or
+// the wrapper rejecting the estimate's parameters with a 400 validation error)
+// means Sogni has no quote for it. Other failures, such as a lost connection
+// or a rate limit, keep their error.
+function asQuoteError(err) {
+  if (err?.code === QUOTE_UNAVAILABLE) return err;
+  if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
+    return quoteUnavailableError(buildMiniMaxH3EstimateUnavailableError(err).message, {
+      hint: 'Quote a clip of 10 seconds or less, or render without --quote; Sogni checks the price when the render starts.',
+      cause: err
+    });
+  }
+  const status = err?.status ?? err?.statusCode;
+  if (status === 400 || status === 404) {
+    return quoteUnavailableError(`Sogni has no quote for this request: ${cliErrorMessage(err)}`, { cause: err });
+  }
+  return err;
+}
+
+async function modelOptionsFor(client, modelId) {
+  const projectsApi = sdkClientOf(client)?.projects;
+  if (typeof projectsApi?.getModelOptions !== 'function') return null;
+  try {
+    return await projectsApi.getModelOptions(modelId);
+  } catch {
+    // Without the tier, its default steps are unknown and the caller refuses the quote.
+    return null;
+  }
+}
+
+// The steps Sogni prices a project at: the request's own, else the tier default.
+async function pricedSteps(client, modelId, requested) {
+  if (Number.isFinite(requested) && requested > 0) return requested;
+  const fallback = (await modelOptionsFor(client, modelId))?.steps?.default;
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+}
+
+// Runs `run` while recording the parameters the wrapper hands to the SDK's
+// `method`, so a quote reports the values it was priced on.
+async function withRecordedSdkCall(target, method, run) {
+  const original = target?.[method];
+  if (typeof original !== 'function') return { result: await run(), recorded: null };
+  let recorded = null;
+  target[method] = function recordQuoteParams(params, ...rest) {
+    recorded = params;
+    return original.call(this, params, ...rest);
+  };
+  try {
+    return { result: await run(), recorded };
+  } finally {
+    target[method] = original;
+  }
+}
+
+async function quoteVideoConfig(client, config) {
+  const tokenType = config.tokenType || 'spark';
+  const projectsApi = sdkClientOf(client)?.projects;
+  if (options.upscaleVideo || options.segmentVideo) {
+    const source = options._videoUpscale?.source;
+    const params = {
+      model: config.modelId,
+      tokenType,
+      width: options.width,
+      height: options.height,
+      frames: options.frames,
+      fps: options.fps,
+      numberOfMedia: 1,
+      network: config.network,
+      ...(config.billingMode ? { billingMode: config.billingMode } : {}),
+      ...(source ? { sourceWidth: source.width, sourceHeight: source.height } : {}),
+      ...(config.sam3VideoPrompt ? { sam3VideoPrompt: config.sam3VideoPrompt } : {})
+    };
+    if (typeof projectsApi?.estimateVideoCost !== 'function') {
+      throw quoteUnavailableError('This Sogni SDK cannot quote video upscaling or video selection.');
+    }
+    return {
+      estimate: await projectsApi.estimateVideoCost(params),
+      settings: {
+        width: params.width,
+        height: params.height,
+        fps: params.fps,
+        frames: params.frames,
+        duration: params.frames / params.fps,
+        count: 1,
+        ...(source ? { sourceWidth: source.width, sourceHeight: source.height } : {}),
+        ...(options._videoUpscale?.resolution ? { resolution: options._videoUpscale.resolution } : {})
+      }
+    };
+  }
+
+  const modelDefaults = getModelDefaults(options.model, openclawConfig);
+  const steps = resolveVideoSteps(options.model, modelDefaults, options.steps);
+  const isStepFreeVendorVideo = isSeedanceModel(options.model)
+    || isHappyHorseModel(options.model)
+    || isWan3ModelLocal(options.model);
+  if (!isStepFreeVendorVideo && (!Number.isFinite(steps) || steps <= 0)) {
+    const err = new Error('--quote needs --steps for this video model (it has no default).');
+    err.code = 'MISSING_STEPS';
+    err.hint = 'Pass --steps explicitly (e.g. --steps 4 for lightx2v models).';
+    throw err;
+  }
+  const params = await buildVideoEstimateParams({ tokenType, steps });
+  // The wrapper fits the canvas to its model grid and reference shape before
+  // the SDK sends the project, so the quote uses the size it would send.
+  if (typeof client.prepareProjectConfig === 'function') {
+    const prepared = await client.prepareProjectConfig({ ...config, type: 'video' });
+    if (prepared?.width && prepared?.height) {
+      params.width = prepared.width;
+      params.height = prepared.height;
+    }
+  }
+  if (config.billingMode) params.billingMode = config.billingMode;
+  const { result: estimate, recorded } = await withRecordedSdkCall(
+    projectsApi,
+    'estimateVideoCost',
+    () => client.estimateVideoCost(params)
+  );
+  const fps = recorded?.fps ?? params.fps;
+  const frames = recorded?.frames ?? params.frames ?? null;
+  const delivered = isMiniMaxH3TwoStageModel(options.model)
+    ? minimaxH3TwoStageDeliveredSize(params.width, params.height)
+    : null;
+  const settings = options.seedanceFinalize !== null
+    ? {
+        // A finalize is priced from its draft's ratio and length.
+        seedanceDraftJobId: options.seedanceFinalize,
+        ...seedanceFinalResolutionOptions(),
+        count: params.numberOfMedia
+      }
+    : {
+        width: params.width,
+        height: params.height,
+        ...(delivered ? { deliveredWidth: delivered.width, deliveredHeight: delivered.height } : {}),
+        fps,
+        frames,
+        // The clip's length, as a render's result reports it.
+        duration: options.frames ? options.frames / options.fps : options.duration,
+        ...(Number.isFinite(params.steps) ? { steps: params.steps } : {}),
+        count: params.numberOfMedia,
+        ...(params.keyframeCount ? { keyframeCount: params.keyframeCount } : {}),
+        ...(params.referenceImageCount !== undefined ? { referenceImageCount: params.referenceImageCount } : {}),
+        ...(params.referenceVideoCount ? { referenceVideoCount: params.referenceVideoCount } : {}),
+        ...(params.seedanceDraft ? { seedanceDraft: true } : {})
+      };
+  return { estimate, settings };
+}
+
+async function quoteAudioConfig(client, config) {
+  const tokenType = config.tokenType || 'spark';
+  if (config.network === 'relaxed') {
+    // Sogni quotes music and speech at Fast prices only.
+    throw quoteUnavailableError('Sogni quotes music and speech on the Fast network only.', {
+      hint: 'Quote with --network fast, or render on Relaxed without --quote.'
+    });
+  }
+  const steps = await pricedSteps(client, config.modelId, config.steps);
+  if (!steps) {
+    throw quoteUnavailableError(`Sogni has no quote for ${config.modelId}: its default step count is unknown.`);
+  }
+  const count = config.numberOfMedia || 1;
+  if (options.speech) {
+    // Speech is priced per character of script. The SDK's audio estimate has
+    // no field for the script length, so the socket's estimate route is read
+    // directly with the same parameters the SDK sends.
+    const socket = sdkClientOf(client)?.apiClient?.socket;
+    if (typeof socket?.get !== 'function') throw quoteUnavailableError('This Sogni SDK cannot quote speech.');
+    const characters = String(config.positivePrompt || '').length;
+    const path = '/api/v1/job-audio/estimate/'
+      + [tokenType, config.modelId, 30, steps, count].map((part) => encodeURIComponent(part)).join('/');
+    const response = await socket.get(path, {
+      characters,
+      ...(config.network ? { network: config.network } : {}),
+      ...(config.billingMode ? { billingMode: config.billingMode } : {})
+    });
+    const project = response?.quote?.project;
+    if (!project) throw quoteUnavailableError('Sogni returned no price for this speech request.');
+    return {
+      estimate: {
+        spark: project.costInSpark,
+        sogni: project.costInSogni,
+        usd: project.costInUSD,
+        estimatedRenderSeconds: response.benchmark?.estimatedRenderTimeSec,
+        estimatedTotalSeconds: response.benchmark?.estimatedTotalTimeSec,
+        dailyFairUsePct: response.dailyFairUse?.pct
+      },
+      settings: { characters, count }
+    };
+  }
+  const estimate = await client.estimateAudioCost({
+    modelId: config.modelId,
+    duration: config.duration,
+    steps,
+    numberOfMedia: count,
+    tokenType,
+    ...(config.network ? { network: config.network } : {}),
+    ...(config.billingMode ? { billingMode: config.billingMode } : {}),
+    ...(config.priorityMode !== undefined ? { priorityMode: config.priorityMode } : {})
+  });
+  return { estimate, settings: { duration: config.duration, steps, count } };
+}
+
+async function quoteImageConfig(client, config) {
+  const tokenType = config.tokenType || 'spark';
+  const projectsApi = sdkClientOf(client)?.projects;
+  if (typeof projectsApi?.estimateCost !== 'function') throw quoteUnavailableError('This Sogni SDK cannot quote images.');
+  const modelId = config.modelId;
+  const pixal3d = modelId === PIXAL3D_MODEL_ID || modelId === PIXAL3D_MULTIVIEW_MODEL_ID;
+  if (pixal3d && config.shapeResolution !== undefined && config.shapeResolution !== 1024) {
+    throw quoteUnavailableError('Sogni\'s image quote in this SDK prices Pixal3D at its default shape resolution only.', {
+      hint: 'Quote without --shape-resolution, or render without --quote.'
+    });
+  }
+  const segmentation = modelId === SAM3_MODEL_ID;
+  const steps = await pricedSteps(client, modelId, config.steps);
+  if (!steps) throw quoteUnavailableError(`Sogni has no quote for ${modelId}: its default step count is unknown.`);
+  let { width, height } = config;
+  // Sogni renders an InstantID face transfer requested at 1024x1024 at 1016x1016.
+  if (config.controlNet?.name === 'instantid' && width === 1024 && height === 1024) {
+    width = 1016;
+    height = 1016;
+  }
+  const contextImages = Array.isArray(config.contextImages) ? config.contextImages.length : 0;
+  const outputFormat = IMAGE_ESTIMATE_OUTPUT_FORMATS.has(config.outputFormat) ? config.outputFormat : undefined;
+  const params = {
+    network: config.network,
+    tokenType,
+    model: modelId,
+    // Segmentation always renders one mask; utilities render no previews.
+    imageCount: segmentation ? 1 : (config.numberOfMedia || 1),
+    stepCount: steps,
+    previewCount: segmentation || pixal3d ? 0 : (config.numberOfPreviews || 0),
+    cnEnabled: Boolean(config.controlNet),
+    ...(config.startingImage ? { startingImageStrength: config.startingImageStrength ?? 0.5 } : {}),
+    ...(config.sizePreset && config.sizePreset !== 'custom'
+      ? { sizePreset: config.sizePreset }
+      : (width && height ? { width, height } : {})),
+    ...(config.sampler ? { sampler: config.sampler } : {}),
+    ...(config.guidance !== undefined ? { guidance: config.guidance } : {}),
+    contextImages,
+    ...(outputFormat ? { outputFormat } : {}),
+    ...(config.billingMode ? { billingMode: config.billingMode } : {}),
+    ...(config.priorityMode !== undefined ? { priorityMode: config.priorityMode } : {})
+  };
+  for (const key of IMAGE_ESTIMATE_PASSTHROUGH) {
+    if (config[key] !== undefined) params[key] = config[key];
+  }
+  // A cutout is the source's size, which the config does not carry.
+  const outputSize = width && height
+    ? { width, height }
+    : (options.removeBackground ? { width: options.width, height: options.height } : {});
+  return {
+    estimate: await projectsApi.estimateCost(params),
+    settings: {
+      ...outputSize,
+      count: params.imageCount,
+      steps,
+      ...(contextImages ? { referenceImages: contextImages } : {}),
+      ...(outputFormat ? { outputFormat } : {}),
+      ...(params.gptImageQuality ? { quality: params.gptImageQuality } : {}),
+      ...(params.gptImageFrameCount !== undefined ? { frameCount: params.gptImageFrameCount } : {})
+    }
+  };
+}
+
+function quoteMedia(projectType) {
+  if (projectType === 'video' || projectType === 'audio') return projectType;
+  return options.imageTo3d ? 'model' : 'image';
+}
+
+async function quoteProjectConfig(client, projectType, config) {
+  let quoted;
+  try {
+    quoted = projectType === 'video'
+      ? await quoteVideoConfig(client, config)
+      : projectType === 'audio'
+        ? await quoteAudioConfig(client, config)
+        : await quoteImageConfig(client, config);
+  } catch (err) {
+    throw asQuoteError(err);
+  }
+  const subscription = await fetchSubscriptionSnapshot(client, null);
+  let balance = null;
+  try {
+    balance = await client.getBalance();
+  } catch { /* the balance is best effort; the quote stands without it */ }
+  return buildQuoteResult({
+    media: quoteMedia(projectType),
+    model: config.modelId,
+    network: config.network,
+    tokenType: config.tokenType || 'spark',
+    settings: quoted.settings,
+    estimate: quoted.estimate,
+    partnerModel: requiresSparkOnlyToken(config.modelId),
+    subscription,
+    balance,
+    billingMode: config.billingMode
+  });
+}
+
+function formatQuoteAmount(price) {
+  const parts = [];
+  if (price.spark !== undefined) parts.push(`${formatTokenValue(price.spark)} Spark`);
+  if (price.sogni !== undefined) parts.push(`${formatTokenValue(price.sogni)} SOGNI`);
+  if (price.usd !== undefined) parts.push(`$${price.usd}`);
+  return parts.join(' / ') || 'unknown';
+}
+
+function printQuote(quote) {
+  if (options.json) {
+    console.log(JSON.stringify(quote));
+    return;
+  }
+  console.log(`Price: ${formatQuoteAmount(quote.price)} (${quote.model}, ${quote.network})`);
+  if (quote.memberPrice) {
+    console.log(`Member price: ${formatQuoteAmount(quote.memberPrice)} (${quote.memberPrice.discountBps / 100}% off)`);
+  }
+  console.log(`Plan: ${quote.planCovered ? 'covers this render' : 'does not cover this render'}`);
+  if (quote.time?.totalSeconds !== undefined || quote.time?.renderSeconds !== undefined) {
+    console.log(`Time: ${quote.time.totalSeconds ?? quote.time.renderSeconds}s`
+      + (quote.time.renderSeconds !== undefined ? ` (render ${quote.time.renderSeconds}s)` : ''));
+  }
+  if (quote.balance) {
+    console.log(`Balance: ${formatTokenValue(quote.balance.spark)} Spark, ${formatTokenValue(quote.balance.sogni)} SOGNI`);
+  }
+}
+
+/**
+ * --quote: each create call prices the config it receives, prints the quote
+ * and ends the run, so the quote covers exactly what the render would submit.
+ * Nothing is submitted and no render state is written.
+ */
+function installQuoteInterceptor(client) {
+  for (const [method, projectType] of [
+    ['createImageProject', 'image'],
+    ['createImageEditProject', 'image'],
+    ['createVideoProject', 'video'],
+    ['createAudioProject', 'audio']
+  ]) {
+    client[method] = async (config) => {
+      printQuote(await quoteProjectConfig(client, projectType, config));
+      try {
+        await Promise.race([client.disconnect(), new Promise((resolve) => setTimeout(resolve, 1000))]);
+      } catch { /* exiting either way */ }
+      await flushStdout();
+      process.exit(0);
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --receipt: the charge Sogni recorded for this run's projects.
+// ---------------------------------------------------------------------------
+
+async function readRunCharge(client, projectIds) {
+  const projectsApi = sdkClientOf(client)?.projects;
+  if (typeof projectsApi?.getStatus !== 'function') {
+    return { charge: null, chargeUnavailable: 'This Sogni SDK cannot read project records.' };
+  }
+  const records = [];
+  try {
+    for (const projectId of projectIds) records.push(await projectsApi.getStatus(projectId));
+  } catch (err) {
+    const reason = String(cliErrorMessage(err) || 'error').slice(0, 200);
+    return { charge: null, chargeUnavailable: `Sogni's project record could not be read (${reason}).` };
+  }
+  return chargeFromProjectRecords(records);
+}
+
+function describeCharge(receipt) {
+  if (!receipt.charge) return `Charge unavailable: ${receipt.chargeUnavailable}`;
+  const { paidBy, amount, value } = receipt.charge;
+  const worth = value ? `; value ${formatQuoteAmount(value)}` : '';
+  if (paidBy === 'plan') return `Charge: covered by your plan${worth}`;
+  if (paidBy === 'credit') return `Charge: covered by promotional credit${worth}`;
+  const paid = paidBy === 'sogni' ? `${formatTokenValue(amount.sogni)} SOGNI` : `${formatTokenValue(amount.spark)} Spark`;
+  return `Charge: ${paid} ($${amount.usd})`;
+}
+
+// --progress-events: projects this run submitted, whose events it reports.
+const runProjectIds = new Set();
+
+function createSogniEventWriter() {
+  return createProgressEventWriter({ write: (line) => process.stderr.write(line) });
 }
 
 // ---------------------------------------------------------------------------
@@ -15724,6 +16215,14 @@ async function main() {
       return;
     }
 
+    if (options.quote) installQuoteInterceptor(client);
+    if (options.progressEvents && !options.quote) {
+      attachProgressEvents(sdkClientOf(client), {
+        allow: (projectId) => runProjectIds.has(projectId),
+        writer: createSogniEventWriter()
+      });
+    }
+
     if (options.multiAngle) {
       if (options.contextImages.length > 1 && !options.quiet) {
         console.error('Warning: --multi-angle uses the first context image only.');
@@ -15736,9 +16235,12 @@ async function main() {
     let completedJobs = 0;
     let loopingStartImageBuffer;
     const activeProjects = new Set();
+    // Projects submitted after the first finished (the looping return clip).
+    const laterProjectIds = [];
     const projectWait = createProjectWaitTracker(client, log);
     const trackProjectResult = (projectResult) => {
       if (projectResult?.project) {
+        if (projectResult.project.id) runProjectIds.add(projectResult.project.id);
         activeProjects.add(projectResult.project);
         projectWait.track(projectResult.project);
       }
@@ -16860,6 +17362,11 @@ async function main() {
         : null;
 
       const useVariations = options.count > 1 && hasPromptVariations(options.prompt);
+      if (useVariations && options.quote) {
+        throw quoteUnavailableError('Sogni has no quote for this request: a prompt with variations submits one project per variation.', {
+          hint: 'Quote one variation with --count 1.'
+        });
+      }
       const variationCount = useVariations ? options.count : 1;
       const imagesPerCall = useVariations ? 1 : options.count;
 
@@ -17193,6 +17700,7 @@ async function main() {
 
           const clip2Result = await client2.createVideoProject(withBillingMode(projectConfig2));
           activeClip2Project = clip2Result?.project || null;
+          if (activeClip2Project?.id) laterProjectIds.push(activeClip2Project.id);
 
           // Check for errors in the response (e.g., insufficient tokens)
           if (clip2Result?.error || clip2Result?.message) {
@@ -17232,6 +17740,10 @@ async function main() {
           log(`Saved last frame to ${framePath}`);
         }
       }
+
+      const receipt = options.receipt
+        ? await readRunCharge(client, [...new Set([...activeProjects].map((project) => project?.id).concat(laterProjectIds).filter(Boolean))])
+        : null;
 
       // Output result
       if (options.json) {
@@ -17375,9 +17887,11 @@ async function main() {
           output.duration = null;
           Object.assign(output, seedanceFinalResolutionOptions());
         }
+        if (receipt) Object.assign(output, receipt);
         console.log(JSON.stringify(output));
       } else {
         urls.forEach(url => console.log(url));
+        if (receipt) console.log(describeCharge(receipt));
         if (withheldCount > 0) console.log(`${withheldCount} of ${results.length} results withheld by the Sensitive Content Filter`);
         if (options.returnLastFrame) {
           results.forEach(result => { if (result.lastFrameUrl) console.log(`Last frame: ${result.lastFrameUrl}`); });

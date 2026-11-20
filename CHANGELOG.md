@@ -1,3 +1,11 @@
+## [3.72.1] - 2026-11-20
+
+- With the content filter off (`--no-filter`), MiniMax H3 video from loose references now uses MiniMax H3 Prism (`minimax-h3-r2v-prism`, or `minimax-h3-r2v-prism-2stage` for 1080p, 2K and two-stage output) for any theme, and `sogni-agent --help` says so. With the filter on it still uses Balanced, and a model you name is kept.
+- Renders started at the same moment (several agents, or `xargs -P`) no longer share an app ID, so one no longer stops the other mid-render with error 4015.
+- `--no-generate-audio` and `--generate-audio` now reach Seedance videos. Before, Seedance always made its own soundtrack, which could block an edit whose audio you replace afterwards. Without either flag nothing changes.
+- Saving a finished render with `-o` or `--result -o` no longer hangs when the media download stalls. A download that receives nothing for 30 seconds is retried up to 3 times and resumes from the bytes already saved; if it still fails, the CLI exits with the `sogni-agent --result <id> -o <file>` command to download it again.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.32.2.
+
 ## [3.72.0] - 2026-11-20
 
 - See what a render will cost before it starts with `--quote`: Sogni's price for the exact settings, the member price on partner models, whether your plan covers it, Sogni's time estimate and your balance, with nothing rendered. Add `--receipt` to a render or to `--result` to get what Sogni recorded as the charge, and `--progress-events` for one machine-readable `SOGNI_EVENT` line per queue, model-loading, start, progress, time-left and retry event.

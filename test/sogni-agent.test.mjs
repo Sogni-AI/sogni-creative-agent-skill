@@ -105,7 +105,7 @@ function runCli(args, envOverrides = {}) {
   };
 }
 
-function runCliAsync(args, envOverrides = {}) {
+function runCliAsync(args, envOverrides = {}, { onSpawn = null } = {}) {
   const { env, statePath, loaderPath, cliPath } = prepareCliRun(envOverrides);
 
   return new Promise((resolve, reject) => {
@@ -114,6 +114,7 @@ function runCliAsync(args, envOverrides = {}) {
       ['--loader', loaderPath, cliPath, ...args],
       { env, stdio: ['ignore', 'pipe', 'pipe'] }
     );
+    if (onSpawn) onSpawn(child);
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -11208,6 +11209,7 @@ test('a result download that never recovers stops after 3 retries and names the 
     res.writeHead(start ? 206 : 200, {
       'content-length': body.length - start,
       'accept-ranges': 'bytes',
+      etag: '"v9"',
       ...(start ? { 'content-range': `bytes ${start}-${body.length - 1}/${body.length}` } : {})
     });
     res.write(body.subarray(start, start + step));
@@ -11242,7 +11244,7 @@ test('a result download from a server without range support restarts cleanly', a
   const output = join(dir, 'image.png');
   // No Accept-Ranges, and a Range request still gets the whole file with 200.
   await withScriptedMediaServer((requestNumber, _req, res) => {
-    res.writeHead(200, { 'content-length': body.length });
+    res.writeHead(200, { 'content-length': body.length, etag: '"v2"' });
     if (requestNumber === 1) res.write(body.subarray(0, 30 * 1024));
     else res.end(body);
   }, async (url, requests) => {
@@ -11264,6 +11266,78 @@ test('a result download from a server without range support restarts cleanly', a
     assert.deepEqual(readFileSync(output), body);
     assert.deepEqual(requests.map(request => request.range), [null, null]);
     assert.match(result.stderr, /stalled with no data for 300 ms at 30,720 of 81,920 bytes; retrying in 20 ms \(attempt 2 of 4\)\./);
+  });
+});
+
+test('a result download with no ETag or Last-Modified restarts from zero instead of splicing a Range', async () => {
+  const body = patternBytes(72 * 1024);
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-novalidator-'));
+  const output = join(dir, 'clip.mp4');
+  // Ranges are advertised, but nothing proves a resumed body is the same object.
+  await withScriptedMediaServer((requestNumber, _req, res) => {
+    res.writeHead(200, { 'content-length': body.length, 'accept-ranges': 'bytes' });
+    if (requestNumber === 1) res.write(body.subarray(0, 24 * 1024));
+    else res.end(body);
+  }, async (url, requests) => {
+    const result = await runCliAsync([...VIDEO_ARGS, '-o', output, '--json', 'a slow pan'], { SOGNI_AGENT_TEST_RESULT_URL: url, ...FAST_DOWNLOAD_RETRIES });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), body);
+    assert.deepEqual(requests, [{ range: null, ifRange: null }, { range: null, ifRange: null }]);
+    assert.match(result.stderr, /retrying in 20 ms \(attempt 2 of 4\)\./);
+    assert.doesNotMatch(result.stderr, /resuming where it stopped/);
+    assert.deepEqual(readdirSync(dir), ['clip.mp4']);
+  });
+});
+
+test('a result download refused with 404 reports the host and status, never the presigned URL', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-404-'));
+  const output = join(dir, 'clip.mp4');
+  await withScriptedMediaServer((_requestNumber, _req, res) => {
+    res.writeHead(404, { 'content-type': 'text/plain' });
+    res.end('not found');
+  }, async (url, requests) => {
+    const signed = `${url}?verify=SIGNED-SECRET-123`;
+    const result = await runCliAsync(['--result', 'proj-4', '-o', output, '--json'], {
+      SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+        id: 'proj-4', status: 'completed', finished: true, modelId: 'minimax-h3-ref2va-fp8_r2v',
+        jobs: [{ id: 'VID-1', status: 'completed', kind: 'video', url: signed }]
+      }),
+      ...FAST_DOWNLOAD_RETRIES
+    });
+    assert.equal(result.exitCode, 1, result.stderr);
+    const payload = JSON.parse(result.stdout.trim().split('\n').pop());
+    assert.equal(payload.success, false);
+    assert.equal(payload.errorDetails.host, new URL(url).host);
+    assert.equal(payload.errorDetails.status, 404);
+    assert.equal('url' in payload.errorDetails, false);
+    assert.equal(result.stdout.includes('SIGNED-SECRET-123'), false);
+    assert.equal(requests.length, 1, 'a 404 is not retried');
+    assert.deepEqual(readdirSync(dir), []);
+  });
+});
+
+test('SIGTERM during a result download removes the in-flight .part file', async () => {
+  const body = patternBytes(64 * 1024);
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-signal-'));
+  const output = join(dir, 'clip.mp4');
+  let child = null;
+  await withScriptedMediaServer((_requestNumber, _req, res) => {
+    res.writeHead(200, { 'content-length': body.length, 'accept-ranges': 'bytes', etag: '"v3"' });
+    res.write(body.subarray(0, 16 * 1024)); // then hold the connection open
+  }, async (url, requests) => {
+    const run = runCliAsync([...VIDEO_ARGS, '-o', output, '--json', 'a slow pan'], {
+      SOGNI_AGENT_TEST_RESULT_URL: url, SOGNI_AGENT_TEST_DOWNLOAD_STALL_MS: '20000', SOGNI_AGENT_TEST_DOWNLOAD_BACKOFF_MS: '20'
+    }, { onSpawn: (spawned) => { child = spawned; } });
+    for (let waited = 0; !readdirSync(dir).some(name => name.endsWith('.part')) && waited < 15000; waited += 50) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(readdirSync(dir).some(name => name.endsWith('.part')), 'the download had started writing its .part file');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    child.kill('SIGTERM');
+    const result = await run;
+    assert.equal(result.exitCode, 143, result.stderr);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(readdirSync(dir), [], 'no .part file and no partial output left behind');
   });
 });
 

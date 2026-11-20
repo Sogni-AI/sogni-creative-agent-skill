@@ -428,6 +428,9 @@ process.on('exit', () => {
 // normal exit, fatal error, or signal. Ctrl-C during a long video job is the
 // common case that used to orphan directories under os.tmpdir().
 const TRACKED_TEMP_DIRS = new Set();
+// In-flight result downloads (.part files beside the -o target). A signal exits
+// through process.exit(), which skips the downloader's finally, so 'exit' removes them.
+const TRACKED_TEMP_FILES = new Set();
 
 function createTrackedTempDir(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -436,6 +439,10 @@ function createTrackedTempDir(prefix) {
 }
 
 function cleanupTrackedTempDirs() {
+  for (const file of TRACKED_TEMP_FILES) {
+    try { rmSync(file, { force: true }); } catch { /* best effort */ }
+    TRACKED_TEMP_FILES.delete(file);
+  }
   for (const dir of TRACKED_TEMP_DIRS) {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
     TRACKED_TEMP_DIRS.delete(dir);
@@ -12686,6 +12693,7 @@ async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput 
   const say = options.quiet ? () => {} : console.error.bind(console);
   const dir = dirname(filePath);
   const tempPath = join(dir, `.${basename(filePath)}.${process.pid}-${randomBytes(4).toString('hex')}.part`);
+  TRACKED_TEMP_FILES.add(tempPath);
   // received: bytes in tempPath; total: the full size when the server says it;
   // validator: the ETag / Last-Modified sent as If-Range; resumable: false once ranges are ruled out.
   const state = { received: 0, total: null, validator: null, resumable: true };
@@ -12701,7 +12709,7 @@ async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput 
     for (let attempt = 1; attempt <= attempts; attempt++) {
       if (lastFailure) {
         const waitMs = backoffMs[attempt - 2];
-        const resume = state.received > 0 && state.resumable ? ', resuming where it stopped' : '';
+        const resume = state.received > 0 && state.resumable && state.validator ? ', resuming where it stopped' : '';
         say(`Result download from ${host} ${lastFailure.reason} at ${formatDownloadProgress(state)}; retrying in ${formatDownloadDuration(waitMs)} (attempt ${attempt} of ${attempts}${resume}).`);
         await new Promise((resolve) => setTimeout(resolve, waitMs));
       }
@@ -12725,6 +12733,7 @@ async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput 
     if (!saved) {
       try { rmSync(tempPath, { force: true }); } catch { /* best effort */ }
     }
+    TRACKED_TEMP_FILES.delete(tempPath);
   }
   const resultCommand = projectId ? `${resultCommandFor(projectId)}${retryOutput ? ` -o ${shellWord(retryOutput)}` : ''}` : null;
   const err = new Error(
@@ -12752,11 +12761,13 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
   const controller = new AbortController();
   let silentFor = null;
   const expireAfter = (ms) => setTimeout(() => { silentFor = ms; controller.abort(); }, ms);
-  const resuming = state.received > 0 && state.resumable;
+  // Resume only when If-Range can prove the bytes on disk belong to the same object
+  // (a strong ETag or Last-Modified); without one, start over rather than splice.
+  const resuming = state.received > 0 && state.resumable && Boolean(state.validator);
   const headers = {};
   if (resuming) {
     headers.range = `bytes=${state.received}-`;
-    if (state.validator) headers['if-range'] = state.validator;
+    headers['if-range'] = state.validator;
   }
   let timer = expireAfter(DEFAULT_HTTP_TIMEOUT_MS);
   let fd = null;
@@ -12795,7 +12806,10 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
       throw retryableDownloadError(`answered HTTP ${response.status}`);
     } else {
       const err = new Error(`Result download failed: HTTP ${response.status}`);
-      err.details = { url, status: response.status };
+      let host = null;
+      try { host = new URL(url).host; } catch { /* no host to report */ }
+      // Never the URL itself: result links are presigned and errorDetails is printed.
+      err.details = { host, status: response.status };
       throw err;
     }
 

@@ -1,6 +1,7 @@
-## Unreleased
+## [3.72.0] - 2026-11-20
 
 - See what a render will cost before it starts with `--quote`: Sogni's price for the exact settings, the member price on partner models, whether your plan covers it, Sogni's time estimate and your balance, with nothing rendered. Add `--receipt` to a render or to `--result` to get what Sogni recorded as the charge, and `--progress-events` for one machine-readable `SOGNI_EVENT` line per queue, model-loading, start, progress, time-left and retry event.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.32.1.
 
 ## [3.71.1] - 2026-11-19
 

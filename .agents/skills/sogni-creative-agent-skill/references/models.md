@@ -1135,8 +1135,8 @@ also skips the CLI's local prompt guardrails.
   1080x1578); a fixed `--wan3-ratio` does not crop the frame. Explicit
   `-w`/`-h` are sent as given, 480-1920 per side. The network prices the tier
   from the canvas, so 1080P costs twice the 720P rate per second.
-- **Cost (as of 2026-08):** platform artist pricing is $0.065/s at 480P,
-  $0.13/s at 720P, and $0.26/s at 1080P; native audio does not change the rate.
+- **Cost (as of 2026-11):** platform artist pricing is $0.07/s at 480P,
+  $0.14/s at 720P, and $0.28/s at 1080P; native audio does not change the rate.
 
 Prompt in plain natural language. Name references exactly as `Image 1`,
 `Video 1`, and `Audio 1` in per-modality submission order. For dialogue, quote

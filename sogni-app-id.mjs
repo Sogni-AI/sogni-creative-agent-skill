@@ -82,11 +82,16 @@ function sleepSync(ms) {
 }
 
 // A future mtime (clock skew on network or FUSE homes) is never fresh: it would
-// otherwise stay "being written" for as long as the skew lasts.
+// otherwise stay "being written" for as long as the skew lasts. A file written
+// a moment ago can still read a little ahead of Date.now(), which drops the
+// fraction of the current millisecond that mtimeMs keeps (CI, 2026-11-20), so
+// up to MTIME_AHEAD_TOLERANCE_MS ahead still counts as fresh.
+const MTIME_AHEAD_TOLERANCE_MS = 1_000;
+
 function isFreshlyCreated(path) {
   try {
     const age = Date.now() - statSync(path).mtimeMs;
-    return age >= 0 && age < CREATE_GRACE_MS;
+    return age > -MTIME_AHEAD_TOLERANCE_MS && age < CREATE_GRACE_MS;
   } catch {
     return false;
   }

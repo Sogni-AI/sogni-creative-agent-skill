@@ -361,6 +361,26 @@ test('an empty or partial lease is being written while fresh and stale only afte
   releaseSogniAppId();
 });
 
+test('an empty lease written this millisecond, with an mtime just ahead of Date.now(), is still fresh', () => {
+  // Date.now() drops the fraction of the current millisecond that mtimeMs keeps, so
+  // a lease read right after it is written can look a moment ahead (CI Node 24,
+  // 2026-11-20). Pin that deterministically with an mtime half a second ahead.
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-same-ms-'));
+  writeFileSync(join(poolDir, 'slot-0'), 'sogni-agent-same-ms-0\n');
+  writeFileSync(join(poolDir, 'slot-0.lease'), '');
+  const ahead = (Date.now() + 500) / 1000;
+  fs.utimesSync(join(poolDir, 'slot-0.lease'), ahead, ahead);
+  assert.ok(statSync(join(poolDir, 'slot-0.lease')).mtimeMs > Date.now(), 'the lease mtime reads ahead of Date.now()');
+  let generated = 0;
+  releaseSogniAppId();
+  const appId = getOrCreateSogniAppId({
+    poolDir, generateUuid: () => `same-ms-${++generated}`, ownPid: 4301, isPidAlive: () => true,
+  });
+  assert.equal(appId, 'sogni-agent-same-ms-1', 'a lease being written now is left alone');
+  assert.equal(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8'), '');
+  releaseSogniAppId();
+});
+
 
 test('a future-dated or never-written empty identity file fails fast instead of waiting forever', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-skew-'));

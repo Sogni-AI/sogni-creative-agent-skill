@@ -9217,7 +9217,7 @@ test('new utility flags appear in --help output', () => {
   assert.ok(stdout.includes('minimax-h3-t2v-balanced'), 'Help should include the MiniMax H3 Balanced selectors');
   assert.ok(stdout.includes('minimax-h3-r2v-balanced'), 'Help should include the MiniMax H3 Ref2VA Balanced selector');
   assert.ok(
-    /minimax-h3-r2v-prism\s+Optional Ref2VA model for mature themes[\s\S]{0,160}requires --no-filter/.test(stdout),
+    /minimax-h3-r2v-prism\s+Prism Ref2VA, the reference-to-video model whenever the filter is off[\s\S]{0,200}requires --no-filter/.test(stdout),
     'Help should list MiniMax H3 Prism with its --no-filter requirement'
   );
   assert.ok(

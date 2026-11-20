@@ -6052,9 +6052,11 @@ state negatives in the structured prompt.):
   minimax-h3-t2v-balanced           Balanced text-to-video
   minimax-h3-i2v-balanced           Balanced I2VA (--ref) or L2VA (--ref-end)
   minimax-h3-flf2v-balanced         Balanced first-frame -> last-frame (--ref plus --ref-end)
-  minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references
-  minimax-h3-r2v-prism              Optional Ref2VA model for mature themes on Balanced's graph: 768p class,
-                                     Balanced's references, keyframes and LoRAs; requires --no-filter
+  minimax-h3-r2v-balanced           Balanced Ref2VA with loose image/video/audio references; with the filter
+                                     off, use minimax-h3-r2v-prism instead
+  minimax-h3-r2v-prism              Prism Ref2VA, the reference-to-video model whenever the filter is off (any
+                                     theme), on Balanced's graph: 768p class, Balanced's references, keyframes
+                                     and LoRAs; requires --no-filter
   minimax-h3-r2v-prism-2stage       Prism Two-Stage: the minimax-h3-r2v-prism request, delivered at twice the
                                      canvas like minimax-h3-r2v-balanced-2stage; requires --no-filter
   minimax-h3-r2v-2stage             Ref2VA Two-Stage: the minimax-h3-r2v request (20 steps), delivered at twice the

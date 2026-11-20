@@ -1,3 +1,7 @@
+## Unreleased
+
+- See what a render will cost before it starts with `--quote`: Sogni's price for the exact settings, the member price on partner models, whether your plan covers it, Sogni's time estimate and your balance, with nothing rendered. Add `--receipt` to a render or to `--result` to get what Sogni recorded as the charge, and `--progress-events` for one machine-readable `SOGNI_EVENT` line per queue, model-loading, start, progress, time-left and retry event.
+
 ## [3.71.1] - 2026-11-19
 
 - Seedance videos made from a first or last frame (`--ref`, `--ref-end`) now render at the resolution you ask for. A 16:9 still at 480p (including Seedance 2.5 drafts), a portrait still at 720p and a 21:9 still at 480p were refused, and a portrait or square still at 1080p rendered and was billed at a lower resolution; it now renders at 1080p at the 1080p price. Seedance 2.5 gets the frames at full size, up to 4K, so a draft's 1080p or 4K final is made from them.

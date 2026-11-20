@@ -271,3 +271,32 @@ test('claimSogniAppIdSlot reclaims a dead lease and ignores app IDs outside the 
   claim.release();
   assert.equal(claimSogniAppIdSlot('sogni-web-tab', { poolDir }), null);
 });
+
+// Six CLI processes started on the same millisecond, as `xargs -P` or several agents
+// do. Before leases were published by hard link, an empty, half-created lease read as
+// stale and was taken again: three pairs shared an app ID in 30 of 30 such rounds
+// (2026-11-19), and the socket kicked one of each pair mid-render (SWITCH_CONNECTION).
+test('pool: processes that start together never share an app ID, with or without a dead lease', async () => {
+  const moduleUrl = new URL('../sogni-app-id.mjs', import.meta.url).href;
+  for (const deadLeaseOnSlot0 of [false, true]) {
+    for (let round = 0; round < 3; round += 1) {
+      const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-race-'));
+      for (let slot = 0; slot < 8; slot += 1) writeFileSync(join(dir, `slot-${slot}`), `race-app-${slot}\n`, { mode: 0o600 });
+      if (deadLeaseOnSlot0) writeFileSync(join(dir, 'slot-0.lease'), `${JSON.stringify({ pid: 99999999 })}\n`, { mode: 0o600 });
+      const startAt = Date.now() + 600;
+      const code = `const { getOrCreateSogniAppId } = await import(${JSON.stringify(moduleUrl)});
+        while (Date.now() < ${startAt}) {}
+        console.log(getOrCreateSogniAppId({ appId: '', appIdPath: '', poolDir: process.argv[1] }));
+        setTimeout(() => {}, 700);`;
+      const ids = await Promise.all(Array.from({ length: 6 }, () => new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, ['--input-type=module', '-e', code, dir]);
+        let out = '', err = '';
+        child.stdout.on('data', (chunk) => { out += chunk; });
+        child.stderr.on('data', (chunk) => { err += chunk; });
+        child.once('error', reject);
+        child.once('exit', (status) => (status === 0 ? resolve(out.trim()) : reject(new Error(err))));
+      })));
+      assert.equal(new Set(ids).size, ids.length, `shared app IDs (dead lease: ${deadLeaseOnSlot0}): ${ids.join(', ')}`);
+    }
+  }
+});

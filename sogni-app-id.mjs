@@ -24,6 +24,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -133,22 +134,65 @@ function leaseIsStale(leasePath, { isPidAlive, ownPid }) {
   return !isPidAlive(pid);
 }
 
+// A lease appears with its record already inside: the record is written to a
+// private temporary file and hard-linked into place, which fails with EEXIST
+// while the slot is held. Creating the lease file first and writing it after
+// left an empty file that a process starting at the same moment read as
+// corrupt, judged stale, deleted and took, so two processes shared one app ID
+// and the socket kicked the first mid-render with SWITCH_CONNECTION (six
+// simultaneous starts gave three shared pairs in 30 of 30 rounds, 2026-11-19).
 function tryCreateLease(leasePath, ownPid) {
-  let descriptor;
+  const record = {
+    pid: ownPid,
+    tool: basename(process.argv[1] || 'sogni-agent'),
+    acquiredAt: new Date().toISOString(),
+  };
+  const temporaryPath = `${leasePath}.${ownPid}.${randomUUID()}.tmp`;
+  writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try {
-    descriptor = openSync(leasePath, 'wx', 0o600);
-    const record = {
-      pid: ownPid,
-      tool: basename(process.argv[1] || 'sogni-agent'),
-      acquiredAt: new Date().toISOString(),
-    };
-    writeFileSync(descriptor, `${JSON.stringify(record)}\n`, 'utf8');
+    linkSync(temporaryPath, leasePath);
     return true;
   } catch (error) {
     if (error?.code === 'EEXIST') return false;
     throw error;
   } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
+    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
+  }
+}
+
+// A reclaim holds this lock only between re-checking a lease and replacing it.
+// A lock older than this was left by a process that died mid-reclaim.
+const RECLAIM_LOCK_STALE_MS = 30_000;
+
+function tryCreateReclaimLock(lockPath) {
+  try {
+    closeSync(openSync(lockPath, 'wx', 0o600));
+    return true;
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+  }
+  try {
+    if (Date.now() - statSync(lockPath).mtimeMs < RECLAIM_LOCK_STALE_MS) return false;
+    unlinkSync(lockPath);
+    closeSync(openSync(lockPath, 'wx', 0o600));
+    return true;
+  } catch {
+    return false; // released, or another process took it first
+  }
+}
+
+// Replace a stale lease with ours. Only the process holding the slot's reclaim
+// lock may delete a lease: without it, two starters that both judged the same
+// dead lease stale could each delete the other's fresh lease and share the slot.
+function reclaimStaleLease(leasePath, { isPidAlive, ownPid }) {
+  const lockPath = `${leasePath}.reclaim`;
+  if (!tryCreateReclaimLock(lockPath)) return false;
+  try {
+    if (!leaseIsStale(leasePath, { isPidAlive, ownPid })) return tryCreateLease(leasePath, ownPid);
+    try { unlinkSync(leasePath); } catch { /* already gone */ }
+    return tryCreateLease(leasePath, ownPid);
+  } finally {
+    try { unlinkSync(lockPath); } catch { /* best effort */ }
   }
 }
 
@@ -166,15 +210,18 @@ function migrateLegacyAppId(poolDir, legacyAppIdPath) {
   } catch {
     return; // absent or corrupt legacy identity: nothing worth migrating
   }
-  let descriptor;
+  // Published by hard link, like every identity file, so a process starting at
+  // the same moment never reads an empty slot-0.
+  const slotPath = join(poolDir, 'slot-0');
+  const temporaryPath = `${slotPath}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    descriptor = openSync(join(poolDir, 'slot-0'), 'wx', 0o600);
-    writeFileSync(descriptor, `${legacyValue}\n`, 'utf8');
+    writeFileSync(temporaryPath, `${legacyValue}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    linkSync(temporaryPath, slotPath);
   } catch (error) {
     if (error?.code !== 'EEXIST') throw error;
     return; // pool already initialized; leave the legacy file alone
   } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
+    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
   }
   try { unlinkSync(legacyAppIdPath); } catch { /* best effort */ }
 }
@@ -208,10 +255,8 @@ function acquireSlotLease({ poolDir, poolMax, generateUuid, isPidAlive, ownPid, 
     const appId = getOrCreateAppIdFile(slotPath, generateUuid);
     const leasePath = `${slotPath}.lease`;
     if (tryCreateLease(leasePath, ownPid)) return { appId, leasePath };
-    if (leaseIsStale(leasePath, { isPidAlive, ownPid })) {
-      try { unlinkSync(leasePath); } catch { /* another reclaimer won */ }
-      if (tryCreateLease(leasePath, ownPid)) return { appId, leasePath };
-    }
+    if (leaseIsStale(leasePath, { isPidAlive, ownPid })
+      && reclaimStaleLease(leasePath, { isPidAlive, ownPid })) return { appId, leasePath };
   }
   const error = new Error(`All ${poolMax} Sogni app-ID slots in ${poolDir} are leased by live processes.`);
   error.code = 'APP_ID_POOL_EXHAUSTED';
@@ -311,8 +356,7 @@ export function claimSogniAppIdSlot(appId, {
         try { pid = JSON.parse(readFileSync(leasePath, 'utf8'))?.pid ?? null; } catch { /* unreadable: still held */ }
         return { heldByPid: pid };
       }
-      try { unlinkSync(leasePath); } catch { /* another reclaimer won */ }
-      if (!tryCreateLease(leasePath, ownPid)) return { heldByPid: null };
+      if (!reclaimStaleLease(leasePath, { isPidAlive, ownPid })) return { heldByPid: null };
     }
     let released = false;
     const release = () => {

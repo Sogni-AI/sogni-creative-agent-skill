@@ -11309,3 +11309,257 @@ test('GPT Image 2.6 CLI chooses a valid default GIF frame size', () => {
   assert.equal(state.lastImageProject.width, 896);
   assert.equal(state.lastImageProject.height, 896);
 });
+
+// --- --quote, --receipt, --progress-events -------------------------------------------
+
+const FLAGLESS_RENDER_OUTPUTS = JSON.parse(readFileSync(join(process.cwd(), 'test', 'fixtures', 'flagless-render-outputs.json'), 'utf8'));
+const QUOTED_ESTIMATE = JSON.stringify({
+  token: '1.6', spark: '1.6', sogni: '0.08', usd: '0.008',
+  estimatedRenderSeconds: 6.6, estimatedTotalSeconds: 16.6, dailyFairUsePct: 0.1
+});
+const UNLIMITED_SUBSCRIPTION = JSON.stringify({ active: true, status: 'active', tier: 'unlimited', frontierDiscountBps: 500 });
+const PLAN_PAID_RECORD = JSON.stringify({
+  'proj-1': {
+    id: 'proj-1', status: 'completed', finished: true, paymentModel: 'subscription', tokenType: 'spark',
+    costActual: { costInRenderSec: '10', costInUSD: '0.1', costInToken: '20.67', costInSpark: '20.67', costInSogni: '1.2' }
+  }
+});
+
+function sogniEventLines(stderr) {
+  return stderr.split('\n').filter((line) => line.startsWith('SOGNI_EVENT ')).map((line) => JSON.parse(line.slice('SOGNI_EVENT '.length)));
+}
+
+test('without the new flags an image and a video run print exactly what they printed before', () => {
+  for (const [name, expected] of Object.entries(FLAGLESS_RENDER_OUTPUTS)) {
+    const { exitCode, stdout, stderr } = runCli(expected.args);
+    assert.equal(exitCode, expected.exitCode, name);
+    assert.equal(stdout, expected.stdout, name);
+    assert.equal(stderr, expected.stderr, name);
+  }
+});
+
+test('--quote prices the image the run would submit and submits nothing', () => {
+  const { exitCode, stdout, state } = runCli(['--quote', '--json', '-m', 'z_image_turbo_bf16', '--width', '1024', '--height', '1024', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_ESTIMATE_JSON: QUOTED_ESTIMATE,
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: UNLIMITED_SUBSCRIPTION,
+    SOGNI_AGENT_TEST_BALANCE_JSON: JSON.stringify({ spark: 840.2, sogni: 12, premiumSpark: 3 })
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout.trim()), {
+    success: true,
+    type: 'quote',
+    media: 'image',
+    model: 'z_image_turbo_bf16',
+    network: 'fast',
+    tokenType: 'spark',
+    settings: { width: 1024, height: 1024, count: 1, steps: 8 },
+    price: { spark: 1.6, sogni: 0.08, usd: 0.008 },
+    partnerModel: false,
+    planCovered: true,
+    plan: { active: true, tier: 'unlimited', partnerDiscountBps: 500 },
+    time: { renderSeconds: 6.6, queueSeconds: 10, totalSeconds: 16.6 },
+    dailyFairUsePct: 0.1,
+    balance: { spark: 840.2, sogni: 12, premiumSpark: 3 }
+  });
+  assert.equal(state.lastImageProject, null, 'A quote must not submit a render');
+  assert.equal(state.lastEstimateImageCost.model, 'z_image_turbo_bf16');
+  assert.equal(state.lastEstimateImageCost.imageCount, 1);
+  assert.equal(state.lastEstimateImageCost.width, 1024);
+  assert.equal(state.lastEstimateImageCost.network, 'fast');
+});
+
+test('--quote prices a video at the frames, steps and billing the render would send', () => {
+  const { exitCode, stdout, state, stderr } = runCli([
+    '--quote', '--json', '--video', '-m', 'minimax-h3-fastvideo-int8_t2v_turbo', '--duration', '5',
+    '--billing-mode', 'subscription', 'waves rolling onto a beach'
+  ]);
+  assert.equal(exitCode, 0, stderr);
+  const quote = JSON.parse(stdout.trim());
+  assert.equal(quote.media, 'video');
+  assert.deepEqual(quote.settings, { width: 1344, height: 768, fps: 24, frames: 124, duration: 124 / 24, steps: 4, count: 1 });
+  assert.equal(quote.planCovered, false);
+  assert.deepEqual(quote.plan, { active: false });
+  assert.equal('time' in quote, false);
+  assert.equal(state.lastEstimateVideoCost.billingMode, 'subscription');
+  assert.equal(state.lastEstimateVideoCost.frames, 124);
+  assert.equal(state.lastVideoProject, null);
+});
+
+test('--quote of a partner model shows the member price and uploads no reference', () => {
+  const { exitCode, stdout, state, stderr } = runCli([
+    '--quote', '--json', '--video', '-m', 'seedance2-5', '--duration', '5', '-c', SCREENSHOT_FIXTURE,
+    'The <Picture 1> lantern drifts over a lake.'
+  ], {
+    SOGNI_AGENT_TEST_ESTIMATE_JSON: JSON.stringify({ spark: '20.67', sogni: '1.2', usd: '0.1' }),
+    SOGNI_AGENT_TEST_SUBSCRIPTION_JSON: UNLIMITED_SUBSCRIPTION,
+    // An upload would reach this address and fail; a quote never makes one.
+    SOGNI_API_BASE_URL: 'http://127.0.0.1:9'
+  });
+  assert.equal(exitCode, 0, stderr);
+  const quote = JSON.parse(stdout.trim());
+  assert.equal(quote.partnerModel, true);
+  assert.equal(quote.planCovered, false);
+  assert.deepEqual(quote.memberPrice, { spark: 19.6365, sogni: 1.14, usd: 0.095, discountBps: 500 });
+  assert.equal(state.lastVideoProject, null);
+});
+
+test('--quote prices music and speech with the values the render sends', () => {
+  const music = runCli(['--quote', '--json', '--music', '--duration', '30', 'a calm piano piece']);
+  assert.equal(music.exitCode, 0, music.stderr);
+  const musicQuote = JSON.parse(music.stdout.trim());
+  assert.equal(musicQuote.media, 'audio');
+  assert.equal(music.state.lastEstimateAudioCost.duration, 30);
+  assert.equal(musicQuote.settings.duration, 30);
+  assert.equal(music.state.lastAudioProject, null);
+
+  const speech = runCli(['--quote', '--json', '--speech', 'Hello there, welcome to the show.']);
+  assert.equal(speech.exitCode, 0, speech.stderr);
+  const speechQuote = JSON.parse(speech.stdout.trim());
+  assert.deepEqual(speechQuote.settings, { characters: 'Hello there, welcome to the show.'.length, count: 1 });
+  const [get] = speech.state.socketGets;
+  assert.match(get.path, /^\/api\/v1\/job-audio\/estimate\/spark\/[^/]+\/30\/8\/1$/);
+  assert.equal(get.query.characters, 'Hello there, welcome to the show.'.length);
+
+  const relaxed = runCli(['--quote', '--json', '--music', '--network', 'relaxed', '--duration', '30', 'a calm piano piece']);
+  assert.equal(relaxed.exitCode, 1);
+  assert.equal(JSON.parse(relaxed.stdout.trim()).errorCode, 'QUOTE_UNAVAILABLE');
+});
+
+test('--quote prices an image upscale from its source and target size', () => {
+  const source = createPngDimensionFixture(1024, 768);
+  const { exitCode, stdout, state, stderr } = runCli(['--quote', '--json', '--upscale', source]);
+  assert.equal(exitCode, 0, stderr);
+  const quote = JSON.parse(stdout.trim());
+  assert.equal(quote.model, 'rtx_vsr_pro');
+  assert.equal(state.lastEstimateImageCost.startingImageStrength, 1);
+  assert.equal(state.lastEstimateImageCost.width, quote.settings.width);
+  assert.equal(state.lastImageProject, null);
+});
+
+test('--quote refuses what Sogni cannot quote with QUOTE_UNAVAILABLE and other misuse as invalid', () => {
+  const looping = runCli(['--quote', '--json', '--video', '--looping', '--ref', SCREENSHOT_FIXTURE, '-o', 'loop.mp4', 'a slow push in']);
+  assert.equal(looping.exitCode, 1);
+  assert.equal(JSON.parse(looping.stdout.trim()).errorCode, 'QUOTE_UNAVAILABLE');
+
+  const balance = runCli(['--quote', '--json', '--balance']);
+  assert.equal(balance.exitCode, 1);
+  assert.equal(JSON.parse(balance.stdout.trim()).errorCode, 'INVALID_ARGUMENT');
+
+  const refused = runCli(['--quote', '--json', '-m', 'z_image_turbo_bf16', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_ESTIMATE_ERROR_JSON: JSON.stringify({ message: 'Model not found', status: 400 })
+  });
+  assert.equal(refused.exitCode, 1);
+  const refusal = JSON.parse(refused.stdout.trim());
+  assert.equal(refusal.errorCode, 'QUOTE_UNAVAILABLE');
+  assert.match(refusal.error, /Model not found/);
+
+  const offline = runCli(['--quote', '--json', '-m', 'z_image_turbo_bf16', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_ESTIMATE_ERROR_JSON: JSON.stringify({ message: 'fetch failed' })
+  });
+  assert.equal(offline.exitCode, 1);
+  assert.notEqual(JSON.parse(offline.stdout.trim()).errorCode, 'QUOTE_UNAVAILABLE');
+});
+
+test('--receipt adds the charge Sogni recorded to a finished render', () => {
+  const { exitCode, stdout, state } = runCli(['--json', '--receipt', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_PROJECT_RECORDS_JSON: PLAN_PAID_RECORD
+  });
+  assert.equal(exitCode, 0);
+  const output = JSON.parse(stdout.trim());
+  assert.deepEqual(output.charge, {
+    paidBy: 'plan', amount: { spark: 0, sogni: 0, usd: 0 }, value: { spark: 20.67, sogni: 1.2, usd: 0.1 }
+  });
+  assert.equal('chargeUnavailable' in output, false);
+  assert.deepEqual(state.projectLookups.map((entry) => entry.method), ['getStatus']);
+
+  const unread = runCli(['--json', '--receipt', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_GET_STATUS_ERROR_JSON: JSON.stringify({ message: 'Too many requests', status: 429 })
+  });
+  const unreadOutput = JSON.parse(unread.stdout.trim());
+  assert.equal(unread.exitCode, 0);
+  assert.equal(unreadOutput.charge, null);
+  assert.match(unreadOutput.chargeUnavailable, /could not be read/);
+
+  const text = runCli(['--receipt', 'a red bicycle'], { SOGNI_AGENT_TEST_PROJECT_RECORDS_JSON: PLAN_PAID_RECORD });
+  assert.match(text.stdout, /^Charge: covered by your plan; value 20\.67 Spark/m);
+});
+
+test('--receipt reports the charge of a project collected with --result', () => {
+  const { exitCode, stdout } = runCli(['--json', '--receipt', '--result', 'proj-1'], {
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({ id: 'proj-1', status: 'completed', finished: true, jobs: [{ id: 'j1', status: 'completed', url: 'https://cdn.test/r.png' }] }),
+    SOGNI_AGENT_TEST_PROJECT_RECORDS_JSON: JSON.stringify({
+      'proj-1': { finished: true, paymentModel: 'paid_spark', costActual: { costInSpark: '1.6', costInSogni: '0.08', costInUSD: '0.008' } }
+    })
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout.trim()).charge, {
+    paidBy: 'spark', amount: { spark: 1.6, sogni: 0, usd: 0.008 }, value: { spark: 1.6, sogni: 0.08, usd: 0.008 }
+  });
+});
+
+test('--progress-events writes one line per lifecycle event of this run\'s projects', async () => {
+  const events = [
+    { afterMs: 0, channel: 'project', event: { type: 'queued', queuePosition: 3, estimatedStartSeconds: 45 } },
+    { afterMs: 5, channel: 'project', event: { projectId: 'someone-else', type: 'queued', queuePosition: 1 } },
+    { afterMs: 10, channel: 'job', event: { type: 'initiating', jobId: 'j1' } },
+    { afterMs: 20, channel: 'job', event: { type: 'started', jobId: 'j1' } },
+    { afterMs: 30, channel: 'job', projectProgress: 40, event: { type: 'progress', jobId: 'j1', step: 12, stepCount: 30, etaSeconds: 95 } },
+    { afterMs: 40, channel: 'job', event: { type: 'jobETA', jobId: 'j1', etaSeconds: 94 } },
+    { afterMs: 50, channel: 'socket', name: 'jobRetry', event: { jobID: 'proj-1', imgID: 'j1', attempt: 2, maxAttempts: 3 } }
+  ];
+  const { exitCode, stderr } = await runCliAsync(['--json', '-q', '--progress-events', 'a red bicycle'], {
+    SOGNI_AGENT_TEST_SDK_EVENTS_JSON: JSON.stringify(events)
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(sogniEventLines(stderr), [
+    { event: 'queued', projectId: 'proj-1', queuePosition: 3, startsInSeconds: 45 },
+    { event: 'model-loading', projectId: 'proj-1' },
+    { event: 'started', projectId: 'proj-1' },
+    { event: 'progress', projectId: 'proj-1', percent: 40, step: 12, stepCount: 30, etaSeconds: 95 },
+    { event: 'eta', projectId: 'proj-1', etaSeconds: 94 },
+    { event: 'retry', projectId: 'proj-1', attempt: 2, maxAttempts: 3 }
+  ]);
+});
+
+test('--progress-events follows a project collected with --result --wait', async () => {
+  const { exitCode, stderr } = await runCliAsync(['--result', 'proj-9', '--wait', '--json', '--progress-events'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_AGENT_TEST_TRACKED_JSON: JSON.stringify({ 'main-app': [{ id: 'proj-9', status: 'queued', completeAfterMs: 300 }] }),
+    SOGNI_AGENT_TEST_GET_RESULT_JSON: FINISHED_RESULT,
+    SOGNI_AGENT_TEST_SDK_EVENTS_JSON: JSON.stringify([
+      { afterMs: 10, channel: 'project', event: { projectId: 'proj-9', type: 'queued', queuePosition: 2 } },
+      { afterMs: 20, channel: 'job', event: { projectId: 'proj-9', type: 'started', jobId: 'j1' } },
+      { afterMs: 30, channel: 'job', event: { projectId: 'proj-8', type: 'started', jobId: 'j2' } }
+    ])
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(sogniEventLines(stderr), [
+    { event: 'queued', projectId: 'proj-9', queuePosition: 2 },
+    { event: 'started', projectId: 'proj-9' }
+  ]);
+});
+
+test('--quote prices background removal, object selection and 3D as the render submits them', () => {
+  const source = createPngDimensionFixture(1170, 1630);
+  const background = runCli(['--quote', '--json', '--remove-background', source]);
+  assert.equal(background.exitCode, 0, background.stderr);
+  assert.equal(JSON.parse(background.stdout.trim()).media, 'image');
+  assert.equal(background.state.lastEstimateImageCost.model, 'birefnet_image_background_removal_fp16');
+  assert.equal(background.state.lastEstimateImageCost.startingImageStrength, 0.5);
+  assert.equal(background.state.lastEstimateImageCost.previewCount, 0);
+  assert.equal(background.state.lastImageProject, null);
+
+  const selection = runCli(['--quote', '--json', '--segment', SCREENSHOT_FIXTURE, '--segment-point', '0.4,0.6']);
+  assert.equal(selection.exitCode, 0, selection.stderr);
+  assert.equal(selection.state.lastEstimateImageCost.imageCount, 1);
+  assert.equal(selection.state.lastEstimateImageCost.stepCount, 1);
+  assert.equal(selection.state.lastImageProject, null);
+
+  const model = runCli(['--quote', '--json', '--image-to-3d', source]);
+  assert.equal(model.exitCode, 0, model.stderr);
+  assert.equal(JSON.parse(model.stdout.trim()).media, 'model');
+
+  const fineShape = runCli(['--quote', '--json', '--image-to-3d', source, '--shape-resolution', '1536']);
+  assert.equal(fineShape.exitCode, 1);
+  assert.equal(JSON.parse(fineShape.stdout.trim()).errorCode, 'QUOTE_UNAVAILABLE');
+});

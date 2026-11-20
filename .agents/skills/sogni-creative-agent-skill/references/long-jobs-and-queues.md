@@ -115,6 +115,63 @@ then.
 later, and `--wait` needs 5.58.0; an older installation says so and asks for a
 skill update.
 
+## Price, charge and progress for host apps
+
+Three opt-in flags let an app show a render's price before it starts, what it
+cost afterwards, and its queue and time-left status while it runs. Without them
+the output is unchanged.
+
+```bash
+# Price this exact request and exit; nothing is submitted.
+sogni-agent --quote --json -m z_image_turbo_bf16 -w 1024 -h 1024 "A red bicycle against a brick wall"
+
+# Render, report what Sogni recorded as the charge, and print status lines.
+sogni-agent --json --receipt --progress-events --video -m minimax-h3-fasth3-t2v-turbo --duration 5 -o clip.mp4 "Waves at sunset"
+sogni-agent --json --receipt --progress-events --result <projectId> --wait -o clip.mp4
+```
+
+`--quote` resolves every priced setting the way the render would (model id,
+size, count, steps, frames or duration, fps, network, token type) and prints
+`{ "type": "quote", "media", "model", "network", "tokenType", "settings",
+"price", "partnerModel", "planCovered", "plan", "time", "dailyFairUsePct",
+"balance" }`. `price` is Sogni's quote for all outputs; on partner models
+(Seedance, Seedream, GPT Image, HappyHorse, Wan 3) a member with a plan
+discount also gets `memberPrice`, the quote after that discount. Sogni settles
+some partner models from the vendor's actual usage, so the charge it records
+(`--receipt`) can differ slightly from the quote. Partner models are never
+plan-covered. `planCovered` is the CLI's reading of the
+account; Sogni decides again when the render is submitted. `time` holds Sogni's
+own estimate (`renderSeconds`, `queueSeconds`, `totalSeconds`) and is absent
+when Sogni has none for these settings; `dailyFairUsePct` and `balance` appear
+only when known. A request Sogni cannot quote (a looping return clip,
+`--multi-angle`, source reels, hosted chat and workflows, Wan 3
+`--smart-duration`, music or speech on Relaxed) fails with
+`errorCode: "QUOTE_UNAVAILABLE"`; a lost connection keeps its own error.
+
+`--receipt` adds `charge` to a finished render's JSON and to `--result`:
+`paidBy` (`plan`, `spark`, `sogni` or `credit` for promotional credit) comes
+from Sogni's project record, `amount` is what left the balances (all zero when
+the plan paid) and `value` is the work's price as Sogni recorded it. When the
+record cannot be read or does not say, `charge` is `null` and
+`chargeUnavailable` gives the reason. It costs one extra request per project,
+after the project finished.
+
+`--progress-events` writes one stderr line per lifecycle event, beside the usual
+progress lines, also with `-q`:
+
+```text
+SOGNI_EVENT {"event":"queued","projectId":"…","queuePosition":3,"startsInSeconds":45}
+SOGNI_EVENT {"event":"model-loading","projectId":"…"}
+SOGNI_EVENT {"event":"started","projectId":"…"}
+SOGNI_EVENT {"event":"progress","projectId":"…","percent":40,"step":12,"stepCount":30,"etaSeconds":95}
+SOGNI_EVENT {"event":"eta","projectId":"…","etaSeconds":95}
+SOGNI_EVENT {"event":"retry","projectId":"…","attempt":2,"maxAttempts":3}
+```
+
+A field appears only when the server sent it. Each kind of line prints at most
+once every 5 seconds per project (the newest value then); a new phase prints at
+once.
+
 ## Fast, Relaxed and Priority
 
 `--network fast|relaxed` selects the worker network for a render. `--priority` is a per-run opt-in for paid Unlimited or Unlimited Pro on Fast: earlier queue placement behind Premium Spark, with daily and monthly fair-use consumption at 1.5×. Explain that tradeoff and use it only when requested. It applies to covered worker models, excluding third-party vendor models, Relaxed, token billing, hosted chat and hosted workflows. It does not make the GPU faster. If refused, show the error and let the user choose standard Fast or Relaxed. Never retry or spend Premium Spark automatically.

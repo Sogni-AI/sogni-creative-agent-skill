@@ -41,6 +41,10 @@ function persistState() {
       lastAudioProject: state.lastAudioProject ?? null,
       lastEditProject: state.lastEditProject ?? null,
       lastEstimateVideoCost: state.lastEstimateVideoCost ?? null,
+      lastEstimateImageCost: state.lastEstimateImageCost ?? null,
+      lastEstimateAudioCost: state.lastEstimateAudioCost ?? null,
+      lastSdkEstimateVideoCost: state.lastSdkEstimateVideoCost ?? null,
+      socketGets: state.socketGets ?? null,
       canceledProjectIds: state.canceledProjectIds ?? null,
       emittedJobs: state.emittedJobs ?? null,
       projectLookups: state.projectLookups ?? null,
@@ -90,6 +94,34 @@ function makeTrackedProject(spec) {
   return project;
 }
 
+/** Cost estimate the stub answers with: SOGNI_AGENT_TEST_ESTIMATE_JSON, else a fixed price. */
+function estimateResponse() {
+  return envJson('SOGNI_AGENT_TEST_ESTIMATE_JSON') ?? { token: '1', usd: '0.01', spark: '1', sogni: '1' };
+}
+
+/**
+ * SOGNI_AGENT_TEST_SDK_EVENTS_JSON: [{ afterMs, channel: 'project'|'job'|'socket', name, event, projectProgress }]
+ * emitted like the SDK's `projects` events (and the socket's raw frames) after a
+ * project is created or synced. `projectProgress` is set on the tracked project
+ * first, as the SDK updates its project before it emits. Returns the last delay.
+ */
+function scheduleSdkEvents(sdkClient) {
+  const events = envJson('SOGNI_AGENT_TEST_SDK_EVENTS_JSON') ?? [];
+  let lastMs = 0;
+  for (const spec of events) {
+    lastMs = Math.max(lastMs, spec.afterMs ?? 0);
+    setTimeout(() => {
+      if (spec.projectProgress !== undefined) {
+        const project = sdkClient.projects.trackedProjects.find((item) => item.id === (spec.event?.projectId ?? 'proj-1'));
+        if (project) project.progress = spec.projectProgress;
+      }
+      const target = spec.channel === 'socket' ? sdkClient.apiClient.socket : sdkClient.projects;
+      target.emit(spec.name ?? spec.channel, { projectId: 'proj-1', ...spec.event });
+    }, spec.afterMs ?? 0);
+  }
+  return events.length ? lastMs : null;
+}
+
 /**
  * The raw @sogni-ai/sogni-client `projects` API the skill reaches through
  * `wrapper.client`: queue explanations (queueChanged), results by id, recent
@@ -124,9 +156,38 @@ function makeSdkProjects(appId) {
   let tracked = null;
   projects.sync = async () => {
     recordSequence(`sync:${appId}`);
+    const firstSync = tracked === null;
     tracked = tracked ?? (envJson('SOGNI_AGENT_TEST_TRACKED_JSON')?.[appId] ?? []).map(makeTrackedProject);
+    if (firstSync && tracked.length && projects.sdkClient) scheduleSdkEvents(projects.sdkClient);
   };
-  Object.defineProperty(projects, 'trackedProjects', { get: () => (tracked ?? []).slice() });
+  projects.created = [];
+  Object.defineProperty(projects, 'trackedProjects', { get: () => [...projects.created, ...(tracked ?? [])] });
+  // Price reads: image estimates, SDK-level video estimates, tier defaults and stored project records.
+  projects.estimateCost = async (params) => {
+    if (process.env.SOGNI_AGENT_TEST_ESTIMATE_ERROR_JSON) {
+      const failure = envJson('SOGNI_AGENT_TEST_ESTIMATE_ERROR_JSON');
+      throw Object.assign(new Error(failure.message), failure);
+    }
+    getState().lastEstimateImageCost = params;
+    persistState();
+    return estimateResponse();
+  };
+  projects.estimateVideoCost = async (params) => {
+    getState().lastSdkEstimateVideoCost = params;
+    persistState();
+    return estimateResponse();
+  };
+  projects.getModelOptions = async (modelId) => {
+    const steps = envJson('SOGNI_AGENT_TEST_MODEL_STEPS_JSON') ?? {};
+    return { steps: { default: steps[modelId] ?? 8 } };
+  };
+  projects.getStatus = async (projectId) => {
+    recordLookup({ method: 'getStatus', projectId });
+    const failure = envJson('SOGNI_AGENT_TEST_GET_STATUS_ERROR_JSON');
+    if (failure) throw Object.assign(new Error(failure.message || 'Request failed'), failure);
+    const records = envJson('SOGNI_AGENT_TEST_PROJECT_RECORDS_JSON') ?? {};
+    return records[projectId] ?? null;
+  };
   return projects;
 }
 
@@ -140,7 +201,22 @@ class SogniClientWrapper extends EventEmitter {
     this.lastAudioProject = null;
     this.lastEditProject = null;
     this.emittedJobs = 0;
+    const socket = new EventEmitter();
+    socket.get = async (path, query) => {
+      const state = getState();
+      state.socketGets = state.socketGets || [];
+      state.socketGets.push({ path, query: query ?? null });
+      persistState();
+      const estimate = estimateResponse();
+      return {
+        quote: { project: { costInSpark: estimate.spark, costInSogni: estimate.sogni, costInUSD: estimate.usd } },
+        ...(estimate.estimatedRenderSeconds !== undefined
+          ? { benchmark: { estimatedRenderTimeSec: estimate.estimatedRenderSeconds, estimatedTotalTimeSec: estimate.estimatedTotalSeconds } }
+          : {})
+      };
+    };
     this.client = {
+      apiClient: { socket },
       projects: makeSdkProjects(config?.appId),
       setSocketEventSubscriptions: async (socketEventSubscriptions) => {
         const currentState = getState();
@@ -149,6 +225,7 @@ class SogniClientWrapper extends EventEmitter {
         persistState();
       }
     };
+    this.client.projects.sdkClient = this.client;
     const state = getState();
     state.clientConfigs = state.clientConfigs || [];
     state.clientConfigs.push(config);
@@ -332,12 +409,14 @@ class SogniClientWrapper extends EventEmitter {
     const state = getState();
     state.lastEstimateVideoCost = arguments[0] ?? null;
     persistState();
-    return {
-      token: '1',
-      usd: '0.01',
-      spark: '1',
-      sogni: '1'
-    };
+    return estimateResponse();
+  }
+
+  async estimateAudioCost(params) {
+    const state = getState();
+    state.lastEstimateAudioCost = params;
+    persistState();
+    return estimateResponse();
   }
 
   _emitJobs(urlField, count, seed) {
@@ -347,7 +426,10 @@ class SogniClientWrapper extends EventEmitter {
       setImmediate(() => this.emit(event, payload));
       return;
     }
-    queueMicrotask(() => {
+    // With simulated SDK events, the jobs finish after the last of them.
+    const lastEventMs = scheduleSdkEvents(this.client);
+    const finish = lastEventMs === null ? queueMicrotask : (fn) => setTimeout(fn, lastEventMs + 20);
+    finish(() => {
       const state = getState();
       const ext = urlField === 'videoUrl' ? 'mp4' : urlField === 'audioUrl' ? 'mp3' : 'png';
       // One labels object for every job, or an array with one per job index.
@@ -387,6 +469,7 @@ class SogniClientWrapper extends EventEmitter {
     // process) until the server's first answer: queued, or a refusal.
     // SOGNI_AGENT_TEST_NO_SERVER_ANSWER simulates a request that never reached the server.
     const project = new EventEmitter();
+    this.client.projects.created.push(project);
     Object.assign(project, {
       id,
       status: 'pending',

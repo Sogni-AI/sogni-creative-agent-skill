@@ -1,0 +1,54 @@
+{
+  "image": {
+    "args": [
+      "--json",
+      "-m",
+      "z_image_turbo_bf16",
+      "--width",
+      "1024",
+      "--height",
+      "1024",
+      "a red bicycle leaning on a wall"
+    ],
+    "exitCode": 0,
+    "stdout": "{\"success\":true,\"type\":\"image\",\"prompt\":\"a red bicycle leaning on a wall\",\"model\":\"z_image_turbo_bf16\",\"width\":1024,\"height\":1024,\"seed\":2209808942,\"seedStrategy\":\"prompt-hash\",\"seeds\":[2209808942],\"urls\":[\"https://example.com/resultUrl-1.png\"],\"results\":[{\"url\":\"https://example.com/resultUrl-1.png\",\"seed\":2209808942,\"jobIndex\":0,\"nsfwDetected\":false,\"nsfwSources\":[]}],\"localPath\":null,\"tokenType\":\"spark\"}\n",
+    "stderr": "Using prompt-hash seed: 2209808942\nConnecting to Sogni...\nConnected.\nGenerating with z_image_turbo_bf16...\nUsing seed: 2209808942\nImage 1/1 completed\n"
+  },
+  "imageText": {
+    "args": [
+      "-m",
+      "z_image_turbo_bf16",
+      "a red bicycle leaning on a wall"
+    ],
+    "exitCode": 0,
+    "stdout": "https://example.com/resultUrl-1.png\n",
+    "stderr": "Using prompt-hash seed: 1595957701\nConnecting to Sogni...\nConnected.\nGenerating with z_image_turbo_bf16...\nUsing seed: 1595957701\nImage 1/1 completed\n"
+  },
+  "video": {
+    "args": [
+      "--json",
+      "--video",
+      "-m",
+      "minimax-h3-fastvideo-int8_t2v_turbo",
+      "--duration",
+      "5",
+      "waves rolling onto a beach at sunset"
+    ],
+    "exitCode": 0,
+    "stdout": "{\"success\":true,\"type\":\"video\",\"prompt\":\"waves rolling onto a beach at sunset\",\"model\":\"minimax-h3-fastvideo-int8_t2v_turbo\",\"width\":1344,\"height\":768,\"seed\":708454211,\"seedStrategy\":\"prompt-hash\",\"seeds\":[708454211],\"urls\":[\"https://example.com/resultUrl-1.png\"],\"results\":[{\"url\":\"https://example.com/resultUrl-1.png\",\"seed\":708454211,\"jobIndex\":0,\"nsfwDetected\":false,\"nsfwSources\":[]}],\"localPath\":null,\"tokenType\":\"spark\",\"workflow\":\"t2v\",\"fps\":24,\"duration\":5.166666666666667,\"frames\":124,\"strictSize\":false}\n",
+    "stderr": "Adjusted video duration from 5s to 5.17s (124 frames). MiniMax H3 renders 124 + n×17 frames at 24fps, so minimax-h3-fastvideo-int8_t2v_turbo delivers 5.17-15.08s.\nUsing prompt-hash seed: 708454211\nConnecting to Sogni...\nConnected.\nGenerating video (t2v) with minimax-h3-fastvideo-int8_t2v_turbo...\nVideo 1/1 completed\n"
+  },
+  "videoText": {
+    "args": [
+      "--video",
+      "-m",
+      "minimax-h3-fastvideo-int8_t2v_turbo",
+      "--duration",
+      "5",
+      "waves rolling onto a beach at sunset"
+    ],
+    "exitCode": 0,
+    "stdout": "https://example.com/resultUrl-1.png\n",
+    "stderr": "Adjusted video duration from 5s to 5.17s (124 frames). MiniMax H3 renders 124 + n×17 frames at 24fps, so minimax-h3-fastvideo-int8_t2v_turbo delivers 5.17-15.08s.\nUsing prompt-hash seed: 708454211\nConnecting to Sogni...\nConnected.\nGenerating video (t2v) with minimax-h3-fastvideo-int8_t2v_turbo...\nVideo 1/1 completed\n"
+  }
+}

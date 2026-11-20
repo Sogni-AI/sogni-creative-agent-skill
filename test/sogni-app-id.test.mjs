@@ -1,12 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { claimSogniAppIdSlot, getOrCreateSogniAppId } from '../sogni-app-id.mjs';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+
+/** Run fn with fs.linkSync refusing as a filesystem without hard links does. */
+function withoutHardLinks(code, fn) {
+  const original = fs.linkSync;
+  fs.linkSync = () => { const error = new Error(`${code}: operation not supported, link`); error.code = code; throw error; };
+  syncBuiltinESMExports();
+  try { return fn(); } finally { fs.linkSync = original; syncBuiltinESMExports(); }
+}
 
 test('creates one private app ID and reuses it across calls', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-'));
@@ -270,4 +280,116 @@ test('claimSogniAppIdSlot reclaims a dead lease and ignores app IDs outside the 
   assert.equal(claim.appId, 'sogni-agent-earlier');
   claim.release();
   assert.equal(claimSogniAppIdSlot('sogni-web-tab', { poolDir }), null);
+});
+
+// Six CLI processes started on the same millisecond, as `xargs -P` or several agents
+// do. Before leases were published by hard link, an empty, half-created lease read as
+// stale and was taken again: three pairs shared an app ID in 30 of 30 such rounds
+// (2026-11-19), and the socket kicked one of each pair mid-render (SWITCH_CONNECTION).
+test('pool: processes that start together never share an app ID, with or without a dead lease', async () => {
+  const moduleUrl = new URL('../sogni-app-id.mjs', import.meta.url).href;
+  for (const deadLeaseOnSlot0 of [false, true]) {
+    for (let round = 0; round < 3; round += 1) {
+      const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-race-'));
+      for (let slot = 0; slot < 8; slot += 1) writeFileSync(join(dir, `slot-${slot}`), `race-app-${slot}\n`, { mode: 0o600 });
+      if (deadLeaseOnSlot0) writeFileSync(join(dir, 'slot-0.lease'), `${JSON.stringify({ pid: 99999999 })}\n`, { mode: 0o600 });
+      const startAt = Date.now() + 600;
+      const code = `const { getOrCreateSogniAppId } = await import(${JSON.stringify(moduleUrl)});
+        while (Date.now() < ${startAt}) {}
+        console.log(getOrCreateSogniAppId({ appId: '', appIdPath: '', poolDir: process.argv[1] }));
+        setTimeout(() => {}, 700);`;
+      const ids = await Promise.all(Array.from({ length: 6 }, () => new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, ['--input-type=module', '-e', code, dir]);
+        let out = '', err = '';
+        child.stdout.on('data', (chunk) => { out += chunk; });
+        child.stderr.on('data', (chunk) => { err += chunk; });
+        child.once('error', reject);
+        child.once('exit', (status) => (status === 0 ? resolve(out.trim()) : reject(new Error(err))));
+      })));
+      assert.equal(new Set(ids).size, ids.length, `shared app IDs (dead lease: ${deadLeaseOnSlot0}): ${ids.join(', ')}`);
+    }
+  }
+});
+
+
+test('filesystems without hard links fall back to exclusive create + write for slots, leases and migration', () => {
+  for (const code of ['EPERM', 'ENOTSUP', 'ENOSYS', 'EXDEV']) {
+    const poolDir = mkdtempSync(join(tmpdir(), `sogni-app-id-nolink-${code}-`));
+    let generated = 0;
+    const generateUuid = () => `nolink-${code}-${++generated}`;
+    releaseSogniAppId();
+    const first = withoutHardLinks(code, () => getOrCreateSogniAppId({ poolDir, generateUuid, ownPid: 4101, isPidAlive: () => true }));
+    assert.equal(first, `sogni-agent-nolink-${code}-1`, code);
+    assert.equal(readFileSync(join(poolDir, 'slot-0'), 'utf8'), `${first}\n`, `${code}: slot written`);
+    assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8')).pid, 4101, `${code}: lease written`);
+    releaseSogniAppId();
+    // A second live process takes the next slot rather than failing or sharing slot-0.
+    writeFileSync(join(poolDir, 'slot-0.lease'), `${JSON.stringify({ pid: 4101 })}\n`);
+    const second = withoutHardLinks(code, () => getOrCreateSogniAppId({ poolDir, generateUuid, ownPid: 4102, isPidAlive: () => true }));
+    assert.equal(second, `sogni-agent-nolink-${code}-2`, code);
+    releaseSogniAppId();
+    assert.equal(readdirSync(poolDir).filter(name => name.endsWith('.tmp')).length, 0, `${code}: no temporary files left`);
+
+    // Legacy single-file identity migrates into slot-0 the same way.
+    const legacyDir = mkdtempSync(join(tmpdir(), `sogni-app-id-nolink-legacy-${code}-`));
+    const legacyAppIdPath = join(legacyDir, 'app-id');
+    writeFileSync(legacyAppIdPath, 'sogni-agent-legacy-identity\n');
+    const migratedPool = join(legacyDir, 'pool');
+    fs.mkdirSync(migratedPool);
+    const migrated = withoutHardLinks(code, () => getOrCreateSogniAppId({ poolDir: migratedPool, legacyAppIdPath, generateUuid, ownPid: 4103, isPidAlive: () => true }));
+    assert.equal(migrated, 'sogni-agent-legacy-identity', `${code}: legacy identity kept`);
+    releaseSogniAppId();
+  }
+});
+
+test('an empty or partial lease is being written while fresh and stale only after the grace period', () => {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-grace-'));
+  writeFileSync(join(poolDir, 'slot-0'), 'sogni-agent-grace-0\n');
+  writeFileSync(join(poolDir, 'slot-0.lease'), ''); // another process between create and write
+  let generated = 0;
+  const generateUuid = () => `grace-${++generated}`;
+  releaseSogniAppId();
+  const fresh = getOrCreateSogniAppId({ poolDir, generateUuid, ownPid: 4201, isPidAlive: () => true });
+  assert.equal(fresh, 'sogni-agent-grace-1', 'a fresh empty lease is left alone');
+  assert.equal(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8'), '');
+  releaseSogniAppId();
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(join(poolDir, 'slot-0.lease'), old, old);
+  const reclaimed = getOrCreateSogniAppId({ poolDir, generateUuid, ownPid: 4202, isPidAlive: () => true });
+  assert.equal(reclaimed, 'sogni-agent-grace-0', 'an old empty lease is reclaimed');
+  assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8')).pid, 4202);
+  releaseSogniAppId();
+});
+
+
+test('a future-dated or never-written empty identity file fails fast instead of waiting forever', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-skew-'));
+  const appIdPath = join(dir, 'app-id');
+  writeFileSync(appIdPath, '');
+  const future = new Date('2030-01-01T00:00:00Z');
+  fs.utimesSync(appIdPath, future, future); // clock skew on a network home
+  let started = Date.now();
+  assert.throws(() => getOrCreateSogniAppId({ appIdPath, generateUuid: () => 'never' }), { code: 'INVALID_APP_ID' });
+  assert.ok(Date.now() - started < 2_000, `future mtime is not "being written" (took ${Date.now() - started} ms)`);
+
+  // A fresh empty file nobody finishes writing: the wait ends at the deadline.
+  writeFileSync(appIdPath, '');
+  fs.utimesSync(appIdPath, new Date(), new Date()); // rewriting an empty file need not touch its mtime
+  started = Date.now();
+  assert.throws(() => getOrCreateSogniAppId({ appIdPath, generateUuid: () => 'never' }), { code: 'INVALID_APP_ID' });
+  const waited = Date.now() - started;
+  assert.ok(waited >= 4_000 && waited < 9_000, `bounded wait (took ${waited} ms)`);
+});
+
+test('a future-dated empty lease is reclaimable, not held forever', () => {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-skew-lease-'));
+  writeFileSync(join(poolDir, 'slot-0'), 'sogni-agent-skew-0\n');
+  writeFileSync(join(poolDir, 'slot-0.lease'), '');
+  const future = new Date('2030-01-01T00:00:00Z');
+  fs.utimesSync(join(poolDir, 'slot-0.lease'), future, future);
+  releaseSogniAppId();
+  const appId = getOrCreateSogniAppId({ poolDir, generateUuid: () => 'skew-new', ownPid: 4301, isPidAlive: () => true });
+  assert.equal(appId, 'sogni-agent-skew-0');
+  assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8')).pid, 4301);
+  releaseSogniAppId();
 });

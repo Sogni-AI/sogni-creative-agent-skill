@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -10901,6 +10901,31 @@ async function withMediaResult(bytes, fn, status = 200) {
   finally { await new Promise(resolve => server.close(resolve)); }
 }
 
+// Result downloads give up on a silent body after 300 ms and wait 20 ms between attempts here
+// (30 s and 2 / 5 / 10 s in real runs).
+const FAST_DOWNLOAD_RETRIES = { SOGNI_AGENT_TEST_DOWNLOAD_STALL_MS: '300', SOGNI_AGENT_TEST_DOWNLOAD_BACKOFF_MS: '20' };
+
+/** A media server whose `answer(requestNumber, req, res)` scripts each reply; it records Range and If-Range. */
+async function withScriptedMediaServer(answer, fn) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push({ range: req.headers.range ?? null, ifRange: req.headers['if-range'] ?? null });
+    answer(requests.length, req, res);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try { await fn(`http://127.0.0.1:${server.address().port}/result.mp4`, requests); }
+  finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+function patternBytes(size) {
+  const bytes = Buffer.alloc(size);
+  for (let i = 0; i < size; i++) bytes[i] = (i * 31 + 7) & 0xff;
+  return bytes;
+}
+
 test('Pixal3D preserves original bytes and forwards all mesh controls without image defaults', () => {
   const source = createPngDimensionFixture(3100, 2070);
   const result = runCli(['--image-to-3d', source, '--mesh-faces', '12000', '--shape-resolution', '1536',
@@ -11128,7 +11153,7 @@ test('Pixal3D saves binary GLB and rejects invalid artifacts and HTTP errors', a
     assert.deepEqual(readFileSync(output), glb);
   });
   await withMediaResult(Buffer.from('Unavailable'), async url => {
-    const result = await runCliAsync(['--image-to-3d', source, '-o', output, '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    const result = await runCliAsync(['--image-to-3d', source, '-o', output, '--json'], { SOGNI_AGENT_TEST_RESULT_URL: url, ...FAST_DOWNLOAD_RETRIES });
     assert.equal(result.exitCode, 1); assert.match(JSON.parse(result.stdout).error, /HTTP 503/);
   }, 503);
 });
@@ -11142,6 +11167,103 @@ test('Qwen speech batch downloads every result to a distinct local file', async 
     const paths = JSON.parse(result.stdout).localPaths;
     assert.deepEqual(paths, [output, output.replace('.wav', '-2.wav')]);
     for (const path of paths) assert.deepEqual(readFileSync(path), bytes);
+  });
+});
+
+// 2026-11-20: media.sogni.ai trickled two finished videos, "Video 1/1 completed" then waited
+// 5+ minutes with no timeout, and `--result -o` fetches of them ended "Error: terminated".
+test('a result download that stalls mid-body times out and resumes with a Range request', async () => {
+  const body = patternBytes(96 * 1024);
+  const cut = 40 * 1024;
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-resume-'));
+  const output = join(dir, 'clip.mp4');
+  await withScriptedMediaServer((requestNumber, req, res) => {
+    if (requestNumber === 1) {
+      res.writeHead(200, { 'content-length': body.length, 'accept-ranges': 'bytes', etag: '"v1"' });
+      res.write(body.subarray(0, cut)); // and then nothing more
+      return;
+    }
+    const start = Number(/^bytes=(\d+)-$/.exec(req.headers.range)[1]);
+    res.writeHead(206, { 'content-length': body.length - start, 'content-range': `bytes ${start}-${body.length - 1}/${body.length}` });
+    res.end(body.subarray(start));
+  }, async (url, requests) => {
+    const result = await runCliAsync([...VIDEO_ARGS, '-o', output, '--json', 'a slow pan'], { SOGNI_AGENT_TEST_RESULT_URL: url, ...FAST_DOWNLOAD_RETRIES });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), body);
+    assert.deepEqual(JSON.parse(result.stdout).localPaths, [output]);
+    assert.deepEqual(requests, [{ range: null, ifRange: null }, { range: `bytes=${cut}-`, ifRange: '"v1"' }]);
+    assert.match(result.stderr, /Result download from 127\.0\.0\.1:\d+ stalled with no data for 300 ms at 40,960 of 98,304 bytes; retrying in 20 ms \(attempt 2 of 4, resuming where it stopped\)\./);
+    assert.deepEqual(readdirSync(dir), ['clip.mp4']);
+  });
+});
+
+test('a result download that never recovers stops after 3 retries and names the --result command', async () => {
+  const body = patternBytes(64 * 1024);
+  const step = 10 * 1024;
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-fail-'));
+  const output = join(dir, 'clip.mp4');
+  // Every attempt sends 10 KB more, then goes silent.
+  await withScriptedMediaServer((requestNumber, req, res) => {
+    const start = req.headers.range ? Number(/^bytes=(\d+)-$/.exec(req.headers.range)[1]) : 0;
+    res.writeHead(start ? 206 : 200, {
+      'content-length': body.length - start,
+      'accept-ranges': 'bytes',
+      ...(start ? { 'content-range': `bytes ${start}-${body.length - 1}/${body.length}` } : {})
+    });
+    res.write(body.subarray(start, start + step));
+  }, async (url, requests) => {
+    const result = await runCliAsync(['--result', 'proj-9', '-o', output, '--json'], {
+      SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+        id: 'proj-9', status: 'completed', finished: true, modelId: 'minimax-h3-ref2va-fp8_r2v',
+        jobs: [{ id: 'IMG-1', status: 'completed', kind: 'video', url }]
+      }),
+      ...FAST_DOWNLOAD_RETRIES
+    });
+    assert.equal(result.exitCode, 1, result.stderr);
+    const payload = JSON.parse(result.stdout.trim().split('\n').pop());
+    assert.equal(payload.success, false);
+    assert.equal(payload.errorCode, 'RESULT_DOWNLOAD_FAILED');
+    assert.equal(payload.errorType, 'PROVIDER_TIMEOUT');
+    assert.equal(payload.retryable, true);
+    assert.equal(payload.error, `Could not download the result from ${new URL(url).host}: 4 attempts failed, the last one stalled with no data for 300 ms, ` +
+      `with 40,960 of 65,536 bytes received. The render finished and stays on Sogni; fetch it later with: sogni-agent --result proj-9 -o ${output}`);
+    assert.equal(payload.hint, 'Do not render it again. Fetching the result later with --result costs nothing.');
+    assert.deepEqual(payload.errorDetails.resultCommands, [`sogni-agent --result proj-9 -o ${output}`]);
+    assert.equal(payload.errorDetails.bytesReceived, 40960);
+    assert.deepEqual(requests.map(request => request.range), [null, 'bytes=10240-', 'bytes=20480-', 'bytes=30720-']);
+    assert.equal(result.stderr.match(/; retrying in 20 ms/g).length, 3);
+    assert.deepEqual(readdirSync(dir), []);
+  });
+});
+
+test('a result download from a server without range support restarts cleanly', async () => {
+  const body = patternBytes(80 * 1024);
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-restart-'));
+  const output = join(dir, 'image.png');
+  // No Accept-Ranges, and a Range request still gets the whole file with 200.
+  await withScriptedMediaServer((requestNumber, _req, res) => {
+    res.writeHead(200, { 'content-length': body.length });
+    if (requestNumber === 1) res.write(body.subarray(0, 30 * 1024));
+    else res.end(body);
+  }, async (url, requests) => {
+    const result = await runCliAsync(['--json', '-o', output, 'A glowing amber figure'], { SOGNI_AGENT_TEST_RESULT_URL: url, ...FAST_DOWNLOAD_RETRIES });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), body);
+    assert.deepEqual(requests.map(request => request.range), [null, 'bytes=30720-']);
+    assert.deepEqual(readdirSync(dir), ['image.png']);
+  });
+
+  // A server that rules ranges out is not sent one.
+  await withScriptedMediaServer((requestNumber, _req, res) => {
+    res.writeHead(200, { 'content-length': body.length, 'accept-ranges': 'none' });
+    if (requestNumber === 1) res.write(body.subarray(0, 30 * 1024));
+    else res.end(body);
+  }, async (url, requests) => {
+    const result = await runCliAsync(['--json', '-o', output, 'A glowing amber figure'], { SOGNI_AGENT_TEST_RESULT_URL: url, ...FAST_DOWNLOAD_RETRIES });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), body);
+    assert.deepEqual(requests.map(request => request.range), [null, null]);
+    assert.match(result.stderr, /stalled with no data for 300 ms at 30,720 of 81,920 bytes; retrying in 20 ms \(attempt 2 of 4\)\./);
   });
 });
 

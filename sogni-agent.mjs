@@ -12,7 +12,7 @@ import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync, openSync, writeSync, closeSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
@@ -428,6 +428,9 @@ process.on('exit', () => {
 // normal exit, fatal error, or signal. Ctrl-C during a long video job is the
 // common case that used to orphan directories under os.tmpdir().
 const TRACKED_TEMP_DIRS = new Set();
+// In-flight result downloads (.part files beside the -o target). A signal exits
+// through process.exit(), which skips the downloader's finally, so 'exit' removes them.
+const TRACKED_TEMP_FILES = new Set();
 
 function createTrackedTempDir(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -436,6 +439,10 @@ function createTrackedTempDir(prefix) {
 }
 
 function cleanupTrackedTempDirs() {
+  for (const file of TRACKED_TEMP_FILES) {
+    try { rmSync(file, { force: true }); } catch { /* best effort */ }
+    TRACKED_TEMP_FILES.delete(file);
+  }
   for (const dir of TRACKED_TEMP_DIRS) {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
     TRACKED_TEMP_DIRS.delete(dir);
@@ -858,6 +865,11 @@ function classifyCliError(error, context = {}) {
 
   // The same class as the timeout this replaces on a long chat call: another try can work.
   if (error?.code === 'NETWORK_CONNECTION_LOST') {
+    return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message: rawMessage, retryable: true };
+  }
+
+  // The render finished; only its download failed, and `--result` (details.resultCommands) fetches it later.
+  if (error?.code === 'RESULT_DOWNLOAD_FAILED') {
     return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message: rawMessage, retryable: true };
   }
 
@@ -12583,23 +12595,27 @@ function writeOutputFileSafe(filePath, buffer, label = 'output') {
     if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(filePath, buffer);
   } catch (e) {
-    const code = e?.code;
-    const err = new Error(`Could not write ${label} to ${filePath}.`);
-    err.code = 'OUTPUT_WRITE_FAILED';
-    if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
-      err.hint = 'The output path is not writable. Choose a different --output location or fix the directory permissions.';
-    } else if (code === 'ENOSPC') {
-      err.hint = 'No space left on the device. Free up disk space or choose another --output location.';
-    } else if (code === 'ENOENT') {
-      err.hint = 'The output directory does not exist and could not be created. Check the --output path.';
-    } else if (code === 'EISDIR') {
-      err.hint = '--output points to a directory; pass a file path instead.';
-    } else {
-      err.hint = 'Check the --output path and permissions.';
-    }
-    err.details = { filePath, cause: code || String(e) };
-    throw err;
+    throw outputWriteError(e, filePath, label);
   }
+}
+
+function outputWriteError(e, filePath, label) {
+  const code = e?.code;
+  const err = new Error(`Could not write ${label} to ${filePath}.`);
+  err.code = 'OUTPUT_WRITE_FAILED';
+  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+    err.hint = 'The output path is not writable. Choose a different --output location or fix the directory permissions.';
+  } else if (code === 'ENOSPC') {
+    err.hint = 'No space left on the device. Free up disk space or choose another --output location.';
+  } else if (code === 'ENOENT') {
+    err.hint = 'The output directory does not exist and could not be created. Check the --output path.';
+  } else if (code === 'EISDIR') {
+    err.hint = '--output points to a directory; pass a file path instead.';
+  } else {
+    err.hint = 'Check the --output path and permissions.';
+  }
+  err.details = { filePath, cause: code || String(e) };
+  return err;
 }
 
 // With the Sensitive Content Filter on, the server withholds a flagged result:
@@ -12614,13 +12630,219 @@ function sensitiveContentWithheldError(totalCount = 1) {
   return err;
 }
 
-async function downloadUrlToFile(url, filePath) {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download image: ${response.statusText}`);
+// Result downloads (media.sogni.ai). fetchWithTimeout bounds only the wait for the
+// headers, so an edge that trickled or stopped a body held a finished run open with no
+// end: on 2026-11-20 "Video 1/1 completed" waited 5+ minutes (curl got 1.9 MB in 418 s,
+// then an HTTP/2 INTERNAL_ERROR) and `--result` fetches of it ended "terminated".
+// An attempt now ends once no byte has arrived for MEDIA_DOWNLOAD_STALL_TIMEOUT_MS; a
+// failed attempt is retried after each MEDIA_DOWNLOAD_RETRY_BACKOFF_MS wait, resuming
+// with a Range request from the bytes already saved unless the server rules ranges out.
+// Bytes go to a hidden temp file beside the target, renamed into place only when complete.
+const MEDIA_DOWNLOAD_STALL_TIMEOUT_MS = 30_000;
+const MEDIA_DOWNLOAD_RETRY_BACKOFF_MS = [2_000, 5_000, 10_000];
+
+/** The stall limit and retry waits; only the test harness may shorten them. */
+function mediaDownloadTiming() {
+  const testMs = (name) => {
+    const raw = getEnv('SOGNI_AGENT_TEST_STATE_PATH') ? getEnv(name) : undefined;
+    const value = raw ? Number(raw) : NaN;
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  };
+  const stallMs = testMs('SOGNI_AGENT_TEST_DOWNLOAD_STALL_MS');
+  const backoffMs = testMs('SOGNI_AGENT_TEST_DOWNLOAD_BACKOFF_MS');
+  return {
+    stallMs: stallMs || MEDIA_DOWNLOAD_STALL_TIMEOUT_MS,
+    backoffMs: backoffMs === null ? MEDIA_DOWNLOAD_RETRY_BACKOFF_MS : MEDIA_DOWNLOAD_RETRY_BACKOFF_MS.map(() => backoffMs),
+  };
+}
+
+function formatDownloadDuration(ms) {
+  return ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`;
+}
+
+function formatDownloadProgress({ received, total }) {
+  const bytes = (n) => n.toLocaleString('en-US');
+  return total === null ? `${bytes(received)} bytes` : `${bytes(received)} of ${bytes(total)} bytes`;
+}
+
+function shellWord(value) {
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/** A failed attempt that another one may fix; `reason` finishes "the download from <host> ...". */
+function retryableDownloadError(reason, cause = undefined) {
+  const err = new Error(`Result download ${reason}`);
+  err.downloadRetryable = true;
+  err.reason = reason;
+  if (cause) err.cause = cause;
+  return err;
+}
+
+function downloadConnectionReason(error) {
+  const cause = error?.cause?.message || error?.cause?.code || error?.message || error?.code || String(error);
+  return `lost the connection: ${cause}`;
+}
+
+/**
+ * Download a finished result to filePath. `projectId` and `retryOutput` (the -o path that
+ * `--result` would save to) build the command printed when every attempt fails;
+ * `validate(tempPath)` may refuse the bytes before they replace filePath.
+ */
+async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput = null, label = 'output', validate = null } = {}) {
+  const { stallMs, backoffMs } = mediaDownloadTiming();
+  let host = 'the media server';
+  try { host = new URL(url).host; } catch { /* keep the generic name */ }
+  const say = options.quiet ? () => {} : console.error.bind(console);
+  const dir = dirname(filePath);
+  const tempPath = join(dir, `.${basename(filePath)}.${process.pid}-${randomBytes(4).toString('hex')}.part`);
+  TRACKED_TEMP_FILES.add(tempPath);
+  // received: bytes in tempPath; total: the full size when the server says it;
+  // validator: the ETag / Last-Modified sent as If-Range; resumable: false once ranges are ruled out.
+  const state = { received: 0, total: null, validator: null, resumable: true };
+  const attempts = backoffMs.length + 1;
+  let lastFailure = null;
+  let saved = false;
+  try {
+    try {
+      if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      throw outputWriteError(e, filePath, label);
+    }
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (lastFailure) {
+        const waitMs = backoffMs[attempt - 2];
+        const resume = state.received > 0 && state.resumable && state.validator ? ', resuming where it stopped' : '';
+        say(`Result download from ${host} ${lastFailure.reason} at ${formatDownloadProgress(state)}; retrying in ${formatDownloadDuration(waitMs)} (attempt ${attempt} of ${attempts}${resume}).`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+      try {
+        await downloadResultAttempt(url, tempPath, state, { stallMs, filePath, label });
+      } catch (error) {
+        if (!error?.downloadRetryable) throw error;
+        lastFailure = error;
+        continue;
+      }
+      if (validate) validate(tempPath);
+      try {
+        renameSync(tempPath, filePath);
+      } catch (e) {
+        throw outputWriteError(e, filePath, label);
+      }
+      saved = true;
+      return;
+    }
+  } finally {
+    if (!saved) {
+      try { rmSync(tempPath, { force: true }); } catch { /* best effort */ }
+    }
+    TRACKED_TEMP_FILES.delete(tempPath);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  writeOutputFileSafe(filePath, buffer);
+  const resultCommand = projectId ? `${resultCommandFor(projectId)}${retryOutput ? ` -o ${shellWord(retryOutput)}` : ''}` : null;
+  const err = new Error(
+    `Could not download the result from ${host}: ${attempts} attempts failed, the last one ${lastFailure.reason}, ` +
+    `with ${formatDownloadProgress(state)} received. ` +
+    (resultCommand
+      ? `The render finished and stays on Sogni; fetch it later with: ${resultCommand}`
+      : 'The render finished and stays on Sogni; find it later with: sogni-agent --recent')
+  );
+  err.code = 'RESULT_DOWNLOAD_FAILED';
+  err.hint = 'Do not render it again. Fetching the result later with --result costs nothing.';
+  err.details = {
+    host,
+    attempts,
+    bytesReceived: state.received,
+    totalBytes: state.total,
+    projectIds: projectId ? [projectId] : [],
+    resultCommands: resultCommand ? [resultCommand] : [],
+  };
+  throw err;
+}
+
+/** One GET into tempPath: fresh, or appended from state.received with a Range request. */
+async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, label }) {
+  const controller = new AbortController();
+  let silentFor = null;
+  const expireAfter = (ms) => setTimeout(() => { silentFor = ms; controller.abort(); }, ms);
+  // Resume only when If-Range can prove the bytes on disk belong to the same object
+  // (a strong ETag or Last-Modified); without one, start over rather than splice.
+  const resuming = state.received > 0 && state.resumable && Boolean(state.validator);
+  const headers = {};
+  if (resuming) {
+    headers.range = `bytes=${state.received}-`;
+    headers['if-range'] = state.validator;
+  }
+  let timer = expireAfter(DEFAULT_HTTP_TIMEOUT_MS);
+  let fd = null;
+  try {
+    let response;
+    try {
+      response = await fetch(url, { headers, signal: controller.signal });
+    } catch (error) {
+      throw retryableDownloadError(silentFor ? `got no reply for ${formatDownloadDuration(silentFor)}` : downloadConnectionReason(error), error);
+    }
+    clearTimeout(timer);
+    timer = expireAfter(stallMs);
+
+    if (resuming && response.status === 206) {
+      const range = /^bytes (\d+)-\d+\/(\d+|\*)$/i.exec(response.headers.get('content-range') || '');
+      if (!range || Number(range[1]) !== state.received) {
+        state.resumable = false;
+        throw retryableDownloadError('answered the resume with a different byte range');
+      }
+      if (range[2] !== '*') state.total = Number(range[2]);
+      fd = openSync(tempPath, 'a');
+    } else if (resuming && response.status === 416 && state.total !== null && state.received >= state.total) {
+      return;
+    } else if (response.ok && response.status !== 206) {
+      // A full body, also what a server that ignores Range sends: start the file over.
+      const encoded = !['', 'identity'].includes((response.headers.get('content-encoding') || '').toLowerCase());
+      const length = response.headers.get('content-length');
+      state.received = 0;
+      state.total = !encoded && length !== null && Number.isFinite(Number(length)) ? Number(length) : null;
+      state.resumable = !encoded && (response.headers.get('accept-ranges') || '').toLowerCase() !== 'none';
+      const etag = response.headers.get('etag');
+      state.validator = etag && !etag.startsWith('W/') ? etag : response.headers.get('last-modified');
+      fd = openSync(tempPath, 'w');
+    } else if (response.status === 408 || response.status === 416 || response.status >= 500) {
+      if (response.status === 416) state.resumable = false;
+      throw retryableDownloadError(`answered HTTP ${response.status}`);
+    } else {
+      const err = new Error(`Result download failed: HTTP ${response.status}`);
+      let host = null;
+      try { host = new URL(url).host; } catch { /* no host to report */ }
+      // Never the URL itself: result links are presigned and errorDetails is printed.
+      err.details = { host, status: response.status };
+      throw err;
+    }
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      for (;;) {
+        let chunk;
+        try {
+          chunk = await reader.read();
+        } catch (error) {
+          throw retryableDownloadError(silentFor ? `stalled with no data for ${formatDownloadDuration(silentFor)}` : downloadConnectionReason(error), error);
+        }
+        if (chunk.done) break;
+        for (let offset = 0; offset < chunk.value.length;) {
+          offset += writeSync(fd, chunk.value, offset, chunk.value.length - offset);
+        }
+        state.received += chunk.value.length;
+        timer.refresh();
+      }
+    }
+    if (state.total !== null && state.received < state.total) {
+      throw retryableDownloadError('ended early');
+    }
+  } catch (error) {
+    if (error?.downloadRetryable || !error?.syscall) throw error;
+    throw outputWriteError(error, filePath, label);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+    if (fd !== null) closeSync(fd);
+  }
 }
 
 function removeClientListener(client, event, handler) {
@@ -14018,7 +14240,7 @@ async function saveProjectResult(result, receipt = null) {
       const path = index === 0
         ? options.output
         : options.output.slice(0, options.output.length - extension.length) + `-${index + 1}` + extension;
-      await downloadUrlToFile(url, path);
+      await downloadUrlToFile(url, path, { projectId: summary.projectId, retryOutput: options.output });
       localPaths.push(path);
     }
   }
@@ -14505,7 +14727,7 @@ async function runMultiAngleFlow(client, log) {
         const prefix = outputConfig.prefix ? `${outputConfig.prefix}-` : '';
         const filename = `${prefix}${safeAzimuth}${suffix}.${outputConfig.ext}`;
         const filePath = join(outputConfig.dir, filename);
-        await downloadUrlToFile(urls[i], filePath);
+        await downloadUrlToFile(urls[i], filePath, { projectId: results.find((r) => r.resultUrl === urls[i])?.projectId });
         if (options.angles360Video && i === 0) {
           videoFrames.push(filePath);
         }
@@ -14695,7 +14917,7 @@ async function runMultiAngleFlow(client, log) {
         throw new Error('No video URL returned for 360 segment.');
       }
       const clipPath = join(clipDir, `segment-${i + 1}.mp4`);
-      await downloadUrlToFile(clipUrl, clipPath);
+      await downloadUrlToFile(clipUrl, clipPath, { projectId: clipResult?.project?.id });
       clipPaths.push(clipPath);
     }
 
@@ -17582,11 +17804,6 @@ async function main() {
 
       // Save to file if requested
       if (options.output && urls[0]) {
-        const response = await fetchWithTimeout(urls[0]);
-        if (!response.ok) throw new Error(`Result download failed: HTTP ${response.status}`);
-        const buffer = Buffer.from(await response.arrayBuffer());
-        if (options.imageTo3d) validateGlb(buffer);
-
         const dir = dirname(options.output);
         if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
 
@@ -17600,7 +17817,7 @@ async function main() {
           const lastFramePath = join(tempDir, 'last-frame.png');
           const clip2Path = join(tempDir, 'clip2.mp4');
 
-          writeFileSync(clip1Path, buffer);
+          await downloadUrlToFile(urls[0], clip1Path, { projectId: firstResult.projectId, label: 'video' });
           log('Extracting last frame...');
           await extractLastFrameFromVideo(clip1Path, lastFramePath);
 
@@ -17669,10 +17886,7 @@ async function main() {
                 }
 
                 // Download second clip
-                const response2 = await fetchWithTimeout(clip2Url);
-                if (!response2.ok) throw new Error(`Second clip download failed: HTTP ${response2.status}`);
-                const buffer2 = Buffer.from(await response2.arrayBuffer());
-                writeFileSync(clip2Path, buffer2);
+                await downloadUrlToFile(clip2Url, clip2Path, { projectId: data.projectId || activeClip2Project?.id, label: 'video' });
 
                 await client2.disconnect();
                 resolve();
@@ -17715,7 +17929,13 @@ async function main() {
           await buildConcatVideoFromClips(options.output, [clip1Path, clip2Path]);
           log(`Saved looping video to ${options.output}`);
         } else {
-          writeOutputFileSafe(options.output, buffer, (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : (options.music || options.speech) ? 'audio' : options.imageTo3d ? 'model' : 'image');
+          await downloadUrlToFile(urls[0], options.output, {
+            projectId: firstResult.projectId,
+            retryOutput: options.output,
+            label: (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : (options.music || options.speech) ? 'audio' : options.imageTo3d ? 'model' : 'image',
+            // A refused GLB never replaces the file already at -o.
+            validate: options.imageTo3d ? (path) => validateGlb(readFileSync(path)) : null
+          });
           log(`Saved to ${options.output}`);
         }
       }
@@ -17725,7 +17945,7 @@ async function main() {
         for (let index = 1; index < urls.length; index++) {
           const extension = extname(options.output);
           const path = options.output.slice(0, options.output.length - extension.length) + `-${index + 1}` + extension;
-          await downloadUrlToFile(urls[index], path);
+          await downloadUrlToFile(urls[index], path, { projectId: firstResult.projectId, retryOutput: options.output, label: 'audio' });
           localPaths.push(path);
         }
       }
@@ -17737,7 +17957,7 @@ async function main() {
           if (!result.lastFrameUrl) continue;
           const extension = new URL(result.lastFrameUrl).pathname.match(/\.(png|jpe?g|webp)$/i)?.[1] || 'jpg';
           const framePath = options.output.replace(/\.[^/.]+$/, '') + `-last-frame${results.length > 1 ? `-${index + 1}` : ''}.${extension}`;
-          await downloadUrlToFile(result.lastFrameUrl, framePath);
+          await downloadUrlToFile(result.lastFrameUrl, framePath, { projectId: result.projectId || firstResult.projectId, label: 'last frame' });
           lastFramePaths.push(framePath);
           log(`Saved last frame to ${framePath}`);
         }

@@ -360,3 +360,36 @@ test('an empty or partial lease is being written while fresh and stale only afte
   assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8')).pid, 4202);
   releaseSogniAppId();
 });
+
+
+test('a future-dated or never-written empty identity file fails fast instead of waiting forever', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-app-id-skew-'));
+  const appIdPath = join(dir, 'app-id');
+  writeFileSync(appIdPath, '');
+  const future = new Date('2030-01-01T00:00:00Z');
+  fs.utimesSync(appIdPath, future, future); // clock skew on a network home
+  let started = Date.now();
+  assert.throws(() => getOrCreateSogniAppId({ appIdPath, generateUuid: () => 'never' }), { code: 'INVALID_APP_ID' });
+  assert.ok(Date.now() - started < 2_000, `future mtime is not "being written" (took ${Date.now() - started} ms)`);
+
+  // A fresh empty file nobody finishes writing: the wait ends at the deadline.
+  writeFileSync(appIdPath, '');
+  fs.utimesSync(appIdPath, new Date(), new Date()); // rewriting an empty file need not touch its mtime
+  started = Date.now();
+  assert.throws(() => getOrCreateSogniAppId({ appIdPath, generateUuid: () => 'never' }), { code: 'INVALID_APP_ID' });
+  const waited = Date.now() - started;
+  assert.ok(waited >= 4_000 && waited < 9_000, `bounded wait (took ${waited} ms)`);
+});
+
+test('a future-dated empty lease is reclaimable, not held forever', () => {
+  const poolDir = mkdtempSync(join(tmpdir(), 'sogni-app-id-skew-lease-'));
+  writeFileSync(join(poolDir, 'slot-0'), 'sogni-agent-skew-0\n');
+  writeFileSync(join(poolDir, 'slot-0.lease'), '');
+  const future = new Date('2030-01-01T00:00:00Z');
+  fs.utimesSync(join(poolDir, 'slot-0.lease'), future, future);
+  releaseSogniAppId();
+  const appId = getOrCreateSogniAppId({ poolDir, generateUuid: () => 'skew-new', ownPid: 4301, isPidAlive: () => true });
+  assert.equal(appId, 'sogni-agent-skew-0');
+  assert.equal(JSON.parse(readFileSync(join(poolDir, 'slot-0.lease'), 'utf8')).pid, 4301);
+  releaseSogniAppId();
+});

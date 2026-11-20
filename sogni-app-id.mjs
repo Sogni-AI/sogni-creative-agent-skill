@@ -81,9 +81,12 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+// A future mtime (clock skew on network or FUSE homes) is never fresh: it would
+// otherwise stay "being written" for as long as the skew lasts.
 function isFreshlyCreated(path) {
   try {
-    return Date.now() - statSync(path).mtimeMs < CREATE_GRACE_MS;
+    const age = Date.now() - statSync(path).mtimeMs;
+    return age >= 0 && age < CREATE_GRACE_MS;
   } catch {
     return false;
   }
@@ -115,19 +118,26 @@ function publishExclusive(path, contents) {
   }
   try {
     writeSync(descriptor, contents);
+  } catch (error) {
+    try { unlinkSync(path); } catch { /* best effort: our own empty file */ }
+    throw error;
   } finally {
     closeSync(descriptor);
   }
   return true;
 }
 
-/** Read an identity file, waiting out another process's create-then-write. */
+/**
+ * Read an identity file, waiting out another process's create-then-write, but
+ * never longer than the grace period plus a second from when the wait began.
+ */
 function readPersistedAppIdWhenWritten(appIdPath) {
+  const deadline = Date.now() + CREATE_GRACE_MS + 1_000;
   for (;;) {
     try {
       return readPersistedAppId(appIdPath);
     } catch (error) {
-      if (error?.code !== 'INVALID_APP_ID' || !isFreshlyCreated(appIdPath)) throw error;
+      if (error?.code !== 'INVALID_APP_ID' || !isFreshlyCreated(appIdPath) || Date.now() >= deadline) throw error;
     }
     sleepSync(READ_RETRY_MS);
   }

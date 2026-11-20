@@ -27,6 +27,7 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -67,6 +68,71 @@ function readPersistedAppId(appIdPath) {
   return validateAppId(readFileSync(appIdPath, 'utf8'), `Sogni app-id file ${appIdPath}`);
 }
 
+// Filesystems without hard links (FAT/exFAT, ReFS, some SMB/NFS/FUSE homes) refuse
+// linkSync with one of these codes. There, a file is published the old way, an
+// exclusive create followed by a write, so it is empty for a moment: a reader
+// treats an empty or unparsable file younger than CREATE_GRACE_MS as still
+// being written, never as corrupt or stale.
+const NO_HARD_LINK_CODES = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EXDEV']);
+const CREATE_GRACE_MS = 5_000;
+const READ_RETRY_MS = 25;
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isFreshlyCreated(path) {
+  try {
+    return Date.now() - statSync(path).mtimeMs < CREATE_GRACE_MS;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create `path` holding `contents` unless it already exists; true when this call
+ * created it. Complete bytes appear at once through a hard link; where the
+ * filesystem has none, an exclusive create plus write (see NO_HARD_LINK_CODES).
+ */
+function publishExclusive(path, contents) {
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporaryPath, contents, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  try {
+    linkSync(temporaryPath, path);
+    return true;
+  } catch (error) {
+    if (error?.code === 'EEXIST') return false;
+    if (!NO_HARD_LINK_CODES.has(error?.code)) throw error;
+  } finally {
+    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
+  }
+  let descriptor;
+  try {
+    descriptor = openSync(path, 'wx', 0o600);
+  } catch (error) {
+    if (error?.code === 'EEXIST') return false;
+    throw error;
+  }
+  try {
+    writeSync(descriptor, contents);
+  } finally {
+    closeSync(descriptor);
+  }
+  return true;
+}
+
+/** Read an identity file, waiting out another process's create-then-write. */
+function readPersistedAppIdWhenWritten(appIdPath) {
+  for (;;) {
+    try {
+      return readPersistedAppId(appIdPath);
+    } catch (error) {
+      if (error?.code !== 'INVALID_APP_ID' || !isFreshlyCreated(appIdPath)) throw error;
+    }
+    sleepSync(READ_RETRY_MS);
+  }
+}
+
 function appIdPersistenceError(error, appIdPath) {
   if (error?.code === 'INVALID_APP_ID' || error?.code === 'APP_ID_POOL_EXHAUSTED') return error;
   const wrapped = new Error(`Could not persist the Sogni app ID at ${appIdPath}: ${error?.message || error}`);
@@ -81,7 +147,7 @@ function appIdPersistenceError(error, appIdPath) {
  */
 function getOrCreateAppIdFile(resolvedPath, generateUuid) {
   try {
-    return readPersistedAppId(resolvedPath);
+    return readPersistedAppIdWhenWritten(resolvedPath);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
@@ -91,21 +157,9 @@ function getOrCreateAppIdFile(resolvedPath, generateUuid) {
     `${GENERATED_APP_ID_PREFIX}${generateUuid()}`,
     'Generated Sogni app ID',
   );
-  const temporaryPath = `${resolvedPath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporaryPath, `${candidate}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
-    try {
-      // A hard link publishes complete bytes atomically without replacing an
-      // existing identity. Concurrent readers never see an empty first write.
-      linkSync(temporaryPath, resolvedPath);
-      return candidate;
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
-      return readPersistedAppId(resolvedPath);
-    }
-  } finally {
-    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
-  }
+  // Never replaces an existing identity; a loser reuses the winner's value.
+  if (publishExclusive(resolvedPath, `${candidate}\n`)) return candidate;
+  return readPersistedAppIdWhenWritten(resolvedPath);
 }
 
 function defaultIsPidAlive(pid) {
@@ -124,10 +178,12 @@ function leaseIsStale(leasePath, { isPidAlive, ownPid }) {
     record = JSON.parse(readFileSync(leasePath, 'utf8'));
   } catch (error) {
     if (error?.code === 'ENOENT') return false; // released while we looked
-    return true; // unreadable/corrupt lease can never be released by its owner
+    // Empty or partial: still being written (no-hard-link create + write) while
+    // fresh; after that, a corrupt lease its owner can never release.
+    return !isFreshlyCreated(leasePath);
   }
   const pid = record?.pid;
-  if (!Number.isInteger(pid) || pid <= 0) return true;
+  if (!Number.isInteger(pid) || pid <= 0) return !isFreshlyCreated(leasePath);
   // A lease naming our own pid cannot be live: this process acquires at most
   // one lease and caches it, so this is a leftover from a recycled pid.
   if (pid === ownPid) return true;
@@ -147,17 +203,7 @@ function tryCreateLease(leasePath, ownPid) {
     tool: basename(process.argv[1] || 'sogni-agent'),
     acquiredAt: new Date().toISOString(),
   };
-  const temporaryPath = `${leasePath}.${ownPid}.${randomUUID()}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try {
-    linkSync(temporaryPath, leasePath);
-    return true;
-  } catch (error) {
-    if (error?.code === 'EEXIST') return false;
-    throw error;
-  } finally {
-    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
-  }
+  return publishExclusive(leasePath, `${JSON.stringify(record)}\n`);
 }
 
 // A reclaim holds this lock only between re-checking a lease and replacing it.
@@ -213,16 +259,7 @@ function migrateLegacyAppId(poolDir, legacyAppIdPath) {
   // Published by hard link, like every identity file, so a process starting at
   // the same moment never reads an empty slot-0.
   const slotPath = join(poolDir, 'slot-0');
-  const temporaryPath = `${slotPath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporaryPath, `${legacyValue}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
-    linkSync(temporaryPath, slotPath);
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error;
-    return; // pool already initialized; leave the legacy file alone
-  } finally {
-    try { unlinkSync(temporaryPath); } catch { /* best effort: only our temporary file */ }
-  }
+  if (!publishExclusive(slotPath, `${legacyValue}\n`)) return; // pool already initialized; leave the legacy file alone
   try { unlinkSync(legacyAppIdPath); } catch { /* best effort */ }
 }
 

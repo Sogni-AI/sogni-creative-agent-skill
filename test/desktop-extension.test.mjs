@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync as fsExistsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import {
@@ -168,7 +168,7 @@ test('generate_image builds quiet JSON argv with prompt last', () => {
     '--json', '-q', '--no-update-check',
     '-o', '/tmp/cat.png', '-Q', 'pro', '-w', '1024', '-h', '768',
     '-c', '/tmp/a.jpg', '-c', '/tmp/b.jpg',
-    'a cat wearing a hat',
+    '--', 'a cat wearing a hat',
   ]);
 });
 
@@ -184,14 +184,14 @@ test('generate_video maps refs and duration', () => {
     '--json', '-q', '--no-update-check', '--video',
     '-o', '/tmp/cat.mp4', '-m', 'wan_v2.2-14b-fp8_i2v_lightx2v',
     '--duration', '8', '--ref', '/tmp/cat.jpg',
-    'cat walks around',
+    '--', 'cat walks around',
   ]);
 });
 
 test('generate_video maps Seedance 2.5 draft mode, and a finalize sends no prompt', () => {
   const tool = getTool('generate_video');
   assert.deepEqual(tool.buildArgs({ prompt: 'a storm rolls in', model: 'seedance2-5', seedance_draft: true }), [
-    '--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-draft', 'a storm rolls in',
+    '--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-draft', '--', 'a storm rolls in',
   ]);
   assert.deepEqual(tool.buildArgs({ model: 'seedance2-5', seedance_finalize: 'job-draft-1', output_path: '/tmp/final.mp4' }), [
     '--json', '-q', '--no-update-check', '--video', '-o', '/tmp/final.mp4', '-m', 'seedance2-5', '--seedance-finalize', 'job-draft-1',
@@ -224,7 +224,7 @@ test('generate_video exposes MiniMax H3 r2v reference arrays and audio control',
     '--ref-audio', '/tmp/voice.m4a', '--ref-audio', '/tmp/rhythm.m4a',
     '--ref-video', '/tmp/motion.mp4', '--ref-video', '/tmp/camera.mp4',
     '-c', '/tmp/wardrobe.jpg', '--no-generate-audio',
-    '<Picture 1> controls identity. <Video 1> controls motion. <Audio 1> controls voice.',
+    '--', '<Picture 1> controls identity. <Video 1> controls motion. <Audio 1> controls voice.',
   ]);
 });
 
@@ -255,7 +255,7 @@ test('generate_video maps MiniMax H3 keyframes to repeatable --keyframe image@se
     '-m', 'minimax-h3-fasth3-flf2v-turbo', '--duration', '8',
     '--ref', '/tmp/first.png', '--ref-end', '/tmp/last.png',
     '--keyframe', '/tmp/turn.png@3.5', '--keyframe', 'https://cdn.example.com/wave.png@6',
-    '<FLF2V preamble plus three-field H3 prompt>',
+    '--', '<FLF2V preamble plus three-field H3 prompt>',
   ]);
   assert.throws(
     () => tool.buildArgs({ prompt: 'x', keyframes: [{ image: '/tmp/turn.png' }] }),
@@ -275,7 +275,7 @@ test('generate_music maps lyrics and format', () => {
     '--json', '-q', '--no-update-check', '--music',
     '--lyrics', 'Rise with the morning light', '--duration', '30',
     '--bpm', '128', '--output-format', 'mp3',
-    'bright indie pop chorus',
+    '--', 'bright indie pop chorus',
   ]);
 });
 
@@ -287,7 +287,7 @@ test('generate_music defaults to Music 3 and passes a named model through', () =
   assert.deepEqual(args, [
     '--json', '-q', '--no-update-check', '--music',
     '--music-model', 'turbo', '--duration', '420',
-    'long ambient drone',
+    '--', 'long ambient drone',
   ]);
 });
 
@@ -296,8 +296,107 @@ test('photobooth requires ref', () => {
   const args = getTool('photobooth').buildArgs({ prompt: 'headshot', ref: '/tmp/face.jpg', count: 4 });
   assert.deepEqual(args, [
     '--json', '-q', '--no-update-check', '--photobooth',
-    '--ref', '/tmp/face.jpg', '-n', '4', 'headshot',
+    '--ref', '/tmp/face.jpg', '-n', '4', '--', 'headshot',
   ]);
+});
+
+const OUTPUT_CASES = [
+  ['generate_image', { prompt: 'a duck' }, 'output_path'],
+  ['generate_video', { prompt: 'a duck' }, 'output_path'],
+  ['generate_music', { prompt: 'soft piano' }, 'output_path'],
+  ['photobooth', { prompt: 'a portrait', ref: '/face.jpg' }, 'output_path'],
+  ['edit_video', { action: 'extract_first_frame', input: '/in.mp4' }, 'output'],
+  ['edit_video', { action: 'extract_last_frame', input: '/in.mp4' }, 'output'],
+  ['edit_video', { action: 'concat_videos', clips: ['/a.mp4', '/b.mp4'] }, 'output'],
+  ['edit_video', { action: 'remix_audio', input: '/in.mp4' }, 'output'],
+];
+
+test('output paths reach the CLI as given, which expands ~ and writes any path', () => {
+  for (const [name, input, field] of OUTPUT_CASES) {
+    for (const path of [
+      '~/Desktop/render.png', 'relative/render.mp4', '/Users/me/.openclaw/media/inbound/render.png',
+      '/media/render.webm', '/media/render.m4a', '/media/render', '/media/render.PNG',
+    ]) {
+      assert.ok(getTool(name).buildArgs({ ...input, [field]: path }).includes(path), `${name}: ${path}`);
+    }
+  }
+});
+
+test('a null or empty optional field counts as not given', () => {
+  for (const [name, input, field] of OUTPUT_CASES.slice(0, 4)) {
+    for (const value of [null, '']) {
+      assert.deepEqual(
+        getTool(name).buildArgs({ ...input, [field]: value, persona: value, timeout_seconds: value }),
+        getTool(name).buildArgs(input),
+        `${name}: ${JSON.stringify(value)}`,
+      );
+    }
+  }
+  const t = getTool('edit_video');
+  for (const value of [null, '']) {
+    assert.deepEqual(
+      t.buildArgs({ action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '/b.mp4'], audio_path: value, input: value }),
+      ['--no-update-check', '--concat-videos', '/out.mp4', '/a.mp4', '/b.mp4'],
+    );
+    assert.deepEqual(
+      t.buildArgs({ action: 'remix_audio', input: '/in.mp4', output: '/out.mp4', bed_audio: value }),
+      ['--no-update-check', '--remix-audio', '/in.mp4', '/out.mp4'],
+    );
+  }
+  assert.deepEqual(
+    getTool('generate_video').buildArgs({ prompt: null, model: 'seedance2-5', seedance_finalize: 'job-1', keyframes: null }),
+    ['--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-1'],
+  );
+});
+
+test('loosely typed values reach the CLI, which checks and normalizes them', () => {
+  assert.deepEqual(
+    getTool('generate_image').buildArgs({ prompt: 'a cat', width: '1024', quality: 'HQ', output_format: 'jpeg', context_images: null }),
+    ['--json', '-q', '--no-update-check', '--output-format', 'jpeg', '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
+  );
+  assert.deepEqual(
+    getTool('generate_video').buildArgs({ prompt: 'a cat walks', workflow: 'T2V', duration: '8' }),
+    ['--json', '-q', '--no-update-check', '--video', '--workflow', 'T2V', '--duration', '8', '--', 'a cat walks'],
+  );
+  assert.deepEqual(
+    getTool('manage_personas').buildArgs({ action: 'resolve', name: '-dash' }),
+    ['--json', '--no-update-check', '--persona-resolve', '-dash'],
+  );
+  assert.deepEqual(
+    getTool('manage_memories').buildArgs({ action: 'set', key: '-k', value: 5, category: 'style' }),
+    ['--no-update-check', '--memory-set', '-k', '5', '--memory-category', 'style'],
+  );
+});
+
+const PROMPT_CASES = [
+  ['generate_image', {}, '/out.png'],
+  ['generate_video', {}, '/out.mp4'],
+  ['generate_music', {}, '/out.mp3'],
+  ['photobooth', { ref: '/face.jpg' }, '/out.png'],
+];
+
+test('generation tools place the whole prompt after the final separator', () => {
+  for (const [name, input, output] of PROMPT_CASES) {
+    for (const prompt of ['a sunny day', '-5 degrees outside', '--personality-clear', '- Shot 1: a cat -- then a dog']) {
+      const args = getTool(name).buildArgs({ ...input, prompt, output_path: output });
+      assert.deepEqual(args.slice(-2), ['--', prompt], name);
+      assert.equal(args.indexOf('--'), args.length - 2, name);
+      assert.ok(args.indexOf('-o') < args.length - 2);
+    }
+  }
+});
+
+test('edit_video refuses a concat clip that the CLI would read as an option', () => {
+  for (const clip of ['--personality-set', '-clip.mp4']) {
+    assert.throws(() => getTool('edit_video').buildArgs({
+      action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '/b.mp4', clip],
+    }), { message: 'clip paths cannot start with "-".' });
+  }
+  // Any other clip reaches the CLI as on main; the CLI reports a missing file itself.
+  assert.deepEqual(
+    getTool('edit_video').buildArgs({ action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '', 42, null] }),
+    ['--no-update-check', '--concat-videos', '/out.mp4', '/a.mp4', '', '42', 'null'],
+  );
 });
 
 test('edit_video dispatches per action and validates inputs', () => {
@@ -465,7 +564,7 @@ test('tools/call spawns the CLI with built argv and returns its stdout', async (
   });
   assert.equal(res.result.isError ?? false, false);
   const echoed = JSON.parse(res.result.content[0].text);
-  assert.deepEqual(echoed.argv, ['--json', '-q', '--no-update-check', '-Q', 'fast', 'a red fox']);
+  assert.deepEqual(echoed.argv, ['--json', '-q', '--no-update-check', '-Q', 'fast', '--', 'a red fox']);
 });
 
 test('MCP initialize allowlists clientInfo before injecting child attribution', async (t) => {
@@ -519,7 +618,7 @@ test('oversized success output keeps the head (front-loaded JSON), not the tail'
   const text = res.result.content[0].text;
   assert.equal(text.length, 20000);
   assert.ok(
-    text.startsWith('{"argv":["--json","-q","--no-update-check","-Q","fast","a red fox"]'),
+    text.startsWith('{"argv":["--json","-q","--no-update-check","-Q","fast","--","a red fox"]'),
     'expected the head (result JSON) to survive truncation, not the trailing pad',
   );
 });
@@ -556,6 +655,118 @@ test('tools/call with invalid input returns isError without spawning', async (t)
   const res = await client.request('tools/call', { name: 'photobooth', arguments: { prompt: 'x' } });
   assert.equal(res.result.isError, true);
   assert.match(res.result.content[0].text, /ref/);
+});
+
+test('tools/call passes input to the CLI as main does, including null and loose values', async (t) => {
+  const home = tempHome();
+  const client = new McpClient({ SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') });
+  t.after(() => { client.close(); rmSync(home, { recursive: true, force: true }); });
+  const call = async (name, args) => {
+    const res = await client.request('tools/call', { name, arguments: args });
+    const text = res.result.content.at(-1).text;
+    assert.equal(res.result.isError ?? false, false, `${name} ${JSON.stringify(args)}: ${text}`);
+    return text;
+  };
+  const argv = async (name, args) => JSON.parse((await call(name, args)).split('\n')[0]).argv;
+  assert.deepEqual(await argv('account_balance', null), ['--balances', '--json', '--no-update-check']);
+  assert.deepEqual(await argv('list_media', null), ['--json', '--no-update-check', '--list-media', 'images']);
+  assert.deepEqual(
+    await argv('generate_image', { prompt: 'a cat', output_path: '~/Desktop/cat.png', width: '1024', quality: 'HQ', persona: null }),
+    ['--json', '-q', '--no-update-check', '-o', '~/Desktop/cat.png', '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
+  );
+  assert.deepEqual(
+    await argv('generate_video', { prompt: null, model: 'seedance2-5', seedance_finalize: 'job-1' }),
+    ['--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-1'],
+  );
+  assert.deepEqual(
+    await argv('edit_video', { action: 'concat_videos', output: '/Users/me/.openclaw/media/inbound/joined.webm', clips: ['/a.mp4', '/b.mp4'], audio_path: '' }),
+    ['--no-update-check', '--concat-videos', '/Users/me/.openclaw/media/inbound/joined.webm', '/a.mp4', '/b.mp4'],
+  );
+  assert.deepEqual(
+    await argv('manage_memories', { action: 'set', key: '-k', value: 'v', category: 'style' }),
+    ['--no-update-check', '--memory-set', '-k', 'v', '--memory-category', 'style'],
+  );
+  assert.match(await call('import_media', { data: TINY_PNG.toString('base64'), filename: 'dot.png', append_to_path: null }), /dot\.png/);
+});
+
+function realCliEnv(home) {
+  return {
+    HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(),
+    SOGNI_API_KEY: '', SOGNI_CREDENTIALS_PATH: join(home, 'no-credentials'),
+    SOGNI_PERSONALITY_PATH: join(home, '.config', 'sogni', 'personality.txt'),
+    OPENCLAW_CONFIG_PATH: join(home, 'openclaw.json'), OPENCLAW_PLUGIN_CONFIG: '',
+  };
+}
+
+test('a prompt that looks like an option reaches the real CLI as prompt text', { timeout: 30000 }, async (t) => {
+  const oldHome = tempHome();
+  const newHome = tempHome();
+  t.after(() => {
+    rmSync(oldHome, { recursive: true, force: true });
+    rmSync(newHome, { recursive: true, force: true });
+  });
+  const cli = join(HERE, '..', 'sogni-agent.mjs');
+  const personalityPath = (home) => realCliEnv(home).SOGNI_PERSONALITY_PATH;
+  for (const home of [oldHome, newHome]) {
+    mkdirSync(dirname(personalityPath(home)), { recursive: true });
+    writeFileSync(personalityPath(home), 'Use a cheerful tone.');
+  }
+  // Without the separator, the CLI ran the prompt as its own command.
+  const old = spawnSync(process.execPath, [cli, '--json', '-q', '--no-update-check', '--personality-clear'], {
+    env: realCliEnv(oldHome), encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(old.status, 0, old.stderr);
+  assert.equal(fsExistsSync(personalityPath(oldHome)), false);
+
+  const client = new McpClient({ ...realCliEnv(newHome), SOGNI_AGENT_PATH: cli });
+  t.after(() => client.close());
+  for (const prompt of ['--personality-clear', '-5 degrees outside']) {
+    const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt } });
+    const text = res.result.content.at(-1).text;
+    // No key is configured, so the CLI stops at credentials after reading the prompt.
+    assert.equal(res.result.isError, true);
+    assert.match(text, /"errorCode":"MISSING_CREDENTIALS"/);
+    assert.ok(text.includes(`"prompt":${JSON.stringify(prompt)}`), text);
+  }
+  assert.equal(readFileSync(personalityPath(newHome), 'utf8'), 'Use a cheerful tone.');
+});
+
+test('concat clip validation leaves personality unchanged with the real CLI', { timeout: 20000 }, async (t) => {
+  const oldHome = tempHome();
+  const newHome = tempHome();
+  t.after(() => {
+    rmSync(oldHome, { recursive: true, force: true });
+    rmSync(newHome, { recursive: true, force: true });
+  });
+  const cli = join(HERE, '..', 'sogni-agent.mjs');
+  const clips = ['/a.mp4', '/b.mp4', '--personality-set', 'Use a cheerful tone.'];
+  const personalityPath = (home) => realCliEnv(home).SOGNI_PERSONALITY_PATH;
+  const old = spawnSync(process.execPath, [cli, '--no-update-check', '--concat-videos', join(oldHome, 'out.mp4'), ...clips], {
+    env: realCliEnv(oldHome), encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(old.status, 0, old.stderr);
+  assert.equal(readFileSync(personalityPath(oldHome), 'utf8'), 'Use a cheerful tone.');
+
+  const input = { action: 'concat_videos', output: join(newHome, 'out.mp4'), clips };
+  assert.throws(() => getTool('edit_video').buildArgs(input), { message: 'clip paths cannot start with "-".' });
+  const client = new McpClient({ ...realCliEnv(newHome), SOGNI_AGENT_PATH: cli });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'edit_video', arguments: input });
+  assert.equal(res.result.isError, true);
+  assert.equal(res.result.content[0].text, 'clip paths cannot start with "-".');
+  assert.equal(fsExistsSync(personalityPath(newHome)), false);
+});
+
+test('tools/call ignores fields outside the schema', async (t) => {
+  const client = new McpClient();
+  t.after(() => client.close());
+  const res = await client.request('tools/call', {
+    name: 'generate_video', arguments: { prompt: '-5 degrees outside', extra: { arbitrary: true }, keyframes: [{ image: '/a.png', at_seconds: 2, extra: '--help' }] },
+  });
+  assert.equal(res.result.isError, false);
+  assert.deepEqual(JSON.parse(res.result.content[0].text).argv, [
+    '--json', '-q', '--no-update-check', '--video', '--keyframe', '/a.png@2', '--', '-5 degrees outside',
+  ]);
 });
 
 test('missing CLI yields a setup hint, not a crash', async (t) => {

@@ -112,7 +112,7 @@ export const TOOLS = [
       for (const c of input.context_images ?? []) push(args, '-c', c);
       push(args, '--persona', input.persona);
       push(args, '-t', input.timeout_seconds);
-      args.push(prompt);
+      args.push('--', prompt);
       return args;
     },
   },
@@ -216,7 +216,7 @@ export const TOOLS = [
       if (input.seedance_draft === true) args.push('--seedance-draft');
       push(args, '--seedance-finalize', finalize);
       push(args, '-t', input.timeout_seconds);
-      if (prompt) args.push(prompt);
+      if (prompt) args.push('--', prompt);
       return args;
     },
   },
@@ -287,7 +287,7 @@ export const TOOLS = [
       push(args, '--keyscale', input.keyscale);
       push(args, '--output-format', input.audio_format);
       push(args, '-t', input.timeout_seconds);
-      args.push(prompt);
+      args.push('--', prompt);
       return args;
     },
   },
@@ -313,7 +313,7 @@ export const TOOLS = [
       const args = [...GEN_BASE, '--photobooth', '--ref', String(ref)];
       push(args, '-n', input.count);
       push(args, '-o', input.output_path);
-      args.push(prompt);
+      args.push('--', prompt);
       return args;
     },
   },
@@ -347,6 +347,11 @@ export const TOOLS = [
         const output = required(input, 'output');
         const clips = input.clips ?? [];
         if (clips.length < 2) throw new Error('concat_videos needs at least two clips.');
+        // --concat-videos reads clips until the first "-" argument, so a clip
+        // like that would be read as a CLI option instead of a file.
+        if (Array.isArray(clips) && clips.some((clip) => String(clip).startsWith('-'))) {
+          throw new Error('clip paths cannot start with "-".');
+        }
         const args = ['--no-update-check', '--concat-videos', String(output), ...clips.map(String)];
         push(args, '--concat-audio', input.audio_path);
         return args;

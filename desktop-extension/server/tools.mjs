@@ -2,22 +2,8 @@
 // MCP tool registry: JSON Schemas shown to Claude Desktop plus pure
 // buildArgs() functions that translate tool input into sogni-agent argv.
 // buildArgs never spawns anything — index.mjs owns process execution.
-import { extname, isAbsolute } from 'node:path';
 
 const GEN_BASE = ['--json', '-q', '--no-update-check'];
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
-const VIDEO_EXTENSIONS = ['.mp4', '.mov'];
-const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac'];
-
-function validateOutputPath(input, field, extensions) {
-  if (!Object.hasOwn(input, field)) return;
-  const value = input[field];
-  if (typeof value !== 'string' || !isAbsolute(value) || value.includes('\0')
-      || value.split(/[\\/]/).some((segment) => segment.startsWith('.'))
-      || !extensions.includes(extname(value).toLowerCase())) {
-    throw new Error('output paths must be absolute media file paths');
-  }
-}
 
 // Past the CLI's longest default wait (30 minutes, for any render on Relaxed), so
 // the CLI can report the project id before this process-level safety valve fires.
@@ -49,21 +35,6 @@ function required(input, field, hint) {
     throw new Error(`${field} is required${hint ? ` — ${hint}` : ''}.`);
   }
   return v;
-}
-
-function filePath(value, field) {
-  if (typeof value !== 'string' || !value || value.startsWith('-')) {
-    throw new Error(`${field} paths must be file paths`);
-  }
-  return value;
-}
-
-function identifier(input, field) {
-  const value = required(input, field);
-  if (typeof value !== 'string' || value.startsWith('-')) {
-    throw new Error(`${field} must be text that does not start with a dash.`);
-  }
-  return value;
 }
 
 const str = (description) => ({ type: 'string', description });
@@ -122,7 +93,6 @@ export const TOOLS = [
       required: ['prompt'],
     },
     buildArgs(input) {
-      validateOutputPath(input, 'output_path', IMAGE_EXTENSIONS);
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE];
       pushRenderOptions(args, input);
@@ -213,7 +183,6 @@ export const TOOLS = [
       required: [],
     },
     buildArgs(input) {
-      validateOutputPath(input, 'output_path', VIDEO_EXTENSIONS);
       // A finalize renders its draft's own prompt; every other render needs one.
       const finalize = input.seedance_finalize;
       const prompt = finalize ? input.prompt : required(input, 'prompt');
@@ -307,7 +276,6 @@ export const TOOLS = [
       required: ['prompt'],
     },
     buildArgs(input) {
-      validateOutputPath(input, 'output_path', AUDIO_EXTENSIONS);
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE, '--music'];
       pushRenderOptions(args, input);
@@ -340,7 +308,6 @@ export const TOOLS = [
       required: ['prompt', 'ref'],
     },
     buildArgs(input) {
-      validateOutputPath(input, 'output_path', IMAGE_EXTENSIONS);
       const prompt = required(input, 'prompt');
       const ref = required(input, 'ref', 'a face photo path or URL');
       const args = [...GEN_BASE, '--photobooth', '--ref', String(ref)];
@@ -371,11 +338,6 @@ export const TOOLS = [
     },
     buildArgs(input) {
       const action = required(input, 'action');
-      validateOutputPath(input, 'output', action === 'extract_first_frame' || action === 'extract_last_frame'
-        ? IMAGE_EXTENSIONS : VIDEO_EXTENSIONS);
-      for (const field of ['input', 'audio_path', 'bed_audio']) {
-        if (Object.hasOwn(input, field)) filePath(input[field], field);
-      }
       if (action === 'extract_first_frame' || action === 'extract_last_frame') {
         const src = required(input, 'input', 'the source video');
         const output = required(input, 'output');
@@ -384,9 +346,6 @@ export const TOOLS = [
       if (action === 'concat_videos') {
         const output = required(input, 'output');
         const clips = input.clips ?? [];
-        if (!Array.isArray(clips) || clips.some((clip) => typeof clip !== 'string' || !clip || clip.startsWith('-'))) {
-          throw new Error('clip paths must be file paths');
-        }
         if (clips.length < 2) throw new Error('concat_videos needs at least two clips.');
         const args = ['--no-update-check', '--concat-videos', String(output), ...clips.map(String)];
         push(args, '--concat-audio', input.audio_path);
@@ -462,8 +421,8 @@ export const TOOLS = [
         push(args, '--persona-account-after', input.after);
         return args;
       }
-      if (action === 'import_account') return ['--json', '--no-update-check', '--persona-import-account', identifier(input, 'account_persona_id')];
-      const name = identifier(input, 'name');
+      if (action === 'import_account') return ['--json', '--no-update-check', '--persona-import-account', String(required(input, 'account_persona_id'))];
+      const name = required(input, 'name');
       if (action === 'remove') return ['--no-update-check', '--persona-remove', String(name)];
       if (action === 'resolve') return ['--json', '--no-update-check', '--persona-resolve', String(name)];
       if (action === 'add') {
@@ -494,7 +453,7 @@ export const TOOLS = [
     buildArgs(input) {
       const action = required(input, 'action');
       if (action === 'list') return ['--json', '--no-update-check', '--memory-list'];
-      const key = identifier(input, 'key');
+      const key = required(input, 'key');
       if (action === 'get') return ['--json', '--no-update-check', '--memory-get', String(key)];
       if (action === 'remove') return ['--no-update-check', '--memory-remove', String(key)];
       if (action === 'set') {
@@ -525,37 +484,6 @@ export const TOOLS = [
     },
   },
 ];
-
-export function validateToolInput(tool, input) {
-  function validate(schema, value, field) {
-    const matches = schema.type === 'array' ? Array.isArray(value)
-      : schema.type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value)
-      : schema.type === 'number' ? typeof value === 'number' && Number.isFinite(value)
-      : typeof value === schema.type;
-    if (!matches) throw new Error(`${field} must be ${schema.type}.`);
-    if (schema.enum && !schema.enum.includes(value)) {
-      throw new Error(`${field} must be one of: ${schema.enum.join(', ')}.`);
-    }
-    if (schema.type === 'array') {
-      if (schema.maxItems !== undefined && value.length > schema.maxItems) {
-        throw new Error(`${field} must have at most ${schema.maxItems} items.`);
-      }
-      return value.map((item, index) => validate(schema.items, item, `${field}[${index}]`));
-    }
-    if (schema.type === 'object') {
-      const result = {};
-      for (const key of schema.required ?? []) {
-        if (!Object.hasOwn(value, key)) throw new Error(`${field}.${key} is required.`);
-      }
-      for (const [key, childSchema] of Object.entries(schema.properties)) {
-        if (Object.hasOwn(value, key)) result[key] = validate(childSchema, value[key], `${field}.${key}`);
-      }
-      return result;
-    }
-    return value;
-  }
-  return validate(tool.inputSchema, input, 'input');
-}
 
 export function getTool(name) {
   return TOOLS.find((t) => t.name === name);

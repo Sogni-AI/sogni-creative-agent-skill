@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TOOLS, getTool, hardKillTimeoutMs, validateToolInput } from './tools.mjs';
+import { TOOLS, getTool, hardKillTimeoutMs } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
 import { collectInlineImages } from './inline-images.mjs';
 import { runImportMedia } from './import-media.mjs';
@@ -68,12 +68,6 @@ const LOCAL_HANDLERS = { import_media: runImportMedia };
 async function callTool(name, input, progressToken) {
   const tool = getTool(name);
   if (!tool) return textResult(`Unknown tool: ${name}`, true);
-
-  try {
-    input = validateToolInput(tool, input === undefined ? {} : input);
-  } catch (err) {
-    return textResult(err.message, true);
-  }
 
   if (tool.local) {
     try {

@@ -301,75 +301,89 @@ test('photobooth requires ref', () => {
 });
 
 const OUTPUT_CASES = [
-  ['generate_image', { prompt: 'a duck' }, 'output_path', ['png', 'jpg', 'jpeg', 'webp', 'gif']],
-  ['generate_video', { prompt: 'a duck' }, 'output_path', ['mp4', 'mov']],
-  ['generate_music', { prompt: 'soft piano' }, 'output_path', ['mp3', 'wav', 'flac']],
-  ['photobooth', { prompt: 'a portrait', ref: '/face.jpg' }, 'output_path', ['png', 'jpg', 'jpeg', 'webp', 'gif']],
-  ['edit_video', { action: 'extract_first_frame', input: '/in.mp4' }, 'output', ['png', 'jpg', 'jpeg', 'webp', 'gif']],
-  ['edit_video', { action: 'extract_last_frame', input: '/in.mp4' }, 'output', ['png', 'jpg', 'jpeg', 'webp', 'gif']],
-  ['edit_video', { action: 'concat_videos', clips: ['/a.mp4', '/b.mp4'] }, 'output', ['mp4', 'mov']],
-  ['edit_video', { action: 'remix_audio', input: '/in.mp4' }, 'output', ['mp4', 'mov']],
+  ['generate_image', { prompt: 'a duck' }, 'output_path'],
+  ['generate_video', { prompt: 'a duck' }, 'output_path'],
+  ['generate_music', { prompt: 'soft piano' }, 'output_path'],
+  ['photobooth', { prompt: 'a portrait', ref: '/face.jpg' }, 'output_path'],
+  ['edit_video', { action: 'extract_first_frame', input: '/in.mp4' }, 'output'],
+  ['edit_video', { action: 'extract_last_frame', input: '/in.mp4' }, 'output'],
+  ['edit_video', { action: 'concat_videos', clips: ['/a.mp4', '/b.mp4'] }, 'output'],
+  ['edit_video', { action: 'remix_audio', input: '/in.mp4' }, 'output'],
 ];
 
-test('output paths must be absolute media paths without dot segments or NUL bytes', () => {
-  for (const [name, input, field, extensions] of OUTPUT_CASES) {
-    const ext = extensions[0];
-    for (const path of [`relative.${ext}`, `/out\0.${ext}`, '/out.txt', `/home/.config/out.${ext}`, `/home/../out.${ext}`, `/home/./out.${ext}`, `/home/.out.${ext}`, '']) {
-      assert.throws(() => getTool(name).buildArgs({ ...input, [field]: path }), {
-        message: 'output paths must be absolute media file paths',
-      }, `${name}: ${JSON.stringify(path)}`);
-    }
-    for (const extension of extensions) {
-      const path = `/media/render.${extension.toUpperCase()}`;
-      assert.ok(getTool(name).buildArgs({ ...input, [field]: path }).includes(path), name);
+test('output paths reach the CLI as given, which expands ~ and writes any path', () => {
+  for (const [name, input, field] of OUTPUT_CASES) {
+    for (const path of [
+      '~/Desktop/render.png', 'relative/render.mp4', '/Users/me/.openclaw/media/inbound/render.png',
+      '/media/render.webm', '/media/render.m4a', '/media/render', '/media/render.PNG',
+    ]) {
+      assert.ok(getTool(name).buildArgs({ ...input, [field]: path }).includes(path), `${name}: ${path}`);
     }
   }
 });
 
+test('a null or empty optional field counts as not given', () => {
+  for (const [name, input, field] of OUTPUT_CASES.slice(0, 4)) {
+    for (const value of [null, '']) {
+      assert.deepEqual(
+        getTool(name).buildArgs({ ...input, [field]: value, persona: value, timeout_seconds: value }),
+        getTool(name).buildArgs(input),
+        `${name}: ${JSON.stringify(value)}`,
+      );
+    }
+  }
+  const t = getTool('edit_video');
+  for (const value of [null, '']) {
+    assert.deepEqual(
+      t.buildArgs({ action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '/b.mp4'], audio_path: value, input: value }),
+      ['--no-update-check', '--concat-videos', '/out.mp4', '/a.mp4', '/b.mp4'],
+    );
+    assert.deepEqual(
+      t.buildArgs({ action: 'remix_audio', input: '/in.mp4', output: '/out.mp4', bed_audio: value }),
+      ['--no-update-check', '--remix-audio', '/in.mp4', '/out.mp4'],
+    );
+  }
+  assert.deepEqual(
+    getTool('generate_video').buildArgs({ prompt: null, model: 'seedance2-5', seedance_finalize: 'job-1', keyframes: null }),
+    ['--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-1'],
+  );
+});
+
+test('loosely typed values reach the CLI, which checks and normalizes them', () => {
+  assert.deepEqual(
+    getTool('generate_image').buildArgs({ prompt: 'a cat', width: '1024', quality: 'HQ', output_format: 'jpeg', context_images: null }),
+    ['--json', '-q', '--no-update-check', '--output-format', 'jpeg', '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
+  );
+  assert.deepEqual(
+    getTool('generate_video').buildArgs({ prompt: 'a cat walks', workflow: 'T2V', duration: '8' }),
+    ['--json', '-q', '--no-update-check', '--video', '--workflow', 'T2V', '--duration', '8', '--', 'a cat walks'],
+  );
+  assert.deepEqual(
+    getTool('manage_personas').buildArgs({ action: 'resolve', name: '-dash' }),
+    ['--json', '--no-update-check', '--persona-resolve', '-dash'],
+  );
+  assert.deepEqual(
+    getTool('manage_memories').buildArgs({ action: 'set', key: '-k', value: 5, category: 'style' }),
+    ['--no-update-check', '--memory-set', '-k', '5', '--memory-category', 'style'],
+  );
+});
+
+const PROMPT_CASES = [
+  ['generate_image', {}, '/out.png'],
+  ['generate_video', {}, '/out.mp4'],
+  ['generate_music', {}, '/out.mp3'],
+  ['photobooth', { ref: '/face.jpg' }, '/out.png'],
+];
+
 test('generation tools place the whole prompt after the final separator', () => {
-  for (const [name, input, field, extensions] of OUTPUT_CASES.slice(0, 4)) {
-    for (const prompt of ['a sunny day', '-5 degrees outside', '--personality-clear']) {
-      const args = getTool(name).buildArgs({ ...input, prompt, [field]: `/out.${extensions[0]}` });
+  for (const [name, input, output] of PROMPT_CASES) {
+    for (const prompt of ['a sunny day', '-5 degrees outside', '--personality-clear', '- Shot 1: a cat -- then a dog']) {
+      const args = getTool(name).buildArgs({ ...input, prompt, output_path: output });
       assert.deepEqual(args.slice(-2), ['--', prompt], name);
+      assert.equal(args.indexOf('--'), args.length - 2, name);
       assert.ok(args.indexOf('-o') < args.length - 2);
     }
   }
-});
-
-test('edit_video rejects clip paths that start with a dash', () => {
-  for (const clip of ['--personality-set', '', 42, null]) {
-    assert.throws(() => getTool('edit_video').buildArgs({
-      action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '/b.mp4', clip],
-    }), { message: 'clip paths must be file paths' });
-  }
-});
-
-test('edit_video requires non-empty file paths for each path field', () => {
-  const tool = getTool('edit_video');
-  for (const action of ['extract_first_frame', 'extract_last_frame', 'concat_videos', 'remix_audio']) {
-    const fields = action === 'concat_videos' ? ['output', 'audio_path']
-      : action === 'remix_audio' ? ['input', 'output', 'bed_audio'] : ['input', 'output'];
-    for (const field of fields) {
-      for (const value of ['--personality-clear', '', 42, null]) {
-        assert.throws(() => tool.buildArgs({
-          action, input: '/in.mp4', output: action.startsWith('extract') ? '/out.png' : '/out.mp4',
-          clips: ['/a.mp4', '/b.mp4'], [field]: value,
-        }), /file paths/, `${action}.${field}`);
-      }
-    }
-  }
-});
-
-test('persona identifiers and memory keys reject a leading dash', () => {
-  for (const action of ['add', 'remove', 'resolve']) {
-    assert.throws(() => getTool('manage_personas').buildArgs({ action, name: '--help', ref: '/face.jpg' }), /name/);
-  }
-  assert.throws(() => getTool('manage_personas').buildArgs({ action: 'import_account', account_persona_id: '--help' }), /account_persona_id/);
-  for (const action of ['get', 'set', 'remove']) {
-    assert.throws(() => getTool('manage_memories').buildArgs({ action, key: '--help', value: 'text' }), /key/);
-  }
-  assert.ok(getTool('manage_memories').buildArgs({ action: 'set', key: 'style', value: '-free text' }).includes('-free text'));
-  assert.ok(getTool('manage_personas').buildArgs({ action: 'add', name: 'Mo', ref: '/face.jpg', description: '-free text' }).includes('-free text'));
 });
 
 test('edit_video dispatches per action and validates inputs', () => {
@@ -630,52 +644,48 @@ test('tools/call with invalid input returns isError without spawning', async (t)
   assert.match(res.result.content[0].text, /ref/);
 });
 
-test('tools/call validates declared field types and enums before starting the CLI', { timeout: 20000 }, async (t) => {
+test('tools/call passes input to the CLI as main does, including null and loose values', async (t) => {
   const home = tempHome();
-  const marker = join(home, 'started');
-  const agent = join(home, 'agent.mjs');
-  writeFileSync(agent, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'started');`);
-  const client = new McpClient({ SOGNI_AGENT_PATH: agent, SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') });
+  const client = new McpClient({ SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') });
   t.after(() => { client.close(); rmSync(home, { recursive: true, force: true }); });
-  function sample(schema) {
-    if (schema.enum) return schema.enum[0];
-    if (schema.type === 'string') return 'text';
-    if (schema.type === 'number') return 1;
-    if (schema.type === 'boolean') return true;
-    if (schema.type === 'array') return [sample(schema.items)];
-    return Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, sample(value)]));
-  }
-  for (const tool of TOOLS) {
-    const valid = sample(tool.inputSchema);
-    for (const [field, schema] of Object.entries(tool.inputSchema.properties)) {
-      const invalid = [null, schema.type === 'string' ? 12 : 'wrong type'];
-      if (schema.enum) invalid.push('--personality-clear');
-      if (schema.type === 'array') invalid.push([12]);
-      if (field === 'keyframes') invalid.push([{}], [{ image: '/a.png', at_seconds: '3' }], Array(9).fill({ image: '/a.png', at_seconds: 1 }));
-      for (const value of invalid) {
-        const res = await client.request('tools/call', { name: tool.name, arguments: { ...valid, [field]: value } });
-        assert.equal(res.result.isError, true, `${tool.name}.${field}`);
-        assert.match(res.result.content[0].text, new RegExp(field));
-        assert.equal(fsExistsSync(marker), false, `${tool.name}.${field} started the CLI`);
-      }
-    }
-  }
-  for (const [name, input, field, extensions] of OUTPUT_CASES) {
-    for (const path of [`relative.${extensions[0]}`, `/out\0.${extensions[0]}`, '/out.txt', `/home/.config/out.${extensions[0]}`]) {
-      const res = await client.request('tools/call', { name, arguments: { ...input, [field]: path } });
-      assert.equal(res.result.isError, true);
-      assert.equal(res.result.content[0].text, 'output paths must be absolute media file paths');
-      assert.equal(fsExistsSync(marker), false);
-    }
-  }
-  for (const value of [[], 'text', 1, false]) {
-    const res = await client.request('tools/call', { name: 'account_balance', arguments: value });
-    assert.equal(res.result.isError, true);
-    assert.equal(fsExistsSync(marker), false);
-  }
+  const call = async (name, args) => {
+    const res = await client.request('tools/call', { name, arguments: args });
+    const text = res.result.content.at(-1).text;
+    assert.equal(res.result.isError ?? false, false, `${name} ${JSON.stringify(args)}: ${text}`);
+    return text;
+  };
+  const argv = async (name, args) => JSON.parse((await call(name, args)).split('\n')[0]).argv;
+  assert.deepEqual(await argv('account_balance', null), ['--balances', '--json', '--no-update-check']);
+  assert.deepEqual(await argv('list_media', null), ['--json', '--no-update-check', '--list-media', 'images']);
+  assert.deepEqual(
+    await argv('generate_image', { prompt: 'a cat', output_path: '~/Desktop/cat.png', width: '1024', quality: 'HQ', persona: null }),
+    ['--json', '-q', '--no-update-check', '-o', '~/Desktop/cat.png', '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
+  );
+  assert.deepEqual(
+    await argv('generate_video', { prompt: null, model: 'seedance2-5', seedance_finalize: 'job-1' }),
+    ['--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-1'],
+  );
+  assert.deepEqual(
+    await argv('edit_video', { action: 'concat_videos', output: '/Users/me/.openclaw/media/inbound/joined.webm', clips: ['/a.mp4', '/b.mp4'], audio_path: '' }),
+    ['--no-update-check', '--concat-videos', '/Users/me/.openclaw/media/inbound/joined.webm', '/a.mp4', '/b.mp4'],
+  );
+  assert.deepEqual(
+    await argv('manage_memories', { action: 'set', key: '-k', value: 'v', category: 'style' }),
+    ['--no-update-check', '--memory-set', '-k', 'v', '--memory-category', 'style'],
+  );
+  assert.match(await call('import_media', { data: TINY_PNG.toString('base64'), filename: 'dot.png', append_to_path: null }), /dot\.png/);
 });
 
-test('concat clip validation leaves personality unchanged with the real CLI', { timeout: 20000 }, async (t) => {
+function realCliEnv(home) {
+  return {
+    HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(),
+    SOGNI_API_KEY: '', SOGNI_CREDENTIALS_PATH: join(home, 'no-credentials'),
+    SOGNI_PERSONALITY_PATH: join(home, '.config', 'sogni', 'personality.txt'),
+    OPENCLAW_CONFIG_PATH: join(home, 'openclaw.json'), OPENCLAW_PLUGIN_CONFIG: '',
+  };
+}
+
+test('a prompt that looks like an option reaches the real CLI as prompt text', { timeout: 30000 }, async (t) => {
   const oldHome = tempHome();
   const newHome = tempHome();
   t.after(() => {
@@ -683,27 +693,29 @@ test('concat clip validation leaves personality unchanged with the real CLI', { 
     rmSync(newHome, { recursive: true, force: true });
   });
   const cli = join(HERE, '..', 'sogni-agent.mjs');
-  const clips = ['/a.mp4', '/b.mp4', '--personality-set', 'Use a cheerful tone.'];
-  const personalityPath = (home) => join(home, '.config', 'sogni', 'personality.txt');
-  const env = (home) => ({
-    HOME: home, USERPROFILE: home, PATH: process.env.PATH, TMPDIR: tmpdir(),
-    SOGNI_API_KEY: '', SOGNI_PERSONALITY_PATH: personalityPath(home),
-    OPENCLAW_CONFIG_PATH: join(home, 'openclaw.json'), OPENCLAW_PLUGIN_CONFIG: '',
-  });
-  const old = spawnSync(process.execPath, [cli, '--no-update-check', '--concat-videos', join(oldHome, 'out.mp4'), ...clips], {
-    env: env(oldHome), encoding: 'utf8', timeout: 10000,
+  const personalityPath = (home) => realCliEnv(home).SOGNI_PERSONALITY_PATH;
+  for (const home of [oldHome, newHome]) {
+    mkdirSync(dirname(personalityPath(home)), { recursive: true });
+    writeFileSync(personalityPath(home), 'Use a cheerful tone.');
+  }
+  // Without the separator, the CLI ran the prompt as its own command.
+  const old = spawnSync(process.execPath, [cli, '--json', '-q', '--no-update-check', '--personality-clear'], {
+    env: realCliEnv(oldHome), encoding: 'utf8', timeout: 10000,
   });
   assert.equal(old.status, 0, old.stderr);
-  assert.equal(readFileSync(personalityPath(oldHome), 'utf8'), 'Use a cheerful tone.');
+  assert.equal(fsExistsSync(personalityPath(oldHome)), false);
 
-  const input = { action: 'concat_videos', output: join(newHome, 'out.mp4'), clips };
-  assert.throws(() => getTool('edit_video').buildArgs(input), { message: 'clip paths must be file paths' });
-  const client = new McpClient({ ...env(newHome), SOGNI_AGENT_PATH: cli });
+  const client = new McpClient({ ...realCliEnv(newHome), SOGNI_AGENT_PATH: cli });
   t.after(() => client.close());
-  const res = await client.request('tools/call', { name: 'edit_video', arguments: input });
-  assert.equal(res.result.isError, true);
-  assert.equal(res.result.content[0].text, 'clip paths must be file paths');
-  assert.equal(fsExistsSync(personalityPath(newHome)), false);
+  for (const prompt of ['--personality-clear', '-5 degrees outside']) {
+    const res = await client.request('tools/call', { name: 'generate_image', arguments: { prompt } });
+    const text = res.result.content.at(-1).text;
+    // No key is configured, so the CLI stops at credentials after reading the prompt.
+    assert.equal(res.result.isError, true);
+    assert.match(text, /"errorCode":"MISSING_CREDENTIALS"/);
+    assert.ok(text.includes(`"prompt":${JSON.stringify(prompt)}`), text);
+  }
+  assert.equal(readFileSync(personalityPath(newHome), 'utf8'), 'Use a cheerful tone.');
 });
 
 test('tools/call ignores fields outside the schema', async (t) => {

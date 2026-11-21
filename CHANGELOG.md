@@ -1,3 +1,7 @@
+## Unreleased
+
+- In the local MCP server used by Claude Desktop, Codex and goose, upscale an image up to 16K with `upscale_image`, upscale a video up to 2160p with `upscale_video`, and turn text into speech in a preset, cloned or designed voice with `generate_speech`. Upscaled images show inline in the chat like generated ones.
+
 ## [3.72.2] - 2026-11-21
 
 - In the local MCP server used by Claude Desktop, Codex and goose, a prompt that starts with "-" now renders instead of failing with "Unknown option", and a prompt such as "--personality-clear" is sent to the model as text and is never run as a command.

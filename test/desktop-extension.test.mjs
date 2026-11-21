@@ -386,6 +386,19 @@ test('generation tools place the whole prompt after the final separator', () => 
   }
 });
 
+test('edit_video refuses a concat clip that the CLI would read as an option', () => {
+  for (const clip of ['--personality-set', '-clip.mp4']) {
+    assert.throws(() => getTool('edit_video').buildArgs({
+      action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '/b.mp4', clip],
+    }), { message: 'clip paths cannot start with "-".' });
+  }
+  // Any other clip reaches the CLI as on main; the CLI reports a missing file itself.
+  assert.deepEqual(
+    getTool('edit_video').buildArgs({ action: 'concat_videos', output: '/out.mp4', clips: ['/a.mp4', '', 42, null] }),
+    ['--no-update-check', '--concat-videos', '/out.mp4', '/a.mp4', '', '42', 'null'],
+  );
+});
+
 test('edit_video dispatches per action and validates inputs', () => {
   const t = getTool('edit_video');
   assert.deepEqual(
@@ -716,6 +729,32 @@ test('a prompt that looks like an option reaches the real CLI as prompt text', {
     assert.ok(text.includes(`"prompt":${JSON.stringify(prompt)}`), text);
   }
   assert.equal(readFileSync(personalityPath(newHome), 'utf8'), 'Use a cheerful tone.');
+});
+
+test('concat clip validation leaves personality unchanged with the real CLI', { timeout: 20000 }, async (t) => {
+  const oldHome = tempHome();
+  const newHome = tempHome();
+  t.after(() => {
+    rmSync(oldHome, { recursive: true, force: true });
+    rmSync(newHome, { recursive: true, force: true });
+  });
+  const cli = join(HERE, '..', 'sogni-agent.mjs');
+  const clips = ['/a.mp4', '/b.mp4', '--personality-set', 'Use a cheerful tone.'];
+  const personalityPath = (home) => realCliEnv(home).SOGNI_PERSONALITY_PATH;
+  const old = spawnSync(process.execPath, [cli, '--no-update-check', '--concat-videos', join(oldHome, 'out.mp4'), ...clips], {
+    env: realCliEnv(oldHome), encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(old.status, 0, old.stderr);
+  assert.equal(readFileSync(personalityPath(oldHome), 'utf8'), 'Use a cheerful tone.');
+
+  const input = { action: 'concat_videos', output: join(newHome, 'out.mp4'), clips };
+  assert.throws(() => getTool('edit_video').buildArgs(input), { message: 'clip paths cannot start with "-".' });
+  const client = new McpClient({ ...realCliEnv(newHome), SOGNI_AGENT_PATH: cli });
+  t.after(() => client.close());
+  const res = await client.request('tools/call', { name: 'edit_video', arguments: input });
+  assert.equal(res.result.isError, true);
+  assert.equal(res.result.content[0].text, 'clip paths cannot start with "-".');
+  assert.equal(fsExistsSync(personalityPath(newHome)), false);
 });
 
 test('tools/call ignores fields outside the schema', async (t) => {

@@ -347,6 +347,11 @@ export const TOOLS = [
         const output = required(input, 'output');
         const clips = input.clips ?? [];
         if (clips.length < 2) throw new Error('concat_videos needs at least two clips.');
+        // --concat-videos reads clips until the first "-" argument, so a clip
+        // like that would be read as a CLI option instead of a file.
+        if (Array.isArray(clips) && clips.some((clip) => String(clip).startsWith('-'))) {
+          throw new Error('clip paths cannot start with "-".');
+        }
         const args = ['--no-update-check', '--concat-videos', String(output), ...clips.map(String)];
         push(args, '--concat-audio', input.audio_path);
         return args;

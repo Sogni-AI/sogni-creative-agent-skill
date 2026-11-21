@@ -4,12 +4,13 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import {
   resolveAgentPath, resolveFfmpegPath, buildChildEnv,
 } from '../desktop-extension/server/resolve.mjs';
-import { TOOLS, getTool } from '../desktop-extension/server/tools.mjs';
+import { TOOLS, getTool, hardKillTimeoutMs } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 import { importMedia } from '../desktop-extension/server/import-media.mjs';
 import { PACKAGE_VERSION } from '../version.mjs';
@@ -144,8 +145,9 @@ test('buildChildEnv applies canonical MCP markers and drops undeclared versions'
 test('TOOLS exposes the expected v1 tool names', () => {
   assert.deepEqual(TOOLS.map((t) => t.name).sort(), [
     'account_balance', 'edit_video', 'generate_image', 'generate_music',
-    'generate_video', 'import_media', 'list_media', 'manage_memories',
+    'generate_speech', 'generate_video', 'import_media', 'list_media', 'manage_memories',
     'manage_personas', 'photobooth', 'prompt_guide', 'sogni_doctor',
+    'upscale_image', 'upscale_video',
   ]);
   for (const t of TOOLS) {
     assert.equal(typeof t.description, 'string');
@@ -153,6 +155,101 @@ test('TOOLS exposes the expected v1 tool names', () => {
     // Tools either translate to CLI argv (buildArgs) or run inside the server (local).
     assert.ok(typeof t.buildArgs === 'function' || t.local === true, `${t.name} has no execution path`);
   }
+});
+
+// Hosts and the chat app read these tools as they were in 3.72.2: a digest of
+// each one's schema, description, argv for sample inputs and kill deadline.
+// Change a digest only when that tool is meant to change.
+const EXISTING_TOOL_DIGESTS = {
+  generate_image: 'b74b41ddb0460bba2babce34004a2ecdb1ce3089942e2da1a9f8e14191fa30dc',
+  generate_video: '9adef5096589873d25e8a609032a9557076713149f4d26b2019ab7e5e81d48bc',
+  prompt_guide: 'fdfcd12d08757698cf387e94db08c8a9780aac3722d7a7a8554abe23ed1d5266',
+  generate_music: '098d41be333d1f629e5b4ebe81857165fbb974331384aad38989ac236a5d8c87',
+  photobooth: 'c6a59a58b1db78b93223e0cee9c64376d6a9e76afac723ecc5aba53ca74818fe',
+  edit_video: '65a3dafd84e8b7f7617d0f06339f5ccf68098d43bdabe9e1a385a632080c299d',
+  import_media: '19c0e034eb27d476badaa732f91f4ae5e16fed95cefc68036cdff1e12bdda995',
+  list_media: '0aaf2af9d438e3e783d41bdb65e449a13b794a38bcc1b8865101e88e902cd980',
+  manage_personas: 'd73dac45894bd3b6efca5c5f4ea18c7ed6a9bb4a2936d79ded0d9ffb86eb7746',
+  manage_memories: 'd6fd059ea657a6df2ccf64298267306029c09f26750989caec7eab5ec9e14fc2',
+  sogni_doctor: 'e2a1cc16fcd124bf21d05eb398deac942108d076c8f252b83f2744bc34e8661c',
+  account_balance: '8dfd577944243d0e1b3065d6dd76159aaea267b18c10c4b8697e0e7e54b958c2',
+};
+
+function sampleValue(key, schema) {
+  if (schema.enum) return schema.enum[0];
+  if (schema.type === 'number') return 7;
+  if (schema.type === 'boolean') return true;
+  if (schema.type === 'array' && schema.items?.type === 'object') {
+    return [Object.fromEntries(Object.entries(schema.items.properties).map(([k, s]) => [k, sampleValue(k, s)]))];
+  }
+  if (schema.type === 'array') return [`/${key}-1`, `/${key}-2`];
+  return `/${key}-value`;
+}
+
+function toolDigest(tool) {
+  const { name, description, inputSchema, maxResultChars, local } = tool;
+  const properties = inputSchema.properties ?? {};
+  const full = Object.fromEntries(Object.entries(properties).map(([key, schema]) => [key, sampleValue(key, schema)]));
+  const minimal = Object.fromEntries((inputSchema.required ?? []).map((key) => [key, full[key]]));
+  const argvFor = (input) => {
+    try {
+      return tool.buildArgs(input);
+    } catch (error) {
+      return { error: error.message };
+    }
+  };
+  const argv = local ? null : (properties.action?.enum ?? [undefined]).flatMap((action) => [
+    argvFor(action ? { ...full, action } : full),
+    argvFor(action ? { ...minimal, action } : minimal),
+  ]);
+  const hardKill = [hardKillTimeoutMs(name, {}), hardKillTimeoutMs(name, { timeout_seconds: 7200 })];
+  const text = JSON.stringify({ name, description, inputSchema, maxResultChars, local, argv, hardKill });
+  return createHash('sha256').update(text).digest('hex');
+}
+
+test('the 3.72.2 tools keep their order, schemas, descriptions, argv and kill deadlines', () => {
+  const names = Object.keys(EXISTING_TOOL_DIGESTS);
+  assert.deepEqual(TOOLS.slice(0, names.length).map((t) => t.name), names);
+  for (const name of names) assert.equal(toolDigest(getTool(name)), EXISTING_TOOL_DIGESTS[name], `${name} changed`);
+});
+
+test('upscale_image, upscale_video and generate_speech map each argument to one CLI flag', () => {
+  const base = ['--json', '-q', '--no-update-check'];
+  // A prompt is no upscale argument, so it never reaches the promptless CLI mode.
+  assert.deepEqual(getTool('upscale_image').buildArgs({ image: '/in.jpg', prompt: 'make it sharper' }), [...base, '--upscale', '/in.jpg']);
+  assert.deepEqual(getTool('upscale_image').buildArgs({
+    image: 'https://cdn.example/in.png', network: 'relaxed', priority: true, scale: 3, target_longest_edge: 3840,
+    output_path: '/out.png', timeout_seconds: 300,
+  }), [
+    ...base, '--upscale', 'https://cdn.example/in.png', '--network', 'relaxed', '--priority',
+    '--upscale-scale', '3', '--target-longest-edge', '3840', '-o', '/out.png', '-t', '300',
+  ]);
+  assert.deepEqual(getTool('upscale_video').buildArgs({ video: '/in.mp4' }), [...base, '--upscale-video', '/in.mp4']);
+  assert.deepEqual(getTool('upscale_video').buildArgs({
+    video: '/in.mp4', network: 'fast', upscale_model: 'relayvsr', resolution: 2160, output_path: '/out.mp4', timeout_seconds: 2400,
+  }), [
+    ...base, '--upscale-video', '/in.mp4', '--network', 'fast',
+    '--upscale-model', 'relayvsr', '--upscale-resolution', '2160', '-o', '/out.mp4', '-t', '2400',
+  ]);
+  const speech = getTool('generate_speech');
+  assert.deepEqual(speech.buildArgs({ text: 'Hello there.' }), [...base, '--speech', '--', 'Hello there.']);
+  assert.deepEqual(speech.buildArgs({
+    text: 'Hello there.', priority: true, mode: 'clone', voice: 'ryan', voice_description: 'calm and slow',
+    voice_reference: '/voice.m4a', voice_transcript: 'This is my voice.', creativity: 0.7, language: 'english',
+    output_path: '/out.mp3', audio_format: 'mp3', timeout_seconds: 900,
+  }), [
+    ...base, '--speech', '--priority', '--speech-mode', 'clone', '--speech-voice', 'ryan',
+    '--voice-description', 'calm and slow', '--voice-reference', '/voice.m4a', '--voice-transcript', 'This is my voice.',
+    '--speech-creativity', '0.7', '--language', 'english', '-o', '/out.mp3', '--output-format', 'mp3', '-t', '900',
+    '--', 'Hello there.',
+  ]);
+  for (const value of [null, '']) {
+    assert.deepEqual(speech.buildArgs({ text: 'Hi.', mode: value, voice: value, voice_reference: value, output_path: value }), [...base, '--speech', '--', 'Hi.']);
+    assert.deepEqual(getTool('upscale_video').buildArgs({ video: '/in.mp4', upscale_model: value, resolution: value }), [...base, '--upscale-video', '/in.mp4']);
+  }
+  assert.throws(() => getTool('upscale_image').buildArgs({}), /^Error: image is required/);
+  assert.throws(() => getTool('upscale_video').buildArgs({ video: '' }), /^Error: video is required/);
+  assert.throws(() => speech.buildArgs({ text: null }), /^Error: text is required/);
 });
 
 test('generate_image builds quiet JSON argv with prompt last', () => {
@@ -309,6 +406,9 @@ const OUTPUT_CASES = [
   ['edit_video', { action: 'extract_last_frame', input: '/in.mp4' }, 'output'],
   ['edit_video', { action: 'concat_videos', clips: ['/a.mp4', '/b.mp4'] }, 'output'],
   ['edit_video', { action: 'remix_audio', input: '/in.mp4' }, 'output'],
+  ['upscale_image', { image: '/in.png' }, 'output_path'],
+  ['upscale_video', { video: '/in.mp4' }, 'output_path'],
+  ['generate_speech', { text: 'Hello.' }, 'output_path'],
 ];
 
 test('output paths reach the CLI as given, which expands ~ and writes any path', () => {
@@ -383,6 +483,11 @@ test('generation tools place the whole prompt after the final separator', () => 
       assert.equal(args.indexOf('--'), args.length - 2, name);
       assert.ok(args.indexOf('-o') < args.length - 2);
     }
+  }
+  for (const text of ['Hello.', '-5 degrees outside', '--personality-clear', '- First -- then']) {
+    const args = getTool('generate_speech').buildArgs({ text, voice_description: '--calm', output_path: '/out.wav' });
+    assert.deepEqual(args.slice(-2), ['--', text]);
+    assert.equal(args.indexOf('--'), args.length - 2);
   }
 });
 
@@ -698,7 +803,7 @@ function realCliEnv(home) {
   };
 }
 
-test('a prompt that looks like an option reaches the real CLI as prompt text', { timeout: 30000 }, async (t) => {
+test('a prompt or media path that looks like an option reaches the real CLI as text', { timeout: 45000 }, async (t) => {
   const oldHome = tempHome();
   const newHome = tempHome();
   t.after(() => {
@@ -726,6 +831,19 @@ test('a prompt that looks like an option reaches the real CLI as prompt text', {
     // No key is configured, so the CLI stops at credentials after reading the prompt.
     assert.equal(res.result.isError, true);
     assert.match(text, /"errorCode":"MISSING_CREDENTIALS"/);
+    assert.ok(text.includes(`"prompt":${JSON.stringify(prompt)}`), text);
+  }
+  // Media paths are flag values, so one that looks like an option is still read as a path.
+  for (const [name, args, prompt] of [
+    ['generate_speech', { text: '--personality-clear' }, '--personality-clear'],
+    ['generate_speech', { text: 'Hello.', mode: 'clone', voice_reference: '--personality-clear' }, 'Hello.'],
+    ['upscale_image', { image: '--personality-clear' }, null],
+    ['upscale_video', { video: '--personality-clear' }, null],
+  ]) {
+    const res = await client.request('tools/call', { name, arguments: args });
+    const text = res.result.content.at(-1).text;
+    assert.equal(res.result.isError, true, name);
+    assert.match(text, /"errorCode":"MISSING_CREDENTIALS"/, name);
     assert.ok(text.includes(`"prompt":${JSON.stringify(prompt)}`), text);
   }
   assert.equal(readFileSync(personalityPath(newHome), 'utf8'), 'Use a cheerful tone.');
@@ -1019,6 +1137,27 @@ test('tools/call generate_video stays text-only', async (t) => {
   assert.equal(res.result.content[0].type, 'text');
 });
 
+test('tools/call upscale_image attaches its image inline; upscale_video and generate_speech stay text-only', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-inline-proto-'));
+  const img = join(dir, 'upscaled.png');
+  writeFileSync(img, TINY_PNG);
+  const stdoutFile = join(dir, 'stdout.json');
+  // Every tool gets the same readable image result, so only the tool decides whether it is attached.
+  writeFileSync(stdoutFile, JSON.stringify({ success: true, type: 'image', localPath: img, urls: [] }) + '\n');
+  const client = new McpClient({ FAKE_AGENT_STDOUT_FILE: stdoutFile });
+  t.after(() => {
+    client.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const upscaled = await client.request('tools/call', { name: 'upscale_image', arguments: { image: '/in.png' } });
+  assert.deepEqual(upscaled.result.content.map((block) => block.type), ['image', 'text']);
+  assert.ok(Buffer.from(upscaled.result.content[0].data, 'base64').equals(TINY_PNG));
+  for (const [name, args] of [['upscale_video', { video: '/in.mp4' }], ['generate_speech', { text: 'Hello.' }]]) {
+    const res = await client.request('tools/call', { name, arguments: args });
+    assert.deepEqual(res.result.content.map((block) => block.type), ['text'], name);
+  }
+});
+
 test('importMedia writes decoded base64 into the inbound dir and returns path + bytes', async () => {
   const dir = join(tempHome(), 'inbound'); // does not exist yet — must be created
   const result = await importMedia(
@@ -1115,7 +1254,7 @@ test('importMedia enforces per-chunk and total-size caps', async () => {
 });
 
 test('media-consuming tools warn about chat attachments and point at import_media', () => {
-  for (const name of ['generate_image', 'generate_video', 'photobooth', 'manage_personas']) {
+  for (const name of ['generate_image', 'generate_video', 'photobooth', 'manage_personas', 'upscale_image', 'upscale_video', 'generate_speech']) {
     const { description } = getTool(name);
     assert.match(description, /chat/i, `${name} should mention chat attachments`);
     assert.match(description, /import_media/, `${name} should point at import_media`);
@@ -1156,7 +1295,7 @@ test('the safety kill outlasts the CLI wait for a render on Relaxed', async () =
   const { hardKillTimeoutMs } = await import('../desktop-extension/server/tools.mjs');
   // The CLI waits at least 30 minutes on Relaxed, then reports the project id.
   // A kill before that would lose the id, so every render tool has to allow more.
-  for (const name of ['generate_image', 'generate_video', 'generate_music', 'photobooth']) {
+  for (const name of ['generate_image', 'generate_video', 'generate_music', 'photobooth', 'upscale_image', 'upscale_video', 'generate_speech']) {
     assert.ok(hardKillTimeoutMs(name, {}) > 30 * 60 * 1000, `${name} would be killed first`);
   }
   // A longer explicit wait still gets a margin past it.

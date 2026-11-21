@@ -488,6 +488,127 @@ export const TOOLS = [
       return ['--balances', '--json', '--no-update-check'];
     },
   },
+  {
+    name: 'upscale_image',
+    description:
+      'Enlarge one image with NVIDIA RTX VSR, up to 15360 px (16K) on the long edge. ' +
+      'Promptless: the picture comes back sharper and larger with nothing added or changed; ' +
+      'to change what it shows, use generate_image with context_images. ' +
+      'The result is attached inline in the tool result. ' + CHAT_ATTACHMENT_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: str('Absolute path or URL of the image to upscale'),
+        ...RENDER_OPTIONS,
+        scale: { type: 'number', enum: [2, 3, 4], description: 'Long-edge multiplier (default 2)' },
+        target_longest_edge: num('Exact output long edge in px, 512-15360, instead of scale; e.g. 3840 for 4K, 7680 for 8K'),
+        output_path: str('Absolute path to save: .png, or .jpg when the long edge passes 7680 px (optional)'),
+        timeout_seconds: num('Timeout override (default 120)'),
+      },
+      required: ['image'],
+    },
+    buildArgs(input) {
+      const image = required(input, 'image', 'a path or URL of the image to upscale');
+      const args = [...GEN_BASE, '--upscale', String(image)];
+      pushRenderOptions(args, input);
+      push(args, '--upscale-scale', input.scale);
+      push(args, '--target-longest-edge', input.target_longest_edge);
+      push(args, '-o', input.output_path);
+      push(args, '-t', input.timeout_seconds);
+      return args;
+    },
+  },
+  {
+    name: 'upscale_video',
+    description:
+      'Upscale one video to 1080p, 1440p or 2160p, keeping its frames, frame rate, length, aspect ratio and audio. ' +
+      'Promptless: nothing in the picture is added or changed; to change content or motion, use generate_video. ' +
+      'Rendering takes minutes; prefer output_path (absolute .mp4). ' + CHAT_ATTACHMENT_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        video: str('Absolute path or URL of the video to upscale (up to 100 MB)'),
+        ...RENDER_OPTIONS,
+        upscale_model: {
+          type: 'string',
+          enum: ['flashvsr', 'relayvsr'],
+          description: 'flashvsr (default): up to 1440p, sources up to about 1344x768. relayvsr (recommended): up to 2160p, sources up to 1920x1088',
+        },
+        resolution: {
+          type: 'number',
+          enum: [1080, 1440, 2160],
+          description: 'Output short edge; 2160 needs relayvsr. Default 1440, or 1080 for sources under 720p',
+        },
+        output_path: str('Absolute .mp4 path to save (optional)'),
+        timeout_seconds: num('Timeout override (default 1800)'),
+      },
+      required: ['video'],
+    },
+    buildArgs(input) {
+      const video = required(input, 'video', 'a path or URL of the video to upscale');
+      const args = [...GEN_BASE, '--upscale-video', String(video)];
+      pushRenderOptions(args, input);
+      push(args, '--upscale-model', input.upscale_model);
+      push(args, '--upscale-resolution', input.resolution);
+      push(args, '-o', input.output_path);
+      push(args, '-t', input.timeout_seconds);
+      return args;
+    },
+  },
+  {
+    name: 'generate_speech',
+    description:
+      'Speak text aloud in a preset, cloned or designed voice and return the audio. ' +
+      'The text is read exactly as written, so pass only the words to say and put delivery direction in voice_description. ' +
+      'For singing or songs, use generate_music. Prefer output_path. ' + CHAT_ATTACHMENT_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: str('The exact words to speak, up to 4096 characters; no stage directions or speaker labels'),
+        ...RENDER_OPTIONS,
+        mode: {
+          type: 'string',
+          enum: ['voice', 'clone', 'design'],
+          description: 'voice (default): a preset voice. clone: the voice in voice_reference. design: a new voice from voice_description',
+        },
+        voice: {
+          type: 'string',
+          enum: ['serena', 'vivian', 'uncle_fu', 'ryan', 'aiden', 'ono_anna', 'sohee', 'eric', 'dylan'],
+          description: 'Preset for mode voice (default serena). Female: serena, vivian, ono_anna, sohee. Male: uncle_fu, ryan, aiden, eric, dylan',
+        },
+        voice_description: str('How the voice sounds and reads, e.g. "warm, unhurried, slightly amused"; required for design, optional for voice, not used by clone'),
+        voice_reference: str('Absolute path or URL of a 3-30 second recording of the voice to clone (required for clone)'),
+        voice_transcript: str('The words spoken in voice_reference (clone, optional)'),
+        creativity: num('Sampling temperature, 0.1-2'),
+        language: {
+          type: 'string',
+          enum: ['auto', 'english', 'chinese', 'japanese', 'korean', 'german', 'french', 'russian', 'portuguese', 'spanish', 'italian'],
+          description: 'Spoken language (default auto)',
+        },
+        output_path: str('Absolute audio file path to save; its extension must match audio_format (optional)'),
+        audio_format: { type: 'string', enum: ['wav', 'mp3', 'flac'], description: 'Default wav' },
+        timeout_seconds: num('Timeout override (default 600)'),
+      },
+      required: ['text'],
+    },
+    buildArgs(input) {
+      const text = required(input, 'text', 'the words to speak');
+      const args = [...GEN_BASE, '--speech'];
+      pushRenderOptions(args, input);
+      push(args, '--speech-mode', input.mode);
+      push(args, '--speech-voice', input.voice);
+      push(args, '--voice-description', input.voice_description);
+      push(args, '--voice-reference', input.voice_reference);
+      push(args, '--voice-transcript', input.voice_transcript);
+      push(args, '--speech-creativity', input.creativity);
+      push(args, '--language', input.language);
+      push(args, '-o', input.output_path);
+      push(args, '--output-format', input.audio_format);
+      push(args, '-t', input.timeout_seconds);
+      args.push('--', String(text));
+      return args;
+    },
+  },
 ];
 
 export function getTool(name) {

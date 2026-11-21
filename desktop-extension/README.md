@@ -34,10 +34,10 @@ and relays the base64 — token-expensive, so previews beat full-res originals.
 
 ## Inline images
 
-Successful `generate_image`, `photobooth`, and frame-extraction calls attach
-the rendered image(s) to the tool result as MCP image content blocks, which
-Claude Desktop displays inline (up to 4 per call). Previews auto-fit the
-host's 1MB tool-result limit: they share a ~700KB cumulative raw-byte budget,
+Successful `generate_image`, `upscale_image`, `photobooth`, and frame-extraction
+calls attach the rendered image(s) to the tool result as MCP image content
+blocks, which Claude Desktop displays inline (up to 4 per call). Previews
+auto-fit the host's 1MB tool-result limit: they share a ~700KB cumulative raw-byte budget,
 and any image over the remaining budget is downscaled via a `sharp` ladder
 (1024px/q80 → 768px/q70 → 512px/q60), or skipped with a note if none fits.
 The text block always keeps the full-resolution URL / saved path. Set

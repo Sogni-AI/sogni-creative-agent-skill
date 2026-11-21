@@ -16,7 +16,7 @@
 import { extname } from 'node:path';
 import { PREVIEW_SOURCE_MAX_BYTES, readPreviewFile, readPreviewUrl } from './preview-source.mjs';
 
-const INLINE_TOOLS = new Set(['generate_image', 'photobooth']);
+const INLINE_TOOLS = new Set(['generate_image', 'photobooth', 'upscale_image']);
 const FRAME_ACTIONS = new Set(['extract_first_frame', 'extract_last_frame']);
 const MAX_INLINE_IMAGES = 4;
 // Cumulative raw-byte budget across all inline images. ≈933KB once base64-

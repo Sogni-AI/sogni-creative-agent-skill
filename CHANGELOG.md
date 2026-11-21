@@ -1,3 +1,9 @@
+## [3.72.2] - 2026-11-21
+
+- In the local MCP server used by Claude Desktop, Codex and goose, a prompt that starts with "-" now renders instead of failing with "Unknown option", and a prompt such as "--personality-clear" is sent to the model as text and is never run as a command.
+- `edit_video` refuses a concat clip path that starts with "-", because the CLI would read it as an option. Every other clip and tool input reaches the CLI as before.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.32.2.
+
 ## [3.72.1] - 2026-11-20
 
 - With the content filter off (`--no-filter`), MiniMax H3 video from loose references now uses MiniMax H3 Prism (`minimax-h3-r2v-prism`, or `minimax-h3-r2v-prism-2stage` for 1080p, 2K and two-stage output) for any theme, and `sogni-agent --help` says so. With the filter on it still uses Balanced, and a model you name is kept.

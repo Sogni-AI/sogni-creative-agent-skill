@@ -1,3 +1,9 @@
+## [3.73.1] - 2026-11-22
+
+- Media references continue to download through configured proxies across supported Node versions, with clearer failures for invalid, oversized or stalled downloads.
+- Local media processing accepts self-contained images, audio and video. Playlists and manifests that refer to other files are refused. Missing media tools and corrupt files retain their existing error behavior.
+- Long help and model prompt guides finish writing before the CLI exits, including when another program reads the output through a pipe.
+
 ## [3.73.0] - 2026-11-21
 
 - In the local MCP server used by Claude Desktop, Codex and goose, upscale an image up to 16K with `upscale_image`, upscale a video up to 2160p with `upscale_video`, and turn text into speech in a preset, cloned or designed voice with `generate_speech`. Upscaled images show inline in the chat like generated ones.

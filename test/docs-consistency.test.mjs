@@ -29,6 +29,7 @@ const NON_SOGNI_FLAG_ALLOWLIST = new Set([
   '--purge',           // setup-sogni-agent-skill
   '--yes',             // setup-sogni-agent-skill / skills
   '--no-credentials',  // setup-sogni-agent-skill
+  '--use-env-proxy',   // node
 ]);
 
 const DOC_FILES = [

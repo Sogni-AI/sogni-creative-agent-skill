@@ -1,3 +1,9 @@
+## [3.73.2] - 2026-11-22
+
+- If another connection takes over while a render is running, the CLI reports error 4015 immediately and prints `sogni-agent --result <project-id> --wait` for each affected project. You can collect the original render without submitting or paying for it again.
+- A takeover during startup identifies the shared app ID. A takeover after the final job completes still lets the CLI finish saving the result.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.33.1.
+
 ## [3.73.1] - 2026-11-22
 
 - Media references continue to download through configured proxies across supported Node versions, with clearer failures for invalid, oversized or stalled downloads.

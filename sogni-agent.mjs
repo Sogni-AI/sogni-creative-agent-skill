@@ -11,7 +11,7 @@ import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
 import { createRequire } from 'module';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync, openSync, writeSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync, openSync, readSync, writeSync, closeSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
 import sharp from 'sharp';
@@ -407,7 +407,7 @@ function assertSelfContainedMediaFormat(formatName, filePath, label) {
     || (names.includes('image2') && IMAGE_SEQUENCE_PATTERN.test(filePath) ? 'image2 sequence' : null);
   if (!indirect) return;
   const err = new Error(
-    `${label} is not a self-contained media file: ffprobe reads it as ${indirect}, a format that refers to other files or addresses. ` +
+    `${label} is not a self-contained media file: its format, ${indirect}, refers to other files or addresses. ` +
     'Use an image, audio, or video file.'
   );
   err.code = 'UNSAFE_MEDIA_INPUT';
@@ -444,29 +444,41 @@ async function probeMediaFile(filePath, { label = filePath, entries = [], args =
   return { ffprobePath, result, probe };
 }
 
+// The format of an input that names other inputs, from the first bytes ffmpeg's
+// own hls, concat, dash and imf probes look for, or null.
+function sniffIndirectMediaFormat(filePath) {
+  let head;
+  try {
+    const fd = openSync(filePath, 'r');
+    try {
+      const bytes = Buffer.alloc(4096);
+      head = bytes.subarray(0, readSync(fd, bytes, 0, bytes.length, 0)).toString('latin1');
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    // An unreadable file reaches ffmpeg, which reports it with the step's own error.
+    return null;
+  }
+  if (head.startsWith('#EXTM3U')) return 'hls';
+  if (head.startsWith('ffconcat version')) return 'concat';
+  if (/<MPD[\s>]/i.test(head)) return 'dash';
+  if (head.includes('<CompositionPlaylist')) return 'imf';
+  return null;
+}
+
 /**
- * Check a file before ffmpeg reads it: ffprobe must start, identify it, and
- * find a self-contained format. Throws MISSING_FFPROBE, UNREADABLE_MEDIA_INPUT
- * or UNSAFE_MEDIA_INPUT; ffmpeg never runs on a file it could not check.
- * `label` replaces `filePath` (often a temporary copy) in messages.
+ * Check a file before ffmpeg reads it, refusing it (UNSAFE_MEDIA_INPUT) when
+ * ffprobe identifies a format that names other inputs. When ffprobe is missing
+ * or cannot identify the file, its first bytes decide: an HLS playlist, ffconcat
+ * list, DASH manifest or IMF composition is refused. Any other file goes to
+ * ffmpeg as before, and a corrupt one fails with the step's own error. `label`
+ * replaces `filePath` (often a temporary copy) in messages.
  */
 async function assertSelfContainedMediaInput(filePath, label = filePath) {
-  const { ffprobePath, result, probe } = await probeMediaFile(filePath, { label });
-  if (result.error && result.status === null && !result.error.signal) {
-    const err = new Error(`ffprobe is required to check ${label} before ffmpeg reads it, but "${ffprobePath}" could not be started (${result.error.code}).`);
-    err.code = 'MISSING_FFPROBE';
-    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary.';
-    err.details = { ffprobePath, reason: result.error.code };
-    throw err;
-  }
-  if (!probe?.format?.format_name) {
-    const ffprobeError = String(result.stderr || '').split(filePath).join(label).trim().slice(-500);
-    const err = new Error(`${label} could not be read as an image, audio, or video file.`);
-    err.code = 'UNREADABLE_MEDIA_INPUT';
-    err.details = { source: label, ...(ffprobeError ? { ffprobeError } : {}) };
-    if (ffprobeError) err.hint = `ffprobe reported: ${ffprobeError.split('\n').at(-1).trim()}`;
-    throw err;
-  }
+  const { probe } = await probeMediaFile(filePath, { label });
+  if (probe?.format?.format_name) return;
+  assertSelfContainedMediaFormat(sniffIndirectMediaFormat(filePath), filePath, label);
 }
 
 const DEFAULT_CREDENTIALS_PATH = join(homedir(), '.config', 'sogni', 'credentials');
@@ -11871,7 +11883,8 @@ function applyPersonaAndVoiceReferences() {
 
 // Download a user-supplied media URL. fetchSafeUrl connects only to addresses it
 // has checked, on every redirect hop, so neither a redirect nor a rebinding DNS
-// name can reach a private or metadata address. The server has
+// name can reach a private or metadata address; a hop Node's fetch() sends
+// through a proxy from the environment goes through that proxy. The server has
 // DEFAULT_HTTP_TIMEOUT_MS to answer; the body must then keep arriving (the
 // result-download stall limit) and stay within mediaDownloadMaxBytes().
 async function fetchRemoteMedia(url) {

@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import {
-  assertSafeUrl, fetchSafeUrl, guardedLookup, isBlockedIp, readResponseBody, requestWithLookup
+  assertSafeUrl, fetchSafeUrl, fetchUsesEnvProxy, guardedLookup, isBlockedIp, readResponseBody, requestWithLookup
 } from '../ssrf-guard.mjs';
 
 // Public IP literals are used throughout so assertSafeUrl validates without a
@@ -327,4 +328,72 @@ test('readResponseBody gives up on a body that stops sending data', async () => 
   await assert.rejects(readResponseBody(response, { maxBytes: 1024, stallMs: 50 }), (error) => error.code === 'BODY_STALLED' && error.stallMs === 50);
   assert.ok(Date.now() - started < 5000);
   assert.equal(state.cancelled, true);
+});
+
+function proxyContext(env, { execArgv = [], nodeVersion = '24.11.0' } = {}) {
+  return { env, execArgv, nodeVersion };
+}
+
+test('fetchUsesEnvProxy follows Node: a proxy variable plus NODE_USE_ENV_PROXY=1 or --use-env-proxy on a Node that reads them', () => {
+  const https = 'https://media.example/a.png';
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ HTTPS_PROXY: 'http://proxy:3128' })), false, 'a proxy variable alone');
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: '1' })), false, 'no proxy variable');
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: '1', HTTPS_PROXY: 'http://proxy:3128' })), true);
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: 'true', HTTPS_PROXY: 'http://proxy:3128' })), false, 'only 1 enables it');
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ https_proxy: 'http://proxy:3128' }, { execArgv: ['--use-env-proxy'] })), true);
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_OPTIONS: '--max-old-space-size=4096 --use-env-proxy', HTTPS_PROXY: 'http://p:1' })), true);
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: '1', HTTPS_PROXY: 'http://p:1' }, { execArgv: ['--no-use-env-proxy'] })), false, 'the flag wins');
+  for (const nodeVersion of ['22.11.0', '22.20.0', '23.11.0']) {
+    assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: '1', HTTPS_PROXY: 'http://p:1' }, { nodeVersion })), false, nodeVersion);
+  }
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ NODE_USE_ENV_PROXY: '1', HTTPS_PROXY: 'http://p:1' }, { nodeVersion: '22.21.0' })), true);
+  assert.equal(fetchUsesEnvProxy(https, proxyContext({ HTTPS_PROXY: 'http://p:1' }, { execArgv: ['--use-env-proxy'], nodeVersion: '24.4.0' })), false, 'the flag arrived in 24.5');
+});
+
+test('fetchUsesEnvProxy picks the proxy for the scheme and honours NO_PROXY like undici EnvHttpProxyAgent', () => {
+  const on = { NODE_USE_ENV_PROXY: '1' };
+  const uses = (url, env) => fetchUsesEnvProxy(url, proxyContext({ ...on, ...env }));
+  assert.equal(uses('http://media.example/a.png', { HTTPS_PROXY: 'http://p:1' }), false, 'http needs an http proxy');
+  assert.equal(uses('https://media.example/a.png', { HTTP_PROXY: 'http://p:1' }), true, 'https falls back to the http proxy');
+  assert.equal(uses('http://media.example/a.png', { http_proxy: '', HTTP_PROXY: 'http://p:1' }), false, 'lowercase wins, even empty');
+  const proxied = { HTTPS_PROXY: 'http://p:1' };
+  assert.equal(uses('https://media.example/a.png', { ...proxied, NO_PROXY: 'media.example' }), false);
+  assert.equal(uses('https://cdn.media.example/a.png', { ...proxied, NO_PROXY: '.media.example' }), false, 'parent domain');
+  assert.equal(uses('https://cdn.media.example/a.png', { ...proxied, NO_PROXY: '*.media.example' }), false);
+  assert.equal(uses('https://othermedia.example/a.png', { ...proxied, NO_PROXY: 'media.example' }), true, 'suffix without a dot');
+  assert.equal(uses('https://media.example/a.png', { ...proxied, NO_PROXY: 'media.example:8443' }), true, 'other port');
+  assert.equal(uses('https://media.example:8443/a.png', { ...proxied, NO_PROXY: 'media.example:8443' }), false);
+  assert.equal(uses('https://media.example/a.png', { ...proxied, NO_PROXY: '*' }), false);
+  assert.equal(uses('https://media.example/a.png', { ...proxied, no_proxy: 'other.example', NO_PROXY: 'media.example' }), true, 'lowercase wins');
+  assert.equal(uses('https://media.example/a.png', { ...proxied, NO_PROXY: 'a.example, media.example' }), false);
+});
+
+test('fetchSafeUrl sends a hop through Node fetch() and the environment proxy when Node would use one', async (t) => {
+  const childEnv = { ...process.env, NODE_USE_ENV_PROXY: '1', HTTP_PROXY: 'http://127.0.0.1:1', NO_PROXY: '' };
+  if (!fetchUsesEnvProxy('http://93.184.216.34/media.png', { env: childEnv, execArgv: [] })) {
+    t.skip(`Node ${process.versions.node} fetch() reads no proxy from the environment`);
+    return;
+  }
+  const seen = [];
+  await withLocalServer((req, res) => {
+    seen.push(req.url);
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end('proxied media bytes');
+  }, async (port) => {
+    const script = `import { fetchSafeUrl, readResponseBody } from ${JSON.stringify(new URL('../ssrf-guard.mjs', import.meta.url).href)};
+const response = await fetchSafeUrl('http://93.184.216.34/media.png');
+process.stdout.write((await readResponseBody(response, { maxBytes: 1024, stallMs: 5000 })).toString());`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      env: { ...childEnv, HTTP_PROXY: `http://127.0.0.1:${port}` },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(code, 0, stderr);
+    assert.equal(stdout, 'proxied media bytes');
+  });
+  assert.deepEqual(seen, ['http://93.184.216.34/media.png'], 'the proxy receives the absolute URL');
 });

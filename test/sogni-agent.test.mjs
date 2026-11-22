@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fetchUsesEnvProxy } from '../ssrf-guard.mjs';
 import {
   CROSS_SURFACE_PARITY_FIXTURES,
   CROSS_SURFACE_PARITY_SURFACES,
@@ -11779,8 +11780,9 @@ test('--quote prices background removal, object selection and 3D as the render s
 const MP4_FORMAT_NAME = 'mov,mp4,m4a,3gp,3g2,mj2';
 
 // A fake ffmpeg and ffprobe that append { tool, args, env } to tools.jsonl in dir.
-// ffprobe reports `formatName` for every file it is asked about.
-function writeLoggingMediaTools(dir, { formatName = MP4_FORMAT_NAME } = {}) {
+// ffprobe reports `formatName` for every file it is asked about; with
+// `unreadable`, ffprobe and ffmpeg (but not ffmpeg -version) fail like they do on a corrupt file.
+function writeLoggingMediaTools(dir, { formatName = MP4_FORMAT_NAME, unreadable = false } = {}) {
   const log = join(dir, 'tools.jsonl');
   const fakeFfmpeg = join(dir, 'fake-ffmpeg.mjs');
   const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
@@ -11793,10 +11795,18 @@ if (args.includes('-version')) {
   console.log('ffmpeg version test');
   process.exit(0);
 }
+if (${unreadable}) {
+  console.error(args.at(args.indexOf('-i') + 1) + ': Invalid data found when processing input');
+  process.exit(1);
+}
 if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('converted media'));
 `);
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
 ${logLine('ffprobe')}
+if (${unreadable}) {
+  console.error(args.at(-1) + ': Invalid data found when processing input');
+  process.exit(1);
+}
 console.log(JSON.stringify({
   streams: [
     { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
@@ -11890,7 +11900,7 @@ test('ffmpeg never reads an input ffprobe identifies as a playlist, list, or str
     assert.equal(exitCode, 1, formatName);
     const payload = JSON.parse(stdout.trim());
     assert.equal(payload.errorCode, 'UNSAFE_MEDIA_INPUT', formatName);
-    assert.match(payload.error, new RegExp(`ffprobe reads it as ${formatName}`));
+    assert.match(payload.error, new RegExp(`its format, ${formatName}, refers to other files`));
     assert.equal(payload.errorDetails.format, formatName);
     assert.deepEqual(tools.runs().filter((run) => run.tool === 'ffmpeg' && !run.args.includes('-version')), [], `${formatName}: ffmpeg must not run`);
   }
@@ -11971,6 +11981,61 @@ test('with real ffmpeg, a playlist or concat list disguised as video yields no f
   const real = runCli(['--json', '--extract-first-frame', privateClip, frame]);
   assert.equal(real.exitCode, 0, real.stderr);
   assert.ok(readFileSync(frame).length > 0);
+
+  const corrupt = join(dir, 'corrupt.mp4');
+  writeFileSync(corrupt, Buffer.from('not a video at all'));
+  const failed = runCli(['--json', '--extract-first-frame', corrupt, join(dir, 'corrupt-frame.png')]);
+  assert.equal(failed.exitCode, 1);
+  assert.equal(JSON.parse(failed.stdout.trim()).errorCode, 'FFMPEG_EXTRACT_FAILED', 'a corrupt file keeps the step error');
+});
+
+test('an input ffprobe cannot read reaches ffmpeg and fails with the step\'s own error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-media-unreadable-'));
+  const input = join(dir, 'damaged.mp4');
+  writeFileSync(input, Buffer.from('damaged video bytes'));
+  const tools = writeLoggingMediaTools(dir, { unreadable: true });
+  const env = { FFMPEG_PATH: tools.fakeFfmpeg, FFPROBE_PATH: tools.fakeFfprobe };
+
+  const frame = runCli(['--json', '--extract-first-frame', input, join(dir, 'frame.png')], env);
+  assert.equal(frame.exitCode, 1);
+  assert.equal(JSON.parse(frame.stdout.trim()).errorCode, 'FFMPEG_EXTRACT_FAILED');
+
+  const trim = runCli(['--json', '--trim-video', input, '1', '2', join(dir, 'trimmed.mp4')], env);
+  assert.equal(trim.exitCode, 1);
+  assert.equal(JSON.parse(trim.stdout.trim()).errorCode, 'FFMPEG_TRIM_VIDEO_FAILED');
+  assert.equal(tools.runs().filter((run) => run.tool === 'ffmpeg' && !run.args.includes('-version')).length, 2, 'ffmpeg ran both steps');
+});
+
+test('without ffprobe, ffmpeg steps run as before with the local-only whitelist, and a playlist is still refused by its first bytes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-media-no-ffprobe-'));
+  const tools = writeLoggingMediaTools(dir);
+  const env = { FFMPEG_PATH: tools.fakeFfmpeg, FFPROBE_PATH: join(dir, 'missing-ffprobe') };
+  const clips = [join(dir, 'a.mp4'), join(dir, 'b.mp4')];
+  for (const clip of clips) writeFileSync(clip, Buffer.from('media'));
+
+  const concat = runCli(['--concat-videos', join(dir, 'output.mp4'), ...clips], env);
+  assert.equal(concat.exitCode, 0, concat.stderr);
+  const command = tools.runs().find((run) => run.tool === 'ffmpeg' && run.args.includes('-filter_complex'));
+  assert.ok(command, 'expected an ffmpeg concat command');
+  const filter = command.args[command.args.indexOf('-filter_complex') + 1];
+  assert.match(filter, /fps=24,scale=1280:720/, 'the 3.73.0 defaults for clips ffprobe could not read');
+  for (const [index, arg] of command.args.entries()) {
+    if (arg === '-i') assert.deepEqual(command.args.slice(index - 2, index), ['-protocol_whitelist', 'file,pipe']);
+  }
+
+  for (const [name, bytes, format] of [
+    ['clip.mp4', '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:1,\nfile:///home/user/private.ts\n', 'hls'],
+    ['clip.mov', 'ffconcat version 1.0\nfile private.ts\n', 'concat'],
+  ]) {
+    const playlist = join(dir, name);
+    writeFileSync(playlist, bytes);
+    const refused = runCli(['--json', '--extract-first-frame', playlist, join(dir, `${format}.png`)], env);
+    assert.equal(refused.exitCode, 1, format);
+    const payload = JSON.parse(refused.stdout.trim());
+    assert.equal(payload.errorCode, 'UNSAFE_MEDIA_INPUT', format);
+    assert.equal(payload.errorDetails.format, format);
+  }
+  assert.equal(tools.runs().filter((run) => run.tool === 'ffmpeg' && run.args.includes('-frames:v')).length, 0, 'no frame extraction ran');
 });
 
 test('a media URL larger than SOGNI_MEDIA_DOWNLOAD_MAX_BYTES is refused while it downloads', () => {
@@ -12006,4 +12071,36 @@ test('a media URL whose body stops arriving fails at the stall limit instead of 
   assert.match(payload.error, /example\.com stalled with no data for 200 ms/);
   assert.ok(Date.now() - started < 20_000);
   assert.equal(state?.lastVideoProject ?? null, null);
+});
+
+test('with a proxy from the environment for Node fetch, a media URL downloads through that proxy', async (t) => {
+  const proxyEnv = { NODE_USE_ENV_PROXY: '1', HTTP_PROXY: 'http://127.0.0.1:1', NO_PROXY: '' };
+  if (!fetchUsesEnvProxy('http://93.184.216.34/frame.png', { env: { ...process.env, ...proxyEnv }, execArgv: [] })) {
+    t.skip(`Node ${process.versions.node} fetch() reads no proxy from the environment`);
+    return;
+  }
+  const seen = [];
+  const proxy = createServer((req, res) => {
+    seen.push(req.url);
+    if (req.url !== 'http://93.184.216.34/frame.png') {
+      res.writeHead(502);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(readFileSync(SCREENSHOT_FIXTURE));
+  });
+  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+  try {
+    const { exitCode, state, stderr } = await runCliAsync([
+      '--video', '-m', 'seedance2-5',
+      '--ref', 'http://93.184.216.34/frame.png',
+      'The camera tracks forward from the supplied opening frame.'
+    ], { ...proxyEnv, HTTP_PROXY: `http://127.0.0.1:${proxy.address().port}` });
+    assert.equal(exitCode, 0, stderr);
+    assert.deepEqual(Buffer.from(state.lastVideoProject.referenceImage.data ?? state.lastVideoProject.referenceImage), readFileSync(SCREENSHOT_FIXTURE));
+  } finally {
+    await new Promise((resolve) => proxy.close(resolve));
+  }
+  assert.ok(seen.includes('http://93.184.216.34/frame.png'), `the proxy received ${JSON.stringify(seen)}`);
 });

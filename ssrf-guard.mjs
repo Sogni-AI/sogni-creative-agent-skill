@@ -11,7 +11,11 @@
  * resolves the name through `guardedLookup`, which refuses the connection when
  * any answer is blocked, so a name that answers a public address to the check
  * and a private one to the connection (DNS rebinding) cannot reach the private
- * one. It follows redirects itself and checks every hop the same way.
+ * one. It follows redirects itself and checks every hop the same way. A hop
+ * that Node's fetch() would send through a proxy from the environment
+ * (`fetchUsesEnvProxy`) still goes through fetch() and that proxy: the proxy
+ * resolves the name, so no connection can be pinned, and `assertSafeUrl`'s own
+ * check of the name is the only one.
  *
  * `assertSafeUrl` alone constrains nothing a later request does: a caller that
  * fetches with its own client must pin that client's connection itself.
@@ -321,6 +325,72 @@ function decodedBody(res) {
   return pipeline(res, ...decoders, () => {});
 }
 
+// Node versions whose fetch() reads the proxy from the environment: the
+// --use-env-proxy flag (v24.5.0, v22.21.0) and NODE_USE_ENV_PROXY=1 (v24.0.0, v22.21.0).
+function nodeSupportsEnvProxy(nodeVersion, flag) {
+  const [major, minor] = String(nodeVersion).split('.').map(Number);
+  if (major === 22) return minor >= 21;
+  if (major === 24) return flag ? minor >= 5 : true;
+  return major > 24;
+}
+
+function envProxyEnabled(env, execArgv, nodeVersion) {
+  // The flag wins over NODE_USE_ENV_PROXY; on the command line it wins over NODE_OPTIONS.
+  let flag;
+  if (nodeSupportsEnvProxy(nodeVersion, true)) {
+    for (const token of [...String(env.NODE_OPTIONS || '').split(/\s+/), ...execArgv]) {
+      if (token === '--use-env-proxy') flag = true;
+      else if (token === '--no-use-env-proxy') flag = false;
+    }
+  }
+  if (flag !== undefined) return flag;
+  return nodeSupportsEnvProxy(nodeVersion, false) && env.NODE_USE_ENV_PROXY === '1';
+}
+
+const DEFAULT_PORTS = { 'http:': 80, 'https:': 443 };
+
+/**
+ * Whether Node's own fetch() sends a request for `input` through a proxy from
+ * the environment. Node enables that with --use-env-proxy or
+ * NODE_USE_ENV_PROXY=1 when HTTP_PROXY, HTTPS_PROXY, http_proxy or https_proxy
+ * is set, and installs undici's EnvHttpProxyAgent, whose rules this follows:
+ * http_proxy before HTTP_PROXY; for https, https_proxy, then HTTPS_PROXY, then
+ * the http proxy; and no proxy for a host NO_PROXY (or no_proxy) names, as
+ * itself or as a parent domain, with an optional port, or for every host when
+ * it is "*". The `context` defaults are this process's.
+ *
+ * @param {string|URL} input
+ * @param {{env?: object, execArgv?: string[], nodeVersion?: string}} [context]
+ * @returns {boolean}
+ */
+export function fetchUsesEnvProxy(input, {
+  env = process.env,
+  execArgv = process.execArgv,
+  nodeVersion = process.versions.node,
+} = {}) {
+  if (!env.HTTP_PROXY && !env.HTTPS_PROXY && !env.http_proxy && !env.https_proxy) return false;
+  if (!envProxyEnabled(env, execArgv, nodeVersion)) return false;
+  const url = new URL(input);
+  const httpProxy = env.http_proxy ?? env.HTTP_PROXY;
+  const httpsProxy = (env.https_proxy ?? env.HTTPS_PROXY) || httpProxy;
+  if (!(url.protocol === 'https:' ? httpsProxy : httpProxy)) return false;
+  const noProxy = env.no_proxy ?? env.NO_PROXY ?? '';
+  const entries = noProxy.split(/[,\s]/).filter(Boolean).map((entry) => {
+    const withPort = entry.match(/^(.+):(\d+)$/);
+    return {
+      hostname: (withPort ? withPort[1] : entry).replace(/^\*?\./, '').toLowerCase(),
+      port: withPort ? Number.parseInt(withPort[2], 10) : 0,
+    };
+  });
+  if (entries.length === 0) return true;
+  if (noProxy === '*') return false;
+  // Brackets stay on an IPv6 host, as NO_PROXY writes it.
+  const hostname = url.host.replace(/:\d*$/, '').toLowerCase();
+  const port = Number.parseInt(url.port, 10) || DEFAULT_PORTS[url.protocol] || 0;
+  return !entries.some((entry) => (!entry.port || entry.port === port)
+    && (hostname === entry.hostname || hostname.endsWith(`.${entry.hostname}`)));
+}
+
 /**
  * One GET or HEAD over node:http(s), resolving the host with `lookup` and
  * never following a redirect, answered as a WHATWG Response. A fresh socket
@@ -383,8 +453,10 @@ export function requestWithLookup(input, init = {}, lookup) {
  * through `assertSafeUrl` before it is followed, so a public host cannot
  * bounce the request to a private/metadata address. Without `fetchImpl`, each
  * request connects through `guardedLookup`, so DNS rebinding cannot reach a
- * blocked address either. A `fetchImpl` replaces that connection: tests and
- * callers that pin their own connections pass one.
+ * blocked address either, except a hop `fetchUsesEnvProxy` sends through
+ * Node's fetch() and its environment proxy, which resolves the name itself. A
+ * `fetchImpl` replaces both: tests and callers that pin their own connections
+ * pass one.
  *
  * Intended for GET-style media downloads (redirect responses are followed as
  * GETs, matching standard fetch semantics for 301/302/303 on bodyless
@@ -412,7 +484,9 @@ export async function fetchSafeUrl(input, init = {}, options = {}) {
   if (allowedProtocols) guardOptions.allowedProtocols = allowedProtocols;
   if (allowedHosts) guardOptions.allowedHosts = allowedHosts;
   const pinnedLookup = guardedLookup(lookup);
-  const request = fetchImpl || ((url, requestInit) => requestWithLookup(url, requestInit, pinnedLookup));
+  const request = fetchImpl || ((url, requestInit) => (fetchUsesEnvProxy(url)
+    ? fetch(url, requestInit)
+    : requestWithLookup(url, requestInit, pinnedLookup)));
 
   let current = (await assertSafeUrl(input, guardOptions)).toString();
   for (let hop = 0; hop <= maxRedirects; hop++) {

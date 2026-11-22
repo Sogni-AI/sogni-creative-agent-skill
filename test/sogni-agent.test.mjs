@@ -1964,6 +1964,43 @@ test('a video timeout leaves the Sogni project running and says how to fetch it'
   assert.match(stderr, /sogni-agent --result proj-1/);
 });
 
+test('a 4015 during connect identifies the app ID conflict before any submission', () => {
+  const { exitCode, stderr, state } = runCli([...VIDEO_ARGS, 'startup takeover'], {
+    SOGNI_AGENT_TEST_TAKEOVER: 'startup'
+  });
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /Another connection took over this Sogni app ID \(4015\)/);
+  assert.match(stderr, /SOGNI_APP_ID/);
+  assert.equal(state?.lastVideoProject ?? null, null);
+});
+
+test('a 4015 after submission returns the recovery command without cancelling the project', () => {
+  const { exitCode, stdout, state } = runCli([...VIDEO_ARGS, '--timeout', '2', '--cancel-on-timeout', '--json', 'queued takeover'], {
+    SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1',
+    SOGNI_AGENT_TEST_TAKEOVER: 'queued'
+  });
+  assert.equal(exitCode, 1);
+  const result = JSON.parse(stdout.trim());
+  assert.equal(result.errorCode, '4015');
+  assert.equal(result.retryable, false);
+  assert.deepEqual(result.errorDetails.projectIds, ['proj-1']);
+  assert.deepEqual(result.errorDetails.waitCommands, ['sogni-agent --result proj-1 --wait']);
+  assert.equal(state?.canceledProjectIds ?? null, null);
+});
+
+test('a 4015 after the final job still allows the completed video to download', async () => {
+  const body = patternBytes(1024);
+  const output = join(mkdtempSync(join(tmpdir(), 'sogni-completed-takeover-')), 'clip.mp4');
+  await withMediaResult(body, async url => {
+    const result = await runCliAsync([...VIDEO_ARGS, '-o', output, '--json', 'completed takeover'], {
+      SOGNI_AGENT_TEST_RESULT_URL: url,
+      SOGNI_AGENT_TEST_TAKEOVER: 'after-completion'
+    });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.deepEqual(readFileSync(output), body);
+  });
+});
+
 test('--cancel-on-timeout still cancels the Sogni project before exiting', () => {
   const { exitCode, state, stderr } = runCli([...VIDEO_ARGS, '--timeout', '1', '--cancel-on-timeout', 'timeout cancellation'], {
     SOGNI_AGENT_TEST_SUPPRESS_JOB_EVENTS: '1'
@@ -2128,6 +2165,18 @@ test('--result --wait follows a project over the socket and reads its result onc
   // No status reads while it rendered: one sync, its own completion event, then one result read.
   assert.deepEqual(state.sequence.filter((event) => !event.startsWith('disconnect:')),
     ['sync:main-app', 'completed:proj-9', 'getResult:proj-9']);
+});
+
+test('a 4015 while collecting a previous render returns its requested project ID', async () => {
+  const result = await runCliAsync(['--result', 'proj-9', '--wait', '--json'], {
+    SOGNI_APP_ID: 'main-app',
+    SOGNI_AGENT_TEST_TRACKED_JSON: JSON.stringify({ 'main-app': [{ id: 'proj-9', completeAfterMs: 300 }] }),
+    SOGNI_AGENT_TEST_SDK_EVENTS_JSON: JSON.stringify([{ channel: 'socket', name: 'disconnected', event: { code: 4015 } }])
+  });
+  assert.equal(result.exitCode, 1, result.stderr);
+  const error = JSON.parse(result.stdout);
+  assert.equal(error.errorCode, '4015');
+  assert.deepEqual(error.errorDetails.waitCommands, ['sogni-agent --result proj-9 --wait']);
 });
 
 test('--wait takes a project back from the free app-ID slot that submitted it', async () => {

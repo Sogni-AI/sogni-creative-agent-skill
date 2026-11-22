@@ -853,12 +853,15 @@ function resolveConfiguredPath(rawPath, fallbackPath, label) {
 async function disableLiveModelAvailabilityEvents(wrapper) {
   const sdkClient = wrapper?.client;
 
+  const stopWatching = watchForConnectionTakeover(wrapper);
   try {
     if (typeof sdkClient?.setSocketEventSubscriptions === 'function') {
       await sdkClient.setSocketEventSubscriptions(SOCKET_EVENT_SUBSCRIPTIONS);
     }
   } catch (err) {
     // Subscription optimization is best-effort and must not block generation.
+  } finally {
+    stopWatching();
   }
 }
 
@@ -979,6 +982,10 @@ function classifyHappyHorseCliError(error, rawMessage) {
 function classifyCliError(error, context = {}) {
   error = unwrapGenericProjectError(error);
   const rawMessage = cliErrorMessage(error);
+
+  if (error?.code === '4015') {
+    return { error_type: 'SWITCH_CONNECTION', category: 'connection_error', message: rawMessage, retryable: false };
+  }
 
   if (RELAXED_UNAVAILABLE_MESSAGE.test(rawMessage)) {
     return {
@@ -1289,23 +1296,55 @@ function reportFatalError(error) {
 process.on('uncaughtException', reportFatalError);
 process.on('unhandledRejection', reportFatalError);
 
-// Connect to Sogni, mapping a rejected connection into a clean auth error
-// where we can. (Detached SDK failures that never reach this await are caught
-// by the global handlers above.)
+const connectionTakeovers = new WeakMap();
+
 /** The CLI's SDK client, signed in with the API key under one app ID. */
 function createSkillSogniClient(creds, appId) {
-  return new SogniClientWrapper({
+  const takeover = new AbortController();
+  const client = new SogniClientWrapper({
     appSource: SOGNI_APP_SOURCE,
     appId,
     attribution: clientAttribution(AGENT_ATTRIBUTION),
     network: renderNetwork,
     autoConnect: false,
+    onConnectionTakeover: () => takeover.abort(),
     apiKey: creds.SOGNI_API_KEY,
     authType: 'apiKey'
   });
+  connectionTakeovers.set(client, takeover.signal);
+  client.on(ClientEvent.PROJECT_CREATED, project => runProjectIds.add(project.id));
+  return client;
+}
+
+// A 4015 ends this socket's event stream. Keep completed downloads and other
+// REST-only work independent of it, and stop only commands relying on the socket.
+function watchForConnectionTakeover(client, projectId = options.projectLookup?.projectId) {
+  const signal = connectionTakeovers.get(client);
+  const report = () => {
+    const projects = sdkClientOf(client)?.projects?.trackedProjects || [];
+    const ids = new Set(projectId ? [projectId] : []);
+    for (const project of projects) {
+      if (!project.finished && runProjectIds.has(project.id)) ids.add(project.id);
+    }
+    const projectIds = [...ids];
+    const waitCommands = projectIds.map(waitCommandFor);
+    const usesFixedId = getEnv('SOGNI_APP_ID') || getEnv('SOGNI_APP_ID_PATH');
+    const appIdHint = 'For parallel runs, let the CLI allocate its app IDs or give each process its own SOGNI_APP_ID.';
+    fatalCliError('Another connection took over this Sogni app ID (4015).', {
+      code: '4015',
+      details: { projectIds, waitCommands },
+      hint: waitCommands.length
+        ? `${usesFixedId ? 'Clear the shared SOGNI_APP_ID or SOGNI_APP_ID_PATH before recovery. ' : ''}Recover the existing render with: ${waitCommands.join('; ')}`
+        : appIdHint
+    });
+  };
+  if (signal.aborted) report();
+  signal.addEventListener('abort', report, { once: true });
+  return () => signal.removeEventListener('abort', report);
 }
 
 async function connectSogniClient(client) {
+  const stopWatching = watchForConnectionTakeover(client);
   try {
     await client.connect();
   } catch (error) {
@@ -1315,6 +1354,8 @@ async function connectSogniClient(client) {
       if (!error.code) error.code = 'INVALID_API_KEY';
     }
     throw error;
+  } finally {
+    stopWatching();
   }
 }
 
@@ -14186,6 +14227,7 @@ function waitCommandFor(projectId) {
  * still ends a run whose submission never completes.
  */
 function createProjectWaitTracker(client, log, timeoutMs = options.timeout) {
+  const stopWatching = watchForConnectionTakeover(client);
   const projects = new Map();
   const reasons = new Map();
   const described = new Map();
@@ -14212,6 +14254,7 @@ function createProjectWaitTracker(client, log, timeoutMs = options.timeout) {
     return now - startedAt - heldMs - (heldSince === null ? 0 : now - heldSince);
   };
   const cleanup = () => {
+    stopWatching();
     clearTimeout(timer);
     if (typeof sdkProjects?.off === 'function') sdkProjects.off('queueChanged', onQueueChanged);
   };
@@ -14536,12 +14579,14 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
     }
   }
   const deadline = Date.now() + timeoutMs;
-  let tracked = await trackedProjectAfterSync(projectsApi, projectId);
+  const stopWatching = watchForConnectionTakeover(client, projectId);
   let trackingClient = client;
   let sideClient = null;
   let claim = null;
   let stopProgressEvents = () => {};
+  let stopWatchingSideClient;
   try {
+    let tracked = await trackedProjectAfterSync(projectsApi, projectId);
     if (!tracked) {
       const inFlight = await projectsApi.listProjectsElsewhere();
       const holder = (inFlight || []).find((project) => project?.id === projectId);
@@ -14551,8 +14596,14 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
         log(`Taking project ${projectId} back from the run that submitted it...`);
         sideClient = createSkillSogniClient(creds, claim.appId);
         await connectSogniClient(sideClient);
+        stopWatchingSideClient = watchForConnectionTakeover(sideClient, projectId);
         tracked = await trackedProjectAfterSync(sdkClientOf(sideClient).projects, projectId);
-        trackingClient = sideClient;
+        if (tracked) {
+          stopWatching();
+          trackingClient = sideClient;
+        } else {
+          stopWatchingSideClient();
+        }
       }
       if (!tracked) {
         log(claim?.heldByPid
@@ -14570,6 +14621,8 @@ async function followProjectToEnd(client, projectId, { log, creds, timeoutMs }) 
     }
     await settleTrackedProject(tracked, { log, deadline, timeoutMs });
   } finally {
+    stopWatching();
+    stopWatchingSideClient?.();
     stopProgressEvents();
     if (sideClient) {
       try { await sideClient.disconnect(); } catch { /* already closed */ }
@@ -14704,6 +14757,7 @@ async function buildProjectTimeoutError(projects, timeoutMs, label = 'Project') 
 }
 
 async function runImageEditProjectWithEvents(client, editConfig, expectedCount, log, timeoutMs, label) {
+  const stopWatching = watchForConnectionTakeover(client);
   const results = [];
   let completed = 0;
   let projectId = null;
@@ -14744,6 +14798,7 @@ async function runImageEditProjectWithEvents(client, editConfig, expectedCount, 
   };
 
   const cleanup = () => {
+    stopWatching();
     clearTimeout(timeout);
     removeClientListener(client, ClientEvent.JOB_COMPLETED, onCompleted);
     removeClientListener(client, ClientEvent.JOB_FAILED, onFailed);
@@ -15068,7 +15123,8 @@ async function runMultiAngleFlow(client, log) {
       if (options.autoResizeVideoAssets !== null) {
         clipConfig.autoResizeVideoAssets = options.autoResizeVideoAssets;
       }
-      const clipResult = await client.createVideoProject(withBillingMode(clipConfig));
+      const stopWatching = watchForConnectionTakeover(client);
+      const clipResult = await client.createVideoProject(withBillingMode(clipConfig)).finally(stopWatching);
 
       // Check for errors in the response (e.g., insufficient tokens)
       if (clipResult?.error || clipResult?.message) {
@@ -15867,15 +15923,7 @@ async function runDoctor() {
   if (creds?.SOGNI_API_KEY) {
     let doctorClient = null;
     try {
-      doctorClient = new SogniClientWrapper({
-        appSource: SOGNI_APP_SOURCE,
-        appId: getOrCreateSogniAppId(),
-        attribution: clientAttribution(AGENT_ATTRIBUTION),
-        network: renderNetwork,
-        autoConnect: false,
-        apiKey: creds.SOGNI_API_KEY,
-        authType: 'apiKey'
-      });
+      doctorClient = createSkillSogniClient(creds, getOrCreateSogniAppId());
       const authFlow = (async () => {
         await connectSogniClient(doctorClient);
         const balance = await doctorClient.getBalance();
@@ -17825,7 +17873,8 @@ async function main() {
       // projects.create() resolves once the request is handed to the socket, before the server
       // has it, so exiting at once dropped every detached project (2026-10-01: none reached
       // the server, yet each was reported as submitted). Report only what the server answered.
-      const unconfirmed = await awaitServerAnswer([...activeProjects]);
+      const stopWatching = watchForConnectionTakeover(client);
+      const unconfirmed = await awaitServerAnswer([...activeProjects]).finally(stopWatching);
       const refused = [...activeProjects].find((project) => project?.status === 'failed');
       if (refused) throw buildProjectResultError({ error: refused.terminalError?.() ?? refused.error }, 'Sogni refused the project');
       if (unconfirmed.length) {
@@ -18018,20 +18067,13 @@ async function main() {
 
           // Create a new client for second clip to avoid event conflicts
           const creds = loadCredentials();
-          const client2 = new SogniClientWrapper({
-            appSource: SOGNI_APP_SOURCE,
-            appId: getOrCreateSogniAppId(),
-            attribution: clientAttribution(AGENT_ATTRIBUTION),
-            network: renderNetwork,
-            autoConnect: false,
-            apiKey: creds.SOGNI_API_KEY,
-            authType: 'apiKey'
-          });
+          const client2 = createSkillSogniClient(creds, getOrCreateSogniAppId());
           await connectSogniClient(client2);
           await disableLiveModelAvailabilityEvents(client2);
 
           // Create second clip and wait for completion via events
           let activeClip2Project = null;
+          const stopWatchingClip2 = watchForConnectionTakeover(client2);
           const clip2Promise = new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
               void buildProjectTimeoutError([activeClip2Project], options.timeout, 'second clip project')
@@ -18039,6 +18081,7 @@ async function main() {
             }, options.timeout);
 
             client2.on(ClientEvent.JOB_COMPLETED, async (data) => {
+              stopWatchingClip2();
               try {
                 clearTimeout(timeout);
                 if (data.job?.isWithheld === true) {

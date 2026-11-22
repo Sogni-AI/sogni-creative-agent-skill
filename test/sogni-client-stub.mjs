@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const ClientEvent = {
+  PROJECT_CREATED: 'PROJECT_CREATED',
   JOB_COMPLETED: 'JOB_COMPLETED',
   JOB_FAILED: 'JOB_FAILED',
   PROJECT_PROGRESS: 'PROJECT_PROGRESS',
@@ -202,6 +203,9 @@ class SogniClientWrapper extends EventEmitter {
     this.lastEditProject = null;
     this.emittedJobs = 0;
     const socket = new EventEmitter();
+    socket.on('disconnected', ({ code }) => {
+      if (code === 4015) config.onConnectionTakeover?.();
+    });
     socket.get = async (path, query) => {
       const state = getState();
       state.socketGets = state.socketGets || [];
@@ -234,6 +238,10 @@ class SogniClientWrapper extends EventEmitter {
   }
 
   async connect() {
+    if (process.env.SOGNI_AGENT_TEST_TAKEOVER === 'startup') {
+      this.client.apiClient.socket.emit('disconnected', { code: 4015 });
+      throw new Error('Failed to connect to Sogni Supernet');
+    }
     if (process.env.SOGNI_AGENT_TEST_CONNECT_APP_ID_LIMIT) {
       const err = new Error('Too many app IDs for this address. Reuse the same application ID and wait before retrying.');
       err.code = 4061;
@@ -447,6 +455,7 @@ class SogniClientWrapper extends EventEmitter {
           projectId: 'proj-1'
         });
       }
+      if (process.env.SOGNI_AGENT_TEST_TAKEOVER === 'after-completion') this.client.apiClient.socket.emit('disconnected', { code: 4015 });
       persistState();
     });
   }
@@ -486,9 +495,11 @@ class SogniClientWrapper extends EventEmitter {
         project.status = refusal ? 'failed' : 'queued';
         if (refusal) project.terminalError = () => ({ code: 4024, message: refusal });
         project.emit('updated', ['status']);
+        if (process.env.SOGNI_AGENT_TEST_TAKEOVER === 'queued') this.client.apiClient.socket.emit('disconnected', { code: 4015 });
         if (refusal) project.emit('failed', project.terminalError());
       });
     }
+    this.emit(ClientEvent.PROJECT_CREATED, project);
     return project;
   }
 }

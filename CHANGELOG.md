@@ -1,3 +1,11 @@
+## [3.73.1] - 2026-11-22
+
+- Media you pass by URL (`--ref`, `-c`, `--keyframe`, `--ref-audio`, `--ref-video`, upscale sources, voice references) is downloaded only from a public address. A host name that answers a public address to the CLI's check and a private one when the download connects (DNS rebinding) can no longer reach your local network or a cloud metadata service, and IPv6 addresses that lead to a private IPv4 host (`[::7f00:1]`, 6to4, NAT64, site-local) are refused.
+- ffmpeg and ffprobe read only self-contained media files. A playlist, manifest or ffmpeg concat list passed as an image, audio or video input (HLS, DASH, concat, IMF, a numbered image sequence) is refused with `UNSAFE_MEDIA_INPUT` instead of converting the files it names, and neither tool opens a network address. Every ffmpeg step now runs ffprobe, which ships with ffmpeg, to check its inputs first.
+- ffmpeg and ffprobe run with only `PATH`, `HOME`, the temp folder, locale and library-path variables, so your Sogni API key and other environment variables no longer reach them.
+- A download from a media URL stops with `NETWORK_TIMEOUT` when no data arrives for 30 seconds, and with `MEDIA_DOWNLOAD_TOO_LARGE` past 512 MiB (`SOGNI_MEDIA_DOWNLOAD_MAX_BYTES` changes the limit). Local files have no limit.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.32.2.
+
 ## [3.73.0] - 2026-11-21
 
 - In the local MCP server used by Claude Desktop, Codex and goose, upscale an image up to 16K with `upscale_image`, upscale a video up to 2160p with `upscale_video`, and turn text into speech in a preset, cloned or designed voice with `generate_speech`. Upscaled images show inline in the chat like generated ones.

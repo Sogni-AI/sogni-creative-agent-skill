@@ -155,7 +155,7 @@ Then ask your agent to do something:
 
 - **Node.js ≥ 22.11.0**
 - **Sogni API key** ([API Keys page](https://dashboard.sogni.ai/api-key))
-- **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`; `--upscale-video` needs `ffprobe`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery (a leading `~` is expanded).
+- **`ffmpeg` + `ffprobe`** *(optional)* — required for local utilities such as `--angles-360-video`, `--concat-videos`, timestamped frame extraction, and `--verify-video`; `--upscale-video` needs `ffprobe`, and every ffmpeg step runs `ffprobe` first to check its inputs. Set `FFMPEG_PATH` / `FFPROBE_PATH` to override discovery (a leading `~` is expanded).
 - macOS, Linux, or Windows
 
 ---
@@ -453,6 +453,8 @@ Defaults live under `~/.config/sogni/` for credentials, last-render metadata, pe
 | `SOGNI_MEDIA_INBOUND_DIR` | Directory used by `--list-media` |
 | `OPENCLAW_CONFIG_PATH` | OpenClaw config file location |
 | `FFMPEG_PATH` | Custom `ffmpeg` binary |
+| `FFPROBE_PATH` | Custom `ffprobe` binary |
+| `SOGNI_MEDIA_DOWNLOAD_MAX_BYTES` | Largest download from one media URL (default: 536870912, 512 MiB); local files have no limit |
 
 ---
 
@@ -1153,7 +1155,9 @@ This skill is designed to be loaded into agent runtimes as a first-class capabil
 7. **Update notices for agents**
    When a newer version exists, any command may print one advisory stderr line — `[sogni-agent] Update available: <current> -> <latest> ...` — at most once per day (stdout JSON is never touched). Agents should relay it to the user and offer `sogni-agent self-update`, or run `sogni-agent --snooze-update` if the user declines. Interactive TTY users get a banner instead. Each failed check carries a `detail` string with the fix.
 8. **SSRF / URL safety**
-   The CLI validates every HTTP(S) media reference with an SSRF guard ([`ssrf-guard.mjs`](./ssrf-guard.mjs)) and re-validates each redirect hop on download. Localhost and private-network URLs are rejected; only public HTTPS references are forwarded as Seedance multimodal context.
+   The CLI validates every HTTP(S) media reference with an SSRF guard ([`ssrf-guard.mjs`](./ssrf-guard.mjs)) and re-validates each redirect hop on download. A download connects only to an address the guard has checked, so a host name that answers a public address to the check and a private one to the connection (DNS rebinding) is refused. Localhost, private-network, link-local (cloud metadata) and reserved addresses are rejected, including IPv6 forms that lead to such an IPv4 host; only public HTTPS references are forwarded as Seedance multimodal context. A download stops when it passes `SOGNI_MEDIA_DOWNLOAD_MAX_BYTES` or receives nothing for 30 seconds.
+9. **Local media tools**
+   `ffmpeg` and `ffprobe` read only local files, never a network address, and run with only `PATH`, `HOME`, the temp folder, locale and library-path variables: the Sogni API key does not reach them. Before ffmpeg reads an input, `ffprobe` must identify it as a self-contained image, audio or video file; a playlist, manifest, ffmpeg concat list or numbered image sequence (`UNSAFE_MEDIA_INPUT`) is refused, so a file disguised as media cannot make ffmpeg convert the files it names.
 
 ---
 

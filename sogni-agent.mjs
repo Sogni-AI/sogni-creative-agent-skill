@@ -10,7 +10,6 @@
 import './node-version-check.mjs';
 import JSON5 from 'json5';
 import { createHash, randomBytes } from 'crypto';
-import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync, openSync, writeSync, closeSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
@@ -28,7 +27,7 @@ import {
   resolveAgentAttribution,
   semanticWorkloadAttribution,
 } from './attribution.mjs';
-import { assertSafeUrl, fetchSafeUrl } from './ssrf-guard.mjs';
+import { assertSafeUrl, fetchSafeUrl, readResponseBody } from './ssrf-guard.mjs';
 import {
   MESH_FLAGS, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
   prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
@@ -343,6 +342,133 @@ function sanitizePath(p, label) {
   return expandHomePath(p);
 }
 
+// ---------------------------------------------------------------------------
+// Local media tools (ffmpeg/ffprobe). Each one gets only the environment it
+// needs, reads only local files and pipes, and reads only self-contained
+// media: never a playlist or list that names other files or addresses.
+// Defined here, above the top-level option checks that already probe media.
+// ---------------------------------------------------------------------------
+
+// Variables a media tool needs to start and to find its libraries and temp
+// folder, plus LANG and LC_*. Nothing else in this process's environment,
+// the Sogni API key included, reaches it.
+const MEDIA_TOOL_ENV_NAMES = new Set([
+  'PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG',
+  // Windows: process start, executable extension lookup, the user profile.
+  'SYSTEMROOT', 'WINDIR', 'PATHEXT', 'USERPROFILE',
+  // An ffmpeg build installed outside the system library path loads its libraries through these.
+  'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_FALLBACK_LIBRARY_PATH',
+]);
+
+function mediaToolEnvironment() {
+  return Object.fromEntries(Object.entries(process.env).filter(([name, value]) => {
+    const upper = name.toUpperCase();
+    return value !== undefined && (MEDIA_TOOL_ENV_NAMES.has(upper) || upper.startsWith('LC_'));
+  }));
+}
+
+// Demuxers that read further files or network addresses named inside the
+// input: playlists and manifests (hls, dash), edit lists (concat, which also
+// reads ffconcat files, and imf), stream descriptions (sdp, rtp, rtsp, sap),
+// filter graphs and scripts (lavfi, avisynth, vapoursynth). Given one disguised
+// as media, ffmpeg converts what it names, such as another local file.
+const INDIRECT_MEDIA_DEMUXERS = new Set([
+  'applehttp', 'avisynth', 'concat', 'dash', 'hls', 'imf', 'lavfi',
+  'rtp', 'rtsp', 'sap', 'sdp', 'vapoursynth', 'webm_dash_manifest',
+]);
+// A frame-number pattern (%d, %03d) in a path the image2 demuxer opens makes it
+// read a numbered sequence of other files.
+const IMAGE_SEQUENCE_PATTERN = /%\d*d/;
+// Input option for every ffmpeg and ffprobe input: local files and pipes only,
+// so no input makes either tool fetch a URL around the SSRF guard.
+const MEDIA_INPUT_PROTOCOL_ARGS = Object.freeze(['-protocol_whitelist', 'file,pipe']);
+
+/** ffmpeg arguments that open `filePath` as an input under MEDIA_INPUT_PROTOCOL_ARGS. */
+function mediaInputArgs(filePath) {
+  return [...MEDIA_INPUT_PROTOCOL_ARGS, '-i', filePath];
+}
+
+let execaPromise = null;
+async function loadExeca() {
+  if (!execaPromise) {
+    execaPromise = import('execa');
+  }
+  return execaPromise;
+}
+
+/**
+ * Throws UNSAFE_MEDIA_INPUT when ffprobe's `formatName` for `filePath` (such as
+ * "mov,mp4,m4a,3gp,3g2,mj2") is a format that names other inputs. `label` is
+ * how the user knows the file.
+ */
+function assertSelfContainedMediaFormat(formatName, filePath, label) {
+  const names = String(formatName || '').split(',').map((name) => name.trim()).filter(Boolean);
+  const indirect = names.find((name) => INDIRECT_MEDIA_DEMUXERS.has(name))
+    || (names.includes('image2') && IMAGE_SEQUENCE_PATTERN.test(filePath) ? 'image2 sequence' : null);
+  if (!indirect) return;
+  const err = new Error(
+    `${label} is not a self-contained media file: ffprobe reads it as ${indirect}, a format that refers to other files or addresses. ` +
+    'Use an image, audio, or video file.'
+  );
+  err.code = 'UNSAFE_MEDIA_INPUT';
+  err.details = { source: label, format: formatName };
+  throw err;
+}
+
+/**
+ * Run ffprobe on one file with JSON output: `args` before the entries, one
+ * -show_entries per `entries` item, plus format=format_name, which refuses the
+ * file (UNSAFE_MEDIA_INPUT) when it names other inputs. Resolves
+ * { ffprobePath, result, probe }: `probe` is the parsed JSON, or null when
+ * ffprobe failed or printed none; `result` is runCommand's.
+ */
+async function probeMediaFile(filePath, { label = filePath, entries = [], args = [] } = {}) {
+  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
+  const result = await runCommand(ffprobePath, [
+    '-v', 'error',
+    ...args,
+    ...entries.flatMap((entry) => ['-show_entries', entry]),
+    '-show_entries', 'format=format_name',
+    '-of', 'json',
+    ...MEDIA_INPUT_PROTOCOL_ARGS,
+    filePath,
+  ], { captureOutput: true });
+  let probe = null;
+  try {
+    probe = JSON.parse(result.stdout || 'null');
+  } catch {
+    probe = null;
+  }
+  if (!probe || typeof probe !== 'object' || Array.isArray(probe)) probe = null;
+  assertSelfContainedMediaFormat(probe?.format?.format_name, filePath, label);
+  return { ffprobePath, result, probe };
+}
+
+/**
+ * Check a file before ffmpeg reads it: ffprobe must start, identify it, and
+ * find a self-contained format. Throws MISSING_FFPROBE, UNREADABLE_MEDIA_INPUT
+ * or UNSAFE_MEDIA_INPUT; ffmpeg never runs on a file it could not check.
+ * `label` replaces `filePath` (often a temporary copy) in messages.
+ */
+async function assertSelfContainedMediaInput(filePath, label = filePath) {
+  const { ffprobePath, result, probe } = await probeMediaFile(filePath, { label });
+  if (result.error && result.status === null && !result.error.signal) {
+    const err = new Error(`ffprobe is required to check ${label} before ffmpeg reads it, but "${ffprobePath}" could not be started (${result.error.code}).`);
+    err.code = 'MISSING_FFPROBE';
+    err.hint = 'Install ffmpeg/ffprobe (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set FFPROBE_PATH to a working ffprobe binary.';
+    err.details = { ffprobePath, reason: result.error.code };
+    throw err;
+  }
+  if (!probe?.format?.format_name) {
+    const ffprobeError = String(result.stderr || '').split(filePath).join(label).trim().slice(-500);
+    const err = new Error(`${label} could not be read as an image, audio, or video file.`);
+    err.code = 'UNREADABLE_MEDIA_INPUT';
+    err.details = { source: label, ...(ffprobeError ? { ffprobeError } : {}) };
+    if (ffprobeError) err.hint = `ffprobe reported: ${ffprobeError.split('\n').at(-1).trim()}`;
+    throw err;
+  }
+}
+
 const DEFAULT_CREDENTIALS_PATH = join(homedir(), '.config', 'sogni', 'credentials');
 const DEFAULT_LAST_RENDER_PATH = join(homedir(), '.config', 'sogni', 'last-render.json');
 const DEFAULT_MODEL_CATALOG_CACHE_PATH = join(homedir(), '.config', 'sogni', 'model-catalog-cache.json');
@@ -363,6 +489,11 @@ const DEFAULT_PERSONAS_INDEX_PATH = join(homedir(), '.config', 'sogni', 'persona
 const DEFAULT_API_MEDIA_REFERENCE_MAX_BYTES = 100 * 1024 * 1024;
 // The API's ceiling on one uploaded reference (MAX_UPLOAD_SIZE_BYTES in sogni-api).
 const API_MEDIA_REFERENCE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+// The most the CLI downloads from one user-supplied media URL. Uploads stop at the
+// API's 100 MiB, but a source the CLI trims locally first (a Seedance
+// video-to-video source with --video-start) may be longer. Override with
+// SOGNI_MEDIA_DOWNLOAD_MAX_BYTES; local files have no limit.
+const DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024;
 // Content types the API accepts per reference kind (ALLOWED_IMAGE_CONTENT_TYPES,
 // ALLOWED_AUDIO_CONTENT_TYPES and ALLOWED_VIDEO_CONTENT_TYPES in sogni-api).
 const VENDOR_REFERENCE_UPLOAD_CONTENT_TYPES = Object.freeze({
@@ -1780,15 +1911,11 @@ async function probeVideoUpscaleSource(buffer, sourceLabel) {
   let result;
   try {
     writeFileSync(inputPath, buffer);
-    result = await runCommand(ffprobePath, [
-      '-v', 'error',
-      '-select_streams', 'v:0',
-      '-count_frames',
-      '-show_entries',
-      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation',
-      '-of', 'json',
-      inputPath,
-    ], { captureOutput: true });
+    ({ result } = await probeMediaFile(inputPath, {
+      label: sourceLabel,
+      args: ['-select_streams', 'v:0', '-count_frames'],
+      entries: ['stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation'],
+    }));
   } finally {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
@@ -1865,16 +1992,11 @@ async function probeConformedVideoUpscaleSource(buffer, sourceLabel) {
   let result;
   try {
     writeFileSync(inputPath, buffer);
-    result = await runCommand(ffprobePath, [
-      '-v', 'error',
-      '-select_streams', 'v:0',
-      '-count_frames',
-      '-show_frames',
-      '-show_entries',
-      'stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation:frame=best_effort_timestamp_time',
-      '-of', 'json',
-      inputPath,
-    ], { captureOutput: true });
+    ({ result } = await probeMediaFile(inputPath, {
+      label: sourceLabel,
+      args: ['-select_streams', 'v:0', '-count_frames', '-show_frames'],
+      entries: ['stream=width,height,nb_read_frames,avg_frame_rate,r_frame_rate,sample_aspect_ratio,color_transfer:stream_side_data=rotation:frame=best_effort_timestamp_time'],
+    }));
   } finally {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
@@ -8133,7 +8255,12 @@ if (options.video) {
       const localVideoReferences = [options.refVideo, ...options.refVideos]
         .filter((reference) => reference && !isHttpUrl(reference) && existsSync(reference));
       for (const reference of localVideoReferences) {
-        const frameRate = probeLocalVideoFrameRate(reference);
+        let frameRate;
+        try {
+          frameRate = await probeLocalVideoFrameRate(reference);
+        } catch (error) {
+          fatalCliError(error.message, { code: error.code, details: error.details });
+        }
         if (!frameRate) {
           fatalCliError(
             `MiniMax H3 r2v could not verify the reference-video frame rate for "${reference}". ` +
@@ -9292,6 +9419,13 @@ const CHAT_HTTP_TIMEOUT_MS = (() => {
 // than the connect-phase default that suffices for GET/download/stream calls.
 const UPLOAD_HTTP_TIMEOUT_MS = Math.max(DEFAULT_HTTP_TIMEOUT_MS, 120000);
 
+function networkTimeoutError(timeoutMs) {
+  const err = new Error(`Sogni network request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+  err.code = 'NETWORK_TIMEOUT';
+  err.hint = 'Check your internet connection. If you are behind a corporate proxy/VPN or firewall, it may be blocking api.sogni.ai. You can raise the limit with SOGNI_HTTP_TIMEOUT_MS.';
+  return err;
+}
+
 // fetch() with an AbortController-based timeout that maps a timeout/abort into a
 // clean, coded error instead of a hang or an opaque "aborted" stack.
 async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS) {
@@ -9300,12 +9434,7 @@ async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_HTTP_TI
   try {
     return await fetch(resource, { ...init, signal: controller.signal });
   } catch (error) {
-    if (error?.name === 'AbortError') {
-      const err = new Error(`Sogni network request timed out after ${Math.round(timeoutMs / 1000)}s.`);
-      err.code = 'NETWORK_TIMEOUT';
-      err.hint = 'Check your internet connection. If you are behind a corporate proxy/VPN or firewall, it may be blocking api.sogni.ai. You can raise the limit with SOGNI_HTTP_TIMEOUT_MS.';
-      throw err;
-    }
+    if (error?.name === 'AbortError') throw networkTimeoutError(timeoutMs);
     throw error;
   } finally {
     clearTimeout(timer);
@@ -9403,6 +9532,13 @@ function getApiModeMediaReferences() {
 
 function formatApiMediaFlags(refs) {
   return [...new Set(refs.map(ref => ref.flag))].join(', ');
+}
+
+function mediaDownloadMaxBytes() {
+  const configured = Number(getEnv('SOGNI_MEDIA_DOWNLOAD_MAX_BYTES') || '');
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_MEDIA_DOWNLOAD_MAX_BYTES;
 }
 
 function apiMediaReferenceMaxBytes() {
@@ -11733,21 +11869,61 @@ function applyPersonaAndVoiceReferences() {
   }
 }
 
+// Download a user-supplied media URL. fetchSafeUrl connects only to addresses it
+// has checked, on every redirect hop, so neither a redirect nor a rebinding DNS
+// name can reach a private or metadata address. The server has
+// DEFAULT_HTTP_TIMEOUT_MS to answer; the body must then keep arriving (the
+// result-download stall limit) and stay within mediaDownloadMaxBytes().
+async function fetchRemoteMedia(url) {
+  let host = 'the media server';
+  try { host = new URL(url).host; } catch { /* keep the generic name */ }
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, DEFAULT_HTTP_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetchSafeUrl(url, { signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw networkTimeoutError(DEFAULT_HTTP_TIMEOUT_MS);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) {
+    await response.body?.cancel?.().catch(() => {});
+    const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
+    err.code = 'FETCH_FAILED';
+    err.details = { url, status: response.status, statusText: response.statusText };
+    throw err;
+  }
+  const maxBytes = mediaDownloadMaxBytes();
+  const { stallMs } = mediaDownloadTiming();
+  try {
+    const buffer = await readResponseBody(response, { maxBytes, stallMs });
+    return { buffer, contentType: response.headers.get('content-type') };
+  } catch (error) {
+    if (error?.code === 'BODY_TOO_LARGE') {
+      const err = new Error(`The media at ${host} is larger than the ${maxBytes}-byte download limit.`);
+      err.code = 'MEDIA_DOWNLOAD_TOO_LARGE';
+      err.hint = 'Download the file and pass its local path, or raise the limit with SOGNI_MEDIA_DOWNLOAD_MAX_BYTES.';
+      err.details = { url, maxBytes };
+      throw err;
+    }
+    if (error?.code === 'BODY_STALLED') {
+      const err = new Error(`The media download from ${host} stalled with no data for ${formatDownloadDuration(stallMs)}.`);
+      err.code = 'NETWORK_TIMEOUT';
+      err.hint = 'Check the URL and your connection, or download the file and pass its local path.';
+      err.details = { url, stallMs };
+      throw err;
+    }
+    throw error;
+  }
+}
+
 // Fetch image as buffer
 async function fetchMediaBuffer(pathOrUrl) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    // fetchSafeUrl re-validates every redirect hop, so a vetted public URL
-    // cannot bounce the download to a private/metadata address.
-    const response = await fetchSafeUrl(pathOrUrl, {}, {
-      fetchImpl: (resource, init) => fetchWithTimeout(resource, init)
-    });
-    if (!response.ok) {
-      const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
-      err.code = 'FETCH_FAILED';
-      err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
-      throw err;
-    }
-    return Buffer.from(await response.arrayBuffer());
+    return (await fetchRemoteMedia(pathOrUrl)).buffer;
   }
   try {
     return readFileSync(pathOrUrl);
@@ -11762,20 +11938,9 @@ async function fetchMediaBuffer(pathOrUrl) {
 
 async function fetchMediaBlob(pathOrUrl, fallbackMimeType = 'application/octet-stream') {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    // fetchSafeUrl re-validates every redirect hop, so a vetted public URL
-    // cannot bounce the download to a private/metadata address.
-    const response = await fetchSafeUrl(pathOrUrl, {}, {
-      fetchImpl: (resource, init) => fetchWithTimeout(resource, init)
-    });
-    if (!response.ok) {
-      const err = new Error(`Failed to fetch media (${response.status} ${response.statusText})`);
-      err.code = 'FETCH_FAILED';
-      err.details = { url: pathOrUrl, status: response.status, statusText: response.statusText };
-      throw err;
-    }
-    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
-    const mimeType = contentType || mimeTypeForPath(pathOrUrl, fallbackMimeType);
-    return new Blob([await response.arrayBuffer()], { type: mimeType });
+    const { buffer, contentType } = await fetchRemoteMedia(pathOrUrl);
+    const mimeType = contentType?.split(';')[0]?.trim() || mimeTypeForPath(pathOrUrl, fallbackMimeType);
+    return new Blob([buffer], { type: mimeType });
   }
 
   const buffer = await fetchMediaBuffer(pathOrUrl);
@@ -11787,6 +11952,7 @@ async function prepareReferenceAudioIdentityMedia(pathOrUrl) {
   if (!pathOrUrl.startsWith('http://') && !pathOrUrl.startsWith('https://') && (cleanExt === '.wav' || cleanExt === '.wave')) {
     const sourcePath = sanitizePath(pathOrUrl, '--reference-audio-identity');
     const ffmpegPath = await ensureFfmpegAvailable();
+    await assertSelfContainedMediaInput(sourcePath);
     const tempDir = createTrackedTempDir('sogni-audio-id-');
     const outputPath = join(tempDir, 'voice-identity.m4a');
     try {
@@ -11794,7 +11960,7 @@ async function prepareReferenceAudioIdentityMedia(pathOrUrl) {
         '-hide_banner',
         '-loglevel', 'error',
         '-y',
-        '-i', sourcePath,
+        ...mediaInputArgs(sourcePath),
         '-vn',
         '-ac', '1',
         '-c:a', 'aac',
@@ -11834,11 +12000,12 @@ async function transcodeMp3ReferenceAudioBuffer(buffer, sourceLabel) {
   const outputPath = join(tempDir, 'reference-audio.m4a');
   try {
     writeFileSync(inputPath, buffer);
+    await assertSelfContainedMediaInput(inputPath, sourceLabel);
     const result = await runCommand(ffmpegPath, [
       '-hide_banner',
       '-loglevel', 'error',
       '-y',
-      '-i', inputPath,
+      ...mediaInputArgs(inputPath),
       '-vn',
       '-c:a', 'aac',
       '-b:a', '192k',
@@ -11889,11 +12056,12 @@ async function trimPreparedReferenceAudioWindowBuffer(buffer, {
   const outputPath = join(tempDir, 'reference-audio-window.m4a');
   try {
     writeFileSync(inputPath, buffer);
+    await assertSelfContainedMediaInput(inputPath, 'The reference audio');
     const args = ['-hide_banner', '-loglevel', 'error', '-y'];
     if (Number.isFinite(startSeconds) && startSeconds > 0) {
       args.push('-ss', String(startSeconds));
     }
-    args.push('-i', inputPath);
+    args.push(...mediaInputArgs(inputPath));
     if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
       args.push('-t', String(durationSeconds));
     }
@@ -11938,35 +12106,26 @@ function withMediaExtension(filename, extension) {
   return `${base || 'reference'}${cleanExtension}`;
 }
 
-async function probeLocalMediaDurationSeconds(pathOrUrl) {
-  if (isHttpUrl(pathOrUrl)) return undefined;
-  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
-  const result = await runCommand(ffprobePath, [
-    '-v', 'error',
-    '-show_entries', 'format=duration',
-    '-of', 'default=noprint_wrappers=1:nokey=1',
-    pathOrUrl,
-  ], { captureOutput: true });
+// The media duration ffprobe reports in seconds, or undefined when it reports none.
+async function probeMediaDurationSeconds(filePath, label) {
+  const { result, probe } = await probeMediaFile(filePath, { label, entries: ['format=duration'] });
   if (result.error || result.status !== 0) return undefined;
-  const parsed = Number(String(result.stdout || '').trim());
+  const raw = probe?.format?.duration;
+  const parsed = raw === undefined || raw === null || raw === '' ? Number.NaN : Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+async function probeLocalMediaDurationSeconds(pathOrUrl) {
+  if (isHttpUrl(pathOrUrl)) return undefined;
+  return probeMediaDurationSeconds(pathOrUrl, pathOrUrl);
+}
+
 async function probeMediaBufferDurationSeconds(buffer, filename) {
-  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const tempDir = createTrackedTempDir('sogni-wan3-probe-');
   const inputPath = mediaTempInputPath(tempDir, filename, '.media');
   try {
     writeFileSync(inputPath, Buffer.from(buffer));
-    const result = await runCommand(ffprobePath, [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
-      inputPath,
-    ], { captureOutput: true });
-    if (result.error || result.status !== 0) return undefined;
-    const parsed = Number(String(result.stdout || '').trim());
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    return await probeMediaDurationSeconds(inputPath, filename);
   } finally {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
@@ -12067,11 +12226,12 @@ async function transcodeSeedanceReferenceAudioToMp3(request) {
   const outputPath = join(tempDir, 'reference-audio.mp3');
   try {
     writeFileSync(inputPath, Buffer.from(request.data));
+    await assertSelfContainedMediaInput(inputPath, request.filename);
     const result = await runCommand(ffmpegPath, [
       '-hide_banner',
       '-loglevel', 'error',
       '-y',
-      '-i', inputPath,
+      ...mediaInputArgs(inputPath),
       '-vn',
       '-ac', '2',
       '-ar', '44100',
@@ -12108,12 +12268,13 @@ async function trimSeedanceReferenceAudioToMp3(request) {
   );
   try {
     writeFileSync(inputPath, Buffer.from(request.data));
+    await assertSelfContainedMediaInput(inputPath, request.filename);
     const result = await runCommand(ffmpegPath, [
       '-hide_banner',
       '-loglevel', 'error',
       '-y',
       '-ss', String(start),
-      '-i', inputPath,
+      ...mediaInputArgs(inputPath),
       '-t', String(duration),
       '-vn',
       '-ac', '2',
@@ -12411,12 +12572,13 @@ async function trimSeedanceV2VSourceVideoBuffer(buffer, sourceLabel, startOffset
   );
   try {
     writeFileSync(inputPath, buffer);
+    await assertSelfContainedMediaInput(inputPath, sourceLabel);
     const result = await runCommand(ffmpegPath, [
       '-hide_banner',
       '-loglevel', 'error',
       '-y',
       '-ss', String(start),
-      '-i', inputPath,
+      ...mediaInputArgs(inputPath),
       '-t', String(duration),
       '-map', '0:v:0',
       '-an',
@@ -12853,14 +13015,6 @@ function removeClientListener(client, event, handler) {
   }
 }
 
-let execaPromise = null;
-async function loadExeca() {
-  if (!execaPromise) {
-    execaPromise = import('execa');
-  }
-  return execaPromise;
-}
-
 async function ensureFfmpegAvailable(operation = 'this audio/video operation') {
   const ffmpegPath = sanitizePath(getEnv('FFMPEG_PATH') || 'ffmpeg', 'FFMPEG_PATH');
   const result = await runCommand(ffmpegPath, ['-version'], { captureOutput: true });
@@ -12913,10 +13067,14 @@ function isNonEmptyFile(filePath) {
   }
 }
 
-async function runCommand(command, args, { captureOutput = false, env = undefined } = {}) {
+// A child gets mediaToolEnvironment() plus `env`. Only `inheritEnv: true`, for
+// a child that is this CLI itself and needs its credentials, passes the whole
+// environment, with `env` on top.
+async function runCommand(command, args, { captureOutput = false, env = undefined, inheritEnv = false } = {}) {
   const options = {
     reject: false,
-    ...(env ? { env: { ...process.env, ...env } } : {}),
+    extendEnv: inheritEnv,
+    env: inheritEnv ? { ...env } : { ...mediaToolEnvironment(), ...env },
   };
   if (captureOutput) {
     options.stdout = 'pipe';
@@ -12953,6 +13111,8 @@ async function buildAngles360Video(outputPath, frames, fps) {
   sanitizePath(outputPath, '--angles-360-video output path');
   frames.forEach((f, i) => sanitizePath(f, `frame[${i}]`));
   const ffmpegPath = await ensureFfmpegAvailable();
+  // The list is the CLI's own concat input; each frame it names is checked like any other input.
+  for (const frame of frames) await assertSelfContainedMediaInput(frame);
   const tempListPath = outputPath.replace(/\.mp4$/i, '') + '.concat.txt';
   const frameDuration = 1 / fps;
   writeConcatList(tempListPath, frames, frameDuration);
@@ -12961,7 +13121,7 @@ async function buildAngles360Video(outputPath, frames, fps) {
     '-y',
     '-f', 'concat',
     '-safe', '0',
-    '-i', tempListPath,
+    ...mediaInputArgs(tempListPath),
     '-r', String(fps),
     '-pix_fmt', 'yuv420p',
     outputPath
@@ -12983,6 +13143,7 @@ async function buildAngles360Video(outputPath, frames, fps) {
 
 async function runFrameExtraction(args, { videoPath, outputImagePath, which }) {
   const ffmpegPath = await ensureFfmpegAvailable();
+  await assertSelfContainedMediaInput(videoPath);
   const result = await runCommand(ffmpegPath, args, { captureOutput: true });
 
   if (result.error || result.status !== 0 || !isNonEmptyFile(outputImagePath)) {
@@ -13016,7 +13177,7 @@ async function extractLastFrameFromVideo(videoPath, outputImagePath) {
   // output so the final write is the genuine last frame.
   const args = [
     '-sseof', '-1',
-    '-i', videoPath,
+    ...mediaInputArgs(videoPath),
     '-update', '1',  // Keep overwriting -> output is the last decoded frame
     '-q:v', '1',  // Best quality
     '-y',
@@ -13032,7 +13193,7 @@ async function extractFirstFrameFromVideo(videoPath, outputImagePath) {
 
   // First decoded frame only.
   const args = [
-    '-i', videoPath,
+    ...mediaInputArgs(videoPath),
     '-frames:v', '1',
     '-q:v', '1',  // Best quality
     '-y',
@@ -13055,7 +13216,7 @@ async function extractFrameAtTimeFromVideo(videoPath, seconds, outputImagePath) 
   // Seek after opening the input for frame-accurate visual QA. Loop Maker
   // clips are short, so accuracy is more useful here than keyframe-only speed.
   const args = [
-    '-i', videoPath,
+    ...mediaInputArgs(videoPath),
     '-ss', String(timestamp),
     '-frames:v', '1',
     '-q:v', '1',
@@ -13083,31 +13244,20 @@ function parseFrameRate(raw) {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-function probeLocalVideoFrameRate(filePath) {
-  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
-  try {
-    const stdout = execFileSync(
-      ffprobePath,
-      [
-        '-v', 'error',
-        '-select_streams', 'v:0',
-        '-show_entries', 'stream=avg_frame_rate,r_frame_rate',
-        '-of', 'default=noprint_wrappers=1:nokey=1',
-        filePath,
-      ],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    for (const candidate of String(stdout || '').trim().split(/\s+/)) {
-      const frameRate = parseFrameRate(candidate);
-      if (frameRate) return frameRate;
-    }
-  } catch {}
-  return null;
+async function probeLocalVideoFrameRate(filePath) {
+  const { result, probe } = await probeMediaFile(filePath, {
+    args: ['-select_streams', 'v:0'],
+    entries: ['stream=avg_frame_rate,r_frame_rate'],
+  });
+  if (result.error || result.status !== 0) return null;
+  const stream = Array.isArray(probe?.streams) ? probe.streams[0] : null;
+  return parseFrameRate(stream?.avg_frame_rate) || parseFrameRate(stream?.r_frame_rate) || null;
 }
 
 // Probe a media file's primary video stream + whether it has any audio.
 // Fields are null when the probe fails (e.g. ffprobe missing); callers fall
-// back to safe defaults unless they explicitly require verification.
+// back to safe defaults unless they explicitly require verification. A file
+// that names other inputs throws UNSAFE_MEDIA_INPUT.
 async function probeVideoStreamInfo(filePath) {
   const info = {
     width: null,
@@ -13118,17 +13268,10 @@ async function probeVideoStreamInfo(filePath) {
     videoCodec: null,
     audioCodec: null
   };
-  const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
-  const result = await runCommand(ffprobePath, [
-    '-v', 'error',
-    '-show_entries', 'stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
-    '-show_entries', 'format=duration',
-    '-of', 'json',
-    filePath,
-  ], { captureOutput: true });
-  if (result.error || result.status !== 0) return info;
-  let parsed;
-  try { parsed = JSON.parse(result.stdout || '{}'); } catch { return info; }
+  const { result, probe: parsed } = await probeMediaFile(filePath, {
+    entries: ['stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate', 'format=duration'],
+  });
+  if (result.error || result.status !== 0 || !parsed) return info;
   const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
   const video = streams.find((s) => s.codec_type === 'video');
   const audio = streams.find((s) => s.codec_type === 'audio');
@@ -13160,7 +13303,7 @@ async function verifyVideoFile(videoPath) {
   const result = await runCommand(ffmpegPath, [
     '-hide_banner',
     '-loglevel', 'error',
-    '-i', videoPath,
+    ...mediaInputArgs(videoPath),
     '-map', '0:v:0',
     '-map', '0:a?',
     '-f', 'null',
@@ -13186,11 +13329,12 @@ async function trimVideoClip(inputPath, startSeconds, durationSeconds, outputPat
   sanitizePath(inputPath, 'trim input video');
   sanitizePath(outputPath, 'trim output video');
   const ffmpegPath = await ensureFfmpegAvailable();
+  await assertSelfContainedMediaInput(inputPath);
   const result = await runCommand(ffmpegPath, [
     '-hide_banner',
     '-loglevel', 'error',
     '-y',
-    '-i', inputPath,
+    ...mediaInputArgs(inputPath),
     '-ss', String(startSeconds),
     '-t', String(durationSeconds),
     '-map', '0:v:0',
@@ -13232,6 +13376,9 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
   if (audioPath) sanitizePath(audioPath, '--concat-audio');
   const ffmpegPath = await ensureFfmpegAvailable();
 
+  for (const input of audioPath ? [...clips, audioPath] : clips) {
+    await assertSelfContainedMediaInput(input);
+  }
   const infos = [];
   for (const clip of clips) {
     infos.push(await probeVideoStreamInfo(clip));
@@ -13278,7 +13425,7 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
   );
 
   const args = ['-y'];
-  clips.forEach((clip) => { args.push('-i', clip); });
+  clips.forEach((clip) => { args.push(...mediaInputArgs(clip)); });
 
   let mapAudio = '[ca]';
   if (audioPath) {
@@ -13287,7 +13434,7 @@ async function buildConcatVideoFromClips(outputPath, clips, { audioPath = null, 
     if (Number.isFinite(audioStart) && audioStart > 0) {
       args.push('-ss', String(audioStart));
     }
-    args.push('-i', audioPath);
+    args.push(...mediaInputArgs(audioPath));
     const extIdx = clips.length;
     let extChain = `[${extIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,apad`;
     if (totalDuration > 0) {
@@ -13338,11 +13485,14 @@ async function remixVideoAudio(inputVideo, outputVideo, opts = {}) {
   if (bedAudio) sanitizePath(bedAudio, '--bed-audio');
   if (mixAudio) sanitizePath(mixAudio, '--mix-audio');
   const ffmpegPath = await ensureFfmpegAvailable();
+  for (const input of [inputVideo, bedAudio, mixAudio].filter(Boolean)) {
+    await assertSelfContainedMediaInput(input);
+  }
 
   const info = await probeVideoStreamInfo(inputVideo);
   const totalDuration = info.duration && info.duration > 0 ? info.duration : null;
 
-  const args = ['-y', '-i', inputVideo];
+  const args = ['-y', ...mediaInputArgs(inputVideo)];
 
   // Resolve the bed source. With --audio-loop we re-open the source as a
   // -stream_loop input (the only robust, duration-based loop in ffmpeg).
@@ -13350,11 +13500,11 @@ async function remixVideoAudio(inputVideo, outputVideo, opts = {}) {
   let nextIndex = 1;
   const bedSourceFile = bedAudio || inputVideo;
   if (loop) {
-    args.push('-stream_loop', '-1', '-i', bedSourceFile);
+    args.push('-stream_loop', '-1', ...mediaInputArgs(bedSourceFile));
     bedRef = `[${nextIndex}:a]`;
     nextIndex += 1;
   } else if (bedAudio) {
-    args.push('-i', bedAudio);
+    args.push(...mediaInputArgs(bedAudio));
     bedRef = `[${nextIndex}:a]`;
     nextIndex += 1;
   } else {
@@ -13364,7 +13514,7 @@ async function remixVideoAudio(inputVideo, outputVideo, opts = {}) {
   let mixIndex = null;
   if (mixAudio) {
     mixIndex = nextIndex;
-    args.push('-i', mixAudio);
+    args.push(...mediaInputArgs(mixAudio));
     nextIndex += 1;
   }
 
@@ -13800,6 +13950,7 @@ function sourceReelLineageEnvironment(workloadAttribution) {
 async function runSourceReelChild(label, args, logPath, outputPath, workloadAttribution) {
   const result = await runCommand(process.execPath, args, {
     captureOutput: true,
+    inheritEnv: true,
     env: sourceReelLineageEnvironment(workloadAttribution),
   });
   const parsed = parseSourceReelChildJson(result.stdout);

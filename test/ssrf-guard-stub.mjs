@@ -3,6 +3,7 @@ import {
   assertSafeUrl as assertSafeUrlReal,
   fetchSafeUrl as fetchSafeUrlReal,
   isBlockedIp,
+  readResponseBody,
 } from '../ssrf-guard.mjs';
 
 const TEST_MEDIA_URL = 'https://example.com/sogni-agent-test-reference.png';
@@ -17,7 +18,12 @@ async function assertSafeUrl(input, options) {
 async function fetchSafeUrl(input, init, options) {
   const fixturePath = process.env.SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH;
   if (fixturePath && String(input) === TEST_MEDIA_URL) {
-    return new Response(readFileSync(fixturePath), {
+    const bytes = readFileSync(fixturePath);
+    // SOGNI_AGENT_TEST_MEDIA_FIXTURE_STALL=1: send half the fixture, then nothing, like a stalled server.
+    const body = process.env.SOGNI_AGENT_TEST_MEDIA_FIXTURE_STALL === '1'
+      ? new ReadableStream({ start(controller) { controller.enqueue(bytes.subarray(0, Math.ceil(bytes.length / 2))); } })
+      : bytes;
+    return new Response(body, {
       status: 200,
       headers: { 'content-type': 'image/png' },
     });
@@ -32,4 +38,4 @@ async function fetchSafeUrl(input, init, options) {
   return fetchSafeUrlReal(input, init, options);
 }
 
-export { assertSafeUrl, fetchSafeUrl, isBlockedIp };
+export { assertSafeUrl, fetchSafeUrl, isBlockedIp, readResponseBody };

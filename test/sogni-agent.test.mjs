@@ -3469,8 +3469,7 @@ test('MiniMax H3 r2v uploads ordered image, video, and audio reference arrays', 
   writeFileSync(audio1, Buffer.from('reference audio one'));
   writeFileSync(audio2, Buffer.from('reference audio two'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-console.log(args.includes('format=duration') ? '8' : '24/1');
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '24/1', r_frame_rate: '24/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '8' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -3508,7 +3507,12 @@ test('MiniMax H3 r2v pretrims local reference-audio windows before upload', () =
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-h3-audio-window-'));
   const audio = join(tempDir, 'voice.m4a');
   const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
+  const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(audio, Buffer.from('full prepared reference audio'));
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+console.log(JSON.stringify({ format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '30' } }));
+`);
+  chmodSync(fakeFfprobe, 0o755);
   writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
@@ -3536,7 +3540,7 @@ writeFileSync(args.at(-1), Buffer.from(JSON.stringify({
       '--frames', '124',
       '<Picture 1> controls identity. <Audio 1> controls the exact vocal performance.',
     ],
-    { FFMPEG_PATH: fakeFfmpeg },
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe },
   );
 
   assert.equal(exitCode, 0);
@@ -3576,8 +3580,7 @@ test('MiniMax H3 r2v accepts video-only visual input, rejects audio-only input, 
   const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(video, Buffer.from('reference video'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-console.log(args.includes('format=duration') ? '8' : '24/1');
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '24/1', r_frame_rate: '24/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '8' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -3610,7 +3613,7 @@ test('MiniMax H3 r2v rejects a local reference video that is not 24fps', () => {
   const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(video, Buffer.from('reference video'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-console.log('30/1');
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '30/1', r_frame_rate: '30/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -4069,8 +4072,7 @@ async function seedanceLocalSourceRun(model, duration) {
   const ffmpegLog = join(tempDir, 'ffmpeg-args.jsonl');
   writeFileSync(video, Buffer.from('thirty second source video'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-console.log(args.includes('format=duration') ? '30' : '24/1');
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '24/1', r_frame_rate: '24/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '30' } }));
 `);
   writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
 import { appendFileSync, writeFileSync } from 'node:fs';
@@ -4975,7 +4977,7 @@ test('wan3 routes video inputs as loose references and rejects invented v2v', as
   const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
   writeFileSync(videoFixture, Buffer.from('test video reference'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-console.log('5');
+console.log(JSON.stringify({ format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '5' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -5011,7 +5013,7 @@ console.log('5');
 function writeFakeFfprobe(dir, seconds = 5) {
   const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-console.log('${seconds}');
+console.log(JSON.stringify({ format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '${seconds}' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
   return fakeFfprobe;
@@ -7519,8 +7521,8 @@ test('reference-video estimates bill every clip and the selected Wan 3 window', 
   writeFileSync(first, Buffer.from('first reference'));
   writeFileSync(second, Buffer.from('second reference'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-console.log(args.includes('format=duration') ? (args.at(-1).endsWith('first.mp4') ? '8' : '4') : '24/1');
+const duration = process.argv.at(-1).endsWith('first.mp4') ? '8' : '4';
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '24/1', r_frame_rate: '24/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -8988,6 +8990,8 @@ test('--trim-video validates its complete argument contract', () => {
   );
 });
 
+// The fake ffmpeg logs each command to ffmpeg-commands.jsonl in tempDir: media
+// tools run without the CLI's environment, so the path is in the script.
 function writeFakeTrimTools(tempDir) {
   const fakeFfmpeg = join(tempDir, 'fake-ffmpeg.mjs');
   const fakeFfprobe = join(tempDir, 'fake-ffprobe.mjs');
@@ -8998,7 +9002,7 @@ if (args.includes('-version')) {
   console.log('ffmpeg version test');
   process.exit(0);
 }
-appendFileSync(process.env.FFMPEG_TEST_LOG, JSON.stringify(args) + '\\n');
+appendFileSync(${JSON.stringify(join(tempDir, 'ffmpeg-commands.jsonl'))}, JSON.stringify(args) + '\\n');
 if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('trimmed video'));
 `);
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
@@ -9007,7 +9011,7 @@ console.log(JSON.stringify({
     { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
     { codec_type: 'audio', codec_name: 'aac' }
   ],
-  format: { duration: '3' }
+  format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '3' }
 }));
 `);
   chmodSync(fakeFfmpeg, 0o755);
@@ -9025,7 +9029,7 @@ test('--trim-video re-encodes a frame-accurate clip and verifies the result', ()
 
   const { exitCode, stdout, stderr } = runCli(
     ['--json', '--trim-video', input, '1.25', '3', output],
-    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe, FFMPEG_TEST_LOG: commandLog },
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe },
   );
 
   assert.equal(exitCode, 0, stderr);
@@ -9044,7 +9048,6 @@ test('--trim-video expands a quoted ~ in FFMPEG_PATH and FFPROBE_PATH', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'sogni-agent-trim-video-home-'));
   const input = join(tempDir, 'input.mp4');
   const output = join(tempDir, 'output.mp4');
-  const commandLog = join(tempDir, 'ffmpeg-commands.jsonl');
   writeFileSync(input, Buffer.from('source video'));
   writeFakeTrimTools(tempDir);
 
@@ -9052,8 +9055,7 @@ test('--trim-video expands a quoted ~ in FFMPEG_PATH and FFPROBE_PATH', () => {
     HOME: tempDir,
     USERPROFILE: tempDir,
     FFMPEG_PATH: '~/fake-ffmpeg.mjs',
-    FFPROBE_PATH: '~/fake-ffprobe.mjs',
-    FFMPEG_TEST_LOG: commandLog
+    FFPROBE_PATH: '~/fake-ffprobe.mjs'
   });
 
   assert.equal(exitCode, 0, stderr);
@@ -9078,7 +9080,7 @@ if (args.includes('-version')) {
   console.log('ffmpeg version test');
   process.exit(0);
 }
-appendFileSync(process.env.FFMPEG_TEST_LOG, JSON.stringify(args) + '\\n');
+appendFileSync(${JSON.stringify(commandLog)}, JSON.stringify(args) + '\\n');
 if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('concatenated video'));
 `);
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
@@ -9087,7 +9089,7 @@ console.log(JSON.stringify({
     { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
     { codec_type: 'audio', codec_name: 'aac' }
   ],
-  format: { duration: '2' }
+  format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '2' }
 }));
 `);
   chmodSync(fakeFfmpeg, 0o755);
@@ -9095,7 +9097,7 @@ console.log(JSON.stringify({
 
   const { exitCode, stderr } = runCli(
     ['--concat-videos', output, ...clips, '--concat-audio', soundtrack],
-    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe, FFMPEG_TEST_LOG: commandLog },
+    { FFMPEG_PATH: fakeFfmpeg, FFPROBE_PATH: fakeFfprobe },
   );
 
   assert.equal(exitCode, 0, stderr);
@@ -9123,7 +9125,7 @@ if (process.argv.includes('-version')) console.log('ffmpeg version test');
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
 console.log(JSON.stringify({
   streams: [{ codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' }],
-  format: {}
+  format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2' }
 }));
 `);
   chmodSync(fakeFfmpeg, 0o755);
@@ -9983,8 +9985,7 @@ test('MiniMax H3 Ref2VA Two-Stage accepts reference videos and audio like its on
   writeFileSync(video, Buffer.from('reference video'));
   writeFileSync(audio, Buffer.from('reference audio'));
   writeFileSync(fakeFfprobe, `#!/usr/bin/env node
-const args = process.argv.slice(2);
-console.log(args.includes('format=duration') ? '8' : '24/1');
+console.log(JSON.stringify({ streams: [{ avg_frame_rate: '24/1', r_frame_rate: '24/1' }], format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: '8' } }));
 `);
   chmodSync(fakeFfprobe, 0o755);
 
@@ -11771,4 +11772,238 @@ test('--quote prices background removal, object selection and 3D as the render s
   const fineShape = runCli(['--quote', '--json', '--image-to-3d', source, '--shape-resolution', '1536']);
   assert.equal(fineShape.exitCode, 1);
   assert.equal(JSON.parse(fineShape.stdout.trim()).errorCode, 'QUOTE_UNAVAILABLE');
+});
+
+// --- Media tool inputs, protocols and environment; media URL download limits ---
+
+const MP4_FORMAT_NAME = 'mov,mp4,m4a,3gp,3g2,mj2';
+
+// A fake ffmpeg and ffprobe that append { tool, args, env } to tools.jsonl in dir.
+// ffprobe reports `formatName` for every file it is asked about.
+function writeLoggingMediaTools(dir, { formatName = MP4_FORMAT_NAME } = {}) {
+  const log = join(dir, 'tools.jsonl');
+  const fakeFfmpeg = join(dir, 'fake-ffmpeg.mjs');
+  const fakeFfprobe = join(dir, 'fake-ffprobe.mjs');
+  const logLine = (tool) => `import { appendFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ tool: '${tool}', args, env: process.env }) + '\\n');`;
+  writeFileSync(fakeFfmpeg, `#!/usr/bin/env node
+${logLine('ffmpeg')}
+if (args.includes('-version')) {
+  console.log('ffmpeg version test');
+  process.exit(0);
+}
+if (args.at(-1) !== '-') writeFileSync(args.at(-1), Buffer.from('converted media'));
+`);
+  writeFileSync(fakeFfprobe, `#!/usr/bin/env node
+${logLine('ffprobe')}
+console.log(JSON.stringify({
+  streams: [
+    { codec_type: 'video', codec_name: 'h264', width: 1280, height: 720, avg_frame_rate: '24/1' },
+    { codec_type: 'audio', codec_name: 'aac' }
+  ],
+  format: { format_name: ${JSON.stringify(formatName)}, duration: '3' }
+}));
+`);
+  chmodSync(fakeFfmpeg, 0o755);
+  chmodSync(fakeFfprobe, 0o755);
+  const runs = () => {
+    try {
+      return readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    } catch {
+      return [];
+    }
+  };
+  return { fakeFfmpeg, fakeFfprobe, runs };
+}
+
+test('ffmpeg and ffprobe run without the Sogni API key or the rest of the CLI environment', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-media-tool-env-'));
+  const input = join(dir, 'input.mp4');
+  writeFileSync(input, Buffer.from('source video'));
+  const tools = writeLoggingMediaTools(dir);
+
+  const { exitCode, stderr } = runCli(['--json', '--trim-video', input, '1', '2', join(dir, 'output.mp4')], {
+    FFMPEG_PATH: tools.fakeFfmpeg,
+    FFPROBE_PATH: tools.fakeFfprobe,
+    SOGNI_API_KEY: 'sk-test-must-not-reach-ffmpeg',
+    SOGNI_AGENT_TEST_UNRELATED_SETTING: 'private',
+    LC_ALL: 'C',
+  });
+
+  assert.equal(exitCode, 0, stderr);
+  const runs = tools.runs();
+  assert.ok(runs.some((run) => run.tool === 'ffmpeg' && !run.args.includes('-version')), 'expected an ffmpeg trim');
+  assert.ok(runs.some((run) => run.tool === 'ffprobe'), 'expected an ffprobe check');
+  for (const run of runs) {
+    for (const name of ['SOGNI_API_KEY', 'SOGNI_AGENT_TEST_STATE_PATH', 'SOGNI_AGENT_TEST_UNRELATED_SETTING', 'FFMPEG_PATH', 'FFPROBE_PATH', 'NODE_OPTIONS']) {
+      assert.equal(run.env[name], undefined, `${run.tool} received ${name}`);
+    }
+    assert.equal(run.env.PATH, process.env.PATH, `${run.tool} keeps PATH`);
+    assert.equal(run.env.LC_ALL, 'C', `${run.tool} keeps the locale`);
+    if (process.env.TMPDIR) assert.equal(run.env.TMPDIR, process.env.TMPDIR, `${run.tool} keeps TMPDIR`);
+  }
+});
+
+test('every ffmpeg and ffprobe input opens under the local-files-only protocol whitelist', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-media-protocols-'));
+  const clips = [join(dir, 'a.mp4'), join(dir, 'b.mp4')];
+  const soundtrack = join(dir, 'song.mp3');
+  for (const file of [...clips, soundtrack]) writeFileSync(file, Buffer.from('media'));
+  const tools = writeLoggingMediaTools(dir);
+
+  const { exitCode, stderr } = runCli(
+    ['--concat-videos', join(dir, 'output.mp4'), ...clips, '--concat-audio', soundtrack],
+    { FFMPEG_PATH: tools.fakeFfmpeg, FFPROBE_PATH: tools.fakeFfprobe },
+  );
+
+  assert.equal(exitCode, 0, stderr);
+  const runs = tools.runs().filter((run) => !run.args.includes('-version'));
+  const concat = runs.find((run) => run.tool === 'ffmpeg');
+  assert.ok(concat, 'expected an ffmpeg concat command');
+  const inputs = concat.args.flatMap((arg, index) => (arg === '-i' ? [index] : []));
+  assert.equal(inputs.length, 3);
+  for (const index of inputs) {
+    assert.deepEqual(concat.args.slice(index - 2, index), ['-protocol_whitelist', 'file,pipe'], concat.args[index + 1]);
+  }
+  const probed = runs.filter((run) => run.tool === 'ffprobe');
+  assert.deepEqual([...new Set(probed.map((run) => run.args.at(-1)))].sort(), [...clips, soundtrack].sort());
+  for (const run of probed) {
+    assert.deepEqual(run.args.slice(-3, -1), ['-protocol_whitelist', 'file,pipe']);
+    assert.ok(run.args.join(' ').includes('-show_entries format=format_name'), run.args.join(' '));
+  }
+});
+
+test('ffmpeg never reads an input ffprobe identifies as a playlist, list, or stream description', () => {
+  for (const formatName of ['hls', 'dash', 'concat', 'imf', 'sdp']) {
+    const dir = mkdtempSync(join(tmpdir(), `sogni-agent-media-${formatName}-`));
+    const video = join(dir, 'clip.mp4');
+    const frame = join(dir, 'frame.png');
+    writeFileSync(video, Buffer.from('#EXTM3U\nfile:///home/user/private.mp4\n'));
+    const tools = writeLoggingMediaTools(dir, { formatName });
+
+    const { exitCode, stdout } = runCli(['--json', '--extract-first-frame', video, frame], {
+      FFMPEG_PATH: tools.fakeFfmpeg,
+      FFPROBE_PATH: tools.fakeFfprobe,
+    });
+
+    assert.equal(exitCode, 1, formatName);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, 'UNSAFE_MEDIA_INPUT', formatName);
+    assert.match(payload.error, new RegExp(`ffprobe reads it as ${formatName}`));
+    assert.equal(payload.errorDetails.format, formatName);
+    assert.deepEqual(tools.runs().filter((run) => run.tool === 'ffmpeg' && !run.args.includes('-version')), [], `${formatName}: ffmpeg must not run`);
+  }
+});
+
+test('an image2 input is refused only when its path is a numbered-sequence pattern', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-media-image2-'));
+  const tools = writeLoggingMediaTools(dir, { formatName: 'image2' });
+  const env = { FFMPEG_PATH: tools.fakeFfmpeg, FFPROBE_PATH: tools.fakeFfprobe };
+
+  const sequence = join(dir, 'still%03d.jpg');
+  writeFileSync(sequence, Buffer.from('jpeg'));
+  const refused = runCli(['--json', '--extract-first-frame', sequence, join(dir, 'refused.png')], env);
+  assert.equal(refused.exitCode, 1);
+  assert.equal(JSON.parse(refused.stdout.trim()).errorCode, 'UNSAFE_MEDIA_INPUT');
+
+  const single = join(dir, 'still 50%.jpg');
+  writeFileSync(single, Buffer.from('jpeg'));
+  const allowed = runCli(['--json', '--extract-first-frame', single, join(dir, 'allowed.png')], env);
+  assert.equal(allowed.exitCode, 0, allowed.stderr);
+});
+
+test('a Seedance reference audio that ffprobe reads as an HLS playlist is refused before any conversion', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-seedance-playlist-audio-'));
+  const audio = join(dir, 'voice.audio');
+  writeFileSync(audio, Buffer.from('#EXTM3U\n#EXTINF:5,\nfile:///home/user/.config/sogni/private.m4a\n'));
+  const tools = writeLoggingMediaTools(dir, { formatName: 'hls' });
+
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const { exitCode, stdout, state } = await runCliAsync([
+      '--json', '--api-base-url', apiBaseUrl,
+      '--video', '--workflow', 't2v', '-m', 'seedance2-fast',
+      '--context', 'https://example.com/cover.png',
+      '--ref-audio', audio,
+      '--duration', '4',
+      'Use @Image1 for subject identity and @Audio1 for speech rhythm.'
+    ], { SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1', FFMPEG_PATH: tools.fakeFfmpeg, FFPROBE_PATH: tools.fakeFfprobe });
+    assert.equal(exitCode, 1, stdout);
+    assert.equal(JSON.parse(stdout.trim()).errorCode, 'UNSAFE_MEDIA_INPUT');
+    assert.deepEqual(requests.filter((request) => request.url.includes('referenceAudio')), [], 'no audio upload');
+    assert.equal(state?.lastVideoProject ?? null, null);
+  });
+  assert.deepEqual(tools.runs().filter((run) => run.tool === 'ffmpeg' && !run.args.includes('-version')), []);
+});
+
+// Real ffmpeg: the same disguises ffmpeg 8.1 and Debian's ffmpeg follow when unchecked.
+function realFfmpegClip(dir) {
+  const clip = join(dir, 'private.ts');
+  const made = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi',
+    '-i', 'testsrc=size=64x64:rate=4:duration=1', '-f', 'mpegts', clip], { encoding: 'utf8' });
+  const probe = spawnSync('ffprobe', ['-version'], { encoding: 'utf8' });
+  return made.status === 0 && probe.status === 0 ? clip : null;
+}
+
+test('with real ffmpeg, a playlist or concat list disguised as video yields no frame of the file it names', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-agent-real-playlist-'));
+  const privateClip = realFfmpegClip(dir);
+  if (!privateClip) {
+    t.skip('ffmpeg with lavfi and ffprobe are not installed');
+    return;
+  }
+  const playlist = join(dir, 'clip.m3u8');
+  writeFileSync(playlist, `#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:1,\nfile://${privateClip}\n#EXT-X-ENDLIST\n`);
+  const concatList = join(dir, 'clip.mp4');
+  writeFileSync(concatList, 'ffconcat version 1.0\nfile private.ts\n');
+
+  for (const [input, format] of [[playlist, 'hls'], [concatList, 'concat']]) {
+    const frame = join(dir, `${format}-frame.png`);
+    const { exitCode, stdout } = runCli(['--json', '--extract-first-frame', input, frame]);
+    assert.equal(exitCode, 1, stdout);
+    const payload = JSON.parse(stdout.trim());
+    assert.equal(payload.errorCode, 'UNSAFE_MEDIA_INPUT', stdout);
+    assert.equal(payload.errorDetails.format, format);
+    assert.equal(readdirSync(dir).includes(`${format}-frame.png`), false, `${format}: no frame may be written`);
+  }
+
+  const frame = join(dir, 'real-frame.png');
+  const real = runCli(['--json', '--extract-first-frame', privateClip, frame]);
+  assert.equal(real.exitCode, 0, real.stderr);
+  assert.ok(readFileSync(frame).length > 0);
+});
+
+test('a media URL larger than SOGNI_MEDIA_DOWNLOAD_MAX_BYTES is refused while it downloads', () => {
+  const { exitCode, stdout, state } = runCli([
+    '--json', '--video', '-m', 'seedance2-5',
+    '--ref', 'https://example.com/sogni-agent-test-reference.png',
+    'The camera tracks forward from the supplied opening frame.'
+  ], { SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH: SCREENSHOT_FIXTURE, SOGNI_MEDIA_DOWNLOAD_MAX_BYTES: '64' });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'MEDIA_DOWNLOAD_TOO_LARGE', stdout);
+  assert.equal(payload.errorDetails.maxBytes, 64);
+  assert.match(payload.hint, /SOGNI_MEDIA_DOWNLOAD_MAX_BYTES/);
+  assert.equal(state?.lastVideoProject ?? null, null);
+});
+
+test('a media URL whose body stops arriving fails at the stall limit instead of waiting forever', () => {
+  const started = Date.now();
+  const { exitCode, stdout, state } = runCli([
+    '--json', '--video', '-m', 'seedance2-5',
+    '--ref', 'https://example.com/sogni-agent-test-reference.png',
+    'The camera tracks forward from the supplied opening frame.'
+  ], {
+    SOGNI_AGENT_TEST_MEDIA_FIXTURE_PATH: SCREENSHOT_FIXTURE,
+    SOGNI_AGENT_TEST_MEDIA_FIXTURE_STALL: '1',
+    SOGNI_AGENT_TEST_DOWNLOAD_STALL_MS: '200',
+  });
+
+  assert.equal(exitCode, 1);
+  const payload = JSON.parse(stdout.trim());
+  assert.equal(payload.errorCode, 'NETWORK_TIMEOUT', stdout);
+  assert.match(payload.error, /example\.com stalled with no data for 200 ms/);
+  assert.ok(Date.now() - started < 20_000);
+  assert.equal(state?.lastVideoProject ?? null, null);
 });

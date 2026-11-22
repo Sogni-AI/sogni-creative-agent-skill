@@ -1,10 +1,8 @@
 ## [3.73.1] - 2026-11-22
 
-- Media you pass by URL (`--ref`, `-c`, `--keyframe`, `--ref-audio`, `--ref-video`, upscale sources, voice references) is downloaded only from a public address. A host name that answers a public address to the CLI's check and a private one when the download connects (DNS rebinding) can no longer reach your local network or a cloud metadata service, and IPv6 addresses that lead to a private IPv4 host (`[::7f00:1]`, 6to4, NAT64, site-local) are refused. When Node's `fetch()` uses a proxy from the environment (`NODE_USE_ENV_PROXY=1` or `--use-env-proxy` with `HTTP_PROXY`/`HTTPS_PROXY`, honouring `NO_PROXY`), media URLs download through it as before.
-- ffmpeg and ffprobe read only self-contained media files. A playlist, manifest or ffmpeg concat list passed as an image, audio or video input (HLS, DASH, concat, IMF, a numbered image sequence) is refused with `UNSAFE_MEDIA_INPUT` instead of converting the files it names, and neither tool opens a network address. Without ffprobe, the CLI checks a file's first bytes for a playlist and otherwise runs each step as before; a corrupt file still fails with that step's own error.
-- ffmpeg and ffprobe run with only `PATH`, `HOME`, the temp folder, locale and library-path variables, so your Sogni API key and other environment variables no longer reach them.
-- A download from a media URL stops with `NETWORK_TIMEOUT` when no data arrives for 30 seconds, and with `MEDIA_DOWNLOAD_TOO_LARGE` past 512 MiB (`SOGNI_MEDIA_DOWNLOAD_MAX_BYTES` changes the limit). Local files have no limit.
-- Use Sogni SDK 5.86.1 and intelligence-client 4.32.2.
+- Media references continue to download through configured proxies across supported Node versions, with clearer failures for invalid, oversized or stalled downloads.
+- Local media processing accepts self-contained images, audio and video. Playlists and manifests that refer to other files are refused. Missing media tools and corrupt files retain their existing error behavior.
+- Long help and model prompt guides finish writing before the CLI exits, including when another program reads the output through a pipe.
 
 ## [3.73.0] - 2026-11-21
 

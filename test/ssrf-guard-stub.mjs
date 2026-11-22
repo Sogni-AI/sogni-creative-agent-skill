@@ -9,10 +9,22 @@ import {
 const TEST_MEDIA_URL = 'https://example.com/sogni-agent-test-reference.png';
 const TEST_VIDEO_URL = 'https://example.com/sogni-agent-test-reference.mp4';
 
+// Reference forwarding tests validate fixture hosts without external DNS.
+// The real guard still decides whether the resulting address is allowed.
+function fixtureLookup(hostname, options, callback) {
+  const address = hostname === 'localhost' ? '127.0.0.1'
+    : ['example.com', 'cdn.example.com', 'cdn.sogni.ai'].includes(hostname) ? '93.184.216.34' : null;
+  queueMicrotask(() => {
+    if (address === null) callback(Object.assign(new Error('Unknown fixture host'), { code: 'ENOTFOUND' }));
+    else if (options?.all) callback(null, [{ address, family: 4 }]);
+    else callback(null, address, 4);
+  });
+}
+
 async function assertSafeUrl(input, options) {
   const localApi = process.env.SOGNI_AGENT_TEST_HOSTED_API_BASE;
   if (localApi && new URL(input).origin === localApi) return new URL(input);
-  return assertSafeUrlReal(input, options);
+  return assertSafeUrlReal(input, { lookup: fixtureLookup, ...options });
 }
 
 async function fetchSafeUrl(input, init, options) {
@@ -35,7 +47,7 @@ async function fetchSafeUrl(input, init, options) {
       headers: { 'content-type': 'video/mp4' },
     });
   }
-  return fetchSafeUrlReal(input, init, options);
+  return fetchSafeUrlReal(input, init, { lookup: fixtureLookup, ...options });
 }
 
 export { assertSafeUrl, fetchSafeUrl, isBlockedIp, readResponseBody };

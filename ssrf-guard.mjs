@@ -12,10 +12,10 @@
  * any answer is blocked, so a name that answers a public address to the check
  * and a private one to the connection (DNS rebinding) cannot reach the private
  * one. It follows redirects itself and checks every hop the same way. A hop
- * that Node's fetch() would send through a proxy from the environment
- * (`fetchUsesEnvProxy`) still goes through fetch() and that proxy: the proxy
- * resolves the name, so no connection can be pinned, and `assertSafeUrl`'s own
- * check of the name is the only one.
+ * that Node's fetch() would or might send through a proxy from the environment
+ * (`fetchUsesEnvProxy`) still goes through fetch(): a proxy resolves the name,
+ * so no connection can be pinned, and `assertSafeUrl`'s own check of the name
+ * is the only one.
  *
  * `assertSafeUrl` alone constrains nothing a later request does: a caller that
  * fetches with its own client must pin that client's connection itself.
@@ -325,39 +325,68 @@ function decodedBody(res) {
   return pipeline(res, ...decoders, () => {});
 }
 
-// Node versions whose fetch() reads the proxy from the environment: the
-// --use-env-proxy flag (v24.5.0, v22.21.0) and NODE_USE_ENV_PROXY=1 (v24.0.0, v22.21.0).
-function nodeSupportsEnvProxy(nodeVersion, flag) {
+// How Node's fetch() turns on the proxy from the environment, as observed on
+// Node 22.11.0, 22.21.0, 22.23.4, 24.0.0, 24.4.1, 24.5.0, 24.22.3 and 26.6.0:
+// 'none' never (before 22.21); 'env' any non-empty NODE_USE_ENV_PROXY (24.0 to
+// 24.4); 'flag' the last --use-env-proxy or --no-use-env-proxy in NODE_OPTIONS
+// then the command line, else NODE_USE_ENV_PROXY=1 (22.21+, 24.5+, 26). Null:
+// a version whose rule is not known (23, 25, 27 and later).
+function envProxyRule(nodeVersion) {
   const [major, minor] = String(nodeVersion).split('.').map(Number);
-  if (major === 22) return minor >= 21;
-  if (major === 24) return flag ? minor >= 5 : true;
-  return major > 24;
+  if (major < 22) return 'none';
+  if (major === 22) return minor >= 21 ? 'flag' : 'none';
+  if (major === 24) return minor >= 5 ? 'flag' : 'env';
+  if (major === 26) return 'flag';
+  return null;
 }
 
-function envProxyEnabled(env, execArgv, nodeVersion) {
-  // The flag wins over NODE_USE_ENV_PROXY; on the command line it wins over NODE_OPTIONS.
+function envProxyEnabled(rule, env, execArgv) {
+  if (rule === 'none') return false;
+  if (rule === 'env') return Boolean(env.NODE_USE_ENV_PROXY);
   let flag;
-  if (nodeSupportsEnvProxy(nodeVersion, true)) {
-    for (const token of [...String(env.NODE_OPTIONS || '').split(/\s+/), ...execArgv]) {
-      if (token === '--use-env-proxy') flag = true;
-      else if (token === '--no-use-env-proxy') flag = false;
-    }
+  for (const token of [...String(env.NODE_OPTIONS || '').split(/\s+/), ...execArgv]) {
+    if (token === '--use-env-proxy') flag = true;
+    else if (token === '--no-use-env-proxy') flag = false;
   }
-  if (flag !== undefined) return flag;
-  return nodeSupportsEnvProxy(nodeVersion, false) && env.NODE_USE_ENV_PROXY === '1';
+  return flag ?? env.NODE_USE_ENV_PROXY === '1';
+}
+
+// Whether NO_PROXY sends `hostname` direct under both NO_PROXY rules of the
+// undici versions Node bundles. Older ones (Node 22, early 24) match a plain
+// entry exactly and an entry starting with "." or "*" as a suffix; newer ones
+// match an entry, without its leading "*." or ".", exactly or as a parent domain.
+function noProxySendsDirect(hostname, port, noProxy) {
+  const entries = noProxy.split(/[,\s]/).filter(Boolean).map((entry) => {
+    const withPort = entry.match(/^(.+):(\d+)$/);
+    return { hostname: (withPort ? withPort[1] : entry).toLowerCase(), port: withPort ? Number.parseInt(withPort[2], 10) : 0 };
+  });
+  if (entries.length === 0) return false;
+  if (noProxy === '*') return true;
+  const onPort = entries.filter((entry) => !entry.port || entry.port === port);
+  const older = onPort.some((entry) => (/^[.*]/.test(entry.hostname)
+    ? hostname.endsWith(entry.hostname.replace(/^\*/, ''))
+    : hostname === entry.hostname));
+  const newer = onPort.some((entry) => {
+    const domain = entry.hostname.replace(/^\*?\./, '');
+    return hostname === domain || hostname.endsWith(`.${domain}`);
+  });
+  return older && newer;
 }
 
 const DEFAULT_PORTS = { 'http:': 80, 'https:': 443 };
 
 /**
- * Whether Node's own fetch() sends a request for `input` through a proxy from
- * the environment. Node enables that with --use-env-proxy or
- * NODE_USE_ENV_PROXY=1 when HTTP_PROXY, HTTPS_PROXY, http_proxy or https_proxy
- * is set, and installs undici's EnvHttpProxyAgent, whose rules this follows:
- * http_proxy before HTTP_PROXY; for https, https_proxy, then HTTPS_PROXY, then
- * the http proxy; and no proxy for a host NO_PROXY (or no_proxy) names, as
- * itself or as a parent domain, with an optional port, or for every host when
- * it is "*". The `context` defaults are this process's.
+ * Whether `fetchSafeUrl` leaves a request for `input` to Node's own fetch():
+ * true when fetch() would, or might, send it through a proxy from the
+ * environment. Node does that when HTTP_PROXY, HTTPS_PROXY, http_proxy or
+ * https_proxy is set and --use-env-proxy or NODE_USE_ENV_PROXY turns it on
+ * (`envProxyRule` gives each version's rule), through undici's
+ * EnvHttpProxyAgent: http_proxy before HTTP_PROXY; for https, https_proxy, then
+ * HTTPS_PROXY, then the http proxy; no proxy for a host NO_PROXY exempts, or
+ * for every host when it is "*". Where versions differ, so a request might
+ * still use the proxy, it is left to fetch(), as it is on a Node version whose
+ * rule is not known whenever a proxy variable is set. The `context` defaults
+ * are this process's.
  *
  * @param {string|URL} input
  * @param {{env?: object, execArgv?: string[], nodeVersion?: string}} [context]
@@ -369,26 +398,17 @@ export function fetchUsesEnvProxy(input, {
   nodeVersion = process.versions.node,
 } = {}) {
   if (!env.HTTP_PROXY && !env.HTTPS_PROXY && !env.http_proxy && !env.https_proxy) return false;
-  if (!envProxyEnabled(env, execArgv, nodeVersion)) return false;
+  const rule = envProxyRule(nodeVersion);
+  if (rule === null) return true;
+  if (!envProxyEnabled(rule, env, execArgv)) return false;
   const url = new URL(input);
   const httpProxy = env.http_proxy ?? env.HTTP_PROXY;
   const httpsProxy = (env.https_proxy ?? env.HTTPS_PROXY) || httpProxy;
   if (!(url.protocol === 'https:' ? httpsProxy : httpProxy)) return false;
-  const noProxy = env.no_proxy ?? env.NO_PROXY ?? '';
-  const entries = noProxy.split(/[,\s]/).filter(Boolean).map((entry) => {
-    const withPort = entry.match(/^(.+):(\d+)$/);
-    return {
-      hostname: (withPort ? withPort[1] : entry).replace(/^\*?\./, '').toLowerCase(),
-      port: withPort ? Number.parseInt(withPort[2], 10) : 0,
-    };
-  });
-  if (entries.length === 0) return true;
-  if (noProxy === '*') return false;
   // Brackets stay on an IPv6 host, as NO_PROXY writes it.
   const hostname = url.host.replace(/:\d*$/, '').toLowerCase();
   const port = Number.parseInt(url.port, 10) || DEFAULT_PORTS[url.protocol] || 0;
-  return !entries.some((entry) => (!entry.port || entry.port === port)
-    && (hostname === entry.hostname || hostname.endsWith(`.${entry.hostname}`)));
+  return !noProxySendsDirect(hostname, port, env.no_proxy ?? env.NO_PROXY ?? '');
 }
 
 /**
@@ -453,8 +473,8 @@ export function requestWithLookup(input, init = {}, lookup) {
  * through `assertSafeUrl` before it is followed, so a public host cannot
  * bounce the request to a private/metadata address. Without `fetchImpl`, each
  * request connects through `guardedLookup`, so DNS rebinding cannot reach a
- * blocked address either, except a hop `fetchUsesEnvProxy` sends through
- * Node's fetch() and its environment proxy, which resolves the name itself. A
+ * blocked address either, except a hop `fetchUsesEnvProxy` leaves to Node's
+ * fetch() and its environment proxy, which resolves the name itself. A
  * `fetchImpl` replaces both: tests and callers that pin their own connections
  * pass one.
  *

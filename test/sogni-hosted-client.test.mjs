@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import dns from 'node:dns';
 
 import {
   assertSafeSogniEndpoints,
@@ -54,22 +55,18 @@ test('hosted REST/SSE clients preserve attribution without opening a socket', ()
   assert.deepEqual(config.attribution, attribution);
 });
 
-test('assertSafeSogniEndpoints accepts a public https endpoint', async () => {
-  // Public Sogni endpoint resolves to a non-private IP. SSRF guard returns
-  // successfully (no throw). If the network is offline or DNS fails this
-  // test will be skipped via the catch below.
-  try {
-    await assertSafeSogniEndpoints({
-      restEndpoint: 'https://api.sogni.ai',
-      socketEndpoint: 'wss://socket.sogni.ai'
-    });
-  } catch (err) {
-    if (/ENOTFOUND|EAI_AGAIN|ENETUNREACH/.test(String(err))) {
-      // DNS unavailable in this environment — skip rather than fail.
-      return;
-    }
-    throw err;
-  }
+test('assertSafeSogniEndpoints accepts public https and websocket endpoints', async (t) => {
+  const hosts = [];
+  t.mock.method(dns, 'lookup', (hostname, options, callback) => {
+    hosts.push(hostname);
+    assert.equal(options.all, true);
+    queueMicrotask(() => callback(null, [{ address: '93.184.216.34', family: 4 }]));
+  });
+  await assertSafeSogniEndpoints({
+    restEndpoint: 'https://api.sogni.ai',
+    socketEndpoint: 'wss://socket.sogni.ai'
+  });
+  assert.deepEqual(hosts, ['api.sogni.ai', 'socket.sogni.ai']);
 });
 
 test('assertSafeSogniEndpoints rejects a loopback host', async () => {

@@ -4234,6 +4234,7 @@ function runPromptGuideAction(argv) {
 // before any config, credential or network work.
 if (RAW_ARGS[0] === 'prompt-guide') {
   runPromptGuideAction(RAW_ARGS.slice(1));
+  await flushStdout();
   process.exit(0);
 }
 
@@ -6306,6 +6307,7 @@ Examples:
   sogni-agent -Q pro "a beautiful mountain landscape at sunset"
   sogni-agent -n 3 "a {red|blue|green} sports car on a highway"
 `);
+    await flushStdout();
     process.exit(0);
   } else if (arg === '--') {
     if (!options.prompt && args[i + 1] !== undefined) {

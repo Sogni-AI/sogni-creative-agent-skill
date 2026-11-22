@@ -7,6 +7,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, w
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fetchUsesEnvProxy } from '../ssrf-guard.mjs';
+import { proxiedPath, startLocalProxy } from './local-proxy.mjs';
 import {
   CROSS_SURFACE_PARITY_FIXTURES,
   CROSS_SURFACE_PARITY_SURFACES,
@@ -12073,16 +12074,14 @@ test('a media URL whose body stops arriving fails at the stall limit instead of 
   assert.equal(state?.lastVideoProject ?? null, null);
 });
 
-test('with a proxy from the environment for Node fetch, a media URL downloads through that proxy', async (t) => {
-  const proxyEnv = { NODE_USE_ENV_PROXY: '1', HTTP_PROXY: 'http://127.0.0.1:1', NO_PROXY: '' };
+test('with a proxy from the environment for Node fetch, a media URL downloads through that proxy', { timeout: 30_000 }, async (t) => {
+  const proxyEnv = { NODE_USE_ENV_PROXY: '1', HTTP_PROXY: 'http://127.0.0.1:1', NO_PROXY: '', no_proxy: '' };
   if (!fetchUsesEnvProxy('http://93.184.216.34/frame.png', { env: { ...process.env, ...proxyEnv }, execArgv: [] })) {
     t.skip(`Node ${process.versions.node} fetch() reads no proxy from the environment`);
     return;
   }
-  const seen = [];
-  const proxy = createServer((req, res) => {
-    seen.push(req.url);
-    if (req.url !== 'http://93.184.216.34/frame.png') {
+  const proxy = await startLocalProxy((req, res) => {
+    if (proxiedPath(req) !== '/frame.png') {
       res.writeHead(502);
       res.end();
       return;
@@ -12090,17 +12089,24 @@ test('with a proxy from the environment for Node fetch, a media URL downloads th
     res.writeHead(200, { 'content-type': 'image/png' });
     res.end(readFileSync(SCREENSHOT_FIXTURE));
   });
-  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+  let kill;
   try {
+    // Bound both the request and the CLI process, including a stalled connection teardown.
     const { exitCode, state, stderr } = await runCliAsync([
       '--video', '-m', 'seedance2-5',
       '--ref', 'http://93.184.216.34/frame.png',
       'The camera tracks forward from the supplied opening frame.'
-    ], { ...proxyEnv, HTTP_PROXY: `http://127.0.0.1:${proxy.address().port}` });
+    ], { ...proxyEnv, HTTP_PROXY: proxy.url, SOGNI_HTTP_TIMEOUT_MS: '5000' }, {
+      onSpawn: (child) => { kill = setTimeout(() => child.kill('SIGKILL'), 15_000); },
+    });
     assert.equal(exitCode, 0, stderr);
     assert.deepEqual(Buffer.from(state.lastVideoProject.referenceImage.data ?? state.lastVideoProject.referenceImage), readFileSync(SCREENSHOT_FIXTURE));
+    assert.ok(
+      proxy.requests.includes('GET http://93.184.216.34/frame.png') || proxy.requests.includes('CONNECT 93.184.216.34:80'),
+      `the proxy received ${JSON.stringify(proxy.requests)}`
+    );
   } finally {
-    await new Promise((resolve) => proxy.close(resolve));
+    clearTimeout(kill);
+    await proxy.close();
   }
-  assert.ok(seen.includes('http://93.184.216.34/frame.png'), `the proxy received ${JSON.stringify(seen)}`);
 });

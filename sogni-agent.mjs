@@ -14,6 +14,7 @@ import { createRequire } from 'module';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, statSync, readdirSync, realpathSync, lstatSync, unlinkSync, rmdirSync, rmSync, renameSync, openSync, readSync, writeSync, closeSync } from 'fs';
 import { join, dirname, basename, extname, sep, resolve } from 'path';
 import { homedir, tmpdir } from 'os';
+import { createInterface } from 'node:readline';
 import sharp from 'sharp';
 import { importAccountPersona } from './account-personas.mjs';
 import { getEnv, hasEnv } from './env.mjs';
@@ -1019,6 +1020,9 @@ function classifyCliError(error, context = {}) {
   }
 
   // The render finished; only its download failed, and `--result` (details.resultCommands) fetches it later.
+  if (['RESULT_DOWNLOAD_LIMIT', 'RESULT_DOWNLOAD_STORAGE_FULL', 'RESULT_DOWNLOAD_BUDGET_UNAVAILABLE'].includes(error?.code)) {
+    return { error_type: 'RESOURCE_LIMIT', category: 'resource_limit', message: rawMessage, retryable: false };
+  }
   if (error?.code === 'RESULT_DOWNLOAD_FAILED') {
     return { error_type: 'PROVIDER_TIMEOUT', category: 'timeout', message: rawMessage, retryable: true };
   }
@@ -4308,6 +4312,7 @@ const args = process.argv.slice(2);
 const options = {
   prompt: null,
   output: null,
+  resultDownloadBudgetStdio: false,
   model: null, // Will be set based on type
   width: 512,
   height: 512,
@@ -4664,6 +4669,8 @@ for (let i = 0; i < args.length; i++) {
     i++;
     options.output = expandHomePath(raw);
     cliSet.output = true;
+  } else if (arg === '--result-download-budget-stdio') {
+    options.resultDownloadBudgetStdio = true;
   } else if (arg === '-m' || arg === '--model') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -6033,6 +6040,7 @@ General:
                         holds the project is not counted. The project is NOT cancelled; fetch it
                         later with --result
   --cancel-on-timeout   Cancel the project when --timeout runs out (the pre-3.53 behavior)
+  --result-download-budget-stdio  Host integration: require a storage grant over stdin before each result chunk
   --detach, --no-wait   Submit, print the project id, and exit without waiting. The project keeps
                         running; follow it with --result <projectId> --wait
   --status <projectId>  Show a project's state and, while queued, why it is waiting
@@ -12949,6 +12957,16 @@ async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput 
       saved = true;
       return;
     }
+  } catch (error) {
+    if (['RESULT_DOWNLOAD_LIMIT', 'RESULT_DOWNLOAD_STORAGE_FULL', 'RESULT_DOWNLOAD_BUDGET_UNAVAILABLE'].includes(error?.code)) {
+      const command = projectId ? `${resultCommandFor(projectId)}${retryOutput ? ` -o ${shellWord(retryOutput)}` : ''}` : null;
+      error.details = {
+        ...error.details,
+        projectIds: projectId ? [projectId] : [],
+        resultCommands: command ? [command] : [],
+      };
+    }
+    throw error;
   } finally {
     if (!saved) {
       try { rmSync(tempPath, { force: true }); } catch { /* best effort */ }
@@ -12974,6 +12992,79 @@ async function downloadUrlToFile(url, filePath, { projectId = null, retryOutput 
     resultCommands: resultCommand ? [resultCommand] : [],
   };
   throw err;
+}
+
+// One CLI invocation owns this optional budget across all result files and
+// retries. Bytes are charged before writes, including bytes a retry discards,
+// so a host can reserve this upper bound without inspecting download timing.
+let activeResultDownloadBudget;
+function resultDownloadBudget() {
+  if (activeResultDownloadBudget) return activeResultDownloadBudget;
+  const raw = getEnv('SOGNI_RESULT_DOWNLOAD_MAX_BYTES', { trim: true });
+  const maxBytes = raw ? Number(raw) : Infinity;
+  if (raw && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
+    const error = new Error('SOGNI_RESULT_DOWNLOAD_MAX_BYTES must be a non-negative safe integer byte count.');
+    error.code = 'INVALID_ARGUMENT';
+    throw error;
+  }
+  activeResultDownloadBudget = { maxBytes, writtenBytes: 0, pending: Promise.resolve(), sequence: 0, reader: null, lines: null };
+  return activeResultDownloadBudget;
+}
+
+function checkResultDownloadBudget(bytes, consume = false) {
+  const budget = resultDownloadBudget();
+  if (bytes > budget.maxBytes - budget.writtenBytes) {
+    const error = new Error(`Result downloads exceed this invocation's ${budget.maxBytes}-byte budget.`);
+    error.code = 'RESULT_DOWNLOAD_LIMIT';
+    error.hint = 'Do not render it again. Free storage or raise the host download budget, then collect the existing render with --result.';
+    error.details = { maxBytes: budget.maxBytes, bytesWritten: budget.writtenBytes };
+    throw error;
+  }
+  if (consume) budget.writtenBytes += bytes;
+}
+
+function resultDownloadGrantError(code) {
+  const error = new Error(code === 'RESULT_DOWNLOAD_STORAGE_FULL'
+    ? 'The host could not reserve storage for this result download.'
+    : 'The host did not provide a valid storage grant for this result download.');
+  error.code = code;
+  error.hint = 'Do not render it again. Check available storage and the host connection, then collect the existing render with --result.';
+  return error;
+}
+
+// The opt-in host protocol serializes requests, including if future callers
+// download several files at once. No bytes are written until the matching
+// grant arrives. An older CLI refuses the flag instead of ignoring a host's
+// reservation requirement. Default invocations never read stdin or emit it.
+function reserveResultDownloadBytes(bytes) {
+  const budget = resultDownloadBudget();
+  const work = budget.pending.then(async () => {
+    checkResultDownloadBudget(bytes);
+    if (options.resultDownloadBudgetStdio) {
+      if (!budget.reader) {
+        budget.reader = createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false });
+        budget.lines = budget.reader[Symbol.asyncIterator]();
+      }
+      const id = ++budget.sequence;
+      let timer;
+      try {
+        const line = budget.lines.next();
+        const deadline = new Promise((_resolve, reject) => {
+          timer = setTimeout(() => reject(resultDownloadGrantError('RESULT_DOWNLOAD_BUDGET_UNAVAILABLE')), 30_000);
+        });
+        process.stderr.write(`SOGNI_DOWNLOAD_BUDGET_V1 ${JSON.stringify({ id, bytes })}\n`);
+        const answer = await Promise.race([line, deadline]);
+        if (answer.done || answer.value.length > 512) throw resultDownloadGrantError('RESULT_DOWNLOAD_BUDGET_UNAVAILABLE');
+        let grant;
+        try { grant = JSON.parse(answer.value); } catch { throw resultDownloadGrantError('RESULT_DOWNLOAD_BUDGET_UNAVAILABLE'); }
+        if (grant?.id !== id || typeof grant.allowed !== 'boolean') throw resultDownloadGrantError('RESULT_DOWNLOAD_BUDGET_UNAVAILABLE');
+        if (!grant.allowed) throw resultDownloadGrantError('RESULT_DOWNLOAD_STORAGE_FULL');
+      } finally { clearTimeout(timer); }
+    }
+    checkResultDownloadBudget(bytes, true);
+  });
+  budget.pending = work;
+  return work;
 }
 
 /** One GET into tempPath: fresh, or appended from state.received with a Range request. */
@@ -13033,6 +13124,7 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
       throw err;
     }
 
+    if (state.total !== null) checkResultDownloadBudget(Math.max(0, state.total - state.received));
     if (response.body) {
       const reader = response.body.getReader();
       for (;;) {
@@ -13043,6 +13135,7 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
           throw retryableDownloadError(silentFor ? `stalled with no data for ${formatDownloadDuration(silentFor)}` : downloadConnectionReason(error), error);
         }
         if (chunk.done) break;
+        await reserveResultDownloadBytes(chunk.value.length);
         for (let offset = 0; offset < chunk.value.length;) {
           offset += writeSync(fd, chunk.value, offset, chunk.value.length - offset);
         }
@@ -16010,6 +16103,7 @@ async function main() {
   let client = null;
 
   try {
+    resultDownloadBudget();
     if (options.video && isWan3ModelLocal(options.model)) {
       await prepareWan3ReferenceMediaPlan();
     }
@@ -18418,6 +18512,12 @@ async function main() {
       printHumanError(error, errorContext);
     }
   } finally {
+    if (activeResultDownloadBudget?.reader) {
+      activeResultDownloadBudget.reader.close();
+      activeResultDownloadBudget.reader = null;
+      activeResultDownloadBudget.lines = null;
+      process.stdin.pause();
+    }
     try {
       if (client?.isConnected?.()) {
         await Promise.race([

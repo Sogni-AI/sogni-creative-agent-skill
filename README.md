@@ -455,6 +455,9 @@ Defaults live under `~/.config/sogni/` for credentials, last-render metadata, pe
 | `FFMPEG_PATH` | Custom `ffmpeg` binary |
 | `FFPROBE_PATH` | Custom `ffprobe` binary |
 | `SOGNI_MEDIA_DOWNLOAD_MAX_BYTES` | Largest download from one media URL (default: 536870912, 512 MiB); local files have no limit |
+| `SOGNI_RESULT_DOWNLOAD_MAX_BYTES` | Optional total decoded-byte budget for result downloads in one CLI invocation. Unset keeps existing behavior. Counts all result files and retries, including discarded retry bytes; zero permits no result bytes. A refusal preserves existing output files, removes the current partial download, and reports `RESULT_DOWNLOAD_LIMIT` with collection commands. Hosts should reserve this many bytes before launching the CLI and account for retained files before releasing the reservation. This is not a quota for local media processing or other file writes |
+
+Hosts that share storage across simultaneous writers can pass `--result-download-budget-stdio` instead of reserving the whole byte limit upfront. Before each result chunk is written, stderr emits one `SOGNI_DOWNLOAD_BUDGET_V1 {"id":1,"bytes":65536}` line. The host must atomically reserve those bytes and answer on stdin with `{"id":1,"allowed":true}` followed by a newline, or deny with `allowed:false`. Requests are serialized; each needs the matching ID and a boolean answer within 30 seconds. Denial reports `RESULT_DOWNLOAD_STORAGE_FULL`; a missing or malformed reply reports `RESULT_DOWNLOAD_BUDGET_UNAVAILABLE`. Both preserve existing outputs and include result-collection commands. The host must keep granted reservations until the CLI exits, account for retained files, then release them. The environment byte limit still applies. Without the flag, the CLI neither reads this protocol nor emits its request lines. Old CLI versions reject the flag, so a host cannot silently lose enforcement by running an older version.
 
 ---
 

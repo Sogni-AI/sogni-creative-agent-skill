@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fetchUsesEnvProxy } from '../ssrf-guard.mjs';
@@ -11235,6 +11236,200 @@ test('Qwen speech batch downloads every result to a distinct local file', async 
     for (const path of paths) assert.deepEqual(readFileSync(path), bytes);
   });
 });
+
+// These probes must terminate even if a download regression leaves a child or
+// HTTP response open. A deadline kill is a failed probe, never an expected exit.
+async function boundedDownloadCli(args, env) {
+  let timer;
+  let timedOut = false;
+  let signal = null;
+  try {
+    const result = await runCliAsync(args, env, { onSpawn(child) {
+      timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 15_000);
+      child.once('exit', (_code, endedBy) => { signal = endedBy; });
+    } });
+    assert.equal(timedOut, false, 'download probe exceeded its own deadline');
+    assert.equal(signal, null, 'download probe was killed');
+    return result;
+  } finally { clearTimeout(timer); }
+}
+
+for (const mode of ['declared', 'chunked', 'compressed']) {
+  test(`opt-in result download budget refuses an oversized ${mode} response and preserves existing files`, { timeout: 30_000 }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sogni-result-budget-'));
+    const output = join(dir, 'clip.mp4');
+    writeFileSync(output, 'existing');
+    const body = Buffer.alloc(4096, 120);
+    const encoded = gzipSync(body);
+    assert.ok(encoded.length < 128);
+    try {
+      await withScriptedMediaServer((_number, _req, res) => {
+        if (mode === 'declared') { res.writeHead(200, { 'content-length': body.length }); res.end(body); }
+        if (mode === 'chunked') { res.writeHead(200, { 'transfer-encoding': 'chunked' }); res.end(body); }
+        if (mode === 'compressed') { res.writeHead(200, { 'content-encoding': 'gzip', 'content-length': encoded.length }); res.end(encoded); }
+      }, async (url, requests) => {
+        const result = await boundedDownloadCli([...VIDEO_ARGS, '-o', output, '--json', 'a slow pan'], {
+          SOGNI_AGENT_TEST_RESULT_URL: `${url}?signature=fixture-secret`, SOGNI_RESULT_DOWNLOAD_MAX_BYTES: '128', ...FAST_DOWNLOAD_RETRIES,
+        });
+        assert.equal(result.exitCode, 1, result.stderr);
+        const payload = JSON.parse(result.stdout);
+        assert.equal(payload.errorCode, 'RESULT_DOWNLOAD_LIMIT');
+        assert.equal(payload.retryable, false);
+        assert.match(payload.hint, /Do not render it again/);
+        assert.ok(payload.errorDetails.resultCommands.some(command => command.includes('--result')));
+        assert.ok(!result.stdout.includes('fixture-secret'));
+        assert.equal(requests.length, 1, 'a byte-limit refusal must not retry');
+        assert.equal(readFileSync(output, 'utf8'), 'existing');
+        assert.deepEqual(readdirSync(dir), ['clip.mp4']);
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test('opt-in result download budget accepts the exact decoded byte limit', { timeout: 30_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-result-budget-exact-'));
+  const output = join(dir, 'clip.mp4');
+  const body = patternBytes(1024);
+  try {
+    await withMediaResult(body, async (url) => {
+      const result = await boundedDownloadCli([...VIDEO_ARGS, '-o', output, '--json', 'pan'], {
+        SOGNI_AGENT_TEST_RESULT_URL: url, SOGNI_RESULT_DOWNLOAD_MAX_BYTES: String(body.length),
+      });
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.deepEqual(readFileSync(output), body);
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('opt-in result download budget is shared by every result in a batch', { timeout: 30_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-result-budget-batch-'));
+  const output = join(dir, 'speech.wav');
+  const body = patternBytes(1024);
+  try {
+    await withMediaResult(body, async (url) => {
+      const result = await boundedDownloadCli(['--speech', '-n', '2', '-o', output, 'Read this.', '--json'], {
+        SOGNI_AGENT_TEST_RESULT_URL: url, SOGNI_RESULT_DOWNLOAD_MAX_BYTES: '1536',
+      });
+      assert.equal(result.exitCode, 1, result.stderr);
+      assert.equal(JSON.parse(result.stdout).errorCode, 'RESULT_DOWNLOAD_LIMIT');
+      assert.deepEqual(readFileSync(output), body);
+      assert.deepEqual(readdirSync(dir), ['speech.wav']);
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('opt-in result download budget also counts bytes discarded by a full retry', { timeout: 30_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-result-budget-retry-'));
+  const output = join(dir, 'clip.mp4');
+  try {
+    await withScriptedMediaServer((number, _req, res) => {
+      res.writeHead(200, { 'transfer-encoding': 'chunked', 'accept-ranges': 'none' });
+      res.write(Buffer.alloc(1024));
+      if (number > 1) res.end();
+    }, async (url, requests) => {
+      const result = await boundedDownloadCli([...VIDEO_ARGS, '-o', output, '--json', 'pan'], {
+        SOGNI_AGENT_TEST_RESULT_URL: url, SOGNI_RESULT_DOWNLOAD_MAX_BYTES: '1536', ...FAST_DOWNLOAD_RETRIES,
+      });
+      assert.equal(result.exitCode, 1, result.stderr);
+      assert.equal(JSON.parse(result.stdout).errorCode, 'RESULT_DOWNLOAD_LIMIT');
+      assert.equal(requests.length, 2);
+      assert.deepEqual(readdirSync(dir), []);
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const value of ['-1', '1.5', 'unlimited', '9007199254740992']) {
+  test(`opt-in result download budget rejects invalid configuration ${value} before rendering`, () => {
+    const result = runCli(['--json', 'fox'], { SOGNI_RESULT_DOWNLOAD_MAX_BYTES: value });
+    assert.equal(result.exitCode, 1, result.stderr);
+    assert.equal(JSON.parse(result.stdout).errorCode, 'INVALID_ARGUMENT');
+    assert.equal(result.state?.lastImageProject, undefined);
+  });
+}
+
+async function budgetProtocolCli(args, envOverrides, answer) {
+  const { env, statePath, loaderPath, cliPath } = prepareCliRun(envOverrides);
+  const child = spawn(process.execPath, ['--loader', loaderPath, cliPath, '--result-download-budget-stdio', ...args], {
+    env, stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let timedOut = false;
+  let failure;
+  const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 15_000);
+  let stdout = '';
+  let stderr = '';
+  let pending = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  child.stdin.on('error', error => { failure = error; child.kill('SIGKILL'); });
+  child.stderr.on('data', chunk => {
+    stderr += chunk;
+    pending += chunk;
+    for (;;) {
+      const end = pending.indexOf('\n');
+      if (end < 0) break;
+      const line = pending.slice(0, end);
+      pending = pending.slice(end + 1);
+      if (!line.startsWith('SOGNI_DOWNLOAD_BUDGET_V1 ')) continue;
+      try {
+        const request = JSON.parse(line.slice('SOGNI_DOWNLOAD_BUDGET_V1 '.length));
+        const reply = answer(request);
+        if (reply === null) child.stdin.end();
+        else child.stdin.write(JSON.stringify(reply) + '\n');
+      } catch (error) { failure = error; child.kill('SIGKILL'); }
+    }
+  });
+  try {
+    const result = await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (exitCode, signal) => resolve({ exitCode, signal, stdout, stderr, state: readTestState(statePath) }));
+    });
+    if (failure) throw failure;
+    assert.equal(timedOut, false, 'storage protocol probe exceeded its own deadline');
+    assert.equal(result.signal, null, 'storage protocol probe was killed');
+    return result;
+  } finally { clearTimeout(timer); }
+}
+
+for (const mode of ['allow', 'deny', 'wrong-id', 'closed']) {
+  test(`host result download budget ${mode}: writes only after a matching storage grant`, { timeout: 30_000 }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sogni-result-grants-'));
+    const output = join(dir, 'clip.mp4');
+    const body = patternBytes(128 * 1024);
+    let granted = 0;
+    let requests = 0;
+    try {
+      await withMediaResult(body, async (url) => {
+        const result = await budgetProtocolCli([...VIDEO_ARGS, '-o', output, '--json', 'pan'], {
+          SOGNI_AGENT_TEST_RESULT_URL: url, SOGNI_RESULT_DOWNLOAD_MAX_BYTES: String(body.length),
+        }, ({ id, bytes }) => {
+          assert.equal(id, ++requests);
+          assert.ok(Number.isSafeInteger(bytes) && bytes > 0);
+          const part = readdirSync(dir).find(name => name.endsWith('.part'));
+          assert.ok(part, 'the current attempt owns a partial file');
+          assert.ok(statSync(join(dir, part)).size <= granted, 'ungranted bytes reached disk');
+          if (mode === 'closed') return null;
+          if (mode === 'wrong-id') return { id: id + 1, allowed: true };
+          if (mode === 'allow') granted += bytes;
+          return { id, allowed: mode === 'allow' };
+        });
+        assert.ok(requests > 0, 'the CLI must request storage');
+        if (mode === 'allow') {
+          assert.equal(result.exitCode, 0, result.stderr);
+          assert.equal(granted, body.length);
+          assert.deepEqual(readFileSync(output), body);
+        } else {
+          assert.equal(result.exitCode, 1, result.stderr);
+          const payload = JSON.parse(result.stdout);
+          assert.equal(payload.errorCode, mode === 'deny' ? 'RESULT_DOWNLOAD_STORAGE_FULL' : 'RESULT_DOWNLOAD_BUDGET_UNAVAILABLE');
+          assert.equal(payload.retryable, false);
+          assert.ok(payload.errorDetails.resultCommands.some(command => command.includes('--result')));
+          assert.deepEqual(readdirSync(dir), []);
+        }
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 
 // 2026-11-20: media.sogni.ai trickled two finished videos, "Video 1/1 completed" then waited
 // 5+ minutes with no timeout, and `--result -o` fetches of them ended "Error: terminated".

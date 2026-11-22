@@ -1,3 +1,8 @@
+## [3.73.3] - 2026-11-23
+
+- Hosts can allocate storage before saving completed renders. If a result will not fit, the CLI preserves saved files and gives commands to collect the existing render after making room.
+- Optional result-download limits count decoded bytes across batches and retries. Without a configured limit or host grant protocol, downloads keep their existing behavior.
+
 ## [3.73.2] - 2026-11-22
 
 - If another connection takes over while a render is running, the CLI reports error 4015 immediately and prints `sogni-agent --result <project-id> --wait` for each affected project. You can collect the original render without submitting or paying for it again.

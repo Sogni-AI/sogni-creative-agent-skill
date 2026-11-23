@@ -32,6 +32,19 @@ inbox, 2MB per chunk / 25MB per file. In practice the model reads the
 attachment in its code-execution sandbox, downscales images to ~1024px JPEG,
 and relays the base64 — token-expensive, so previews beat full-res originals.
 
+## Where tools save files
+
+`output_path` (and `edit_video`'s `output`) must name a new file inside one of
+these folders: the home folders Desktop, Documents, Downloads, Pictures,
+Movies, Music and Videos; the media inbox; the temp folder (and `/tmp` on
+macOS); and the project folder the server was started in, when that is a
+folder under home that is not hidden or under Library or AppData. `~` and
+relative paths work as before and are checked once resolved, links included.
+A path that would replace an existing file is refused, and so is one outside
+these folders, before anything renders. To allow more folders, set
+`SOGNI_MCP_OUTPUT_DIR` in the server's environment to a list separated like
+`PATH`.
+
 ## Inline images
 
 Successful `generate_image`, `upscale_image`, `photobooth`, and frame-extraction

@@ -1,7 +1,9 @@
 // desktop-extension/server/tools.mjs
 // MCP tool registry: JSON Schemas shown to Claude Desktop plus pure
 // buildArgs() functions that translate tool input into sogni-agent argv.
-// buildArgs never spawns anything — index.mjs owns process execution.
+// buildArgs never spawns anything — index.mjs owns process execution, and
+// checks each tool's outputFields (output-paths.mjs) before building argv.
+import { lastFrameSiblings } from './output-paths.mjs';
 
 const GEN_BASE = ['--json', '-q', '--no-update-check'];
 
@@ -35,6 +37,14 @@ function required(input, field, hint) {
     throw new Error(`${field} is required${hint ? ` — ${hint}` : ''}.`);
   }
   return v;
+}
+
+// For a value the CLI reads as an option when it starts with "-" (an optional
+// flag value or a list of clips), not as the operand of a value-taking flag.
+function notOptionLike(value, field) {
+  const text = String(value);
+  if (text.startsWith('-')) throw new Error(`${field} cannot start with "-".`);
+  return text;
 }
 
 const str = (description) => ({ type: 'string', description });
@@ -92,6 +102,7 @@ export const TOOLS = [
       },
       required: ['prompt'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE];
@@ -182,6 +193,9 @@ export const TOOLS = [
       },
       required: [],
     },
+    outputFields: ['output_path'],
+    // return_last_frame also saves <name>-last-frame.<ext> beside the video.
+    outputSiblings: (input) => (input.return_last_frame === true ? lastFrameSiblings : undefined),
     buildArgs(input) {
       // A finalize renders its draft's own prompt; every other render needs one.
       const finalize = input.seedance_finalize;
@@ -275,6 +289,7 @@ export const TOOLS = [
       },
       required: ['prompt'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const prompt = required(input, 'prompt');
       const args = [...GEN_BASE, '--music'];
@@ -307,6 +322,7 @@ export const TOOLS = [
       },
       required: ['prompt', 'ref'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const prompt = required(input, 'prompt');
       const ref = required(input, 'ref', 'a face photo path or URL');
@@ -336,6 +352,7 @@ export const TOOLS = [
       },
       required: ['action', 'output'],
     },
+    outputFields: ['output'],
     buildArgs(input) {
       const action = required(input, 'action');
       if (action === 'extract_first_frame' || action === 'extract_last_frame') {
@@ -396,7 +413,9 @@ export const TOOLS = [
       properties: { type: { type: 'string', enum: ['images', 'audio', 'all'] } },
     },
     buildArgs(input) {
-      return ['--json', '--no-update-check', '--list-media', input.type ?? 'images'];
+      // --list-media takes its type only when it is one it knows; anything else
+      // is read as the next argument, so a type starting with "-" would be an option.
+      return ['--json', '--no-update-check', '--list-media', notOptionLike(input.type ?? 'images', 'type')];
     },
   },
   {
@@ -507,6 +526,7 @@ export const TOOLS = [
       },
       required: ['image'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const image = required(input, 'image', 'a path or URL of the image to upscale');
       const args = [...GEN_BASE, '--upscale', String(image)];
@@ -544,6 +564,7 @@ export const TOOLS = [
       },
       required: ['video'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const video = required(input, 'video', 'a path or URL of the video to upscale');
       const args = [...GEN_BASE, '--upscale-video', String(video)];
@@ -591,6 +612,7 @@ export const TOOLS = [
       },
       required: ['text'],
     },
+    outputFields: ['output_path'],
     buildArgs(input) {
       const text = required(input, 'text', 'the words to speak');
       const args = [...GEN_BASE, '--speech'];

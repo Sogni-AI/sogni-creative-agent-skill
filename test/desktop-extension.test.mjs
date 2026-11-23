@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync as fsExistsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, existsSync as fsExistsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -13,6 +13,7 @@ import {
 import { TOOLS, getTool, hardKillTimeoutMs } from '../desktop-extension/server/tools.mjs';
 import { collectInlineImages } from '../desktop-extension/server/inline-images.mjs';
 import { importMedia } from '../desktop-extension/server/import-media.mjs';
+import { allowedOutputDirs, checkOutputPath, lastFrameSiblings } from '../desktop-extension/server/output-paths.mjs';
 import { PACKAGE_VERSION } from '../version.mjs';
 import { MODEL_PROMPT_GUIDES, renderModelPromptGuide } from '@sogni-ai/sogni-intelligence-client/prompt-guides';
 import { stageMcpb } from '../scripts/build-mcpb.mjs';
@@ -411,7 +412,9 @@ const OUTPUT_CASES = [
   ['generate_speech', { text: 'Hello.' }, 'output_path'],
 ];
 
-test('output paths reach the CLI as given, which expands ~ and writes any path', () => {
+// buildArgs passes an output path through as given; the server checks it first
+// (output-paths.mjs) and hands buildArgs the absolute path it checked.
+test('buildArgs passes each output path through unchanged', () => {
   for (const [name, input, field] of OUTPUT_CASES) {
     for (const path of [
       '~/Desktop/render.png', 'relative/render.mp4', '/Users/me/.openclaw/media/inbound/render.png',
@@ -764,7 +767,7 @@ test('tools/call with invalid input returns isError without spawning', async (t)
 
 test('tools/call passes input to the CLI as main does, including null and loose values', async (t) => {
   const home = tempHome();
-  const client = new McpClient({ SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') });
+  const client = new McpClient({ HOME: home, USERPROFILE: home, SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') });
   t.after(() => { client.close(); rmSync(home, { recursive: true, force: true }); });
   const call = async (name, args) => {
     const res = await client.request('tools/call', { name, arguments: args });
@@ -777,15 +780,15 @@ test('tools/call passes input to the CLI as main does, including null and loose 
   assert.deepEqual(await argv('list_media', null), ['--json', '--no-update-check', '--list-media', 'images']);
   assert.deepEqual(
     await argv('generate_image', { prompt: 'a cat', output_path: '~/Desktop/cat.png', width: '1024', quality: 'HQ', persona: null }),
-    ['--json', '-q', '--no-update-check', '-o', '~/Desktop/cat.png', '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
+    ['--json', '-q', '--no-update-check', '-o', join(home, 'Desktop', 'cat.png'), '-Q', 'HQ', '-w', '1024', '--', 'a cat'],
   );
   assert.deepEqual(
     await argv('generate_video', { prompt: null, model: 'seedance2-5', seedance_finalize: 'job-1' }),
     ['--json', '-q', '--no-update-check', '--video', '-m', 'seedance2-5', '--seedance-finalize', 'job-1'],
   );
   assert.deepEqual(
-    await argv('edit_video', { action: 'concat_videos', output: '/Users/me/.openclaw/media/inbound/joined.webm', clips: ['/a.mp4', '/b.mp4'], audio_path: '' }),
-    ['--no-update-check', '--concat-videos', '/Users/me/.openclaw/media/inbound/joined.webm', '/a.mp4', '/b.mp4'],
+    await argv('edit_video', { action: 'concat_videos', output: join(home, 'inbound', 'joined.webm'), clips: ['/a.mp4', '/b.mp4'], audio_path: '' }),
+    ['--no-update-check', '--concat-videos', join(home, 'inbound', 'joined.webm'), '/a.mp4', '/b.mp4'],
   );
   assert.deepEqual(
     await argv('manage_memories', { action: 'set', key: '-k', value: 'v', category: 'style' }),
@@ -873,6 +876,211 @@ test('concat clip validation leaves personality unchanged with the real CLI', { 
   assert.equal(res.result.isError, true);
   assert.equal(res.result.content[0].text, 'clip paths cannot start with "-".');
   assert.equal(fsExistsSync(personalityPath(newHome)), false);
+});
+
+test('list_media refuses a type the CLI would read as an option, with the real CLI', { timeout: 20000 }, async (t) => {
+  const oldHome = tempHome();
+  const newHome = tempHome();
+  t.after(() => {
+    rmSync(oldHome, { recursive: true, force: true });
+    rmSync(newHome, { recursive: true, force: true });
+  });
+  const cli = join(HERE, '..', 'sogni-agent.mjs');
+  const personalityPath = (home) => realCliEnv(home).SOGNI_PERSONALITY_PATH;
+  for (const home of [oldHome, newHome]) {
+    mkdirSync(dirname(personalityPath(home)), { recursive: true });
+    writeFileSync(personalityPath(home), 'Use a cheerful tone.');
+  }
+  // The argv main built for this type: --list-media skips it, so the CLI ran it as a command.
+  const old = spawnSync(process.execPath, [cli, '--json', '--no-update-check', '--list-media', '--personality-clear'], {
+    env: realCliEnv(oldHome), cwd: oldHome, encoding: 'utf8', timeout: 10000,
+  });
+  assert.equal(old.status, 0, old.stderr);
+  assert.equal(fsExistsSync(personalityPath(oldHome)), false);
+
+  for (const type of ['--personality-clear', '-x', ['--personality-clear']]) {
+    assert.throws(() => getTool('list_media').buildArgs({ type }), { message: 'type cannot start with "-".' });
+  }
+  const client = new McpClient({ ...realCliEnv(newHome), SOGNI_AGENT_PATH: cli, SOGNI_MEDIA_INBOUND_DIR: join(newHome, 'inbound') });
+  t.after(() => client.close());
+  const refused = await client.request('tools/call', { name: 'list_media', arguments: { type: '--personality-clear' } });
+  assert.equal(refused.result.isError, true);
+  assert.equal(refused.result.content[0].text, 'type cannot start with "-".');
+  // Every type main accepted still runs: known ones, and any other word, which lists images.
+  for (const [type, mediaType] of [[undefined, 'images'], ['audio', 'audio'], ['all', 'all'], ['videos', 'images'], ['', 'images']]) {
+    const res = await client.request('tools/call', { name: 'list_media', arguments: type === undefined ? {} : { type } });
+    assert.equal(res.result.isError ?? false, false, String(type));
+    assert.equal(JSON.parse(res.result.content[0].text).mediaType, mediaType, String(type));
+  }
+  assert.equal(readFileSync(personalityPath(newHome), 'utf8'), 'Use a cheerful tone.');
+});
+
+// Every value a tool call carries, put where the CLI might read an option:
+// one field at a time, every action, through the real CLI. Each value reaches
+// the CLI as text (or is refused), so the saved personality never changes.
+test('no tool input reaches the real CLI as an option', { timeout: 240000 }, async (t) => {
+  const home = tempHome();
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const cli = join(HERE, '..', 'sogni-agent.mjs');
+  const SENTINEL = '--personality-clear';
+  // Each run gets a personality file of its own, so runs can overlap.
+  let runs = 0;
+  const runCli = (args) => new Promise((resolveRun) => {
+    const env = { ...realCliEnv(home), SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') };
+    env.SOGNI_PERSONALITY_PATH = join(home, 'personality', `${runs++}.txt`);
+    mkdirSync(dirname(env.SOGNI_PERSONALITY_PATH), { recursive: true });
+    writeFileSync(env.SOGNI_PERSONALITY_PATH, 'Use a cheerful tone.');
+    const child = spawn(process.execPath, [cli, ...args], { env, cwd: home, stdio: 'ignore' });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 30000);
+    child.on('close', () => {
+      clearTimeout(timer);
+      const path = env.SOGNI_PERSONALITY_PATH;
+      resolveRun(fsExistsSync(path) && readFileSync(path, 'utf8') === 'Use a cheerful tone.');
+    });
+  });
+  // The probe can see an option: the argv main built for list_media clears it.
+  assert.equal(await runCli(['--json', '--no-update-check', '--list-media', SENTINEL]), false);
+
+  const cases = [];
+  for (const tool of TOOLS.filter((candidate) => typeof candidate.buildArgs === 'function')) {
+    const properties = tool.inputSchema.properties ?? {};
+    const valid = Object.fromEntries(Object.entries(properties).map(([key, schema]) => [key, sampleValue(key, schema)]));
+    const required = Object.fromEntries((tool.inputSchema.required ?? []).map((key) => [key, valid[key]]));
+    for (const action of properties.action?.enum ?? [undefined]) {
+      const base = action ? { ...valid, action } : required;
+      for (const [key, schema] of Object.entries(properties)) {
+        if (key === 'action') continue;
+        let value = SENTINEL;
+        if (schema.type === 'array' && schema.items?.type === 'object') value = [{ ...valid[key][0], image: SENTINEL }];
+        else if (schema.type === 'array') value = ['/first', SENTINEL];
+        cases.push({ name: `${tool.name}${action ? `:${action}` : ''}.${key}`, tool, input: { ...base, [key]: value } });
+      }
+    }
+  }
+  assert.ok(cases.length > 100, `only ${cases.length} probes`);
+  const leaked = [];
+  const queue = [...cases];
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      let args;
+      try {
+        args = next.tool.buildArgs(next.input);
+      } catch {
+        continue; // refused before the CLI runs
+      }
+      if (!(await runCli(args))) leaked.push(next.name);
+    }
+  }));
+  assert.deepEqual(leaked.sort(), []);
+});
+
+test('output paths must land in an allowed folder', () => {
+  const home = tempHome();
+  const project = join(home, 'code', 'site');
+  mkdirSync(project, { recursive: true });
+  const context = { env: { SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound') }, home, cwd: project, temp: join(home, 'tmp') };
+  for (const [path, expected] of [
+    ['~/Desktop/render.png', join(home, 'Desktop', 'render.png')],
+    [join(home, 'Downloads', 'new', 'clip.mp4'), join(home, 'Downloads', 'new', 'clip.mp4')],
+    ['~/Documents/.drafts/take.mp3', join(home, 'Documents', '.drafts', 'take.mp3')],
+    [join(home, 'inbound', 'joined.webm'), join(home, 'inbound', 'joined.webm')],
+    [join(home, 'tmp', 'a.png'), join(home, 'tmp', 'a.png')],
+    ['public/hero.png', join(project, 'public', 'hero.png')],
+    ['render', join(project, 'render')],
+  ]) {
+    assert.equal(checkOutputPath(path, 'output_path', context), expected, path);
+  }
+  for (const path of [
+    '~/.zshrc', '~/.ssh/authorized_keys', '~/Library/LaunchAgents/a.plist', '/etc/hosts.png', '~/render.png',
+    '~/Desktop', '~/Desktop/../.bashrc', join(home, 'code', 'other', 'x.png'),
+  ]) {
+    assert.throws(() => checkOutputPath(path, 'output_path', context), (error) => {
+      assert.equal(error.code, 'OUTPUT_PATH_REFUSED');
+      assert.match(error.message, /^output_path must be inside one of these folders: .*Desktop.*SOGNI_MCP_OUTPUT_DIR/);
+      return true;
+    }, path);
+  }
+  for (const value of [42, ['~/Desktop/a.png'], { path: '~/Desktop/a.png' }]) {
+    assert.throws(() => checkOutputPath(value, 'output', context), { message: 'output must be a file path.' });
+  }
+  // SOGNI_MCP_OUTPUT_DIR adds folders, separated like PATH.
+  const extra = { ...context, env: { ...context.env, SOGNI_MCP_OUTPUT_DIR: [join(home, 'renders'), '~/code/other'].join(delimiter) } };
+  assert.equal(checkOutputPath('~/renders/a.png', 'output_path', extra), join(home, 'renders', 'a.png'));
+  assert.equal(checkOutputPath('~/code/other/x.png', 'output_path', extra), join(home, 'code', 'other', 'x.png'));
+});
+
+test('the server folder counts only when it is a project folder of its own', () => {
+  const home = tempHome();
+  const dirs = (cwd) => allowedOutputDirs({ env: {}, home, cwd, temp: join(home, 'tmp') });
+  for (const cwd of ['/', home, join(home, '.config', 'app'), join(home, 'Library', 'Application Support'), join(home, 'AppData', 'Local', 'App')]) {
+    assert.equal(dirs(cwd).includes(cwd), false, cwd);
+  }
+  assert.ok(dirs(join(home, 'code', 'site')).includes(join(home, 'code', 'site')));
+});
+
+test('output paths never replace an existing file or follow a link out', () => {
+  const home = tempHome();
+  const desktop = join(home, 'Desktop');
+  mkdirSync(desktop, { recursive: true });
+  const context = { env: {}, home, cwd: '/', temp: join(home, 'tmp') };
+  writeFileSync(join(desktop, 'cat.png'), 'old');
+  assert.throws(() => checkOutputPath('~/Desktop/cat.png', 'output_path', context), {
+    message: `output_path would replace ${join(desktop, 'cat.png')}, which already exists. Choose a new file name.`,
+  });
+  assert.equal(readFileSync(join(desktop, 'cat.png'), 'utf8'), 'old');
+  // return_last_frame also writes <name>-last-frame.<ext> beside the video.
+  writeFileSync(join(desktop, 'clip-last-frame.jpg'), 'old');
+  assert.equal(checkOutputPath('~/Desktop/clip.mp4', 'output_path', context), join(desktop, 'clip.mp4'));
+  assert.throws(() => checkOutputPath('~/Desktop/clip.mp4', 'output_path', { ...context, siblings: lastFrameSiblings }), /clip-last-frame\.jpg, which already exists/);
+  // A link inside an allowed folder cannot carry the write elsewhere.
+  mkdirSync(join(home, '.ssh'));
+  symlinkSync(join(home, '.ssh'), join(desktop, 'keys'));
+  assert.throws(() => checkOutputPath('~/Desktop/keys/authorized_keys', 'output_path', context), /must be inside one of these folders/);
+  symlinkSync(join(home, '.zshrc'), join(desktop, 'dangling.png'));
+  assert.throws(() => checkOutputPath('~/Desktop/dangling.png', 'output_path', context), /already exists|must be inside/);
+});
+
+test('tools/call checks every output field before the CLI runs', async (t) => {
+  const home = tempHome();
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  // The test home sits in the run's temp folder, so the server gets a temp folder of its own.
+  const client = new McpClient({
+    HOME: home, USERPROFILE: home, TMPDIR: join(home, 'tmp'), TMP: join(home, 'tmp'), TEMP: join(home, 'tmp'),
+    SOGNI_MEDIA_INBOUND_DIR: join(home, 'inbound'),
+  });
+  t.after(() => client.close());
+  mkdirSync(join(home, 'Movies'), { recursive: true });
+  writeFileSync(join(home, 'Movies', 'taken.mp4'), 'old');
+  const outputCalls = [
+    ['generate_image', { prompt: 'a duck' }, 'output_path'],
+    ['generate_video', { prompt: 'a duck' }, 'output_path'],
+    ['generate_music', { prompt: 'soft piano' }, 'output_path'],
+    ['photobooth', { prompt: 'a portrait', ref: '/face.jpg' }, 'output_path'],
+    ['edit_video', { action: 'extract_first_frame', input: '/in.mp4' }, 'output'],
+    ['edit_video', { action: 'extract_last_frame', input: '/in.mp4' }, 'output'],
+    ['edit_video', { action: 'concat_videos', clips: ['/a.mp4', '/b.mp4'] }, 'output'],
+    ['edit_video', { action: 'remix_audio', input: '/in.mp4' }, 'output'],
+    ['upscale_image', { image: '/in.png' }, 'output_path'],
+    ['upscale_video', { video: '/in.mp4' }, 'output_path'],
+    ['generate_speech', { text: 'Hello.' }, 'output_path'],
+  ];
+  for (const [name, input, field] of outputCalls) {
+    for (const [path, pattern] of [['~/.zshrc', /must be inside one of these folders/], ['~/Movies/taken.mp4', /already exists/]]) {
+      const res = await client.request('tools/call', { name, arguments: { ...input, [field]: path } });
+      assert.equal(res.result.isError, true, `${name} ${path}`);
+      assert.match(res.result.content[0].text, new RegExp(`^${field} `), name);
+      assert.match(res.result.content[0].text, pattern, name);
+    }
+    const res = await client.request('tools/call', { name, arguments: { ...input, [field]: '~/Movies/new.mp4' } });
+    assert.equal(res.result.isError ?? false, false, name);
+    assert.ok(JSON.parse(res.result.content[0].text).argv.includes(join(home, 'Movies', 'new.mp4')), name);
+  }
+  writeFileSync(join(home, 'Movies', 'clip-last-frame.png'), 'old');
+  const lastFrame = await client.request('tools/call', {
+    name: 'generate_video', arguments: { prompt: 'a duck', return_last_frame: true, output_path: '~/Movies/clip.mp4' },
+  });
+  assert.equal(lastFrame.result.isError, true);
+  assert.match(lastFrame.result.content[0].text, /clip-last-frame\.png, which already exists/);
 });
 
 test('tools/call ignores fields outside the schema', async (t) => {

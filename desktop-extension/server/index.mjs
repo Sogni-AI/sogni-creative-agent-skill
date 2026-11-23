@@ -12,6 +12,7 @@ import { TOOLS, getTool, hardKillTimeoutMs } from './tools.mjs';
 import { buildChildEnv, resolveAgentPath, resolveFfmpegPath } from './resolve.mjs';
 import { collectInlineImages } from './inline-images.mjs';
 import { runImportMedia } from './import-media.mjs';
+import { checkOutputPath } from './output-paths.mjs';
 import {
   attributionEnvironment,
   normalizeMcpClientInfo,
@@ -65,6 +66,20 @@ function textResult(text, isError = false) {
 // even when the sogni-agent CLI is not installed yet.
 const LOCAL_HANDLERS = { import_media: runImportMedia };
 
+// Each output path must land in an allowed folder and must not replace a file.
+// The CLI then gets the absolute path that was checked.
+function checkOutputs(tool, input) {
+  const fields = tool.outputFields ?? [];
+  if (!fields.length || !input || typeof input !== 'object') return input;
+  const checked = { ...input };
+  for (const field of fields) {
+    const value = input[field];
+    if (value === undefined || value === null || value === '') continue;
+    checked[field] = checkOutputPath(value, field, { siblings: tool.outputSiblings?.(input) });
+  }
+  return checked;
+}
+
 async function callTool(name, input, progressToken) {
   const tool = getTool(name);
   if (!tool) return textResult(`Unknown tool: ${name}`, true);
@@ -87,7 +102,7 @@ async function callTool(name, input, progressToken) {
 
   let args;
   try {
-    args = tool.buildArgs(input ?? {});
+    args = tool.buildArgs(checkOutputs(tool, input) ?? {});
   } catch (err) {
     return textResult(err.message, true);
   }

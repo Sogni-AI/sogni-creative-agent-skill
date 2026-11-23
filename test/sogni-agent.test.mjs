@@ -7068,6 +7068,49 @@ test('--list-replays lists Sogni Intelligence replay records', async () => {
   });
 });
 
+test('requests that carry the API key never follow a redirect', async () => {
+  const collected = [];
+  const other = createServer((req, res) => {
+    collected.push({ url: req.url, apiKey: req.headers['api-key'] ?? null, authorization: req.headers.authorization ?? null });
+    res.setHeader('Content-Type', 'application/json');
+    res.end('{"data":{"records":[]}}');
+  });
+  let apiOrigin;
+  const api = createServer((req, res) => {
+    const target = req.url.includes('same-origin') || req.url.includes('/stream')
+      ? (req.url.includes('/stream') ? `${apiOrigin}/landing` : '/landing')
+      : `http://127.0.0.1:${other.address().port}/collect`;
+    res.writeHead(req.url.includes('/stream') ? 307 : 302, { Location: target });
+    res.end();
+  });
+  await Promise.all([new Promise((r) => other.listen(0, '127.0.0.1', r)), new Promise((r) => api.listen(0, '127.0.0.1', r))]);
+  apiOrigin = `http://127.0.0.1:${api.address().port}`;
+  try {
+    // Why: Node's fetch drops Authorization on a cross-origin redirect but keeps the api-key header.
+    await (await fetch(`${apiOrigin}/v1/probe`, { headers: { 'api-key': 'probe-key', Authorization: 'Bearer probe-key' } })).text();
+    assert.deepEqual(collected.splice(0), [{ url: '/collect', apiKey: 'probe-key', authorization: null }]);
+
+    for (const args of [
+      ['--list-replays', '7'],
+      ['--get-replay', 'same-origin'],
+      ['--stream-workflow', 'wf_1'],
+    ]) {
+      const { exitCode, stdout, stderr } = await runCliAsync([...args, '--api-base-url', apiOrigin, '--json'], {
+        SOGNI_API_KEY: 'test-api-key',
+        SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1'
+      });
+      assert.notEqual(exitCode, 0, args.join(' '));
+      const output = `${stdout}\n${stderr}`;
+      assert.match(output, /API_REDIRECT_REFUSED/, args.join(' '));
+      assert.match(output, /Requests that carry your API key do not follow redirects/, args.join(' '));
+    }
+    assert.deepEqual(collected, []);
+  } finally {
+    api.close();
+    other.close();
+  }
+});
+
 test('--get-replay fetches one replay RunRecord', async () => {
   await withTestApiServer(async (apiBaseUrl, requests) => {
     const { exitCode, stdout } = await runCliAsync([

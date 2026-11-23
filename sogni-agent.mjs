@@ -9541,6 +9541,21 @@ async function fetchWithTimeout(resource, init = {}, timeoutMs = DEFAULT_HTTP_TI
   }
 }
 
+// A request that carries the API key never follows a redirect, which would send
+// the key to wherever the redirect points; it fails with a coded error instead.
+// (The status list lives in the function: top-level code calls this before a
+// module-level constant further down would be initialized.)
+async function fetchWithApiKey(url, init, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS) {
+  const response = await fetchWithTimeout(url, { ...init, redirect: 'manual' }, timeoutMs);
+  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+  try { await response.body?.cancel(); } catch { /* the error below is what matters */ }
+  const err = new Error(`The Sogni API answered with a redirect (HTTP ${response.status}). Requests that carry your API key do not follow redirects.`);
+  err.code = 'API_REDIRECT_REFUSED';
+  err.hint = 'Point SOGNI_API_BASE_URL (or SOGNI_REST_ENDPOINT) straight at the Sogni API, e.g. https://api.sogni.ai, or unset it.';
+  err.details = { url, status: response.status };
+  throw err;
+}
+
 async function fetchApiJson(path, {
   apiKey,
   method = 'GET',
@@ -9556,7 +9571,7 @@ async function fetchApiJson(path, {
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   };
 
-  const response = await fetchWithTimeout(url, init, timeoutMs);
+  const response = await fetchWithApiKey(url, init, timeoutMs);
   let text;
   try {
     text = await response.text();
@@ -11542,7 +11557,7 @@ function parseWorkflowSseChunk(raw) {
 async function streamApiWorkflowEvents(apiKey, workflowId) {
   const url = await buildSafeApiUrl(`/v1/creative-agent/workflows/${encodeURIComponent(workflowId)}/events/stream`);
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithApiKey(url, {
     method: 'GET',
     headers: apiRequestHeaders(apiKey, { Accept: 'text/event-stream' })
   });

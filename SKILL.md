@@ -277,7 +277,7 @@ sogni-agent doctor --json
 | `-w` / `-h` | Width / height | 512×512 |
 | `-n <num>` | Output count (`{a\|b\|c}` prompt variations cycle); capped at 16, raise with `SOGNI_MAX_COUNT` | 1 |
 | `--video`, `--music` | Generate video / music instead of image | - |
-| `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace` | inferred |
+| `--workflow <t>` | Force `t2v\|i2v\|r2v\|s2v\|ia2v\|a2v\|v2v\|animate-move\|animate-replace`. Seedance also takes the prompt guide's frame modes: `i2v` (`--ref`), `l2v` (`--ref-end`), `flf` (both) | inferred |
 | `--ref`, `-c`, `--ref-end`, `--ref-audio`, `--ref-video`, `--mask` | Frame / loose image / audio / video / mask references; audio/video repeat for H3 r2v; `--keyframe <image>@<sec>` pins an H3 keyframe (repeat, up to 8) | - |
 | `--seedance-task-type reference\|edit\|extend`; `--seedance-draft`, `--seedance-finalize <jobId>` | Seedance 2.5 loose-reference operation (v2v defaults to edit). Drafts require user consent after explaining their added cost; finalize an unchanged kept draft at 1080p by default or 4K with `--target-resolution 2160`, before `seedanceDraftExpiresAt`. See `references/models.md` § Seedance 2.5 | - |
 | `--wan3-ratio`, `--smart-duration` | Wan 3 adaptive/fixed ratio and provider-selected 2–30s duration | adaptive / fixed |

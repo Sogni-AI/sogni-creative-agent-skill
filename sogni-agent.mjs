@@ -2466,6 +2466,15 @@ function imageOptionsFromCli() {
 
 const SEEDANCE_TASK_TYPES = new Set(['reference', 'edit', 'extend']);
 
+// The Seedance prompt guide names its frame-anchor modes i2v, l2v and flf.
+// The CLI sends each as dedicated frame mode (the t2v workflow with
+// --ref/--ref-end), so a named mode decides which anchors must be present.
+const SEEDANCE_GUIDE_FRAME_MODES = Object.freeze({
+  i2v: { first: true, last: false, title: 'first-frame image-to-video', flags: 'the first frame with --ref and no --ref-end' },
+  l2v: { first: false, last: true, title: 'last-frame image-to-video', flags: 'the last frame with --ref-end and no --ref' },
+  flf: { first: true, last: true, title: 'first-and-last-frame video', flags: 'the first frame with --ref and the last frame with --ref-end' }
+});
+
 // Seedance 2.5 draft mode: a draft's job id is what --seedance-finalize takes,
 // and its expiry is the last moment it can be rendered at 1080p. Reported only
 // for draft-mode requests, from the completed SDK job.
@@ -4380,6 +4389,7 @@ const options = {
   musicShift: null,
   video: false,
   videoWorkflow: null,
+  seedanceFrameMode: null, // i2v|l2v|flf from --workflow on a Seedance model; sent as dedicated frame mode
   seedanceTaskType: null,
   seedanceDraft: false,
   seedanceFinalize: null,
@@ -5910,6 +5920,7 @@ Music Options:
 Video Options:
   --video, -v           Generate video instead of image
   --workflow <type>     Video workflow: t2v|i2v|r2v|s2v|ia2v|a2v|v2v|animate-move|animate-replace
+                        Seedance also takes the prompt guide's frame modes: i2v (--ref), l2v (--ref-end), flf (both)
   --seedance-task-type <type> Seedance 2.5 loose-reference operation: reference|edit|extend
   --seedance-draft      Seedance 2.5: render a 480p draft that --seedance-finalize can render at 1080p or 4K
   --seedance-finalize <draft-job-id> Seedance 2.5: render that draft at 1080p by default; --target-resolution 2160 selects 4K.
@@ -6949,7 +6960,13 @@ if (options.angles360Video && !options.angles360) {
 
 // Normalize/validate video workflow before applying defaults
 if (options.video) {
-  if (options.videoWorkflow) {
+  const seedanceFrameMode = options.videoWorkflow && isSeedanceModelSelection(options.model)
+    ? String(options.videoWorkflow).toLowerCase()
+    : null;
+  if (Object.hasOwn(SEEDANCE_GUIDE_FRAME_MODES, seedanceFrameMode)) {
+    options.seedanceFrameMode = seedanceFrameMode;
+    options.videoWorkflow = 't2v';
+  } else if (options.videoWorkflow) {
     const normalized = normalizeVideoWorkflow(options.videoWorkflow);
     if (normalized) {
       options.videoWorkflow = normalized;
@@ -8447,6 +8464,26 @@ if (options.video) {
   if (isSeedanceVideo && !isSeedance25Video && options.refAudio && !options.refImage && !options.refImageEnd && !options.refVideo
       && (!Array.isArray(options.contextImages) || options.contextImages.length === 0)) {
     fatalCliError('Seedance 2.0 audio references require --ref, --ref-video, or -c/--context image refs.', { code: 'INVALID_ARGUMENT' });
+  }
+
+  const seedanceFrameAnchors = isSeedanceVideo ? SEEDANCE_GUIDE_FRAME_MODES[options.seedanceFrameMode] : undefined;
+  if (
+    seedanceFrameAnchors
+    && (Boolean(options.refImage) !== seedanceFrameAnchors.first || Boolean(options.refImageEnd) !== seedanceFrameAnchors.last)
+  ) {
+    fatalCliError(
+      `Seedance --workflow ${options.seedanceFrameMode} is ${seedanceFrameAnchors.title}: pass ${seedanceFrameAnchors.flags}.`,
+      {
+        code: 'INVALID_ARGUMENT',
+        details: {
+          workflow: options.seedanceFrameMode,
+          model: options.model,
+          ref: Boolean(options.refImage),
+          refEnd: Boolean(options.refImageEnd),
+        },
+        hint: 'Use --workflow i2v for --ref alone, l2v for --ref-end alone, or flf for both; or omit --workflow and Seedance anchors whichever frames you pass.'
+      }
+    );
   }
 
   // Seedance provider roles form two mutually exclusive request shapes:
@@ -15451,26 +15488,6 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
   return params;
 }
 
-function isMiniMaxH3ExtendedDurationEstimateError(err) {
-  const actualDuration = options.frames
-    ? options.frames / options.fps
-    : options.duration;
-  return isMiniMaxH3Model(options.model)
-    && actualDuration > 10
-    && /duration must be between 1 and 10 seconds/i.test(String(err?.message || err || ''));
-}
-
-function buildMiniMaxH3EstimateUnavailableError(cause) {
-  const err = new Error(
-    'MiniMax H3 generation supports clips through 15.08 seconds, but this client cannot pre-estimate clips over 10 seconds.'
-  );
-  err.code = 'VIDEO_COST_ESTIMATE_UNAVAILABLE';
-  err.retryable = false;
-  err.hint = 'Submit without --estimate-video-cost so the server can validate balance when the render starts, or estimate a clip of 10 seconds or less.';
-  err.cause = cause;
-  return err;
-}
-
 async function ensureSufficientVideoBalance(client, log) {
   if (!options.video || options.estimateVideoCost || options.quote) return;
   // Wan 3.0 Enhanced launch credits live in the server-side model ledger and
@@ -15519,12 +15536,7 @@ async function ensureSufficientVideoBalance(client, log) {
     estimate = await client.estimateVideoCost(await buildVideoEstimateParams({ tokenType, steps }));
   } catch (err) {
     if (!options.quiet) {
-      if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-        const estimateError = buildMiniMaxH3EstimateUnavailableError(err);
-        log(`Note: ${estimateError.message} ${estimateError.hint}`);
-      } else {
-        log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
-      }
+      log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
     }
     return;
   }
@@ -15557,12 +15569,6 @@ const IMAGE_ESTIMATE_OUTPUT_FORMATS = new Set(['png', 'jpg', 'webp', 'gif']);
 // or a rate limit, keep their error.
 function asQuoteError(err) {
   if (err?.code === QUOTE_UNAVAILABLE) return err;
-  if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-    return quoteUnavailableError(buildMiniMaxH3EstimateUnavailableError(err).message, {
-      hint: 'Quote a clip of 10 seconds or less, or render without --quote; Sogni checks the price when the render starts.',
-      cause: err
-    });
-  }
   const status = err?.status ?? err?.statusCode;
   if (status === 400 || status === 404) {
     return quoteUnavailableError(`Sogni has no quote for this request: ${cliErrorMessage(err)}`, { cause: err });
@@ -16704,15 +16710,7 @@ async function main() {
         tokenType: options.tokenType || 'spark',
         steps
       });
-      let estimate;
-      try {
-        estimate = await client.estimateVideoCost(estimateParams);
-      } catch (err) {
-        if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-          throw buildMiniMaxH3EstimateUnavailableError(err);
-        }
-        throw err;
-      }
+      const estimate = await client.estimateVideoCost(estimateParams);
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
         const delivered = isMiniMaxH3TwoStageModel(options.model)

@@ -15488,26 +15488,6 @@ async function buildVideoEstimateParams({ tokenType, steps }) {
   return params;
 }
 
-function isMiniMaxH3ExtendedDurationEstimateError(err) {
-  const actualDuration = options.frames
-    ? options.frames / options.fps
-    : options.duration;
-  return isMiniMaxH3Model(options.model)
-    && actualDuration > 10
-    && /duration must be between 1 and 10 seconds/i.test(String(err?.message || err || ''));
-}
-
-function buildMiniMaxH3EstimateUnavailableError(cause) {
-  const err = new Error(
-    'MiniMax H3 generation supports clips through 15.08 seconds, but this client cannot pre-estimate clips over 10 seconds.'
-  );
-  err.code = 'VIDEO_COST_ESTIMATE_UNAVAILABLE';
-  err.retryable = false;
-  err.hint = 'Submit without --estimate-video-cost so the server can validate balance when the render starts, or estimate a clip of 10 seconds or less.';
-  err.cause = cause;
-  return err;
-}
-
 async function ensureSufficientVideoBalance(client, log) {
   if (!options.video || options.estimateVideoCost || options.quote) return;
   // Wan 3.0 Enhanced launch credits live in the server-side model ledger and
@@ -15556,12 +15536,7 @@ async function ensureSufficientVideoBalance(client, log) {
     estimate = await client.estimateVideoCost(await buildVideoEstimateParams({ tokenType, steps }));
   } catch (err) {
     if (!options.quiet) {
-      if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-        const estimateError = buildMiniMaxH3EstimateUnavailableError(err);
-        log(`Note: ${estimateError.message} ${estimateError.hint}`);
-      } else {
-        log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
-      }
+      log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
     }
     return;
   }
@@ -15594,12 +15569,6 @@ const IMAGE_ESTIMATE_OUTPUT_FORMATS = new Set(['png', 'jpg', 'webp', 'gif']);
 // or a rate limit, keep their error.
 function asQuoteError(err) {
   if (err?.code === QUOTE_UNAVAILABLE) return err;
-  if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-    return quoteUnavailableError(buildMiniMaxH3EstimateUnavailableError(err).message, {
-      hint: 'Quote a clip of 10 seconds or less, or render without --quote; Sogni checks the price when the render starts.',
-      cause: err
-    });
-  }
   const status = err?.status ?? err?.statusCode;
   if (status === 400 || status === 404) {
     return quoteUnavailableError(`Sogni has no quote for this request: ${cliErrorMessage(err)}`, { cause: err });
@@ -16741,15 +16710,7 @@ async function main() {
         tokenType: options.tokenType || 'spark',
         steps
       });
-      let estimate;
-      try {
-        estimate = await client.estimateVideoCost(estimateParams);
-      } catch (err) {
-        if (isMiniMaxH3ExtendedDurationEstimateError(err)) {
-          throw buildMiniMaxH3EstimateUnavailableError(err);
-        }
-        throw err;
-      }
+      const estimate = await client.estimateVideoCost(estimateParams);
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
         const delivered = isMiniMaxH3TwoStageModel(options.model)

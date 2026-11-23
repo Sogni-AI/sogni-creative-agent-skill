@@ -1,3 +1,9 @@
+## [3.73.4] - 2026-11-23
+
+- Seedance renders from a still now start: `--workflow i2v`, `l2v` and `flf` (the prompt guide's frame modes) use the still as the first or last frame and keep its shape, where the CLI refused them before.
+- `--quote` and the balance check now price MiniMax H3 clips of 11 to 15 seconds.
+- Use Sogni SDK 5.86.1 and intelligence-client 4.33.2.
+
 ## [3.73.3] - 2026-11-23
 
 - Hosts can allocate storage before saving completed renders. If a result will not fit, the CLI preserves saved files and gives commands to collect the existing render after making room.

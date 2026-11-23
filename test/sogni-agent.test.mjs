@@ -4256,6 +4256,76 @@ test('seedance 2.5 routes HTTPS and local --ref inputs to first-frame generation
   assert.equal(local.state.lastVideoProject.referenceImageUrls, undefined);
 });
 
+const SEEDANCE_GUIDE_FRAME_CASES = [
+  ['i2v', ['--ref', SCREENSHOT_FIXTURE], { first: true, last: false }],
+  ['l2v', ['--ref-end', SCREENSHOT_FIXTURE], { first: false, last: true }],
+  ['flf', ['--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE], { first: true, last: true }],
+];
+
+test('seedance 2.5 renders the prompt guide i2v, l2v and flf modes as the same frame-anchor job as no --workflow', () => {
+  for (const [workflow, frames, expected] of SEEDANCE_GUIDE_FRAME_CASES) {
+    const base = ['--video', '-m', 'seedance2-5', ...frames, '--duration', '5', '--seed', '7', 'A slow push-in on the harbor.'];
+    const named = runCli(['--workflow', workflow, ...base]);
+    const inferred = runCli(base);
+    assert.equal(named.exitCode, 0, `${workflow}: ${named.stderr}`);
+    assert.equal(inferred.exitCode, 0, `${workflow}: ${inferred.stderr}`);
+    assert.match(named.stderr, /Generating video \(t2v\) with seedance-2-5/, workflow);
+    assert.equal(Boolean(named.state.lastVideoProject.referenceImage), expected.first, workflow);
+    assert.equal(Boolean(named.state.lastVideoProject.referenceImageEnd), expected.last, workflow);
+    // Attribution carries a per-run operation id; everything else is the same job.
+    const { attribution: _namedRun, ...namedProject } = named.state.lastVideoProject;
+    const { attribution: _inferredRun, ...inferredProject } = inferred.state.lastVideoProject;
+    assert.deepEqual(namedProject, inferredProject, workflow);
+  }
+});
+
+test('seedance 2.0 takes the prompt guide i2v, l2v and flf modes as frame anchors', () => {
+  for (const [workflow, frames, expected] of SEEDANCE_GUIDE_FRAME_CASES) {
+    const { exitCode, state, stderr } = runCli([
+      '--video', '--workflow', workflow, '-m', 'seedance2', ...frames, '--duration', '5', 'A slow push-in on the harbor.'
+    ]);
+    assert.equal(exitCode, 0, `${workflow}: ${stderr}`);
+    assert.match(stderr, /Generating video \(t2v\)/, workflow);
+    assert.equal(Boolean(state.lastVideoProject.referenceImage), expected.first, workflow);
+    assert.equal(Boolean(state.lastVideoProject.referenceImageEnd), expected.last, workflow);
+  }
+});
+
+test('seedance prompt guide frame modes refuse missing or extra frame anchors before dispatch', () => {
+  expectCliError(
+    ['--video', '--workflow', 'i2v', '-m', 'seedance2-5', '--duration', '5', 'A slow push-in on the harbor.'],
+    'Seedance --workflow i2v is first-frame image-to-video: pass the first frame with --ref and no --ref-end.'
+  );
+  expectCliError(
+    ['--video', '--workflow', 'l2v', '-m', 'seedance2', '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE, 'A slow push-in.'],
+    'Seedance --workflow l2v is last-frame image-to-video: pass the last frame with --ref-end and no --ref.'
+  );
+  expectCliError(
+    ['--video', '--workflow', 'flf', '-m', 'seedance2-5', '--ref', SCREENSHOT_FIXTURE, 'A slow push-in.'],
+    'Seedance --workflow flf is first-and-last-frame video: pass the first frame with --ref and the last frame with --ref-end.'
+  );
+});
+
+test('the Seedance frame mode names stay unknown workflows on other video models', () => {
+  expectCliError(
+    ['--video', '--workflow', 'flf', '-m', 'ltx25', '--ref', SCREENSHOT_FIXTURE, '--ref-end', SCREENSHOT_FIXTURE, 'A slow push-in.'],
+    'Unknown workflow "flf"'
+  );
+});
+
+test('--quote prices a Seedance 2.5 --workflow i2v first frame instead of refusing the workflow', () => {
+  const { exitCode, stdout, state, stderr } = runCli([
+    '--quote', '--json', '--video', '-m', 'seedance2-5', '--workflow', 'i2v', '--ref', SCREENSHOT_FIXTURE,
+    '--duration', '5', 'A slow push-in on the harbor.'
+  ], { SOGNI_AGENT_TEST_ESTIMATE_JSON: JSON.stringify({ spark: '20.67', sogni: '1.2', usd: '0.1' }) });
+  assert.equal(exitCode, 0, stderr);
+  const quote = JSON.parse(stdout.trim());
+  assert.equal(quote.media, 'video');
+  assert.equal(quote.settings.duration, 5);
+  assert.equal(state.lastEstimateVideoCost.modelId, 'seedance-2-5');
+  assert.equal(state.lastVideoProject, null);
+});
+
 test('seedance 2.5 rejects native first-frame plus loose audio before dispatch', () => {
   expectCliError([
     '--video',

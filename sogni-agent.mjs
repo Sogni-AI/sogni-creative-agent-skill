@@ -2533,7 +2533,12 @@ const SEEDANCE_MINI_UNCENSORED_MODEL_SELECTIONS = new Set([
   'seedance2-mini-uncensored',
   'seedance2-mini-uncensored-t2v',
 ]);
+const SEEDANCE_FLASH_MODEL_SELECTIONS = new Set([
+  'seedance-2-5-flash', 'seedance2-5-flash', 'seedance2-5-flash-t2v',
+  'seedance2-5-flash-ia2v', 'seedance2-5-flash-v2v',
+]);
 const SEEDANCE_25_MODEL_SELECTIONS = new Set([
+  ...SEEDANCE_FLASH_MODEL_SELECTIONS,
   'seedance-2-5',
   'seedance2-5',
   'seedance2-5-t2v',
@@ -3568,6 +3573,7 @@ function resolveSkillVideoModelAlias(
   const normalized = String(modelId || '').trim().toLowerCase();
   // Mini Uncensored first: "Uncensored Seedance Mini" must never read as 2.5 Uncensored.
   if (isSeedanceMiniUncensoredModelSelectionLocal(normalized)) return SEEDANCE_MINI_UNCENSORED_MODEL_ID;
+  if (SEEDANCE_FLASH_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(normalized))) return 'seedance-2-5-flash';
   if (isSeedance25UncensoredModelSelectionLocal(normalized)) return SEEDANCE_25_UNCENSORED_MODEL_ID;
   if (isWan3EnhancedModelSelectionLocal(normalized)) return WAN3_ENHANCED_MODEL_ID;
   if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
@@ -5933,7 +5939,7 @@ Video Options:
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
-  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5: 480, 720, 1080 or 2160 (4K); Wan 3: 480, 720 (default) or 1080).
+  --target-resolution <px> Short-side target that preserves aspect ratio (Seedance 2.5 Flash: 480 or 720; standard Seedance 2.5: 480, 720, 1080 or 2160 (4K); Wan 3: 480, 720 (default) or 1080).
                          MiniMax H3 FastH3 and Ref2VA Two-Stage: the delivered size, 720, 1080, or 2K (1440; default),
                          rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
@@ -5964,7 +5970,7 @@ Video Options:
   --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 and Seedance native audio
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-mini-uncensored /
-seedance2-fast / seedance2-5 / seedance2-5-uncensored):
+seedance2-fast / seedance2-5 / seedance2-5-flash / seedance2-5-uncensored):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; do not attach loose
     image, video, or audio references to the same request.
@@ -7896,6 +7902,10 @@ if (options.photobooth) {
 if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
+  const isFlash = SEEDANCE_FLASH_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(options.model));
+  if (isFlash && (cliSet.targetResolution || targetResolutionFromPrompt) && ![480, 720].includes(options.targetResolution)) {
+    fatalCliError('Seedance 2.5 Flash supports 480p and 720p.', { code: 'INVALID_ARGUMENT' });
+  }
   const isHappyHorseVideo = isHappyHorseModel(options.model);
   const isWan3Video = isWan3ModelLocal(options.model);
   const isWan3EnhancedVideo = isWan3EnhancedModelLocal(options.model);
@@ -7917,7 +7927,7 @@ if (options.video) {
   // --seedance-finalize renders that draft at 1080p. The final reuses every
   // generation-defining input of its draft, and Sogni refuses any of them sent
   // again, so they are refused here in the CLI's own flag names.
-  if ((options.seedanceDraft || options.seedanceFinalize !== null) && !isSeedance25Video) {
+  if ((options.seedanceDraft || options.seedanceFinalize !== null) && (!isSeedance25Video || isFlash)) {
     fatalCliError('Seedance draft mode (--seedance-draft, --seedance-finalize) is supported only by Seedance 2.5.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model },

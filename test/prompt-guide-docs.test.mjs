@@ -31,7 +31,7 @@ test('generated prompt guide sections match the pinned intelligence-client', asy
   for (const family of IMAGE_FAMILIES) {
     assert.match(read(IMAGE_DOC), new RegExp(`\\| \`${family}\` \\|`), family);
   }
-  assert.deepEqual(new Set(VIDEO_FAMILIES), new Set(['seedance-2.0', 'seedance-2.5', 'ltx-2.5', 'ltx-2.3', 'wan-2.2', 'wan-3', 'happyhorse-1.1', 'minimax-h3']));
+  assert.deepEqual(new Set(VIDEO_FAMILIES), new Set(['seedance-2.0', 'seedance-2.5', 'seedance-2.5-flash', 'ltx-2.5', 'ltx-2.3', 'wan-2.2', 'wan-3', 'happyhorse-1.1', 'minimax-h3']));
 });
 
 test('the check fails when a generated section is edited by hand', async () => {

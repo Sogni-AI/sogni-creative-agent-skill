@@ -1,3 +1,7 @@
+## [3.74.0] - 2026-11-23
+
+- Select `seedance2-5-flash` for 4–30 second videos at 480p or 720p with native audio. The CLI and prompt guides support text, frame anchors, mixed references, video edits and extensions.
+
 ## [3.73.6] - 2026-11-23
 
 - The model guide and README quote Wan 3 at its current price: $0.07 per second at 480P, $0.14 at 720P and $0.28 at 1080P, up from $0.065, $0.13 and $0.26.

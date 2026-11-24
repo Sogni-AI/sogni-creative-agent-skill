@@ -693,6 +693,7 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `seedance2-ia2v` | Variable | Seedance 2.0 image+audio-to-video |
 | `seedance2-v2v` | Variable | Seedance 2.0 video-to-video, no ControlNet |
 | `seedance2-5` | Variable | Seedance 2.5 text-to-video (alias `seedance2-5-t2v`), 4-30s single clips, native audio, 480p/720p/1080p/4K, MP4/MOV and last-frame export |
+| `seedance2-5-flash`, `seedance2-5-flash-t2v`, `seedance2-5-flash-ia2v`, `seedance2-5-flash-v2v` | Variable | Seedance 2.5 Flash, 4–30 seconds at 480p or 720p, native audio, up to 10 images, 5 videos and 5 audio references. Use `--seedance-task-type edit` or `extend` with a source video. |
 | `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
 | `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `seedance2-5-uncensored` | Variable | Seedance 2.5 Uncensored: every Seedance 2.5 mode and limit under its own model id; needs the account's one-time likeness and consent agreement |

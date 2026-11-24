@@ -1,3 +1,10 @@
+## [3.73.5] - 2026-11-23
+
+- In Claude Desktop and other MCP hosts, Sogni tools now save only new files, inside your Desktop, Documents, Downloads, Pictures, Movies, Music or Videos folder, the media inbox, the temp folder or the project folder the host started in. A path anywhere else, or one that would replace an existing file, returns a clear error before anything renders. Add folders with `SOGNI_MCP_OUTPUT_DIR`.
+- `list_media` reads its type only as a media type.
+- Requests the CLI sends with your API key no longer follow a redirect; one fails with `API_REDIRECT_REFUSED` and points at `SOGNI_API_BASE_URL`.
+- Use Sogni SDK 5.86.2 and intelligence-client 4.33.3.
+
 ## [3.73.4] - 2026-11-23
 
 - Seedance renders from a still now start: `--workflow i2v`, `l2v` and `flf` (the prompt guide's frame modes) use the still as the first or last frame and keep its shape, where the CLI refused them before.

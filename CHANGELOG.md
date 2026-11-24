@@ -1,3 +1,7 @@
+## [3.73.6] - 2026-11-23
+
+- The model guide and README quote Wan 3 at its current price: $0.07 per second at 480P, $0.14 at 720P and $0.28 at 1080P, up from $0.065, $0.13 and $0.26.
+
 ## [3.73.5] - 2026-11-23
 
 - In Claude Desktop and other MCP hosts, Sogni tools now save only new files, inside your Desktop, Documents, Downloads, Pictures, Movies, Music or Videos folder, the media inbox, the temp folder or the project folder the host started in. A path anywhere else, or one that would replace an existing file, returns a clear error before anything renders. Add folders with `SOGNI_MCP_OUTPUT_DIR`.

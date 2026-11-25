@@ -1,7 +1,7 @@
 # MiniMax H3 video LoRA catalog
 
 The adapters Sogni publishes for MiniMax H3 — the only video family that loads
-LoRAs. Everything else (LTX, WAN, Seedance, HappyHorse) ignores `--lora`, and
+LoRAs. Everything else (LTX, WAN, Seedance) ignores `--lora`, and
 the CLI refuses the combination rather than rendering as if you had not asked.
 
 Video LoRAs are a different shape from the Krea 2 image sliders:

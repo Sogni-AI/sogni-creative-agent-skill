@@ -19,7 +19,6 @@ answering "which model should I use for X". For everyday generation prefer
 - Seedance 2.5 (and its takes in practice: read before judging, editing or splicing a Seedance take)
 - Seedance 2.5 Uncensored
 - Seedance 2.0 Mini Uncensored
-- HappyHorse 1.1 models
 - Alibaba Wan 3
 - Wan 3.0 Enhanced
 - MiniMax H3 models
@@ -696,9 +695,6 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
 | `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `seedance2-5-uncensored` | Variable | Seedance 2.5 Uncensored: every Seedance 2.5 mode and limit under its own model id; needs the account's one-time likeness and consent agreement |
-| `happyhorse-1.1-t2v` | Variable | HappyHorse 1.1 text-to-video, 3-15s, native audio, 720P/1080P |
-| `happyhorse-1.1-i2v` | Variable | HappyHorse 1.1 image-to-video from one first-frame image (`--ref`) |
-| `happyhorse-1.1-r2v` | Variable | HappyHorse 1.1 reference-to-video from 1-9 reference images (`-c`/`--context`) |
 | `wan3` / `wan3.0-video` | Variable | Alibaba Wan 3 unified text/frame/reference/audio/video generation, 2-30s, native audio, 480P/720P/1080P |
 | `wan3-enhanced` / `wan3.0-spicy-video` | Variable | MuleRouter `w3.0-video`: Wan 3.0 Enhanced text/frame/reference/audio/video generation, fixed or smart 2-30s, native audio, 480P/720P/1080P |
 | `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
@@ -737,8 +733,7 @@ Every key below is a valid `-m` value. The shared intelligence-client
 alias can serve several workflows) to canonical worker/vendor model ids.
 `test/docs-consistency.test.mjs` asserts every alias key in that map appears
 in this file, so a new runtime model family fails CI until it is documented
-here. The bare `happyhorse` / `happyhorse-1.1` selector is resolved by the CLI
-itself (see [HappyHorse 1.1 models](#happyhorse-11-models)).
+here.
 
 | Alias | Resolves to |
 |-------|-------------|
@@ -1030,64 +1025,6 @@ counterpart first, which keeps the likeness, then the closest-looking model to
 try instead; where the uncensored models are not released it names only the
 models that will run. Offer only those, and run an uncensored model only when
 the user picks it.
-
-## HappyHorse 1.1 models
-
-Alibaba HappyHorse 1.1 is a Premium-Spark vendor video family (three discrete
-models, no mini/fast variants). Every mode renders at a fixed 24 fps with an
-always-on natively synchronized audio track (no negative prompt, no ControlNet),
-supports 3–15 second durations, and targets 720P or 1080P output. The bare
-`happyhorse` selector resolves to the mode inferred from your references.
-
-| Model | Mode | Use Case |
-|-------|------|----------|
-| `happyhorse-1.1-t2v` | Text-to-video | Prompt-only clip with native audio (default for `-m happyhorse`) |
-| `happyhorse-1.1-i2v` | Image-to-video | Animate a single first-frame image passed with `--ref` |
-| `happyhorse-1.1-r2v` | Reference-to-video | Compose from 1–9 reference images passed with `-c`/`--context` |
-
-HappyHorse takes image references only — it does not accept reference video or
-reference audio (audio is generated natively). i2v uses exactly one first-frame
-image; r2v accepts up to nine reference images.
-
-### HappyHorse 1.1 prompting tips
-
-HappyHorse rewards concrete scene direction: one subject, one main action
-thread, one setting, and one strong visual or camera cue. Sogni's own prompt
-writer gives a single-beat shot about 80–160 words
-([video-prompting.md § HappyHorse 1.1 Prompting](./video-prompting.md#happyhorse-11-prompting),
-or `sogni-agent prompt-guide happyhorse-1.1 --mode <t2v|i2v|r2v>`). Spend them on
-what is seen and heard, not filler: fal's guide finds that piled-up detail lowers
-face and hand fidelity.
-
-**What to include:**
-
-- **Observable visual detail**: "overcast daylight", "wet asphalt", "warm amber
-  backlight", "long window shadows" — not evaluative filler like "cinematic",
-  "beautiful", "stunning", "epic", or "masterpiece".
-- **One cinematography idea**: put the camera move last and be specific — "slow
-  dolly-in", "lateral orbit with parallax", "locked-off wide". Prefer one exact
-  color over stacked synonyms.
-- **Plain prose only**: no tag lists, JSON, or weighting syntax; HappyHorse
-  ignores negative prompts.
-
-**Multi-beat clips:** use time-coded beats rather than "first X then Y", for
-example: *"0-2s: a wide establishing shot of …, 2-5s: cut to a medium tracking
-shot of …"*, and cut only when the request asks for cuts, a montage, or separate shots.
-
-**By mode:**
-
-- **t2v** — describe the whole scene compactly in a single prompt.
-- **i2v** — prompt only the *deltas*: motion, camera move, or lighting change.
-  The first frame already fixes subject, wardrobe, and background; don't restate
-  them.
-- **r2v** — give each `[Image N]` a clear role, then state composition + action
-  + one camera/lighting cue for the resulting clip.
-
-HappyHorse excels at camera moves, atmospheric light and reflections,
-wind-driven motion (hair, fabric, flags), fire, wide and aerial shots, mirrors,
-and short in-scene text.
-
-*Source: fal "Happy Horse Prompting Guide" — <https://fal.ai/learn/tools/prompting-happy-horse>*
 
 ## Alibaba Wan 3
 
@@ -1498,8 +1435,7 @@ and complete Ref2VA contract.
 The `minimax-h3-r2v`, `minimax-h3-r2v-balanced`, `minimax-h3-r2v-turbo`, and
 `minimax-h3-fasth3-r2v-turbo` selectors are the H3 modes that condition on a whole
 **reference set** instead of one or two locked frames. Ref2VA runs its own
-checkpoint, so it is **never inferred** from stray uploads the way HappyHorse
-r2v is — the user or the plan must name a tier. Direct CLI uses
+checkpoint, so it is **never inferred** from stray uploads. The user or the plan must name a tier. Direct CLI uses
 `-m minimax-h3-r2v`: `--ref` supplies loose image 1, repeatable `-c` supplies
 additional images, and repeatable `--ref-video` / `--ref-audio` supply those
 modalities. At least one visual reference must be supplied: an image or a
@@ -1687,9 +1623,6 @@ model recommendations.
 | Seedance 2.5 video-to-video, editing, or extension | `seedance2-5-v2v` |
 | Seedance 2.5 Uncensored, only when the user asks for it | `seedance2-5-uncensored` |
 | Seedance 2.0 Mini Uncensored, only when the user asks for it | `seedance2-mini-uncensored` |
-| HappyHorse text-to-video with native audio | `happyhorse-1.1-t2v` (or `happyhorse`) |
-| HappyHorse image-to-video from one first frame | `happyhorse-1.1-i2v` |
-| HappyHorse reference-to-video from up to 9 images | `happyhorse-1.1-r2v` |
 | Wan 3 unified text/frame/reference/audio/video generation | `wan3` / `wan3.0-video` |
 | Wan 3.0 Enhanced text/frame/reference/audio/video generation | `wan3-enhanced` / `wan3.0-spicy-video` |
 | MiniMax H3 text-to-video with native stereo audio | `minimax-h3` (or `minimax-h3-t2v`) |
@@ -1721,7 +1654,6 @@ model recommendations.
 - **MiniMax H3 Standard, Balanced, LightX2V Turbo, and FastH3 Turbo** use dimensions divisible by 32, fixed 24 fps, 124–362 frames on the `124 + n×17` grid (5.17–15.08 s), and no more than 1,032,192 pixels (Ref2VA Turbo: 522,240, its own 960×544 canvas; the CLI fits larger requests inside it). Standard, Balanced, LightX2V FL2VA Turbo, FastH3, and FastH3 Reference default to 1344×768; Ref2VA Turbo defaults to 960×544. Standard uses 20 steps; Balanced uses fixed 8-step Euler/simple acceleration, with LightX2V for FL2VA and Larry v4 for Ref2VA; both Turbo engines use 4 steps. LightX2V FL2VA H3 Turbo defaults to `er_sde` and accepts `euler`, `er_sde`, or `sa_solver`; the CLI omits the sampler unless `--sampler` is passed. Ref2VA Turbo and FastH3 use Euler/simple only. FastH3 is the separate FastVideo VSA engine; FastH3 Reference is its reference-to-video model and takes no sampler override. Guidance 1 applies to all, and native stereo audio to all but the FastH3 audio-to-video modes, which deliver the uploaded audio. FastH3 keeps the FastVideo engine when an H3 LoRA is attached: base jobs require 23 GB and jobs with an H3 LoRA require 32 GB. Other FL2VA/Balanced/Turbo and image-only R2V routes require 32 GB-class workers, while video-conditioned R2V requires above 40 GB. See [MiniMax H3 models](#minimax-h3-models).
 - **LTX family** (`ltx2-*`, `ltx23-*`, `ltx25-*`) uses dimensions divisible by 64. The current wrapper caps non-WAN video dimensions at 2048 px on the long side.
 - **Seedance** runs at fixed 24 fps. The 2.0 family (`seedance2`, `seedance2-mini`, `seedance2-mini-uncensored`, `seedance2-fast`) supports 4–15 s durations; full `seedance2` supports native 4K via `--target-resolution 2160` while `seedance2-mini`, `seedance2-mini-uncensored` and `seedance2-fast` remain capped to the 720p lower-resolution path. `seedance2-5` and `seedance2-5-uncensored` render 4–30 s single clips (97–721 frames) with 480p/720p/1080p/4K output. Select `--output-format mov` for editing or `--return-last-frame` to receive the final frame as an image for the next clip. Other default/WAN paths support up to 10 s; LTX and WAN animate workflows support up to 20 s.
-- **HappyHorse 1.1** runs at fixed 24 fps and supports 3–15 s durations at 720P or 1080P, with always-on native audio (no negative prompt, no ControlNet). Accepted aspect ratios are `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `4:5`, `5:4`, `9:21`, and `21:9`. i2v takes one first-frame image (`--ref`); r2v takes 1–9 reference images (`-c`/`--context`); it accepts no reference video or audio.
 - For spoken dialogue, budget roughly 3 words per second plus about 1 second per meaningful acting beat or pause.
 - The CLI auto-normalizes video sizes to satisfy these constraints.
 - Use `--target-resolution <px>` for bare resolution requests like "720p" — it targets the short side and preserves the inherited aspect ratio. On FastH3 and Ref2VA Two-Stage it names the delivered size instead: `720`, `1080`, or `2K`/`1440` (the default).

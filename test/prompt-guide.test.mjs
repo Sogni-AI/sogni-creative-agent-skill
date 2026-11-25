@@ -55,7 +55,6 @@ test('prompt-guide prints the agent rendering of a known model, offline and with
 test('prompt-guide resolves -m aliases the way the CLI does, by model id', () => {
   // Selectors only the CLI's own alias layer knows.
   for (const [model, family, mode] of [
-    ['happyhorse', 'happyhorse-1.1', 't2v'],
     ['minimax-h3-balanced', 'minimax-h3', 't2v'],
     ['sunburst', 'gpt-image', 'generate'],
     ['seedream-uncensored', 'seedream', 'generate'],
@@ -107,7 +106,7 @@ test('prompt-guide --json returns the guide object, the resolved id and the mode
 });
 
 test('prompt-guide with no model lists every family, mode and model id', () => {
-  const expected = Object.entries(MODEL_PROMPT_GUIDES).map(([family, modes]) => ({
+  const expected = Object.entries(MODEL_PROMPT_GUIDES).filter(([family]) => family !== 'happyhorse-1.1').map(([family, modes]) => ({
     family,
     modes: Object.keys(modes),
     models: [...new Set(Object.values(modes).flatMap((guide) => guide.models))],
@@ -137,7 +136,7 @@ test('prompt-guide fails on an unknown model with the list', () => {
   const payload = JSON.parse(json.stdout);
   assert.equal(payload.success, false);
   assert.equal(payload.errorCode, 'INVALID_ARGUMENT');
-  assert.equal(payload.errorDetails.families.length, Object.keys(MODEL_PROMPT_GUIDES).length);
+  assert.equal(payload.errorDetails.families.length, Object.keys(MODEL_PROMPT_GUIDES).filter(family => family !== 'happyhorse-1.1').length);
 });
 
 test('prompt-guide fails on a mode the model has with that model\'s modes', () => {

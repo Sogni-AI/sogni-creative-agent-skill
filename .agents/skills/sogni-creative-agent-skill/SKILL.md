@@ -237,7 +237,7 @@ and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
   chose: it prints the rules Sogni's own prompt writer uses, free and offline.
 - Then, for a video prompt, read the section of
   [video-prompting.md](references/video-prompting.md) for the chosen model: LTX,
-  MiniMax H3, Seedance, WAN 2.2, Wan 3, or HappyHorse. Direct mode runs no
+  MiniMax H3, Seedance, WAN 2.2 or Wan 3. Direct mode runs no
   model-aware prompt shaper (Wan 3 aside), so the model reads your words.
 - Before writing any image prompt, rendered or returned as text, for SD/SDXL,
   FLUX.1 Schnell, FLUX 3 Image Klein, Chroma, Krea 2, Qwen, Z-Image, GPT Image,

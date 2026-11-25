@@ -135,7 +135,7 @@ size, count, steps, frames or duration, fps, network, token type) and prints
 `{ "type": "quote", "media", "model", "network", "tokenType", "settings",
 "price", "partnerModel", "planCovered", "plan", "time", "dailyFairUsePct",
 "balance" }`. `price` is Sogni's quote for all outputs; on partner models
-(Seedance, Seedream, GPT Image, HappyHorse, Wan 3) a member with a plan
+(Seedance, Seedream, GPT Image, Wan 3) a member with a plan
 discount also gets `memberPrice`, the quote after that discount. Sogni settles
 some partner models from the vendor's actual usage, so the charge it records
 (`--receipt`) can differ slightly from the quote. Partner models are never

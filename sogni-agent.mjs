@@ -5777,7 +5777,7 @@ for (let i = 0; i < args.length; i++) {
     options.quiet = true;
   } else if (arg === '--max-project-spark') {
     const value = args[++i];
-    if (!value || value.length > 100 || !/^(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)) {
+    if (!value || value.length > 100 || !/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(value)) {
       fatalCliError('--max-project-spark requires a non-negative decimal Spark amount.', { code: 'INVALID_ARGUMENT' });
     }
     options.maxProjectSpark = value;

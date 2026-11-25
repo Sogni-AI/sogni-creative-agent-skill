@@ -8185,7 +8185,9 @@ test('the quote ceiling reaches image submission as an exact decimal', () => {
   const { exitCode, state } = runCli(['--max-project-spark', '178.378200000000018', 'a duck on a skateboard']);
   assert.equal(exitCode, 0);
   assert.equal(state?.lastImageProject?.maxProjectSpark, '178.378200000000018');
-  assert.equal(runCli(['--max-project-spark', '-1', 'a duck']).exitCode, 1);
+  for (const invalid of ['-1', '1e3', '0.1234567890123456789']) {
+    assert.equal(runCli(['--max-project-spark', invalid, 'a duck']).exitCode, 1);
+  }
 });
 
 test('--billing-mode passes through to the image project config', () => {

@@ -8181,6 +8181,13 @@ test('subscription lookup failure falls back to the balance check', () => {
   assert.equal(payload.errorCode, 'INSUFFICIENT_BALANCE');
 });
 
+test('the quote ceiling reaches image submission as an exact decimal', () => {
+  const { exitCode, state } = runCli(['--max-project-spark', '178.378200000000018', 'a duck on a skateboard']);
+  assert.equal(exitCode, 0);
+  assert.equal(state?.lastImageProject?.maxProjectSpark, '178.378200000000018');
+  assert.equal(runCli(['--max-project-spark', '-1', 'a duck']).exitCode, 1);
+});
+
 test('--billing-mode passes through to the image project config', () => {
   const { exitCode, state } = runCli(['--billing-mode', 'auto', 'a duck on a skateboard']);
   assert.equal(exitCode, 0);

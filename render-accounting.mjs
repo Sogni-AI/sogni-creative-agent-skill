@@ -134,6 +134,7 @@ export function buildQuoteResult({
     tokenType,
     settings,
     price,
+    ...(estimate.accountPrice ? { accountPrice: estimate.accountPrice } : {}),
     ...(discount ? { memberPrice: discount } : {}),
     partnerModel: Boolean(partnerModel),
     planCovered: isPlanCovered({ plan, partnerModel, billingMode, tokenType }),

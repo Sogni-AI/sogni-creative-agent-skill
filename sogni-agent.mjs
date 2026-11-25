@@ -2853,6 +2853,7 @@ function withBillingMode(config, attributionOptions = {}) {
     ...config,
     ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
+    ...(options.maxProjectSpark !== undefined ? { maxProjectSpark: options.maxProjectSpark } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
     ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
     network: projectNetwork(config.modelId),
@@ -4340,6 +4341,7 @@ const options = {
   strictSize: false,
   quality: null, // Quality tier: fast|hq|pro — auto-selects model, steps, dimensions
   tokenType: null,
+  maxProjectSpark: undefined,
   billingMode: null, // auto|subscription|tokens — omitted by default so the server decides coverage
   network: null, // fast|relaxed; defaults to the configured network, then fast
   priorityMode: false, // explicit per-run Unlimited Fast queue opt-in
@@ -5792,6 +5794,12 @@ for (let i = 0; i < args.length; i++) {
     cliSet.strictSize = true;
   } else if (arg === '-q' || arg === '--quiet') {
     options.quiet = true;
+  } else if (arg === '--max-project-spark') {
+    const value = args[++i];
+    if (!value || value.length > 100 || !/^(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)) {
+      fatalCliError('--max-project-spark requires a non-negative decimal Spark amount.', { code: 'INVALID_ARGUMENT' });
+    }
+    options.maxProjectSpark = value;
   } else if (arg === '--estimate-video-cost') {
     options.estimateVideoCost = true;
   } else if (arg === '--quote') {
@@ -5938,6 +5946,7 @@ Video Options:
                          rendered on a half-size canvas (672x384, 960x544, 1344x768)
   --auto-resize-assets  Auto-resize video reference assets (default)
   --no-auto-resize-assets  Disable auto-resize for video assets
+  --max-project-spark N  Submit with the exact per-project Spark ceiling from --quote (accountPrice.spark)
   --estimate-video-cost Estimate video cost and exit
   --ref <path|url>      Reference image for video (start frame; Picture 1 on H3 r2v)
   --ref-end <path|url>  End frame for interpolation/morphing; with --ref it
@@ -15687,7 +15696,7 @@ async function quoteVideoConfig(client, config) {
   const { result: estimate, recorded } = await withRecordedSdkCall(
     projectsApi,
     'estimateVideoCost',
-    () => client.estimateVideoCost(params)
+    () => client.estimateVideoCost({ ...params, includeAccountPrice: true })
   );
   const fps = recorded?.fps ?? params.fps;
   const frames = recorded?.frames ?? params.frames ?? null;
@@ -15761,6 +15770,7 @@ async function quoteAudioConfig(client, config) {
     };
   }
   const estimate = await client.estimateAudioCost({
+    includeAccountPrice: true,
     modelId: config.modelId,
     duration: config.duration,
     steps,
@@ -15823,7 +15833,7 @@ async function quoteImageConfig(client, config) {
     ? { width, height }
     : (options.removeBackground ? { width: options.width, height: options.height } : {});
   return {
-    estimate: await projectsApi.estimateCost(params),
+    estimate: await projectsApi.estimateCost({ ...params, includeAccountPrice: true }),
     settings: {
       ...outputSize,
       count: params.imageCount,
@@ -15885,7 +15895,9 @@ function printQuote(quote) {
     return;
   }
   console.log(`Price: ${formatQuoteAmount(quote.price)} (${quote.model}, ${quote.network})`);
-  if (quote.memberPrice) {
+  if (quote.accountPrice) {
+    console.log(`Account price: ${quote.accountPrice.spark} Spark (${quote.accountPrice.discountBps / 100}% subscriber discount)`);
+  } else if (quote.memberPrice) {
     console.log(`Member price: ${formatQuoteAmount(quote.memberPrice)} (${quote.memberPrice.discountBps / 100}% off)`);
   }
   console.log(`Plan: ${quote.planCovered ? 'covers this render' : 'does not cover this render'}`);
@@ -16725,7 +16737,7 @@ async function main() {
         tokenType: options.tokenType || 'spark',
         steps
       });
-      const estimate = await client.estimateVideoCost(estimateParams);
+      const estimate = await client.estimateVideoCost({ ...estimateParams, includeAccountPrice: true });
       if (options.json) {
         const duration = options.frames ? Math.max(1, Math.round((options.frames - 1) / options.fps)) : options.duration;
         const delivered = isMiniMaxH3TwoStageModel(options.model)

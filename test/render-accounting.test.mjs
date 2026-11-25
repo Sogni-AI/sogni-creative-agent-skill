@@ -53,6 +53,13 @@ test('a partner model never counts as covered and shows the member price Sogni c
   assert.equal('balance' in quote, false);
   assert.equal('dailyFairUsePct' in quote, false);
 
+  const accountPrice = { spark: '18.603', token: '18.603', usd: '0.09', sogni: '1.08', discountBps: 1000 };
+  const personal = buildQuoteResult({
+    media: 'video', estimate: { spark: '20.67', accountPrice }, partnerModel: true, subscription: null
+  });
+  assert.equal(personal.price.spark, 20.67);
+  assert.deepEqual(personal.accountPrice, accountPrice);
+
   const noPlan = buildQuoteResult({
     media: 'image', model: 'seedream-5-5-uncensored', network: 'fast', tokenType: 'spark', settings: {},
     estimate: { spark: '4' }, partnerModel: true, subscription: { active: false, status: 'none' }, balance: null

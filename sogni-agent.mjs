@@ -15478,7 +15478,6 @@ async function ensureSufficientVideoBalance(client, log) {
   // Wan 3.0 Enhanced launch credits live in the server-side model ledger and
   // cannot be inferred from wallet balance. Let the socket apply credit first,
   // then enforce PAYG balance for any remainder.
-  if (isWan3EnhancedModelLocal(options.model)) return;
   // Sogni Unlimited bills covered video jobs to the subscription, so a low
   // token balance must not block them client-side. Vendor models
   // (Seedance/HappyHorse) always bill Premium Spark and keep the check, as
@@ -15501,7 +15500,7 @@ async function ensureSufficientVideoBalance(client, log) {
   }
   const available = tokenType === 'sogni' ? balance.sogni : balance.spark;
   if (!Number.isFinite(available)) return;
-  if (available <= 0) {
+  if (available <= 0 && !isWan3EnhancedModelLocal(options.model)) {
     throw buildBalanceError(
       `Insufficient ${tokenLabel} balance (have ${formatTokenValue(available)}).`,
       { tokenType, available }
@@ -15518,14 +15517,17 @@ async function ensureSufficientVideoBalance(client, log) {
 
   let estimate;
   try {
-    estimate = await client.estimateVideoCost(await buildVideoEstimateParams({ tokenType, steps }));
+    estimate = await client.estimateVideoCost({ ...await buildVideoEstimateParams({ tokenType, steps }), includeAccountPrice: true });
   } catch (err) {
     if (!options.quiet) {
       log(`Warning: Could not estimate video cost (${err?.message || 'error'})`);
     }
     return;
   }
-  const required = parseCostEstimate(estimate, tokenType);
+  const required = parseCostEstimate(estimate.accountPrice ?? estimate, tokenType);
+  if (estimate.accountPrice && tokenType === 'spark' && options.maxProjectSpark === undefined) {
+    options.maxProjectSpark = estimate.accountPrice.spark;
+  }
   if (Number.isFinite(required) && available < required) {
     throw buildBalanceError(
       `Insufficient ${tokenLabel} balance for video render (need ~${formatTokenValue(required)}, ` +
@@ -15857,9 +15859,12 @@ function printQuote(quote) {
   }
   console.log(`Price: ${formatQuoteAmount(quote.price)} (${quote.model}, ${quote.network})`);
   if (quote.accountPrice) {
-    console.log(`Account price: ${quote.accountPrice.spark} Spark (${quote.accountPrice.discountBps / 100}% subscriber discount)`);
+    const price = quote.accountPrice;
+    const unit = price.billingMethod === 'sogni' ? 'SOGNI' : 'Spark';
+    const reason = price.billingMethod === 'subscription' ? 'included in plan' : price.discountBps ? `${price.discountBps / 100}% subscriber discount` : '';
+    console.log(`Account price: ${price.token} ${unit}${reason ? ' (' + reason + ')' : ''}`);
   } else if (quote.memberPrice) {
-    console.log(`Member price: ${formatQuoteAmount(quote.memberPrice)} (${quote.memberPrice.discountBps / 100}% off)`);
+    console.log(`Eligible subscriber discount: ${quote.memberPrice.discountBps / 100}%. The account quote is unavailable.`);
   }
   console.log(`Plan: ${quote.planCovered ? 'covers this render' : 'does not cover this render'}`);
   if (quote.time?.totalSeconds !== undefined || quote.time?.renderSeconds !== undefined) {

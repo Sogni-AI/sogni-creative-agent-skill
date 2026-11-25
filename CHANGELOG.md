@@ -1,6 +1,7 @@
-## [3.74.0] - 2026-11-23
+## [3.74.0] - 2026-11-25
 
 - Select `seedance2-5-flash` for 4–30 second videos at 480p or 720p with native audio. The CLI and prompt guides support text, frame anchors, mixed references, video edits and extensions.
+- Use Sogni SDK 5.89.0 and intelligence-client 4.35.0.
 
 ## [3.73.6] - 2026-11-23
 

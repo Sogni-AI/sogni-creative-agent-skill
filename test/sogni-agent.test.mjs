@@ -8323,7 +8323,6 @@ for (const [label, args, projectKey] of [
   ['Seedance', ['--video', '-m', 'seedance-2-5', 'a cinematic skyline at dusk'], 'lastVideoProject'],
   ['Seedream', ['-m', 'seedream-5-0-pro-uncensored', 'a duck on a skateboard'], 'lastImageProject'],
   ['Seedream 5.5', ['-m', 'seedream-5-5-uncensored', 'a duck on a skateboard'], 'lastImageProject'],
-  ['HappyHorse', ['--video', '-m', 'happyhorse-1.1-t2v', 'a cinematic skyline at dusk'], 'lastVideoProject'],
   ['Wan 3', ['--video', '-m', 'wan3.0-video', 'a cinematic skyline at dusk'], 'lastVideoProject'],
 ]) {
   test(`a configured Relaxed default leaves ${label} on Fast, the only network it runs on`, () => {
@@ -12239,7 +12238,9 @@ test('with a proxy from the environment for Node fetch, a media URL downloads th
 
 test('retired HappyHorse selectors fail before project creation', () => {
   for (const model of ['happyhorse', 'happyhorse-1.1-t2v', 'happyhorse-1.1-i2v', 'happyhorse-1.1-r2v']) {
-    const result = runCli(['--video', '-m', model, 'A jellyfish drifts through the water']);
+    const result = runCli(['--video', '-m', model, 'A jellyfish drifts through the water'], {
+      OPENCLAW_PLUGIN_CONFIG: JSON.stringify({ defaultNetwork: 'relaxed' })
+    });
     assert.notEqual(result.exitCode, 0);
     assert.match(result.stderr + result.stdout, /retired/i);
     assert.ok(!result.state?.lastVideoProject);

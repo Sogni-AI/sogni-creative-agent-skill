@@ -826,6 +826,7 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Seedance text-to-video | `seedance2` for up to native 4K; `seedance2-mini` for the lower-cost 720p path; `seedance2-fast` for the legacy 720p fast path |
 | Seedance video-to-video without ControlNet | `seedance2-v2v` |
 | Seedance 2.5 single clip up to 30s (480p/720p/1080p/4K, MP4/MOV and last-frame export) | `seedance2-5` (`seedance2-5-ia2v` / `seedance2-5-v2v` for image+audio and v2v/editing) |
+| Seedance 2.5 Flash Uncensored, when explicitly selected for 480p or 720p | `seedance2-5-flash-uncensored` |
 | Seedance 2.5 Uncensored, only when the user asks for it ("Seedance Uncensored", "Seedance Spicy") | `seedance2-5-uncensored` |
 | Seedance 2.0 Mini Uncensored, only when the user asks for it ("Seedance Mini Uncensored", "Uncensored Seedance Mini") | `seedance2-mini-uncensored` |
 | Wan 3 unified text, frame, reference, audio, or video generation | `wan3` / `wan3.0-video` |

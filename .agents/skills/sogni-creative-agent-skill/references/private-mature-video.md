@@ -32,6 +32,8 @@ Other models:
   request is mature, and never as a fallback when another model refuses or
   fails.
 
+Seedance 2.5 Flash Uncensored uses `seedance2-5-flash-uncensored` (SDK ID `seedance-2-5-flash-uncensored`). Select it explicitly for 4–30 seconds at 480p or 720p. It uses the shared likeness agreement and comes at a premium rate above Flash.
+
 ## MiniMax H3 Prism
 
 `minimax-h3-r2v-prism` (worker id `minimax-h3-prism-int8_r2v`) is a community

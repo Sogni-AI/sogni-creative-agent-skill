@@ -2639,6 +2639,16 @@ test('Seedance 2.5 Flash keeps its model and rejects unsupported output before s
   }
   expectCliError([...args, '--target-resolution', '1080', 'An amber marble rolls.'], 'Seedance 2.5 Flash supports 480p and 720p.');
 });
+test('Seedance 2.5 Flash Uncensored keeps its model and rejects unsupported output before submission', () => {
+  const args = ['--video', '-m', 'seedance2-5-flash-uncensored', '--duration', '30'];
+  for (const size of ['480', '720']) {
+    const { exitCode, state } = runCli([...args, '--target-resolution', size, 'An amber marble rolls.']);
+    assert.equal(exitCode, 0);
+    assert.equal(state.lastVideoProject.modelId, 'seedance-2-5-flash-uncensored');
+    assert.equal(state.lastVideoProject.duration, 30);
+  }
+  expectCliError([...args, '--target-resolution', '1080', 'An amber marble rolls.'], 'Seedance 2.5 Flash supports 480p and 720p.');
+});
 
 test('MiniMax H3 Turbo backend tiers retain H3 workflow, frame, and fps rules', () => {
   const cases = [

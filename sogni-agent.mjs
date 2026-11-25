@@ -2537,8 +2537,13 @@ const SEEDANCE_FLASH_MODEL_SELECTIONS = new Set([
   'seedance-2-5-flash', 'seedance2-5-flash', 'seedance2-5-flash-t2v',
   'seedance2-5-flash-ia2v', 'seedance2-5-flash-v2v',
 ]);
+const SEEDANCE_FLASH_UNCENSORED_MODEL_SELECTIONS = new Set([
+  'seedance-2-5-flash-uncensored', 'seedance2-5-flash-uncensored', 'seedance2-5-flash-uncensored-t2v',
+  'seedance2-5-flash-uncensored-ia2v', 'seedance2-5-flash-uncensored-v2v',
+]);
 const SEEDANCE_25_MODEL_SELECTIONS = new Set([
   ...SEEDANCE_FLASH_MODEL_SELECTIONS,
+  ...SEEDANCE_FLASH_UNCENSORED_MODEL_SELECTIONS,
   'seedance-2-5',
   'seedance2-5',
   'seedance2-5-t2v',
@@ -3551,6 +3556,7 @@ function resolveSkillVideoModelAlias(
   // Mini Uncensored first: "Uncensored Seedance Mini" must never read as 2.5 Uncensored.
   if (isSeedanceMiniUncensoredModelSelectionLocal(normalized)) return SEEDANCE_MINI_UNCENSORED_MODEL_ID;
   if (SEEDANCE_FLASH_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(normalized))) return 'seedance-2-5-flash';
+  if (SEEDANCE_FLASH_UNCENSORED_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(normalized))) return 'seedance-2-5-flash-uncensored';
   if (isSeedance25UncensoredModelSelectionLocal(normalized)) return SEEDANCE_25_UNCENSORED_MODEL_ID;
   if (isWan3EnhancedModelSelectionLocal(normalized)) return WAN3_ENHANCED_MODEL_ID;
   if (isWan3ModelSelectionLocal(normalized)) return WAN3_MODEL_ID;
@@ -5945,7 +5951,7 @@ Video Options:
   --generate-audio, --no-generate-audio  Keep/strip H3 audio; enable/disable Wan 3 and Seedance native audio
 
 Seedance Reference Modes (mutually exclusive on seedance2 / seedance2-mini / seedance2-mini-uncensored /
-seedance2-fast / seedance2-5 / seedance2-5-flash / seedance2-5-uncensored):
+seedance2-fast / seedance2-5 / seedance2-5-flash / seedance2-5-flash-uncensored / seedance2-5-uncensored):
   - DEDICATED FRAME MODE: --ref (first frame) and/or --ref-end (last frame).
     Best when you want canonical first/last frame anchoring; do not attach loose
     image, video, or audio references to the same request.
@@ -6213,6 +6219,7 @@ Seedance Video Model Selectors:
                                      --ref/--ref-end, up to 30 image / 10 video / 10 audio refs (50 total)
   seedance2-5-ia2v                  Seedance 2.5 image+audio-to-video
   seedance2-5-v2v                   Seedance 2.5 video-to-video, editing, and extension, no ControlNet
+  seedance2-5-flash-uncensored      Seedance 2.5 Flash with the shared likeness agreement. Uses Flash limits and a premium rate.
   seedance2-5-uncensored            Seedance 2.5 Uncensored (also "Seedance Uncensored", "Seedance Spicy",
                                      seedance-2-5-uncensored): every Seedance 2.5 mode, limit, and option above.
                                      Use it only when asked for. Each account first accepts a one-time
@@ -7853,7 +7860,8 @@ if (options.photobooth) {
 if (options.video) {
   const isSeedanceVideo = isSeedanceModel(options.model);
   const isSeedance25Video = isSeedance25ModelSelectionLocal(options.model);
-  const isFlash = SEEDANCE_FLASH_MODEL_SELECTIONS.has(normalizeSeedanceModelSelectionLocal(options.model));
+  const selection = normalizeSeedanceModelSelectionLocal(options.model);
+  const isFlash = SEEDANCE_FLASH_MODEL_SELECTIONS.has(selection) || SEEDANCE_FLASH_UNCENSORED_MODEL_SELECTIONS.has(selection);
   if (isFlash && (cliSet.targetResolution || targetResolutionFromPrompt) && ![480, 720].includes(options.targetResolution)) {
     fatalCliError('Seedance 2.5 Flash supports 480p and 720p.', { code: 'INVALID_ARGUMENT' });
   }

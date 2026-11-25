@@ -781,6 +781,8 @@ here.
 - A configured `videoModels.i2v` (OpenClaw plugin config) overrides both
   defaults.
 
+Seedance 2.5 Flash Uncensored uses `seedance2-5-flash-uncensored` (SDK ID `seedance-2-5-flash-uncensored`). Select it explicitly for 4–30 seconds at 480p or 720p. It uses the shared likeness agreement and comes at a premium rate above Flash.
+
 ## Seedance 2.5
 
 `seedance2-5` (vendor model `seedance-2-5`) is the newest Seedance generation.

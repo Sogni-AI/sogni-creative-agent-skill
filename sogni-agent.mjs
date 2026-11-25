@@ -4379,7 +4379,6 @@ const options = {
   wan3SmartDuration: false,
   wan3ReferenceFileUrl: null,
   wan3ReferenceLinkUrl: null,
-  wan3Watermark: false,
   fps: 16,
   duration: 5,
   frames: null,
@@ -4591,7 +4590,6 @@ const cliSet = {
   wan3SmartDuration: false,
   wan3ReferenceFileUrl: false,
   wan3ReferenceLinkUrl: false,
-  wan3Watermark: false,
   fps: false,
   duration: false,
   frames: false,
@@ -4954,12 +4952,6 @@ for (let i = 0; i < args.length; i++) {
     options.wan3ReferenceLinkUrl = requireFlagValue(args, i, arg).trim();
     i++;
     cliSet.wan3ReferenceLinkUrl = true;
-  } else if (arg === '--watermark') {
-    options.wan3Watermark = true;
-    cliSet.wan3Watermark = true;
-  } else if (arg === '--no-watermark') {
-    options.wan3Watermark = false;
-    cliSet.wan3Watermark = true;
   } else if (arg === '--fps') {
     const raw = requireFlagValue(args, i, arg);
     i++;
@@ -5910,7 +5902,6 @@ Video Options:
   --smart-duration, --no-smart-duration  Let Wan 3 choose 2-30s, or use --duration
   --reference-file-url <url> Wan 3 public HTTPS document context (one, up to 100 MB; supported paged formats up to 50 pages)
   --reference-link-url <url> Wan 3 public HTTPS webpage context (one; mutually exclusive with file)
-  --watermark, --no-watermark  Toggle Wan 3's provider watermark (default: off)
   --fps <num>           Frames per second (model default unless set)
   --duration <sec>      Duration in seconds (default: 5); Seedance 2.5 edit requires @Video1's source duration
   --frames <num>        Override total frames (optional)
@@ -7832,8 +7823,8 @@ if (options.legacyWan3TaskType !== null) {
   );
 }
 
-if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.seedanceDraft || options.seedanceFinalize || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
-  fatalCliError('Video-only options (--workflow/--seedance-task-type/--seedance-draft/--seedance-finalize/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--watermark/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
+if (!options.video && !options.apiChat && !options.apiWorkflowAction && (options.refAudio || options.refVideo || options.refMask || options.referenceAudioIdentity || options.voicePersonaName || options.videoWorkflow || options.seedanceTaskType || options.seedanceDraft || options.seedanceFinalize || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || cliSet.wan3Ratio || options.frames || options.targetResolution || options.audioStart !== null || options.audioDuration !== null || options.videoStart !== null || options.outpaintPosition || options.outpaintAspectRatio)) {
+  fatalCliError('Video-only options (--workflow/--seedance-task-type/--seedance-draft/--seedance-finalize/--wan3-ratio/--smart-duration/--reference-file-url/--reference-link-url/--frames/--target-resolution/--ref-audio/--ref-video/--mask/--outpaint-position/--reference-audio-identity/--voice-persona) require --video.', {
     code: 'INVALID_ARGUMENT'
   });
 }
@@ -7932,19 +7923,14 @@ if (options.video) {
     }
     options.count = 1;
   }
-  if ((cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl || options.wan3Watermark) && !isWan3Video) {
+  if ((cliSet.wan3Ratio || options.wan3SmartDuration || options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl) && !isWan3Video) {
     fatalCliError('Wan 3 controls are supported only by Wan 3 or Wan 3.0 Enhanced.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
     });
   }
-  if (
-    isWan3EnhancedVideo &&
-    (options.wan3ReferenceFileUrl ||
-      options.wan3ReferenceLinkUrl ||
-      options.wan3Watermark)
-  ) {
-    fatalCliError('Wan 3.0 Enhanced does not support document/web context or watermark.', {
+  if (isWan3EnhancedVideo && (options.wan3ReferenceFileUrl || options.wan3ReferenceLinkUrl)) {
+    fatalCliError('Wan 3.0 Enhanced does not support document/web context.', {
       code: 'INVALID_ARGUMENT',
       details: { model: options.model }
     });
@@ -17321,7 +17307,6 @@ async function main() {
         projectConfig.promptExtend = options.apiExpandPrompt ?? true;
         if (options.wan3SmartDuration) projectConfig.smartDuration = true;
         if (!isWan3EnhancedVideo) {
-          projectConfig.watermark = options.wan3Watermark;
           if (options.wan3ReferenceFileUrl) projectConfig.referenceFileUrl = options.wan3ReferenceFileUrl;
           if (options.wan3ReferenceLinkUrl) projectConfig.referenceLinkUrl = options.wan3ReferenceLinkUrl;
         }

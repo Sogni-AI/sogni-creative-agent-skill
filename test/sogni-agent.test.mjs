@@ -4782,12 +4782,11 @@ test('non-seedance, non-H3-r2v video rejects multiple --ref-audio entries', () =
   );
 });
 
-test('wan3 exposes smart duration, exact prompt handling, watermark, and document context', () => {
+test('wan3 exposes smart duration, exact prompt handling, and document context', () => {
   const { exitCode, state, stderr } = runCli([
     '--video', '-m', 'wan3',
     '--smart-duration',
     '--no-expand-prompt',
-    '--watermark',
     '--wan3-ratio', '9:16',
     '--reference-file-url', 'https://example.com/brief.pdf',
     'Create the launch clip from the supplied brief.'
@@ -4796,7 +4795,7 @@ test('wan3 exposes smart duration, exact prompt handling, watermark, and documen
   assert.equal(state.lastVideoProject.smartDuration, true);
   assert.equal(Object.hasOwn(state.lastVideoProject, 'duration'), false);
   assert.equal(state.lastVideoProject.promptExtend, false);
-  assert.equal(state.lastVideoProject.watermark, true);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'watermark'), false);
   assert.equal(state.lastVideoProject.ratio, '9:16');
   assert.equal(state.lastVideoProject.referenceFileUrl, 'https://example.com/brief.pdf');
 });
@@ -4811,7 +4810,7 @@ test('wan3 keeps provider defaults explicit for direct generation', () => {
   assert.equal(Object.hasOwn(state.lastVideoProject, 'wan3TaskType'), false);
   assert.equal(state.lastVideoProject.generateAudio, true);
   assert.equal(state.lastVideoProject.promptExtend, true);
-  assert.equal(state.lastVideoProject.watermark, false);
+  assert.equal(Object.hasOwn(state.lastVideoProject, 'watermark'), false);
 });
 
 test('wan3 enhanced aliases select the exact MuleRouter model and verified controls', () => {
@@ -4835,10 +4834,6 @@ test('wan3 enhanced aliases select the exact MuleRouter model and verified contr
 test('wan3 enhanced rejects only controls absent from its provider contract', () => {
   expectCliError(
     ['--video', '-m', 'wan3-spicy', '--reference-file-url', 'https://example.com/a.pdf', 'Animate this scene.'],
-    'does not support document/web context'
-  );
-  expectCliError(
-    ['--video', '-m', 'wan3-spicy', '--watermark', 'Animate this scene.'],
     'does not support document/web context'
   );
 });

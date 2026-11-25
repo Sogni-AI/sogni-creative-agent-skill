@@ -1101,7 +1101,7 @@ says otherwise.
   every input must be supplied through the context image/media workflow because
   a prompt name alone cannot preserve identity.
 - Smart duration (`--smart-duration`) and provider prompt expansion are
-  supported. There is no document/web context, watermark control, negative
+  supported. There is no document/web context, negative
   prompt, sampling override, source-video edit, or extend mode. Seeds are
   integers from `0` through `2147483647`; omit the seed for a random result.
 - Standard artist PAYG rates are $0.08/s at 480P, $0.16/s at 720P, and

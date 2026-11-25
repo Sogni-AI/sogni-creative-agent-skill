@@ -15714,6 +15714,7 @@ async function quoteAudioConfig(client, config) {
     const path = '/api/v1/job-audio/estimate/'
       + [tokenType, config.modelId, 30, steps, count].map((part) => encodeURIComponent(part)).join('/');
     const response = await socket.get(path, {
+      includeAccountPrice: true,
       characters,
       ...(config.network ? { network: config.network } : {}),
       ...(config.billingMode ? { billingMode: config.billingMode } : {})
@@ -15722,6 +15723,7 @@ async function quoteAudioConfig(client, config) {
     if (!project) throw quoteUnavailableError('Sogni returned no price for this speech request.');
     return {
       estimate: {
+        ...(response.accountPrice ? { accountPrice: response.accountPrice } : {}),
         spark: project.costInSpark,
         sogni: project.costInSogni,
         usd: project.costInUSD,

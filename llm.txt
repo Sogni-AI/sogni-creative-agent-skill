@@ -18,7 +18,7 @@ Current capabilities and limits: read `references/models.md` before answering
 model-selection questions. Seedance 2.5 supports 1080p with
 `--video -m seedance2-5 --target-resolution 1080`, 4–30s clips, MOV export,
 and optional last-frame images. Seedance 2.5 Uncensored (`-m seedance2-5-uncensored`)
-has the same limits, and Seedance 2.0 Mini Uncensored
+has the same limits. Seedance 2.5 Flash Uncensored (`-m seedance2-5-flash-uncensored`) supports 4–30 seconds at 480p or 720p, and Seedance 2.0 Mini Uncensored
 (`-m seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only when
 asked, and on error 4103 tell the user to accept their shared one-time likeness
 and consent agreement in the Sogni app (never retry). Other recent additions include FastH3

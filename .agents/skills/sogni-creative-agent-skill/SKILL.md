@@ -29,6 +29,8 @@ Invoke `sogni-agent-hermes` for every command in this skill. Fall back to
 `sogni-agent` only when the Hermes launcher is not on `PATH`. The two commands
 have identical flags and output; the Hermes launcher adds host attribution.
 
+For an explicit Seedance 2.5 Flash Uncensored selection, use `-m seedance2-5-flash-uncensored`. Flash accepts 4–30 seconds at 480p or 720p and uses the shared likeness agreement.
+
 ## Set up the CLI
 
 This skill runs the local CLI. For local versus hosted MCP setup and hosted

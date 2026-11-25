@@ -696,6 +696,7 @@ re-encoding the picture: `--remix-audio film.mp4 out.mp4 --mix-audio take.mp4 --
 | `seedance2-5-ia2v` | Variable | Seedance 2.5 image+audio-to-video |
 | `seedance2-5-v2v` | Variable | Seedance 2.5 video-to-video and video editing/extension, no ControlNet |
 | `seedance2-5-uncensored` | Variable | Seedance 2.5 Uncensored: every Seedance 2.5 mode and limit under its own model id; needs the account's one-time likeness and consent agreement |
+| `seedance2-5-flash-uncensored`, `seedance2-5-flash-uncensored-t2v`, `seedance2-5-flash-uncensored-ia2v`, `seedance2-5-flash-uncensored-v2v` | Variable | Seedance 2.5 Flash Uncensored: every Seedance 2.5 Flash mode and limit (4–30 seconds at 480p or 720p) under its own model id; shares the Seedance 2.5 Uncensored likeness and consent agreement |
 | `wan3` / `wan3.0-video` | Variable | Alibaba Wan 3 unified text/frame/reference/audio/video generation, 2-30s, native audio, 480P/720P/1080P |
 | `wan3-enhanced` / `wan3.0-spicy-video` | Variable | MuleRouter `w3.0-video`: Wan 3.0 Enhanced text/frame/reference/audio/video generation, fixed or smart 2-30s, native audio, 480P/720P/1080P |
 | `minimax-h3` / `minimax-h3-t2v` | Standard | MiniMax H3 text-to-video at 24 fps with native stereo audio |
@@ -761,6 +762,7 @@ here.
 | `seedance2-fast`, `seedance2-fast-t2v` | `seedance-2-0-fast` |
 | `seedance2-5`, `seedance2-5-t2v`, `seedance2-5-ia2v`, `seedance2-5-v2v` | `seedance-2-5` (suffix picks the workflow) |
 | `seedance2-5-uncensored`, `seedance2-5-uncensored-t2v`, `seedance2-5-uncensored-ia2v`, `seedance2-5-uncensored-v2v`, `seedance-uncensored`, `seedance-spicy` | `seedance-2-5-uncensored` (Seedance 2.5 Uncensored; never `seedance-2-5`) |
+| `seedance2-5-flash-uncensored`, `seedance2-5-flash-uncensored-t2v`, `seedance2-5-flash-uncensored-ia2v`, `seedance2-5-flash-uncensored-v2v` | `seedance-2-5-flash-uncensored` (Seedance 2.5 Flash Uncensored; never `seedance-2-5-flash`) |
 
 ### Default image-to-video routing
 
@@ -781,7 +783,7 @@ here.
 - A configured `videoModels.i2v` (OpenClaw plugin config) overrides both
   defaults.
 
-Seedance 2.5 Flash Uncensored uses `seedance2-5-flash-uncensored` (SDK ID `seedance-2-5-flash-uncensored`). Select it explicitly for 4–30 seconds at 480p or 720p. It uses the shared likeness agreement and comes at a premium rate above Flash.
+Seedance 2.5 Flash Uncensored uses `seedance2-5-flash-uncensored` (SDK ID `seedance-2-5-flash-uncensored`). Select it explicitly for 4–30 seconds at 480p or 720p. It uses the shared likeness agreement; the live estimate shows its price.
 
 ## Seedance 2.5
 

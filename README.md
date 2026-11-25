@@ -884,7 +884,7 @@ The LTX-2.5 v2v selector `ltx25-v2v` supports two extra control modes: **`outpai
 
 ## LTX-2.x Prompting Guide
 
-Every video family reads its own prompt grammar. `sogni-agent prompt-guide <model> --mode <mode>` prints the rules Sogni's own prompt writer uses for that model and mode (free and offline; with no model it lists every guide), and `references/video-prompting.md` has a section per model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3, HappyHorse). This section summarizes the LTX one.
+Every video family reads its own prompt grammar. `sogni-agent prompt-guide <model> --mode <mode>` prints the rules Sogni's own prompt writer uses for that model and mode (free and offline; with no model it lists every guide), and `references/video-prompting.md` has a section per model (LTX, MiniMax H3, Seedance, WAN 2.2, Wan 3). This section summarizes the LTX one.
 
 When you use LTX-2.5 or an LTX-2.3 rollback model, do **not** feed it short tag prompts like `"cinematic drone shot over tropical cliffs"`. LTX renders more reliably from a dense natural-language scene description.
 
@@ -1038,7 +1038,7 @@ Use `--token-type auto` to retry native Sogni models with SOGNI tokens when SPAR
 sogni-agent --token-type auto "a dragon eating tacos"
 ```
 
-Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, HappyHorse, and Wan 3 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
+Tries SPARK first, then falls back to SOGNI if the balance is too low. Vendor models such as GPT Image 2, Seedance, and Wan 3 require Premium Spark eligibility and never use SOGNI fallback. If usable balance is still insufficient, buy Spark Packs at https://docs.sogni.ai/pricing/#spark-packs.
 
 On a **Sogni Unlimited** subscription, Sogni-hosted generation is covered by the plan instead of spending tokens — see the next section.
 
@@ -1062,7 +1062,7 @@ Plan pricing, included features and models, usage allowances, fair-use controls,
 ### What the subscription covers
 
 - **Covered:** Sogni-hosted models on the Supernet — image, video, and music generation, including worker-hosted premium models. Covered renders bill to the subscription and do not spend Spark or SOGNI.
-- **Not subscription-covered:** external-vendor models — **GPT Image 2 / GPT Image 2.5 Sunburst / GPT Image 2.5 Flare** (`gpt-image-2`, `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Mini Uncensored / Seedance 2.0 Fast / Seedance 2.5 / Seedance 2.5 Uncensored** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-mini-uncensored`, `seedance-2-0-fast`, `seedance-2-5`, `seedance-2-5-uncensored`), **Seedream 5.0 Pro Uncensored / Seedream 5.5 Uncensored** (`seedream-5-0-pro-uncensored`, `seedream-5-5-uncensored`), **HappyHorse 1.1** (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1.1-r2v`), **Wan 3** (`wan3.0-video`), and **Wan 3.0 Enhanced** (`wan3.0-spicy-video`). They never fall back to SOGNI. Wan 3.0 Enhanced may use its separate launch-credit ledger before PAYG; that credit does not make the model subscription-covered.
+- **Not subscription-covered:** external-vendor models — **GPT Image 2 / GPT Image 2.5 Sunburst / GPT Image 2.5 Flare** (`gpt-image-2`, `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare`), **Seedance 2.0 / Seedance 2.0 Mini / Seedance 2.0 Mini Uncensored / Seedance 2.0 Fast / Seedance 2.5 / Seedance 2.5 Uncensored** (`seedance-2-0`, `seedance-2-0-mini`, `seedance-2-0-mini-uncensored`, `seedance-2-0-fast`, `seedance-2-5`, `seedance-2-5-uncensored`), **Seedream 5.0 Pro Uncensored / Seedream 5.5 Uncensored** (`seedream-5-0-pro-uncensored`, `seedream-5-5-uncensored`), **Wan 3** (`wan3.0-video`), and **Wan 3.0 Enhanced** (`wan3.0-spicy-video`). They never fall back to SOGNI. Wan 3.0 Enhanced may use its separate launch-credit ledger before PAYG; that credit does not make the model subscription-covered.
 - **Token choice stays yours:** selecting SOGNI (`--token-type sogni`) opts a job out of subscription coverage and spends SOGNI instead. Coverage applies when the active token is Spark.
 
 By default the CLI sends no `billingMode`/coverage hint; the server decides coverage from the account's verified entitlement and the resolved model, and a subscription claim is never honored without a server-verified entitlement. `--billing-mode` makes the choice explicit when you need it: `subscription` requires Unlimited coverage (the job fails instead of spending tokens), `tokens` opts out of coverage and bills Spark/SOGNI, and `auto` states the default server behavior explicitly.
@@ -1114,7 +1114,7 @@ When a generation cannot bill to the subscription, the CLI surfaces a structured
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
-| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance / HappyHorse / Wan 3), or reconnect and retry for a transient entitlement read. |
+| `4078` | Unlimited billing is not available for this generation (a vendor model that the subscription never covers, or no verified entitlement). | Use Premium Spark for vendor models (GPT Image 2 / Seedance /  Wan 3), or reconnect and retry for a transient entitlement read. |
 | `4079` | Maximum queued jobs reached for the plan. | Wait for queued jobs to finish, then submit more. |
 | `4080` | Renewal payment is being retried; Unlimited access is paused. | Pay for this render with Spark or SOGNI (`--token-type spark` / `sogni`) for now. **Do not auto-retry the covered job** — access resumes on its own once renewal succeeds. |
 | `4081` | The feature requires a higher subscription plan. | Upgrade to Unlimited Pro. |

@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent
-description: "Sogni Creative Agent: image, 3D, speech, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/HappyHorse/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent: image, 3D, speech, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
 ---
 
 # Sogni Creative Agent
@@ -134,7 +134,7 @@ Before writing any image or video prompt, run
 `sogni-agent prompt-guide <model> --mode <mode>` for the model and mode you
 chose: it prints the rules Sogni's own prompt writer uses, free and offline.
 Then read that model's section of `../../references/video-prompting.md` (LTX,
-MiniMax H3 including FastH3, Seedance, WAN 2.2, Wan 3, HappyHorse) or
+MiniMax H3 including FastH3, Seedance, WAN 2.2, Wan 3) or
 `../../references/image-prompting.md`. Direct mode runs no model-aware prompt
 shaper (Wan 3 aside), so the model reads your words. For FastH3, select
 the Two-Stage model for higher delivered sizes.

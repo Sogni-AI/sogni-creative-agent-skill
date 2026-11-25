@@ -203,7 +203,7 @@ function subscriptionBillingFallback(code) {
       // Vendor model the subscription never covers, or no verified entitlement.
       return {
         retryable: false,
-        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance, Seedream, HappyHorse) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
+        hint: 'This generation is not covered by Sogni Unlimited. Vendor models (GPT Image 2, Seedance and Seedream) always require Premium Spark; otherwise reconnect and try again. ' + SPARK_PACKS_PURCHASE_HINT,
         purchaseLabel: 'Get Premium Spark',
         purchaseUrl: SPARK_PACKS_PURCHASE_URL,
       };
@@ -2892,33 +2892,10 @@ function describeSubscription(subscription) {
   return `${label} (${subscription.status || 'active'})`;
 }
 
-// HappyHorse 1.1 ships three discrete vendor models (no mini/fast). The shared
-// intel client only resolves the fully-qualified ids; accept the bare
-// `happyhorse` / `happyhorse-1.1` selector here so `-m happyhorse` works the way
-// `-m seedance2` does, and pin the concrete per-mode model id.
-const HAPPYHORSE_VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v']);
-
 function isHappyHorseModelSelectionLocal(modelId) {
   if (isHappyHorseModelSelection(modelId)) return true;
   const key = String(modelId || '').trim().toLowerCase();
   return key === 'happyhorse' || key === 'happyhorse-1.1';
-}
-
-function resolveHappyHorseModelId(modelId, workflow) {
-  if (!isHappyHorseModelSelectionLocal(modelId)) return modelId;
-  const key = String(modelId || '').trim().toLowerCase();
-  if (key === 'happyhorse' || key === 'happyhorse-1.1') {
-    const mode = HAPPYHORSE_VIDEO_MODES.has(workflow) ? workflow : 't2v';
-    return `happyhorse-1.1-${mode}`;
-  }
-  return modelId;
-}
-
-// The per-mode workflow pinned by a concrete `happyhorse-1.1-<mode>` model id, or
-// null for the bare `happyhorse` / `happyhorse-1.1` alias (mode inferred from refs).
-function happyHorseModeFromModelId(modelId) {
-  const match = String(modelId || '').trim().toLowerCase().match(/^happyhorse-1\.1-(t2v|i2v|r2v)$/);
-  return match ? match[1] : null;
 }
 
 function getMaxContextImages(modelId) {
@@ -4132,7 +4109,7 @@ function loadOpenClawPluginConfig() {
 const PROMPT_GUIDE_USAGE = 'sogni-agent prompt-guide <model> [--mode <mode>] [--json]';
 
 function promptGuideCatalog() {
-  return Object.entries(MODEL_PROMPT_GUIDES).map(([family, modes]) => ({
+  return Object.entries(MODEL_PROMPT_GUIDES).filter(([family]) => !isHappyHorseModelSelectionLocal(family)).map(([family, modes]) => ({
     family,
     modes: Object.keys(modes),
     models: [...new Set(Object.values(modes).flatMap((guide) => guide.models))],
@@ -4181,14 +4158,12 @@ const PROMPT_GUIDE_MODES = [...new Set(Object.values(MODEL_PROMPT_GUIDES).flatMa
 // selectors for that workflow, then its image selector normalization. The model
 // id decides; nothing reads prompt text.
 function resolvePromptGuide(model, mode) {
+  if (isHappyHorseModelSelectionLocal(model)) return null;
   const [workflow, hasStartFrame, hasEndFrame] = mode
     ? (PROMPT_GUIDE_MODE_WORKFLOWS[mode] || [])
     : PROMPT_GUIDE_MODE_WORKFLOWS.t2v;
   const video = resolveVideoModelAlias(
-    resolveHappyHorseModelId(
-      resolveSkillVideoModelAlias(model, workflow ?? null, Boolean(hasStartFrame), Boolean(hasEndFrame)),
-      workflow ?? null
-    ),
+    resolveSkillVideoModelAlias(model, workflow ?? null, Boolean(hasStartFrame), Boolean(hasEndFrame)),
     workflow
   );
   const image = normalizeSeedreamModelAlias(normalizeGptImageModelAlias(model));
@@ -6244,11 +6219,6 @@ Seedance Video Model Selectors:
                                      likeness and consent agreement in the Sogni app; until then jobs fail
                                      with error 4103 (not retryable)
 
-HappyHorse 1.1 Video Model Selectors (3-15s, fixed 24fps, native audio, 720P/1080P):
-  happyhorse-1.1-t2v                Text-to-video (also accepts the bare "happyhorse" alias)
-  happyhorse-1.1-i2v                Image-to-video from a single first-frame image (--ref)
-  happyhorse-1.1-r2v                Reference-to-video from 1-9 reference images (-c/--context)
-
 MiniMax H3 Video Model Selectors (fixed 24fps, native 32kHz stereo audio + dialogue,
 frames 124+n*17 = 5.17-15.08s, sizes /32 up to 1,032,192px. FL2VA/Balanced/LightX2V Turbo and
 image-only R2V need 32GB-class workers; video-conditioned R2V needs above 40GB.
@@ -7114,30 +7084,11 @@ if (options.video) {
     );
   }
 
-  // HappyHorse 1.1 has no v2v/ia2v. A concrete `happyhorse-1.1-<mode>` id pins
-  // the workflow; the bare `happyhorse` / `happyhorse-1.1` alias infers t2v by
-  // default, i2v from a single first-frame image (--ref), and r2v from loose
-  // -c/--context reference images (1-9). Pin the concrete per-mode model id.
   if (isHappyHorseModelSelectionLocal(options.model)) {
-    const pinnedMode = happyHorseModeFromModelId(options.model);
-    if (pinnedMode) {
-      if (options.videoWorkflow && options.videoWorkflow !== pinnedMode) {
-        fatalCliError(`Workflow "${options.videoWorkflow}" does not match model "${options.model}".`, {
-          code: 'INVALID_ARGUMENT',
-          details: { workflow: options.videoWorkflow, model: options.model }
-        });
-      }
-      options.videoWorkflow = pinnedMode;
-    } else if (!options.videoWorkflow) {
-      if (Array.isArray(options.contextImages) && options.contextImages.length > 0) {
-        options.videoWorkflow = 'r2v';
-      } else if (options.refImage) {
-        options.videoWorkflow = 'i2v';
-      } else {
-        options.videoWorkflow = 't2v';
-      }
-    }
-    options.model = resolveHappyHorseModelId(options.model, options.videoWorkflow);
+    fatalCliError('HappyHorse has been retired. Select an available video model.', {
+      code: 'INVALID_ARGUMENT',
+      details: { model: options.model }
+    });
   }
 
   const workflowFromModel =

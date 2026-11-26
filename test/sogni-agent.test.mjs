@@ -11213,12 +11213,84 @@ test('--quote --transcribe probes real input audio seconds for pricing', () => {
   assert.equal(quote.media, 'audio');
   assert.equal(quote.model, 'nemotron_3.5_transcribe_30b_a4b_nvfp4');
   assert.equal(quote.settings.duration, 7);
-  assert.equal(quote.settings.steps, 1);
+  assert.equal(quote.settings.steps, undefined);
   assert.ok(
     result.state.socketGets?.some((entry) => entry.path === '/api/v1/job-audio/estimate/spark/nemotron_3.5_transcribe_30b_a4b_nvfp4/7/1/1'),
     `expected STT estimate path with concrete 7s duration, got ${JSON.stringify(result.state.socketGets)}`,
   );
   assert.equal(result.state.lastAudioProject, null);
+
+  const relaxed = runCli(['--quote', '--transcribe', sevenSecAudio, '--network', 'relaxed', '--json']);
+  assert.equal(relaxed.exitCode, 1);
+  assert.match(
+    JSON.parse(relaxed.stdout).error,
+    /Sogni quotes music, speech, and transcription on the Fast network only\./,
+  );
+});
+
+test('--transcribe and --voice-reference enforce audio stream presence, packet-duration fallback, and local byte caps', () => {
+  const dir = makeTempHome('sogni-stt-guards-');
+
+  // 1. Silent video (video stream only, no audio stream) is rejected before quoting or uploading
+  const silentVideo = join(dir, 'silent.mp4');
+  writeFileSync(silentVideo, Buffer.from('fake-mp4'));
+  const silentFfprobe = join(dir, 'ffprobe-silent.sh');
+  writeFileSync(
+    silentFfprobe,
+    '#!/bin/sh\necho \'{"streams":[{"codec_type":"video","duration":"5.0"}],"format":{"format_name":"mov,mp4","duration":"5.0"}}\'\n',
+  );
+  chmodSync(silentFfprobe, 0o755);
+
+  const silentQuote = runCli(['--quote', '--transcribe', silentVideo, '--json'], {
+    FFPROBE_PATH: silentFfprobe,
+  });
+  assert.equal(silentQuote.exitCode, 1);
+  assert.match(JSON.parse(silentQuote.stdout).error, /does not contain an audio track/i);
+  assert.equal(silentQuote.state?.lastAudioProject ?? null, null);
+
+  // 2. Browser .webm with N/A stream & format duration falls back to packet pts_time + duration_time
+  const webmClip = join(dir, 'browser-voice.webm');
+  writeFileSync(webmClip, Buffer.from('fake-webm'));
+  const packetFfprobe = join(dir, 'ffprobe-packets.sh');
+  writeFileSync(
+    packetFfprobe,
+    [
+      '#!/bin/sh',
+      'case "$*" in',
+      '  *packet=pts_time*)',
+      '    echo \'{"packets":[{"pts_time":"0.100","duration_time":"0.020"},{"pts_time":"4.580","duration_time":"0.020"}],"format":{"format_name":"matroska,webm"}}\'',
+      '    ;;',
+      '  *)',
+      '    echo \'{"streams":[{"codec_type":"audio","duration":"N/A"}],"format":{"format_name":"matroska,webm","duration":"N/A"}}\'',
+      '    ;;',
+      'esac',
+    ].join('\n') + '\n',
+  );
+  chmodSync(packetFfprobe, 0o755);
+
+  const webmQuote = runCli(['--quote', '--transcribe', webmClip, '--json'], {
+    FFPROBE_PATH: packetFfprobe,
+  });
+  assert.equal(webmQuote.exitCode, 0, webmQuote.stderr);
+  const webmParsed = JSON.parse(webmQuote.stdout);
+  assert.ok(Math.abs(webmParsed.settings.duration - 4.5) < 1e-6, `expected 4.5s packet duration, got ${webmParsed.settings.duration}`);
+  assert.equal(webmParsed.settings.steps, undefined);
+
+  // 3. Local file > 256 MiB on --transcribe and > 25 MiB on --voice-reference rejected via statSync before readFileSync
+  const hugeStt = join(dir, 'huge-stt.wav');
+  writeFileSync(hugeStt, Buffer.alloc(1));
+  const { truncateSync } = createRequire(import.meta.url)('node:fs');
+  truncateSync(hugeStt, 256 * 1024 * 1024 + 1);
+  const hugeSttRes = runCli(['--transcribe', hugeStt, '--json']);
+  assert.equal(hugeSttRes.exitCode, 1);
+  assert.equal(JSON.parse(hugeSttRes.stdout).errorCode, 'MEDIA_FILE_TOO_LARGE');
+
+  const hugeVoice = join(dir, 'huge-voice.wav');
+  writeFileSync(hugeVoice, Buffer.alloc(1));
+  truncateSync(hugeVoice, 25 * 1024 * 1024 + 1);
+  const hugeVoiceRes = runCli(['--speech', '--speech-mode', 'clone', '--voice-reference', hugeVoice, 'Hello.', '--json']);
+  assert.equal(hugeVoiceRes.exitCode, 1);
+  assert.equal(JSON.parse(hugeVoiceRes.stdout).errorCode, 'MEDIA_FILE_TOO_LARGE');
 });
 
 test('--transcribe rejects invalid flags and engine conflicts before connecting', () => {

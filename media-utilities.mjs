@@ -150,7 +150,11 @@ export function prepareMediaUtilityOptions(options, explicit) {
     });
     if (error) fail(error);
     const engine = requestedSelector
-      ? resolveTranscriptionEngineSelector(requestedSelector)
+      ? resolveTranscriptionEngineSelector(requestedSelector, {
+          diarize: Boolean(options.diarize),
+          hotwords: options.hotwords || undefined,
+          prompt: options.prompt || undefined
+        })
       : (options.diarize || options.hotwords?.trim() || options.prompt?.trim() ? 'nemotron' : DEFAULT_TRANSCRIPTION_ENGINE);
     options.transcribeEngine = engine;
     options.model = TranscriptionModel[engine];

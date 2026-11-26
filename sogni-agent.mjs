@@ -2862,7 +2862,7 @@ function nextSemanticWorkloadAttribution(options = {}) {
 function withBillingMode(config, attributionOptions = {}) {
   return {
     ...config,
-    ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
+    ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.transcribe && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
     ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
@@ -9701,7 +9701,9 @@ function localApiMediaReferenceFile(ref) {
     err.code = 'INVALID_MEDIA_REFERENCE';
     throw err;
   }
-  const maxBytes = apiMediaReferenceMaxBytes();
+  const maxBytes = ref.flag === '--voice-reference'
+    ? Math.min(apiMediaReferenceMaxBytes(), DEFAULT_VOICE_REFERENCE_MAX_BYTES)
+    : apiMediaReferenceMaxBytes();
   if (stat.size > maxBytes) {
     const err = new Error(`${ref.flag} media reference is ${stat.size} bytes, above the ${maxBytes} byte API upload limit.`);
     err.code = 'MEDIA_REFERENCE_TOO_LARGE';
@@ -9804,7 +9806,9 @@ function decodeInlineApiMediaReference(ref) {
     err.code = 'INVALID_MEDIA_REFERENCE';
     throw err;
   }
-  const maxBytes = apiMediaReferenceMaxBytes();
+  const maxBytes = ref.flag === '--voice-reference'
+    ? Math.min(apiMediaReferenceMaxBytes(), DEFAULT_VOICE_REFERENCE_MAX_BYTES)
+    : apiMediaReferenceMaxBytes();
   if (buffer.length > maxBytes) {
     const err = new Error(`${ref.flag} media reference is ${buffer.length} bytes, above the ${maxBytes} byte API upload limit.`);
     err.code = 'MEDIA_REFERENCE_TOO_LARGE';
@@ -11995,6 +11999,7 @@ function applyPersonaAndVoiceReferences() {
 // DEFAULT_HTTP_TIMEOUT_MS to answer; the body must then keep arriving (the
 // result-download stall limit) and stay within mediaDownloadMaxBytes().
 const DEFAULT_STT_MEDIA_MAX_BYTES = 256 * 1024 * 1024;
+const DEFAULT_VOICE_REFERENCE_MAX_BYTES = 25 * 1024 * 1024;
 const PLAYLIST_MEDIA_EXTENSIONS = new Set(['.m3u8', '.m3u', '.pls', '.xspf', '.asx', '.sdp']);
 
 async function fetchRemoteMedia(url, { maxBytes: maxBytesCeiling } = {}) {
@@ -12052,6 +12057,25 @@ async function fetchRemoteMedia(url, { maxBytes: maxBytesCeiling } = {}) {
 async function fetchMediaBuffer(pathOrUrl, fetchOptions = {}) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
     return (await fetchRemoteMedia(pathOrUrl, fetchOptions)).buffer;
+  }
+  let stat;
+  try {
+    stat = statSync(pathOrUrl);
+  } catch (e) {
+    const err = new Error(`Failed to read media file: ${pathOrUrl}`);
+    err.code = 'MISSING_FILE';
+    err.hint = 'Check the path or use a URL.';
+    err.details = { path: pathOrUrl, cause: e?.message || String(e) };
+    throw err;
+  }
+  const maxBytes = fetchOptions?.maxBytes;
+  if (Number.isFinite(maxBytes) && maxBytes > 0 && stat.size > maxBytes) {
+    const err = new Error(
+      `The media file "${pathOrUrl}" is ${stat.size} bytes, exceeding the ${maxBytes}-byte (${Math.round(maxBytes / (1024 * 1024))} MiB) limit.`
+    );
+    err.code = 'MEDIA_FILE_TOO_LARGE';
+    err.details = { path: pathOrUrl, sizeBytes: stat.size, maxBytes };
+    throw err;
   }
   try {
     return readFileSync(pathOrUrl);
@@ -12236,30 +12260,84 @@ function withMediaExtension(filename, extension) {
   return `${base || 'reference'}${cleanExtension}`;
 }
 
-// The media duration ffprobe reports in seconds, or undefined when it reports none.
-async function probeMediaDurationSeconds(filePath, label) {
-  const { result, probe } = await probeMediaFile(filePath, {
-    label,
-    entries: ['format=duration'],
-    protocolWhitelist: 'file',
-  });
-  if (result.error || result.status !== 0) return undefined;
-  const raw = probe?.format?.duration;
-  const parsed = raw === undefined || raw === null || raw === '' ? Number.NaN : Number(raw);
+function parseFfprobeSeconds(value) {
+  if (value === undefined || value === null || value === '' || value === 'N/A') return undefined;
+  const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-async function probeLocalMediaDurationSeconds(pathOrUrl) {
-  if (isHttpUrl(pathOrUrl)) return undefined;
-  return probeMediaDurationSeconds(pathOrUrl, pathOrUrl);
+// The media duration ffprobe reports in seconds, or undefined when it reports none.
+async function probeMediaDurationSeconds(filePath, label, { requireAudio = false } = {}) {
+  const { result, probe } = await probeMediaFile(filePath, {
+    label,
+    entries: ['stream=codec_type,duration:format=duration'],
+    protocolWhitelist: 'file',
+  });
+  if (result.error || result.status !== 0) return undefined;
+
+  const streams = Array.isArray(probe?.streams) ? probe.streams : [];
+  const audioStreams = streams.filter((stream) => stream?.codec_type === 'audio');
+  if (requireAudio && audioStreams.length === 0) {
+    const err = new Error(`"${label}" does not contain an audio track.`);
+    err.code = 'INVALID_ARGUMENT';
+    err.hint = 'Supply an audio recording or a video file that contains an audio stream.';
+    throw err;
+  }
+
+  const relevantStreams = audioStreams.length > 0 ? audioStreams : streams;
+  let streamDuration;
+  for (const stream of relevantStreams) {
+    const sec = parseFfprobeSeconds(stream?.duration);
+    if (sec !== undefined && (streamDuration === undefined || sec > streamDuration)) {
+      streamDuration = sec;
+    }
+  }
+  const formatDuration = parseFfprobeSeconds(probe?.format?.duration);
+  const directDuration = streamDuration ?? formatDuration;
+  if (directDuration !== undefined) return directDuration;
+
+  if (audioStreams.length > 0 || !requireAudio) {
+    const packetSelectArgs = audioStreams.length > 0 ? ['-select_streams', 'a:0'] : [];
+    const packetProbe = await probeMediaFile(filePath, {
+      label,
+      args: packetSelectArgs,
+      entries: ['packet=pts_time,duration_time'],
+      protocolWhitelist: 'file',
+    });
+    if (
+      !packetProbe.result.error &&
+      packetProbe.result.status === 0 &&
+      Array.isArray(packetProbe.probe?.packets)
+    ) {
+      let minStart = Infinity;
+      let maxEnd = -Infinity;
+      for (const packet of packetProbe.probe.packets) {
+        const pts = parseFfprobeSeconds(packet?.pts_time);
+        if (pts === undefined) continue;
+        const dur = parseFfprobeSeconds(packet?.duration_time) ?? 0;
+        if (pts < minStart) minStart = pts;
+        if (pts + dur > maxEnd) maxEnd = pts + dur;
+      }
+      if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd >= minStart) {
+        return maxEnd - minStart;
+      }
+    }
+  }
+
+  return undefined;
 }
 
-async function probeMediaBufferDurationSeconds(buffer, filename) {
+async function probeLocalMediaDurationSeconds(pathOrUrl, probeOptions = {}) {
+  if (isHttpUrl(pathOrUrl)) return undefined;
+  return probeMediaDurationSeconds(pathOrUrl, pathOrUrl, probeOptions);
+}
+
+async function probeMediaBufferDurationSeconds(buffer, filename, probeOptions = {}) {
   const tempDir = createTrackedTempDir('sogni-wan3-probe-');
   const inputPath = mediaTempInputPath(tempDir, filename, '.media');
   try {
     writeFileSync(inputPath, Buffer.from(buffer));
-    return await probeMediaDurationSeconds(inputPath, filename);
+    return await probeMediaDurationSeconds(inputPath, filename, probeOptions);
   } finally {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
@@ -15741,8 +15819,8 @@ async function quoteVideoConfig(client, config) {
 async function quoteAudioConfig(client, config) {
   const tokenType = config.tokenType || 'spark';
   if (config.network === 'relaxed') {
-    // Sogni quotes music and speech at Fast prices only.
-    throw quoteUnavailableError('Sogni quotes music and speech on the Fast network only.', {
+    // Sogni quotes music, speech, and transcription at Fast prices only.
+    throw quoteUnavailableError('Sogni quotes music, speech, and transcription on the Fast network only.', {
       hint: 'Quote with --network fast, or render on Relaxed without --quote.'
     });
   }
@@ -15778,7 +15856,7 @@ async function quoteAudioConfig(client, config) {
         estimatedTotalSeconds: response.benchmark?.estimatedTotalTimeSec,
         dailyFairUsePct: response.dailyFairUse?.pct
       },
-      settings: { duration, steps, count }
+      settings: { duration, count }
     };
   }
   if (options.speech) {
@@ -15787,7 +15865,7 @@ async function quoteAudioConfig(client, config) {
     // directly with the same parameters the SDK sends.
     const socket = sdkClientOf(client)?.apiClient?.socket;
     if (typeof socket?.get !== 'function') throw quoteUnavailableError('This Sogni SDK cannot quote speech.');
-    const characters = String(config.positivePrompt || '').length;
+    const characters = Math.max(1, String(config.positivePrompt || '').trim().length);
     const path = '/api/v1/job-audio/estimate/'
       + [tokenType, config.modelId, 30, steps, count].map((part) => encodeURIComponent(part)).join('/');
     const response = await socket.get(path, {
@@ -17711,8 +17789,12 @@ async function main() {
       log(`Generating speech (${options.speechMode}) with ${options.model}...`);
       let referenceAudio;
       if (options.voiceReference) {
-        referenceAudio = await fetchMediaBuffer(options.voiceReference);
-        const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.voiceReference);
+        referenceAudio = await fetchMediaBuffer(options.voiceReference, {
+          maxBytes: DEFAULT_VOICE_REFERENCE_MAX_BYTES
+        });
+        const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.voiceReference, {
+          requireAudio: true
+        });
         if (!Number.isFinite(seconds)) throw new Error('Cannot read voice reference duration. Install ffprobe and supply a valid audio recording.');
         const refBounds = SPEECH_MODELS[options.speechMode]?.referenceSeconds || SPEECH_REFERENCE_SECONDS;
         if (seconds < refBounds.min || seconds > refBounds.max) {
@@ -17724,7 +17806,9 @@ async function main() {
     } else if (options.transcribe) {
       log(`Transcribing audio (${options.transcribeEngine}) with ${options.model}...`);
       const referenceAudio = await fetchMediaBuffer(options.transcribe, { maxBytes: DEFAULT_STT_MEDIA_MAX_BYTES });
-      const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.transcribe);
+      const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.transcribe, {
+        requireAudio: true
+      });
       if (!Number.isFinite(seconds) || seconds <= 0) {
         throw new Error('Cannot read input audio duration. Install ffprobe and supply a valid audio or video recording.');
       }

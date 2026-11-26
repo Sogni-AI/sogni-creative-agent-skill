@@ -1,8 +1,27 @@
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  BIREFNET_BACKGROUND_REMOVAL_MODEL_ID,
+  FISH_DRAMA_3_TTS_MODEL_ID,
+  NEMOTRON_STT_MODEL_ID,
+  PARAKEET_STT_MODEL_ID,
+  PIXAL3D_IMAGE_TO_3D_MODEL_ID,
+  PIXAL3D_MULTIVIEW_IMAGE_TO_3D_MODEL_ID,
+  SogniClient,
+  isAudioModel,
+  isSpeechTtsModelId,
+  isSttModelId,
+} from '@sogni-ai/sogni-client';
 import { validateProjectConfig } from '@sogni-ai/sogni-intelligence-client';
-import { imageUtilityConfig, speechConfig, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, BIREFNET_MODEL_ID } from '../media-utilities.mjs';
+import {
+  imageUtilityConfig,
+  speechConfig,
+  transcriptionConfig,
+  PIXAL3D_MODEL_ID,
+  PIXAL3D_MULTIVIEW_MODEL_ID,
+  BIREFNET_MODEL_ID,
+} from '../media-utilities.mjs';
 
 const require = createRequire(import.meta.url);
 const serialize = require('../node_modules/@sogni-ai/sogni-client/dist/Projects/createJobRequestMessage.js').default;
@@ -87,5 +106,81 @@ test('pinned SDK carries the Qwen speech filter choice in the project request', 
       assert.equal(message.disableSafety, noFilter === true, `${mode}: noFilter=${noFilter}`);
       assert.equal(message.keyFrames[0].positivePrompt, 'Speak exactly these words.');
     }
+  }
+});
+
+test('pinned SDK transports Fish Drama 3 scripts and optional reference cloning without creativity', () => {
+  assert.equal(PIXAL3D_MODEL_ID, PIXAL3D_IMAGE_TO_3D_MODEL_ID);
+  assert.equal(PIXAL3D_MULTIVIEW_MODEL_ID, PIXAL3D_MULTIVIEW_IMAGE_TO_3D_MODEL_ID);
+  assert.equal(BIREFNET_MODEL_ID, BIREFNET_BACKGROUND_REMOVAL_MODEL_ID);
+  assert.equal(isSpeechTtsModelId(FISH_DRAMA_3_TTS_MODEL_ID), true);
+  assert.equal(isAudioModel(FISH_DRAMA_3_TTS_MODEL_ID), true);
+  const script = '[sighs] Finally home. <whisper>Do not wake them.</whisper>';
+  const config = speechConfig({
+    model: FISH_DRAMA_3_TTS_MODEL_ID,
+    speechMode: 'drama3',
+    prompt: script,
+    count: 1,
+    musicLanguage: 'auto',
+    outputFormat: 'wav',
+    seed: 42,
+    speechCreativity: 0.9,
+    speechVoice: null,
+    voiceDescription: null,
+    voiceTranscript: 'Reference line.',
+  }, source);
+  assert.equal('creativity' in config, false);
+  const message = wire(config, 'audio', audioOptions);
+  assert.equal(message.modelID, FISH_DRAMA_3_TTS_MODEL_ID);
+  assert.equal(message.positivePrompt, script);
+  assert.equal(message.hasReferenceAudio, true);
+  assert.equal(message.referenceText, 'Reference line.');
+  assert.equal(message.creativity, undefined);
+});
+
+test('pinned SDK transports Parakeet and Nemotron transcription audio projects as JSON STT jobs', async () => {
+  assert.equal(isSttModelId(PARAKEET_STT_MODEL_ID), true);
+  assert.equal(isSttModelId(NEMOTRON_STT_MODEL_ID), true);
+  const client = await SogniClient.createInstance({
+    disableSocket: true,
+    apiKey: 'test-api-key',
+    restEndpoint: 'https://api.example.test',
+  });
+  try {
+    client.projects.getSupportedModels = async () => [
+      { id: NEMOTRON_STT_MODEL_ID, name: 'Nemotron STT', SID: 901, tier: 'stt_nemotron', media: 'audio' },
+    ];
+    client.projects._getModelTiers = async () => ({
+      stt_nemotron: {
+        type: 'audio',
+        stt: true,
+        benchmark: { sec: 1, secCN: 0, secMaxPreviews: 0 },
+        duration: { min: 1, max: 3600, default: 60 },
+        timestamps: { allowed: ['none', 'sentence', 'word'], default: 'sentence' },
+        diarize: { default: false },
+        hotwords: { maxLength: 1000 },
+        requiresReferenceAudio: true,
+      },
+    });
+    const sttTier = await client.projects.getModelOptions(NEMOTRON_STT_MODEL_ID);
+    const config = transcriptionConfig({
+      model: NEMOTRON_STT_MODEL_ID,
+      prompt: 'Keynote Q&A',
+      timestamps: 'word',
+      diarize: true,
+      hotwords: 'Sogni, Spark',
+      tokenType: 'spark',
+    }, source, 18.4);
+    validateProjectConfig(config);
+    const request = serialize('00000000-0000-4000-8000-000000000001', config, sttTier);
+    assert.equal(request.outputFormat, 'json');
+    assert.equal(request.keyFrames[0].modelID, NEMOTRON_STT_MODEL_ID);
+    assert.equal(request.keyFrames[0].hasReferenceAudio, true);
+    assert.equal(request.keyFrames[0].timestamps, 'word');
+    assert.equal(request.keyFrames[0].diarize, true);
+    assert.equal(request.keyFrames[0].hotwords, 'Sogni, Spark');
+    assert.equal(request.keyFrames[0].positivePrompt, 'Keynote Q&A');
+  } finally {
+    client.dispose();
   }
 });

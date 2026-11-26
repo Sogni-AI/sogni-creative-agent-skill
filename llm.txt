@@ -32,8 +32,9 @@ Video selection: `sogni-agent --segment-video clip.mp4 --segment-text "person" -
 Direct CLI: Pixal3D uses `--image-to-3d original.png -o object.glb` (add
 `--left-view`, `--back-view`, `--right-view` for multi-view); BiRefNet
 uses `--remove-background original.png -o cutout.png` (add `--matte` for a mask).
-Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); Qwen3-TTS uses `--speech` with
-`--speech-mode voice|clone|design`. Read the model reference for required inputs,
+Music uses `--music`, MiniMax Music 3 by default (`-m turbo` for ACE-Step); speech uses `--speech` with
+`--speech-mode voice|clone|design|drama3` (Qwen3-TTS and Fish Drama 3); speech-to-text uses `--transcribe <audio>`
+(`--transcribe-model parakeet|nemotron`, `--timestamps`, `--diarize`, `--hotwords`, `--output-format txt|json|srt|vtt`). Read the model reference for required inputs,
 allowed controls, and hosted alternatives.
 
 Prompts: direct CLI mode runs no model-aware prompt shaper (Wan 3 aside), so

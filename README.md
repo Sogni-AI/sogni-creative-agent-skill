@@ -709,7 +709,8 @@ Run `sogni-agent --help` for the full CLI. Below are the options and tables most
 | `--video` | Generate video instead of image |
 | `--music` | Generate music instead of an image: MiniMax Music 3 by default, 10–300s (60s default, a ceiling); `-m turbo` or `-m sft` for ACE-Step (10–600s) |
 | `--lyrics`, `--bpm`, `--keyscale`, `--timesig` | `--lyrics` for any model (Music 3: plain `[Verse]`/`[Chorus]` tags); `--bpm`/`--keyscale`/`--timesig` are exact ACE-Step controls and are written into the prompt on the default Music 3 |
-| `--speech`, `--speech-mode` | Qwen3-TTS voice, clone, or design |
+| `--speech`, `--speech-mode` | Qwen3-TTS (`voice`, `clone`, `design`) or Fish Drama 3 (`drama3`) speech |
+| `--transcribe <audio>` | Parakeet or Nemotron speech-to-text (`--transcribe-model`, `--timestamps`, `--diarize`, `--hotwords`, `--output-format txt\|json\|srt\|vtt`) |
 | `--image-to-3d <image>` | Pixal3D binary GLB from one original image (the front view in multi-view) |
 | `--left-view`, `--back-view`, `--right-view <image>` | Pixal3D multi-view orbit views, any subset, named by the subject's own sides: left = its own left side toward the camera (it faces screen-left), right = its own right side (it faces screen-right). Templates that label the subject's right side "left" build a model turned 180 degrees |
 | `--remove-background <image>`, `--matte` | BiRefNet transparent PNG or soft mask |

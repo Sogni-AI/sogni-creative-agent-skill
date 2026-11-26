@@ -11076,6 +11076,172 @@ test('Qwen clone rejects a recording shorter than three seconds', () => {
   assert.equal(result.state.lastAudioProject, null);
 });
 
+test('Fish Drama 3 supports --speech-mode drama3 and -m drama3/fish_drama_3_nvfp4, 1–30s cloning, <=2000-char transcripts, and omits creativity', () => {
+  const script = '[sighs] Finally home. <whisper>Do not wake them.</whisper>';
+  const oneSecRef = speechReferenceFixture(1);
+  const longRefTranscript = 'Known words. '.repeat(120).trim(); // ~1560 chars (>1024, <=2000)
+
+  for (const selectorArgs of [
+    ['--speech', '--speech-mode', 'drama3'],
+    ['-m', 'drama3'],
+    ['-m', 'fish_drama_3_nvfp4'],
+  ]) {
+    const result = runCli([
+      ...selectorArgs,
+      '--voice-reference', oneSecRef,
+      '--voice-transcript', longRefTranscript,
+      '--speech-creativity', '0.8',
+      '--language', 'arabic',
+      script,
+      '--json',
+    ]);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const config = result.state.lastAudioProject;
+    assert.equal(config.modelId, 'fish_drama_3_nvfp4');
+    assert.equal(config.positivePrompt, script);
+    assert.equal(config.language, 'arabic');
+    assert.deepEqual(Buffer.from(config.referenceAudio.data), readFileSync(oneSecRef));
+    assert.equal(config.referenceText, longRefTranscript);
+    assert.equal('creativity' in config, false);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.type, 'speech');
+    assert.equal(output.speechMode, 'drama3');
+    assert.equal('creativity' in output, false);
+  }
+
+  const tooLongAudio = runCli(['--speech', '--speech-mode', 'drama3', '--voice-reference', speechReferenceFixture(32), 'Hello.', '--json']);
+  assert.equal(tooLongAudio.exitCode, 1);
+  assert.match(JSON.parse(tooLongAudio.stdout).error, /1–30 second/);
+  assert.equal(tooLongAudio.state.lastAudioProject, null);
+
+  for (const badArgs of [
+    ['--speech', '--speech-mode', 'drama3', '--voice-description', 'Warm voice'],
+    ['--speech', '--speech-mode', 'drama3', '--speech-voice', 'ryan'],
+    ['--speech', '--speech-mode', 'drama3', '--voice-transcript', 'No audio given'],
+    ['--speech', '--speech-mode', 'drama3', '--voice-reference', oneSecRef, '--voice-transcript', 'x'.repeat(2001)],
+  ]) {
+    const bad = runCli([...badArgs, 'Hello.', '--json']);
+    assert.equal(bad.exitCode, 1, JSON.stringify(badArgs));
+    assert.equal(JSON.parse(bad.stdout).errorCode, 'INVALID_ARGUMENT');
+    assert.equal(bad.state?.lastAudioProject, undefined);
+  }
+});
+
+test('--api-chat and --durable-chat include --voice-reference in uploaded media references', async () => {
+  const voiceRef = speechReferenceFixture(3);
+  await withTestApiServer(async (apiBaseUrl, requests) => {
+    const result = await runCliAsync(
+      ['--api-chat', '--api-base-url', apiBaseUrl, '--voice-reference', voiceRef, 'Read this line with Drama 3', '--json'],
+      { SOGNI_API_KEY: 'test-api-key', SOGNI_ALLOW_UNSAFE_API_BASE_URL: '1' },
+    );
+    assert.equal(result.exitCode, 0, result.stderr);
+    const chatReq = requests.find((req) => req.url === '/v1/chat/completions');
+    assert.ok(chatReq, 'posted /v1/chat/completions');
+    const bodyText = JSON.stringify(chatReq.body);
+    assert.match(bodyText, /--voice-reference/);
+    assert.match(bodyText, /https:\/\/cdn\.sogni\.ai\/test-upload\/referenceAudio\//);
+  });
+});
+
+test('--transcribe routes to Parakeet by default, auto-selects Nemotron for diarize/hotwords, and formats txt/json/srt/vtt', async () => {
+  const audioPath = speechReferenceFixture(6);
+  const artifact = {
+    version: 1,
+    duration: 6,
+    language: 'en',
+    diarized: true,
+    segments: [
+      { id: 0, start: 0, end: 2.5, text: 'Hello Sogni.', speaker: 'S01' },
+      { id: 1, start: 2.6, end: 6.0, text: 'Welcome to Supernet.', speaker: 'S02' },
+    ],
+  };
+  const outDir = makeTempHome('sogni-transcribe-out-');
+
+  await withMediaResult(Buffer.from(JSON.stringify(artifact)), async (url) => {
+    const plain = await runCliAsync(['--transcribe', audioPath], { SOGNI_AGENT_TEST_RESULT_URL: url });
+    assert.equal(plain.exitCode, 0, plain.stderr);
+    assert.equal(plain.state.lastAudioProject.modelId, 'parakeet_tdt_0.6b_v3_bf16');
+    assert.equal(plain.state.lastAudioProject.duration, 6);
+    assert.equal(plain.state.lastAudioProject.timestamps, 'sentence');
+    assert.equal(plain.state.lastAudioProject.diarize, false);
+    assert.equal(plain.state.lastAudioProject.outputFormat, 'json');
+    assert.match(plain.stdout, /\[S01\] Hello Sogni\.\n\[S02\] Welcome to Supernet\./);
+
+    const srtPath = join(outDir, 'captions.srt');
+    const diarized = await runCliAsync(
+      ['--transcribe', audioPath, '--diarize', '--hotwords', 'Sogni, Supernet', '--timestamps', 'word', '-o', srtPath, '--json', 'Podcast intro'],
+      { SOGNI_AGENT_TEST_RESULT_URL: url },
+    );
+    assert.equal(diarized.exitCode, 0, diarized.stderr);
+    assert.equal(diarized.state.lastAudioProject.modelId, 'nemotron_3.5_transcribe_30b_a4b_nvfp4');
+    assert.equal(diarized.state.lastAudioProject.diarize, true);
+    assert.equal(diarized.state.lastAudioProject.hotwords, 'Sogni, Supernet');
+    assert.equal(diarized.state.lastAudioProject.timestamps, 'word');
+    assert.equal(diarized.state.lastAudioProject.positivePrompt, 'Podcast intro');
+    const srtSaved = readFileSync(srtPath, 'utf8');
+    assert.match(srtSaved, /1\n00:00:00,000 --> 00:00:02,500\n\[S01\] Hello Sogni\./);
+    const jsonEnvelope = JSON.parse(diarized.stdout);
+    assert.equal(jsonEnvelope.type, 'transcription');
+    assert.equal(jsonEnvelope.transcribeEngine, 'nemotron');
+    assert.equal(jsonEnvelope.outputFormat, 'srt');
+    assert.equal(jsonEnvelope.localPath, srtPath);
+    assert.equal(jsonEnvelope.diarized, true);
+
+    const vttRes = await runCliAsync(
+      ['--transcribe', audioPath, '-m', 'parakeet', '--output-format', 'vtt'],
+      { SOGNI_AGENT_TEST_RESULT_URL: url },
+    );
+    assert.equal(vttRes.exitCode, 0, vttRes.stderr);
+    assert.match(vttRes.stdout, /^WEBVTT\n\n00:00:00\.000 --> 00:00:02\.500/);
+
+    const jsonFmtRes = await runCliAsync(
+      ['--transcribe', audioPath, '--output-format', 'json'],
+      { SOGNI_AGENT_TEST_RESULT_URL: url },
+    );
+    assert.equal(jsonFmtRes.exitCode, 0, jsonFmtRes.stderr);
+    const parsedTranscript = JSON.parse(jsonFmtRes.stdout);
+    assert.equal(parsedTranscript.model, 'parakeet_tdt_0.6b_v3_bf16');
+    assert.equal(parsedTranscript.segments.length, 2);
+  });
+});
+
+test('--quote --transcribe probes real input audio seconds for pricing', () => {
+  const sevenSecAudio = speechReferenceFixture(7);
+  const result = runCli(['--quote', '--transcribe', sevenSecAudio, '--diarize', '--json']);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const quote = JSON.parse(result.stdout);
+  assert.equal(quote.media, 'audio');
+  assert.equal(quote.model, 'nemotron_3.5_transcribe_30b_a4b_nvfp4');
+  assert.equal(quote.settings.duration, 7);
+  assert.equal(quote.settings.steps, 1);
+  assert.ok(
+    result.state.socketGets?.some((entry) => entry.path === '/api/v1/job-audio/estimate/spark/nemotron_3.5_transcribe_30b_a4b_nvfp4/7/1/1'),
+    `expected STT estimate path with concrete 7s duration, got ${JSON.stringify(result.state.socketGets)}`,
+  );
+  assert.equal(result.state.lastAudioProject, null);
+});
+
+test('--transcribe rejects invalid flags and engine conflicts before connecting', () => {
+  for (const args of [
+    ['--transcribe', 'clip.wav', '--transcribe-model', 'parakeet', '--diarize'],
+    ['--transcribe', 'clip.wav', '-m', 'parakeet', '--hotwords', 'Sogni'],
+    ['--transcribe', 'clip.wav', '--transcribe-model', 'parakeet', '-m', 'nemotron'],
+    ['--transcribe', 'clip.wav', '--transcribe-model', 'bogus'],
+    ['--transcribe', 'clip.wav', '--timestamps', 'syllable'],
+    ['--transcribe', 'clip.wav', '--output-format', 'mp3'],
+    ['--transcribe', 'clip.wav', '-o', 'out.mp3'],
+    ['--transcribe', 'clip.wav', '-n', '2'],
+    ['--diarize', 'a cat'],
+    ['--hotwords', 'Sogni', 'a cat'],
+    ['-m', 'parakeet_tdt_0.6b_v3_bf16', 'a cat'],
+  ]) {
+    const result = runCli([...args, '--json']);
+    assert.equal(result.exitCode, 1, JSON.stringify(args));
+    assert.equal(JSON.parse(result.stdout).errorCode, 'INVALID_ARGUMENT', result.stdout);
+    assert.equal(result.state?.lastAudioProject, undefined);
+  }
+});
+
 test('Music 3 uses current shared defaults and preserves lyrics', () => {
   const result = runCli(['--music', '-m', 'music3', '--lyrics', '[Intro]\n[Verse]\n[Outro]', 'instrumental jazz in C major at 100 BPM', '--json']);
   assert.equal(result.exitCode, 0, result.stderr);
@@ -11772,6 +11938,21 @@ test('--quote prices music and speech with the values the render sends', () => {
   const [get] = speech.state.socketGets;
   assert.match(get.path, /^\/api\/v1\/job-audio\/estimate\/spark\/[^/]+\/30\/8\/1$/);
   assert.equal(get.query.characters, 'Hello there, welcome to the show.'.length);
+
+  // Sparse Fish Drama 3 tier has no steps default; --quote falls back to steps=1 and forwards priorityMode.
+  const drama3Script = '[sighs] Finally home. <whisper>Keep quiet.</whisper>';
+  const drama3Speech = runCli(
+    ['--quote', '--json', '--speech', '--speech-mode', 'drama3', '--priority', drama3Script],
+    { SOGNI_AGENT_TEST_MODEL_STEPS_JSON: JSON.stringify({ fish_drama_3_nvfp4: 0 }) },
+  );
+  assert.equal(drama3Speech.exitCode, 0, drama3Speech.stderr);
+  const drama3Quote = JSON.parse(drama3Speech.stdout.trim());
+  assert.equal(drama3Quote.model, 'fish_drama_3_nvfp4');
+  assert.deepEqual(drama3Quote.settings, { characters: drama3Script.length, count: 1 });
+  const [drama3Get] = drama3Speech.state.socketGets;
+  assert.equal(drama3Get.path, '/api/v1/job-audio/estimate/spark/fish_drama_3_nvfp4/30/1/1');
+  assert.equal(drama3Get.query.characters, drama3Script.length);
+  assert.equal(drama3Get.query.priorityMode, true);
 
   const relaxed = runCli(['--quote', '--json', '--music', '--network', 'relaxed', '--duration', '30', 'a calm piano piece']);
   assert.equal(relaxed.exitCode, 1);

@@ -134,7 +134,7 @@ timeouts.
   `refine_result`, `animate_photo`, `change_angle`, `video_to_video`,
   `stitch_video`, `orbit_video`, `dance_montage`, `sound_to_video`,
   `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles`),
-  media-analysis tools (`analyze_image`, `analyze_video`, `extract_metadata`),
+  media-analysis tools (`analyze_image`, `analyze_video`, `transcribe_audio`, `extract_metadata`),
   and lightweight composition tools (`enhance_prompt`, `compose_lyrics`,
   `compose_instrumental`, `compose_script`).
 - `creative-agent` — this CLI's default for `--api-chat`. Includes
@@ -350,7 +350,8 @@ Submit these media tools as durable workflow steps (`toolName` and `arguments`) 
 | `remove_background` | `sourceImageIndex` or `source_image_url`, `applyMask` (default true) | Transparent PNG; false returns mask |
 | `image_to_3d` | Front `sourceImageIndex`/`source_image_url`; optional `leftViewImageIndex`, `backViewImageIndex`, `rightViewImageIndex` or named `*_view_image_url` URLs; `meshTargetFaces`, `textureSize`, `normalMapSize`, `ambientOcclusionSize`, `shapeResolution` | Binary GLB with media type `model` |
 | `segment_image` | Original source; `text`, `points`, or `boxes`; `threshold`, `multimask`, `maxInstances`, `applyMask` | PNG mask or original-pixel cutout |
-| `generate_speech` | Literal `prompt`; `model=voice/clone/design`; `voice`, `voiceDescription`, `voiceSourceIndex`, `voiceTranscript`, `language`, `creativity`, `outputFormat`, `seed` | Spoken audio |
+| `generate_speech` | Literal `prompt` (plus inline `[direction]` / `<whisper>` acting tags on `drama3`); `model=voice/clone/design/drama3`; `voice`, `voiceDescription`, `voiceSourceIndex`/`voice_source_url`, `voiceTranscript`, `language`, `creativity` (Qwen3-TTS only; omit on `drama3`), `outputFormat`, `seed` | Spoken audio |
+| `transcribe_audio` | `audioSourceIndex` or `audio_source_url`; `model=parakeet/nemotron` (`nemotron` auto-selected when `diarize=true`, `hotwords`, or `prompt` is passed); `responseFormat=json/text/srt/vtt`, `timestamps=none/sentence/word`, `diarize`, `hotwords`, `prompt` | Transcript text, timed segments, diarized turns, or SRT/VTT captions (can feed `add_subtitles`, or set `auto_transcribe: true` directly on `add_subtitles`) |
 
 Negative indices address uploads (-1 first); non-negative indices address generated results. 3D views are from the subject's perspective: left means the subject's own left side faces camera (subject faces screen-left), right means screen-right. Supply original images of the same subject at consistent height and framing; any subset of the three orbit views enables multi-view reconstruction. Keep the GLB in the model artifact lane, never feed it into an image tool.
 

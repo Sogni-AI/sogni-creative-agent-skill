@@ -108,13 +108,13 @@
     "progress-events.mjs"
   ],
   "dependencies": {
-    "@sogni-ai/sogni-intelligence-client": "4.36.0",
+    "@sogni-ai/sogni-intelligence-client": "4.37.0",
     "execa": "^10.0.1",
     "json5": "^2.2.3",
     "sharp": "0.35.5"
   },
   "overrides": {
-    "@sogni-ai/sogni-client": "5.90.0",
+    "@sogni-ai/sogni-client": "5.91.0",
     "undici@7": "7.30.1"
   },
   "openclaw": {

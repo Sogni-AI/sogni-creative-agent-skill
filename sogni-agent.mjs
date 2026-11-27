@@ -11804,20 +11804,55 @@ function personaSlug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
+function resolvePersonaSubdir(slug) {
+  if (typeof slug !== 'string' || slug.trim().length === 0) return null;
+  if (slug.includes('/') || slug.includes('\\')) return null;
+  const root = resolve(PERSONAS_DIR);
+  const target = resolve(PERSONAS_DIR, slug);
+  if (target === root || !target.startsWith(root + sep)) return null;
+  return target;
+}
+
 function addPersona({ name, relationship, description, tags, voice, photoPath, voiceClipPath }) {
+  if (typeof name !== 'string' || !/[\p{L}\p{N}]/u.test(name.trim())) {
+    const err = new Error('Persona name must include at least one letter or number.');
+    err.code = 'INVALID_ARGUMENT';
+    throw err;
+  }
   const personas = loadPersonas();
-  if (personas.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+  if (personas.find(p => typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase())) {
     throw new Error(`Persona "${name}" already exists. Remove it first or use a different name.`);
   }
-  const slug = personaSlug(name);
-  const personaDir = join(PERSONAS_DIR, slug);
+  const id = randomBytes(8).toString('hex');
+  const baseSlug = personaSlug(name);
+  const slugTaken = (candidate) => personas.some(p => p.slug === candidate) || existsSync(join(PERSONAS_DIR, candidate));
+  let slug;
+  if (!baseSlug) {
+    const shortSlug = `persona-${id.slice(0, 8)}`;
+    slug = slugTaken(shortSlug) ? `persona-${id}` : shortSlug;
+  } else if (slugTaken(baseSlug)) {
+    const shortSlug = `${baseSlug}-${id.slice(0, 8)}`;
+    slug = slugTaken(shortSlug) ? `${baseSlug}-${id}` : shortSlug;
+  } else {
+    slug = baseSlug;
+  }
+  const personaDir = resolvePersonaSubdir(slug);
+  if (!personaDir) {
+    const err = new Error('Invalid persona directory.');
+    err.code = 'INVALID_ARGUMENT';
+    throw err;
+  }
+
+  const resolvedPhoto = photoPath ? expandHomePath(photoPath) : null;
+  if (resolvedPhoto && !existsSync(resolvedPhoto)) throw new Error(`Photo not found: ${resolvedPhoto}`);
+  const resolvedVoice = voiceClipPath ? expandHomePath(voiceClipPath) : null;
+  if (resolvedVoice && !existsSync(resolvedVoice)) throw new Error(`Voice clip not found: ${resolvedVoice}`);
+
   if (!existsSync(personaDir)) mkdirSync(personaDir, { recursive: true });
 
   // Copy photo
   let savedPhotoPath = null;
-  if (photoPath) {
-    const resolvedPhoto = expandHomePath(photoPath);
-    if (!existsSync(resolvedPhoto)) throw new Error(`Photo not found: ${resolvedPhoto}`);
+  if (resolvedPhoto) {
     const ext = extname(resolvedPhoto).toLowerCase() || '.jpg';
     savedPhotoPath = join(personaDir, `photo${ext}`);
     writeFileSync(savedPhotoPath, readFileSync(resolvedPhoto));
@@ -11825,16 +11860,14 @@ function addPersona({ name, relationship, description, tags, voice, photoPath, v
 
   // Copy voice clip
   let savedVoicePath = null;
-  if (voiceClipPath) {
-    const resolvedVoice = expandHomePath(voiceClipPath);
-    if (!existsSync(resolvedVoice)) throw new Error(`Voice clip not found: ${resolvedVoice}`);
+  if (resolvedVoice) {
     const ext = extname(resolvedVoice).toLowerCase() || '.webm';
     savedVoicePath = join(personaDir, `voice-clip${ext}`);
     writeFileSync(savedVoicePath, readFileSync(resolvedVoice));
   }
 
   const persona = {
-    id: randomBytes(8).toString('hex'),
+    id,
     name,
     slug,
     relationship: relationship || 'friend',
@@ -11853,21 +11886,24 @@ function addPersona({ name, relationship, description, tags, voice, photoPath, v
 
 function removePersona(name) {
   const personas = loadPersonas();
-  const idx = personas.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+  const idx = personas.findIndex(p => typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase());
   if (idx < 0) return false;
   const persona = personas[idx];
-  // Remove persona directory
-  const personaDir = join(PERSONAS_DIR, persona.slug);
-  try {
-    if (existsSync(personaDir)) {
-      const entries = readdirSync(personaDir);
-      for (const entry of entries) {
-        const fp = join(personaDir, entry);
-        if (statSync(fp).isFile()) unlinkSync(fp);
+  // Remove persona directory only when it is an unshared child directory inside PERSONAS_DIR
+  const personaDir = resolvePersonaSubdir(persona.slug);
+  const sharedSlug = personas.some((p, i) => i !== idx && p.slug === persona.slug);
+  if (personaDir && !sharedSlug) {
+    try {
+      if (existsSync(personaDir)) {
+        const entries = readdirSync(personaDir);
+        for (const entry of entries) {
+          const fp = join(personaDir, entry);
+          if (statSync(fp).isFile()) unlinkSync(fp);
+        }
+        rmdirSync(personaDir);
       }
-      rmdirSync(personaDir);
-    }
-  } catch {}
+    } catch {}
+  }
   personas.splice(idx, 1);
   savePersonasIndex(personas);
   return true;
@@ -13074,6 +13110,14 @@ function reserveResultDownloadBytes(bytes) {
   return work;
 }
 
+function isNonRetryableUrlCheckError(error) {
+  if (error?.code === 'SSRF_BLOCKED') return true;
+  if (error?.code === 'ENOTFOUND') return false;
+  const message = String(error?.message || '');
+  if (/^SSRF guard: (?:DNS lookup failed|no DNS records)\b/i.test(message)) return false;
+  return /^SSRF guard:/i.test(message);
+}
+
 /** One GET into tempPath: fresh, or appended from state.received with a Range request. */
 async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, label }) {
   const controller = new AbortController();
@@ -13092,8 +13136,9 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
   try {
     let response;
     try {
-      response = await fetch(url, { headers, signal: controller.signal });
+      response = await fetchSafeUrl(url, { headers, signal: controller.signal });
     } catch (error) {
+      if (isNonRetryableUrlCheckError(error)) throw error;
       throw retryableDownloadError(silentFor ? `got no reply for ${formatDownloadDuration(silentFor)}` : downloadConnectionReason(error), error);
     }
     clearTimeout(timer);
@@ -13154,7 +13199,7 @@ async function downloadResultAttempt(url, tempPath, state, { stallMs, filePath, 
       throw retryableDownloadError('ended early');
     }
   } catch (error) {
-    if (error?.downloadRetryable || !error?.syscall) throw error;
+    if (error?.downloadRetryable || isNonRetryableUrlCheckError(error) || !error?.syscall) throw error;
     throw outputWriteError(error, filePath, label);
   } finally {
     clearTimeout(timer);

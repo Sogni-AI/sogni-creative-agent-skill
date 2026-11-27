@@ -10697,12 +10697,28 @@ test('Seedream 5.5 Uncensored takes its larger native sizes; 5.0 Pro still refus
   assert.equal(pro.exitCode, 1);
   assert.match(pro.stderr, /Seedream 5\.0 Pro Uncensored cannot render 2816x1584/);
   assert.ok(!pro.state?.lastImageProject);
-  for (const size of [['512', '512'], ['2160', '2160'], ['4096', '4096']]) {
+  for (const size of [['512', '512'], ['3841', '2160'], ['4096', '4096']]) {
     const { exitCode, state, stderr } = runCli(['-m', 'seedream-5-5-uncensored', '-w', size[0], '-h', size[1], 'a cat']);
     assert.equal(exitCode, 1, size.join('x'));
     assert.match(stderr, /Seedream 5\.5 Uncensored cannot render/);
-    assert.match(stderr, /921,600-4,624,220 total pixels/);
+    assert.match(stderr, /921,600-8,294,400 total pixels/);
     assert.ok(!state?.lastImageProject);
+  }
+});
+
+test('Standard Seedream names reach the CLI generation and reference edit paths', () => {
+  for (const [name, id, width, height] of [
+    ['Seedream', 'seedream-5-5', 3840, 2160],
+    ['Seedream 5.0 Pro', 'seedream-5-0-pro', 2048, 2048],
+  ]) {
+    for (const edit of [false, true]) {
+      const args = ['-m', name, '-w', String(width), '-h', String(height)];
+      if (edit) args.push('--context', SCREENSHOT_FIXTURE);
+      const { exitCode, state, stderr } = runCli([...args, 'A quiet bookshop']);
+      assert.equal(exitCode, 0, stderr);
+      const project = edit ? state.lastEditProject : state.lastImageProject;
+      assert.deepEqual([project.modelId, project.width, project.height, project.tokenType], [id, width, height, 'spark']);
+    }
   }
 });
 
@@ -10747,8 +10763,8 @@ test('--help lists Seedream 5.5 Uncensored after Seedream 5.0 Pro Uncensored', (
   const pro = stdout.indexOf('  seedream-5-0-pro-uncensored      Seedream 5.0 Pro Uncensored');
   const v55 = stdout.indexOf('  seedream-5-5-uncensored          Seedream 5.5 Uncensored');
   assert.ok(pro >= 0 && v55 > pro);
-  assert.match(stdout, /921,600-4,624,220 pixels up to 16:1/);
-  assert.doesNotMatch(stdout.slice(v55, v55 + 500), /\b4K\b/);
+  assert.match(stdout, /921,600-8,294,400 pixels up to 16:1/);
+  assert.match(stdout, /seedream-5-5 +Seedream 5.5 Standard.*4K/);
 });
 
 test('Seedance 2.0 Mini Uncensored keeps its own model id with the Seedance 2.0 Mini limits', () => {

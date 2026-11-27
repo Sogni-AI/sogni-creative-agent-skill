@@ -789,8 +789,9 @@ Prefer `-Q fast|hq|pro` for images and automatic workflow routing for video. Pas
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Text-to-image, image-to-image, or edits from up to ten references in one model (FLUX 3 Image Klein) | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
+| Seedream Standard generation or reference edits (5.5 supports 4K) | `seedream-5-5`, `seedream-5-0-pro` |
 | Seedream 5.0 Pro Uncensored images or edits from up to ten references, only when the user asks for it ("Seedream Uncensored") | `seedream-5-0-pro-uncensored` |
-| Seedream 5.5 Uncensored images or edits from up to ten references at up to 4,624,220 pixels, only when the user names Seedream 5.5 | `seedream-5-5-uncensored` |
+| Seedream 5.5 Uncensored images or edits from up to ten references at up to 8,294,400 pixels, only when the user names Seedream 5.5 | `seedream-5-5-uncensored` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |
 | Songs and instrumentals (default) | `minimax_music3` (`--music`) |
 | Quick, cheap music draft, exact BPM/key, or over 300s | `ace_step_1.5_xl_turbo` (`--music-model turbo`) |

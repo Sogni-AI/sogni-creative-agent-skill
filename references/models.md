@@ -10,6 +10,7 @@ answering "which model should I use for X". For everyday generation prefer
 - Live model discovery
 - Quality presets (images)
 - Image models
+- Seedream Standard
 - Seedream 5.0 Pro Uncensored
 - Seedream 5.5 Uncensored
 - Utility and 3D models
@@ -88,8 +89,10 @@ dimensions. "high quality" / "best quality" / "pro" → `-Q pro`; quick drafts �
 | `gpt-image-2.5-flare` | Variable | GPT Image 2.5 Flare; explicit selection, edits, masks and transparency |
 | `gpt-image-2.6-sunburst` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
 | `gpt-image-2.6-flare` | Variable | Explicit GPT Image 2.6 generation, edits, GIFs and annotation-guided still edits |
+| `seedream-5-5` | Variable | Seedream 5.5 Standard, up to 3840x2160 |
+| `seedream-5-0-pro` | Variable | Seedream 5.0 Pro, up to 4,194,304 pixels |
 | `seedream-5-0-pro-uncensored` | Slow (~35-95s) | Seedream 5.0 Pro Uncensored: text-to-image and edits from 1-10 context images; only when asked for; needs the Seedance Uncensored likeness agreement |
-| `seedream-5-5-uncensored` | Medium (~15-40s) | Seedream 5.5 Uncensored: text-to-image and edits from 1-10 context images, up to 4,624,220 pixels; only when the user names Seedream 5.5; needs the Seedance Uncensored likeness agreement |
+| `seedream-5-5-uncensored` | Medium (~15-40s) | Seedream 5.5 Uncensored: text-to-image and edits from 1-10 context images, up to 8,294,400 pixels; only when the user names Seedream 5.5; needs the Seedance Uncensored likeness agreement |
 | `flux1-schnell-fp8` | Very fast | Quick iterations |
 | `qwen_image_2512_fp8` | Medium (~30s) | High quality |
 | `qwen_image_2512_fp8_lightning` | Variable | Qwen Image 2512 Lightning |
@@ -256,6 +259,21 @@ editing with `gpt-image-2`, you can pass up to 16 context images (FLUX 3 Image
 Klein supports up to 10; Krea identity edit models support up to 2; the older
 Qwen Image Edit supports up to 3).
 
+## Seedream Standard
+
+Seedream uses filtered 5.5 (`seedream-5-5`). Seedream 5.0 Pro uses `seedream-5-0-pro`. Both accept up to ten reference images with the content filter on and require Premium Spark. Only Uncensored models require the likeness agreement.
+“Seedream 5.5 Standard” and “Seedream 5.5 Filtered” select filtered 5.5.
+“Seedream 5.5” selects 5.5 Uncensored. “Seedream Uncensored” selects 5.0 Pro Uncensored.
+
+At the same dimensions as their Uncensored twins, filtered 5.5 costs 5.6, 9.8 or
+22.12 Spark per output plus 2.24 per reference. Filtered 5.0 Pro costs 12.6 or
+25.2 Spark plus 0.84 per reference after the first. These prices precede any
+Unlimited member discount.
+
+```bash
+sogni-agent -m seedream -w 3840 -h 2160 "a lighthouse above a quiet bay"
+```
+
 ## Seedream 5.0 Pro Uncensored
 
 `seedream-5-0-pro-uncensored` is **Seedream 5.0 Pro Uncensored**: ByteDance's
@@ -297,13 +315,15 @@ sogni-agent -m seedream-5-0-pro-uncensored -c portrait.jpg \
 The same id is the CLI `-m` value and the hosted `generate_image` /
 `edit_image` selector. It generates from a prompt alone and edits or composes
 from 1-10 context images (`-c`, repeatable; refer to them as Image 1, Image 2,
-and so on). Output is any size with 921,600-4,624,220 total pixels and an
+and so on). Output is any size with 921,600-8,294,400 total pixels and an
 aspect ratio up to 16:1. Its native sizes are 1024x1024, 1152x864, 864x1152,
 1424x800, 800x1424, 1248x832, 832x1248, 1568x672 (1K); 1536x1536 (the
 default), 1792x1344, 1344x1792, 2048x1152, 1152x2048, 1872x1248, 1248x1872,
-2352x1008 (1.5K); and 2048x2048, 2368x1776, 1776x2368, 2816x1584, 1584x2816,
-2496x1664, 1664x2496, 3136x1344 (2K). The CLI refuses other sizes before
-submitting. There is no 4K size. It takes no seed, steps, guidance, LoRAs or
+2352x1008 (1.5K); 2048x2048, 2368x1776, 1776x2368, 2816x1584, 1584x2816,
+2496x1664, 1664x2496, 3136x1344 (2K). The 4K presets are 2880x2880, 3840x2160,
+2160x3840, 3264x2448, 2448x3264, 3504x2336, 2336x3504 and 4368x1872. The CLI
+validates the pixel count and aspect ratio before submission. It takes no seed,
+steps, guidance, LoRAs or
 negative prompt.
 
 - **Names**: `-m seedream-5-5-uncensored`, or "Seedream 5.5 Uncensored",
@@ -312,7 +332,7 @@ negative prompt.
 - **When to use**: only when the user names Seedream 5.5; never in place of
   another image model.
 - **Price**: 6 Spark per image up to 2,601,123 pixels (1536x1536) and 10.5
-  Spark per larger image, plus 2.4 Spark for each context image (no context
+  through 4,624,220 pixels, then 23.7 through 8,294,400 pixels, plus 2.4 Spark for each context image (no context
   image is included). Premium Spark only; Sogni Unlimited does not cover it.
 - **Likeness and consent agreement**: the same one-time agreement as Seedance
   2.5 Uncensored and Seedream 5.0 Pro Uncensored. Until the account accepts it
@@ -1603,6 +1623,7 @@ model recommendations.
 | Identity-preserving Krea image edits | `krea2_identity_edit_v1_2` |
 | Text-to-image, image-to-image, or edits from up to ten references in one model | `flux3_image_klein_sd_int8_convrot` |
 | Uncensored identity-preserving Krea edits | `dark_beast_krea2_identity_edit_v1_2` |
+| Seedream Standard generation or reference edits (5.5 supports 4K) | `seedream-5-5`, `seedream-5-0-pro` |
 | Seedream 5.0 Pro Uncensored images or edits, only when the user asks for it | `seedream-5-0-pro-uncensored` |
 | Seedream 5.5 Uncensored images or edits, only when the user names Seedream 5.5 | `seedream-5-5-uncensored` |
 | Photobooth face transfer | `coreml-sogniXLturbo_alpha1_ad` |

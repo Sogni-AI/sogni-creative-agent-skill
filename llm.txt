@@ -205,6 +205,7 @@ retrying.
   renders at the photo's shape up to 4 MP (picked automatically, larger sizes
   capped). Personal Klein LoRAs work; no nudity (use Dark Beast Krea 2).
   Hosted selector: `flux-3-klein`.
+- Seedream uses filtered 5.5 (`seedream-5-5`). Seedream 5.0 Pro uses `seedream-5-0-pro`. Both accept up to ten reference images with the content filter on and require Premium Spark. Only Uncensored models require the likeness agreement.
 - Seedream 5.0 Pro Uncensored, only when asked: `-m seedream-5-0-pro-uncensored`
   (also "Seedream 5 Pro Uncensored", "Seedream Uncensored") for text-to-image,
   or add up to ten `-c <image>` references for edits; 921,600-4,194,304 pixels
@@ -213,8 +214,8 @@ retrying.
 - Seedream 5.5 Uncensored, only when the user names Seedream 5.5:
   `-m seedream-5-5-uncensored` (also "Seedream 5.5", "Seedream 5.5 Spicy";
   "Seedream Uncensored" stays on 5.0 Pro) for text-to-image, or add up to ten
-  `-c <image>` references for edits; 921,600-4,624,220 pixels up to 16:1
-  (default 1536x1536, no 4K); Premium Spark only; same agreement (error 4103).
+  `-c <image>` references for edits; 921,600-8,294,400 pixels up to 16:1
+  (default 1536x1536, 4K supported); Premium Spark only; same agreement (error 4103).
 - Cost policy: `--workflow-max-cost`, `--confirm-cost`, `--no-confirm-cost`.
 - Direct renders: `--quote` prices the exact request and exits without
   rendering (price, partner-model member price, plan coverage, Sogni's time

@@ -57,7 +57,6 @@ test('prompt-guide resolves -m aliases the way the CLI does, by model id', () =>
   for (const [model, family, mode] of [
     ['minimax-h3-balanced', 'minimax-h3', 't2v'],
     ['sunburst', 'gpt-image', 'generate'],
-    ['seedream-uncensored', 'seedream', 'generate'],
   ]) {
     assert.equal(getModelPromptGuide(model), null, `${model} should need the CLI alias layer`);
     const { exitCode, stdout, stderr } = runPromptGuide([model, '--json']);
@@ -66,6 +65,16 @@ test('prompt-guide resolves -m aliases the way the CLI does, by model id', () =>
     assert.equal(payload.family, family, model);
     assert.equal(payload.mode, mode, model);
     assert.deepEqual(payload.guide, MODEL_PROMPT_GUIDES[family][mode]);
+  }
+  for (const [name, id] of [
+    ['seedream-uncensored', 'seedream-5-0-pro-uncensored'],
+    ['Seedream 5.5', 'seedream-5-5-uncensored'],
+    ['Seedream', 'seedream-5-5'],
+    ['Seedream 5.0 Pro', 'seedream-5-0-pro'],
+  ]) {
+    const payload = JSON.parse(runPromptGuide([name, '--json']).stdout);
+    assert.equal(payload.resolvedModel, id);
+    assert.deepEqual(payload.guide, getModelPromptGuide(id));
   }
   // With a workflow, -m wan22 renders text-to-video on LTX 2.5, so that is its guide;
   // its speech-to-video mode stays on WAN 2.2.

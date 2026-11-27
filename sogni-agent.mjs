@@ -4173,7 +4173,8 @@ function resolvePromptGuide(model, mode) {
     workflow
   );
   const image = normalizeSeedreamModelAlias(normalizeGptImageModelAlias(model));
-  for (const resolvedModel of new Set([video, image])) {
+  const candidates = isSeedreamImageModel(image) ? [image] : [video, image];
+  for (const resolvedModel of new Set(candidates)) {
     const guide = getModelPromptGuide(resolvedModel, mode || undefined);
     if (guide) return { guide, resolvedModel };
   }
@@ -6147,12 +6148,15 @@ Image Models:
   gpt-image-2                     OpenAI GPT Image 2 text-to-image and edit (up to 16 context images)
   gpt-image-2.5-sunburst           GPT Image 2.5 Sunburst: edits, masks, 16 references, transparency
   gpt-image-2.5-flare              GPT Image 2.5 Flare: edits, masks, 16 references, transparency
+  seedream-5-5                      Seedream 5.5 Standard (also "Seedream", "Seedream 5.5 Filtered"), up to 4K.
+  seedream-5-0-pro                  Seedream 5.0 Pro. Both Standard models use Premium Spark and support edits
+                                     with 1-10 references and the content filter on. No likeness agreement required.
   seedream-5-0-pro-uncensored      Seedream 5.0 Pro Uncensored (also "Seedream 5 Pro Uncensored", "Seedream Uncensored"):
                                      text-to-image and edits (1-10 context images), 921,600-4,194,304 pixels up to 16:1,
                                      default 1536x1536. Use it only when asked for. It shares the Seedance 2.5 Uncensored
                                      likeness agreement (error 4103 until accepted in the Sogni app). Premium Spark only.
   seedream-5-5-uncensored          Seedream 5.5 Uncensored (also "Seedream 5.5", "Seedream 5.5 Spicy"):
-                                     text-to-image and edits (1-10 context images), 921,600-4,624,220 pixels up to 16:1,
+                                     text-to-image and edits (1-10 context images), 921,600-8,294,400 pixels up to 16:1,
                                      default 1536x1536. Use it only when asked for by name; "Seedream Uncensored" stays on
                                      5.0 Pro. Same likeness agreement (error 4103 until accepted). Premium Spark only.
   flux3_image_klein_sd_int8_convrot  FLUX 3 Image Klein: text-to-image, image-to-image, edits (up to 10 context images)
@@ -7457,7 +7461,7 @@ if (!options.video && !options.music && isGptImage2ModelSelection(options.model)
 }
 
 // Seedream 5.0 Pro Uncensored renders 921,600-4,194,304 pixels up to 16:1 and
-// Seedream 5.5 Uncensored 921,600-4,624,220; both default to 1536x1536. Refuse
+// Seedream 5.5 Uncensored 921,600-8,294,400; both default to 1536x1536. Refuse
 // a size the model's vendor would reject before paying.
 if (!options.video && !options.music && isSeedreamImageModel(normalizeSeedreamModelAlias(options.model))) {
   options.model = normalizeSeedreamModelAlias(options.model);

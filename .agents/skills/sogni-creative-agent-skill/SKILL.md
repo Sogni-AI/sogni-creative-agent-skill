@@ -204,11 +204,15 @@ Uncensored (`seedance2-mini-uncensored`) has Seedance 2.0 Mini's; use them only
 when asked. Seedream 5.0 Pro Uncensored (`seedream-5-0-pro-uncensored`) makes
 images and edits from 1-10 references, also only when asked, and shares their
 agreement. Seedream 5.5 Uncensored (`seedream-5-5-uncensored`) does the same up
-to 4,624,220 pixels, only when the user names Seedream 5.5 ("Seedream Uncensored"
+to 8,294,400 pixels, only when the user names Seedream 5.5 ("Seedream Uncensored"
 stays on 5.0 Pro), under the same agreement. On error 4103, show the returned `consentUrl` and
 `consentInstructions`: sign in with the same account as the agent/API key,
 accept the shared agreement, then return and retry the original request.
-Never accept for the user or retry while acceptance is pending. FastH3 Two-Stage
+Never accept for the user or retry while acceptance is pending.
+
+Seedream uses filtered 5.5 (`seedream-5-5`). Seedream 5.0 Pro uses `seedream-5-0-pro`. Both accept up to ten reference images with the content filter on and require Premium Spark. Only Uncensored models require the likeness agreement.
+
+FastH3 Two-Stage
 delivers 720p/1080p/2K through its own model selector. FastH3 audio-to-video
 (`minimax-h3-fasth3-ia2v-turbo`, `-flfa2v-turbo`, `-a2v-turbo`) drives H3 with an
 uploaded `--ref-audio` track and keeps it as the soundtrack. Repeatable

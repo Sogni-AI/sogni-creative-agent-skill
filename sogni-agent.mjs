@@ -11806,6 +11806,7 @@ function personaSlug(name) {
 
 function resolvePersonaSubdir(slug) {
   if (typeof slug !== 'string' || slug.trim().length === 0) return null;
+  if (slug.includes('/') || slug.includes('\\')) return null;
   const root = resolve(PERSONAS_DIR);
   const target = resolve(PERSONAS_DIR, slug);
   if (target === root || !target.startsWith(root + sep)) return null;
@@ -13110,7 +13111,11 @@ function reserveResultDownloadBytes(bytes) {
 }
 
 function isNonRetryableUrlCheckError(error) {
-  return error?.code === 'SSRF_BLOCKED' || /^SSRF guard:/i.test(error?.message || '');
+  if (error?.code === 'SSRF_BLOCKED') return true;
+  if (error?.code === 'ENOTFOUND') return false;
+  const message = String(error?.message || '');
+  if (/^SSRF guard: (?:DNS lookup failed|no DNS records)\b/i.test(message)) return false;
+  return /^SSRF guard:/i.test(message);
 }
 
 /** One GET into tempPath: fresh, or appended from state.received with a Range request. */

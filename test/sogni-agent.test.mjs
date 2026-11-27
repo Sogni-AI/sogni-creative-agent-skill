@@ -12355,21 +12355,26 @@ test('non-ASCII and punctuation-variant persona names keep distinct directories 
   assert.equal(readFileSync(saved.get('Mo!').persona.photoPath, 'utf8'), 'photo-mo-1');
 });
 
-test('removing legacy empty-slug or shared-slug persona entries preserves root and shared files', () => {
+test('removing legacy empty, nested, or shared-slug persona entries preserves root, nested, and shared files', () => {
   const root = makeTempHome('sogni-persona-legacy-remove-');
   const personasDir = join(root, 'personas');
   const sharedDir = join(personasDir, 'shared');
+  const nestedDir = join(personasDir, 'a', 'b');
   mkdirSync(sharedDir, { recursive: true });
+  mkdirSync(nestedDir, { recursive: true });
   const rootPhoto = join(personasDir, 'photo.jpg');
   const sharedPhoto = join(sharedDir, 'photo.jpg');
+  const nestedPhoto = join(nestedDir, 'photo.jpg');
   writeFileSync(rootPhoto, 'root-photo-bytes');
   writeFileSync(sharedPhoto, 'shared-photo-bytes');
+  writeFileSync(nestedPhoto, 'nested-photo-bytes');
   writeFileSync(
     join(personasDir, 'index.json'),
     JSON.stringify([
       { id: 'legacy-1', name: '...', slug: '', relationship: 'friend', photoPath: rootPhoto, createdAt: 0, updatedAt: 0 },
       { id: 'legacy-2', name: 'Alex!', slug: 'shared', relationship: 'friend', photoPath: sharedPhoto, createdAt: 0, updatedAt: 0 },
       { id: 'legacy-3', name: 'Alex?', slug: 'shared', relationship: 'friend', photoPath: sharedPhoto, createdAt: 0, updatedAt: 0 },
+      { id: 'legacy-4', name: 'Nested', slug: 'a/b', relationship: 'friend', photoPath: nestedPhoto, createdAt: 0, updatedAt: 0 },
     ], null, 2)
   );
 
@@ -12379,6 +12384,14 @@ test('removing legacy empty-slug or shared-slug persona entries preserves root a
   assert.equal(removeEmpty.exitCode, 0, removeEmpty.stderr);
   assert.equal(JSON.parse(removeEmpty.stdout.trim()).removed, true);
   assert.equal(readFileSync(rootPhoto, 'utf8'), 'root-photo-bytes');
+  assert.equal(JSON.parse(readFileSync(join(personasDir, 'index.json'), 'utf8')).length, 3);
+
+  const removeNested = runCli(['--json', '--no-update-check', '--persona-remove', 'Nested'], {
+    SOGNI_PERSONAS_DIR: personasDir,
+  });
+  assert.equal(removeNested.exitCode, 0, removeNested.stderr);
+  assert.equal(JSON.parse(removeNested.stdout.trim()).removed, true);
+  assert.equal(readFileSync(nestedPhoto, 'utf8'), 'nested-photo-bytes');
   assert.equal(JSON.parse(readFileSync(join(personasDir, 'index.json'), 'utf8')).length, 2);
 
   const removeFirstShared = runCli(['--json', '--no-update-check', '--persona-remove', 'Alex!'], {
@@ -12396,6 +12409,7 @@ test('removing legacy empty-slug or shared-slug persona entries preserves root a
   assert.equal(JSON.parse(removeLastShared.stdout.trim()).removed, true);
   assert.throws(() => statSync(sharedDir));
   assert.equal(readFileSync(rootPhoto, 'utf8'), 'root-photo-bytes');
+  assert.equal(readFileSync(nestedPhoto, 'utf8'), 'nested-photo-bytes');
   assert.deepEqual(JSON.parse(readFileSync(join(personasDir, 'index.json'), 'utf8')), []);
 });
 
@@ -12435,6 +12449,52 @@ test('a result download refuses a 302 redirect to a loopback address immediately
   } finally {
     loopbackServer.closeAllConnections();
     await new Promise(resolve => loopbackServer.close(resolve));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a result download retries transient DNS lookup failures instead of failing immediately', { timeout: 30_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sogni-download-dns-retry-'));
+  const output = join(dir, 'clip.mp4');
+  const body = patternBytes(4096);
+  try {
+    await withScriptedMediaServer((requestNumber, _req, res) => {
+      if (requestNumber === 1) {
+        res.writeHead(302, { location: 'https://transient-dns.invalid/clip.mp4' });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'content-length': body.length });
+      res.end(body);
+    }, async (url, requests) => {
+      const recovered = await boundedDownloadCli(['--result', 'proj-dns-1', '-o', output, '--json'], {
+        SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+          id: 'proj-dns-1', status: 'completed', finished: true, modelId: 'minimax-h3-ref2va-fp8_r2v',
+          jobs: [{ id: 'VID-1', status: 'completed', kind: 'video', url }]
+        }),
+        ...FAST_DOWNLOAD_RETRIES,
+      });
+      assert.equal(recovered.exitCode, 0, recovered.stderr);
+      assert.equal(requests.length, 2);
+      assert.deepEqual(readFileSync(output), body);
+      assert.match(recovered.stderr, /DNS lookup failed for transient-dns\.invalid.*; retrying in 20 ms \(attempt 2 of 4\)\./);
+    });
+
+    const unrecoveredOut = join(dir, 'unrecovered.mp4');
+    const failed = await boundedDownloadCli(['--result', 'proj-dns-2', '-o', unrecoveredOut, '--json'], {
+      SOGNI_AGENT_TEST_GET_RESULT_JSON: JSON.stringify({
+        id: 'proj-dns-2', status: 'completed', finished: true, modelId: 'minimax-h3-ref2va-fp8_r2v',
+        jobs: [{ id: 'VID-2', status: 'completed', kind: 'video', url: 'https://unresolvable-dns.invalid/clip.mp4' }]
+      }),
+      ...FAST_DOWNLOAD_RETRIES,
+    });
+    assert.equal(failed.exitCode, 1, failed.stderr);
+    const payload = JSON.parse(failed.stdout.trim().split('\n').pop());
+    assert.equal(payload.errorCode, 'RESULT_DOWNLOAD_FAILED');
+    assert.equal(payload.retryable, true);
+    assert.equal((failed.stderr.match(/; retrying in 20 ms/g) || []).length, 3);
+    assert.deepEqual(payload.errorDetails.resultCommands, [`sogni-agent --result proj-dns-2 -o ${unrecoveredOut}`]);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

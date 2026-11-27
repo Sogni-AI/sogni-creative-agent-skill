@@ -89,10 +89,16 @@ load no LoRAs and the ids are dropped.
 - The first render with an uncached LoRA pauses while the worker downloads it.
 
 **Safety rule the platform enforces:** `krea2-age` at a negative strength is
-rejected outright when combined with `krea2-mystic-x` or `krea2-realism-engine`
-(the two LoRAs flagged `sexual`). Keep Age at 0 or above in any adult context.
-Only `krea2-aberrant`, `krea2-mystic-x`, and `krea2-realism-engine` are
-mature-gated; the body sliders are not.
+rejected outright when combined with a LoRA flagged `sexual` (`krea2-mystic-x-v4`,
+`krea2-mystic-x` or `krea2-realism-engine`). Keep Age at 0 or above in any adult
+context. Only `krea2-aberrant`, the two Mystic X versions and `krea2-realism-engine`
+are mature-gated; the body sliders are not.
+
+**Newer versions:** `krea2-mystic-x-v4`, `krea2-breast-v2`, `krea2-skin-tone-v2` and
+`krea2-purple-grainy-v2` supersede `krea2-mystic-x`, `krea2-breast`, `krea2-skin-tone`
+and `krea2-purple-grainy` (as of 2026-11). The earlier ids still work and keep their
+own ranges; the catalog marks them with `supersededBy`. Use the newer id unless the
+creator asks for the earlier version.
 
 ## Detail and composition
 
@@ -111,7 +117,7 @@ mature-gated; the body sliders are not.
 | `krea2-realism` | Illustrated ↔ Realistic | -2 to 2 | -1 to 1 | 1 | More Illustrated → More Photoreal |
 | `krea2-amateur` | Professional ↔ Amateur | -5 to 5 | -2 to 2 | 1 | More Professional → More Amateur |
 | `krea2-candid` | Editorial ↔ Candid | -10 to 10 | 3 to 9 | 3 | More Editorial → More Candid |
-| `krea2-purple-grainy` | Purple Grainy | -2 to 2 | -1 to 1.5 | 1 | Clean & Saturated → Grainy & Muted |
+| `krea2-purple-grainy-v2` | Purple Grainy v2 | -2 to 2 | -1 to 1.5 | 1 | Clean & Saturated → Grainy & Muted |
 
 ## Lighting
 
@@ -127,9 +133,9 @@ mature-gated; the body sliders are not.
 | `krea2-height` | Height | -5 to 5 | -3 to 3 | 0 | Shorter → Taller |
 | `krea2-weight` | Weight | -3 to 3 | -3 to 3 | 1 | Leaner → Heavier |
 | `krea2-age` | Age | -10 to 10 | -3 to 8 | 1 | Younger → Older |
-| `krea2-skin-tone` | Skin Tone | -4 to 4 | -1.5 to 1.5 | 1 | Lighter Tone → Darker Tone |
+| `krea2-skin-tone-v2` | Skin Tone v2 | -10 to 10 | -6 to 6 | 2 | Lighter Tone → Darker Tone |
 | `krea2-hourglass-figure` | Figure | -1.5 to 1.5 | 0.7 to 1 | 0.8 | Less Hourglass → More Hourglass |
-| `krea2-breast` | Chest Size | -5 to 5 | -2 to 4 | 1 | Smaller Chest → Larger Chest |
+| `krea2-breast-v2` | Chest Size v2 | -3 to 3 | -2 to 2.5 | 1 | Smaller Chest → Larger Chest |
 | `krea2-chest-firmness` | Natural Sag → Firm | -8 to 8 | -5 to 5 | 0 | Natural Sag → Firm |
 | `krea2-nipple-projection` | Nipple Flat → Protruding | -10 to 10 | -5 to 5 | 0 | Flat → Protruding |
 
@@ -158,7 +164,7 @@ style bias, so treat one as a look you build on rather than a finishing pass.
 |---------|------|-------|-------------|---------|---------|
 | `krea2-realism-engine` | Realism Engine v3 | 0 to 2 | 0.5 to 1 | 0.8 | razzz |
 | `krea2-bloomgirls` | BloomGirls UltraRealism | 0 to 2 | 0.4 to 1 | 0.8 | coolstrad |
-| `krea2-mystic-x` | Mystic X | 0 to 2 | 0 to 1 | 1 | alcaitiff |
+| `krea2-mystic-x-v4` | Mystic X v4 | 0 to 2 | 0 to 1 | 1 | alcaitiff |
 | `krea2-aberrant` | Aberrant | 0 to 2 | 0.2 to 1.5 | 0.75 | alcaitiff |
 
 - **Realism Engine v3** pushes toward photographic realism and carries mature
@@ -168,11 +174,14 @@ style bias, so treat one as a look you build on rather than a finishing pass.
   saturation, smooth skin, close phone-camera framing. It restyles face and hair
   as well as the grade. Trained on the token `bl00m`, which only nudges the
   result. Holds together to ~1.0 on Turbo at 8 steps; smears by 2.0.
-- **Mystic X** is an all-round uncensored adult fine-tune; keep it at or below
+- **Mystic X v4** is an all-round uncensored adult fine-tune; keep it at or below
   1, and the author recommends euler/beta at 12 steps.
+- **Chest Size v2** keeps the face as the size changes but is about twice as
+  strong per step as v1: +2.5 matches v1 at +3 to +4. **Skin Tone v2** changes
+  only the people; past about ±6 it turns stylized and can tint clothing.
 - **Aberrant** adds industrial body-horror: dirt, scars, and mechanical
   undertones low; fused tissue and rusted metal high.
 
-`krea2-mystic-x` and `krea2-realism-engine` are flagged NSFW and sexual in the
+`krea2-mystic-x-v4`, `krea2-mystic-x` and `krea2-realism-engine` are flagged NSFW and sexual in the
 catalog; `krea2-aberrant` is flagged NSFW. Honor the creator's intent and the
 usual mature-content handling when selecting them.

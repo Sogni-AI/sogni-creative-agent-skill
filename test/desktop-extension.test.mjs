@@ -1009,7 +1009,9 @@ test('no tool input reaches the real CLI as an option', { timeout: 240000 }, asy
     const valid = Object.fromEntries(Object.entries(properties).map(([key, schema]) => [key, sampleValue(key, schema)]));
     const required = Object.fromEntries((tool.inputSchema.required ?? []).map((key) => [key, valid[key]]));
     for (const action of properties.action?.enum ?? [undefined]) {
-      const base = action ? { ...valid, action } : required;
+      const base = action
+        ? { ...valid, action }
+        : (Object.keys(required).length === 0 && properties.prompt ? { prompt: 'test' } : required);
       for (const [key, schema] of Object.entries(properties)) {
         if (key === 'action') continue;
         let value = SENTINEL;
@@ -1021,6 +1023,7 @@ test('no tool input reaches the real CLI as an option', { timeout: 240000 }, asy
   }
   assert.ok(cases.length > 100, `only ${cases.length} probes`);
   const leaked = [];
+  const executed = new Set();
   const queue = [...cases];
   await Promise.all(Array.from({ length: 6 }, async () => {
     for (let next = queue.shift(); next; next = queue.shift()) {
@@ -1030,10 +1033,22 @@ test('no tool input reaches the real CLI as an option', { timeout: 240000 }, asy
       } catch {
         continue; // refused before the CLI runs
       }
+      executed.add(next.name);
       if (!(await runCli(args))) leaked.push(next.name);
     }
   }));
+  assert.ok(executed.has('generate_video.ref'), 'generate_video properties should reach the CLI');
+  assert.ok(executed.has('generate_video.persona'), 'generate_video persona should reach the CLI');
   assert.deepEqual(leaked.sort(), []);
+});
+
+test('edit_video concat_videos rejects non-array clips cleanly', () => {
+  for (const clips of ['abc', 123, { length: 3 }, true]) {
+    assert.throws(
+      () => getTool('edit_video').buildArgs({ action: 'concat_videos', output: '/out.mp4', clips }),
+      { message: 'concat_videos needs at least two clips.' },
+    );
+  }
 });
 
 test('output paths must land in an allowed folder', () => {

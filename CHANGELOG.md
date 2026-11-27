@@ -1,3 +1,8 @@
+## [3.75.1] - 2026-11-27
+
+- Completed render downloads now use the same remote URL checks, proxy handling, and retry behavior as reference media downloads, and persona folders stay isolated even when a name contains only punctuation or symbols.
+- Use Sogni SDK 5.90.1 and intelligence-client 4.36.1.
+
 ## [3.75.0] - 2026-11-25
 
 - Select `seedance2-5-flash-uncensored` for Seedance 2.5 Flash Uncensored: 4–30 second videos at 480p or 720p with optional audio, with the same text, frame, reference, edit and extend support as Flash.

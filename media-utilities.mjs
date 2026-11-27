@@ -49,9 +49,9 @@ export const MESH_FLAGS = {
 export function resolveSpeechModeSelection(model, speechEnabled = false) {
   if (typeof model !== 'string' || !model.trim()) return undefined;
   const trimmed = model.trim();
-  const byModelId = getSpeechMode(trimmed);
-  if (byModelId) return byModelId;
   const normalized = trimmed.toLowerCase();
+  const byModelId = getSpeechMode(trimmed) || getSpeechMode(normalized);
+  if (byModelId) return byModelId;
   if (normalized === 'drama3' || normalized === 'fish-drama-3') return 'drama3';
   if (speechEnabled && Object.hasOwn(SpeechModel, normalized)) return normalized;
   return undefined;
@@ -64,7 +64,7 @@ export function prepareMediaUtilityOptions(options, explicit) {
     ? resolveSpeechModeSelection(options.model, Boolean(options.speech))
     : undefined;
   if (selectedSpeechMode) {
-    if (options.speechMode && options.speechMode !== selectedSpeechMode) fail('--speech-mode conflicts with --model.');
+    if (options.speechMode && options.speechMode.trim().toLowerCase() !== selectedSpeechMode) fail('--speech-mode conflicts with --model.');
     options.speech = true;
     options.speechMode = selectedSpeechMode;
     options.model = SpeechModel[selectedSpeechMode];
@@ -107,7 +107,7 @@ export function prepareMediaUtilityOptions(options, explicit) {
     fail('This mode does not accept image/video references, sizing, diffusion, or music controls. Use its dedicated input flags.');
   }
   if (options.speech) {
-    options.speechMode = (options.speechMode || 'voice').toLowerCase();
+    options.speechMode = (options.speechMode || 'voice').trim().toLowerCase();
     const model = SpeechModel[options.speechMode];
     if (!model) fail('Speech mode must be voice, clone, design, or drama3.');
     if (explicit.model && options.model !== model) fail('--model conflicts with the selected speech mode.');

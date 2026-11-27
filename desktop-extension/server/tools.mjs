@@ -587,7 +587,10 @@ export const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        text: str('The exact words to speak, up to 4096 characters; inline [direction] and <whisper>...</whisper> tags are supported only in mode drama3'),
+        text: {
+          ...str('The exact words to speak: up to 4096 characters for voice, clone, or design, and up to 5000 characters for mode drama3; inline [direction] and <whisper>...</whisper> tags are supported only in mode drama3'),
+          maxLength: 5000,
+        },
         ...RENDER_OPTIONS,
         mode: {
           type: 'string',
@@ -616,7 +619,14 @@ export const TOOLS = [
     },
     outputFields: ['output_path'],
     buildArgs(input) {
-      const text = required(input, 'text', 'the words to speak');
+      const text = String(required(input, 'text', 'the words to speak'));
+      const mode = typeof input.mode === 'string' && input.mode.trim()
+        ? input.mode.trim().toLowerCase()
+        : 'voice';
+      const maxChars = mode === 'drama3' ? 5000 : 4096;
+      if (text.trim().length > maxChars) {
+        throw new Error(`Speech scripts are limited to ${maxChars} characters; this one is ${text.trim().length}.`);
+      }
       const args = [...GEN_BASE, '--speech'];
       pushRenderOptions(args, input);
       push(args, '--speech-mode', input.mode);

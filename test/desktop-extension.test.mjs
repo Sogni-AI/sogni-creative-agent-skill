@@ -233,8 +233,13 @@ test('upscale_image, upscale_video and generate_speech map each argument to one 
     '--upscale-model', 'relayvsr', '--upscale-resolution', '2160', '-o', '/out.mp4', '-t', '2400',
   ]);
   const speech = getTool('generate_speech');
+  assert.equal(speech.inputSchema.properties.text.maxLength, 5000);
   assert.deepEqual(speech.inputSchema.properties.mode.enum, ['voice', 'clone', 'design', 'drama3']);
   assert.ok(speech.inputSchema.properties.language.enum.includes('arabic'));
+  assert.equal(speech.buildArgs({ text: 'a'.repeat(5000), mode: 'drama3' }).at(-1)?.length, 5000);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(5001), mode: 'drama3' }), /5000 characters/);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(4097), mode: 'voice' }), /4096 characters/);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(4097) }), /4096 characters/);
   assert.deepEqual(Object.keys(speech.inputSchema.properties).sort(), [
     'audio_format',
     'creativity',

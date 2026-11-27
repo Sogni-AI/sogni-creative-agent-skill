@@ -63,6 +63,8 @@ test('prepareMediaUtilityOptions supports Fish Drama 3 via --speech-mode drama3,
     [{ speech: true, speechMode: 'drama3', prompt: '[sighs] Hello there.' }, {}],
     [{ model: 'drama3', prompt: '[laughs] Good to see you.' }, { model: true }],
     [{ model: 'fish_drama_3_nvfp4', prompt: '<whisper>Stay quiet.</whisper>' }, { model: true }],
+    [{ speech: true, speechMode: 'DRAMA3', model: 'drama3', prompt: '[sighs] Case-insensitive agreement.' }, { model: true }],
+    [{ speechMode: 'Drama3', model: 'FISH_DRAMA_3_NVFP4', prompt: '[warmly] Uppercase model ID.' }, { model: true }],
   ]) {
     const options = makeOptions(overrides);
     prepareMediaUtilityOptions(options, explicit);
@@ -71,6 +73,22 @@ test('prepareMediaUtilityOptions supports Fish Drama 3 via --speech-mode drama3,
     assert.equal(options.model, 'fish_drama_3_nvfp4');
     assert.equal(options.outputFormat, 'wav');
   }
+
+  assert.throws(
+    () => prepareMediaUtilityOptions(makeOptions({ speech: true, speechMode: 'VOICE', model: 'drama3', prompt: 'Conflict' }), { model: true }),
+    /--speech-mode conflicts with --model/,
+  );
+
+  const drama5000 = makeOptions({ speech: true, speechMode: 'drama3', prompt: 'a'.repeat(5000) });
+  assert.doesNotThrow(() => prepareMediaUtilityOptions(drama5000, {}));
+  assert.throws(
+    () => prepareMediaUtilityOptions(makeOptions({ speech: true, speechMode: 'drama3', prompt: 'a'.repeat(5001) }), {}),
+    /5000 characters/,
+  );
+  assert.throws(
+    () => prepareMediaUtilityOptions(makeOptions({ speech: true, speechMode: 'voice', prompt: 'a'.repeat(4097) }), {}),
+    /4096 characters/,
+  );
 });
 
 test('Fish Drama 3 omits creativity and accepts up to 2000-character voice transcripts with reference audio', () => {

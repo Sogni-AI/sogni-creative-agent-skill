@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent
-description: "Sogni Creative Agent: image, 3D, speech, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, MiniMax H3/Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
+description: "Sogni Creative Agent: image, 3D, speech, transcription, video, and music generation using Sogni AI's decentralized GPU network. Supports personas, persistent memories, custom personality, style transfer, angle synthesis, Fish Drama 3 & Qwen3-TTS speech, Parakeet & Nemotron speech-to-text, MiniMax H3/Seedance/LTX/WAN video, music/lyrics, hosted chat, durable workflows, replay records, and multi-step creative workflows. Invoke when the user asks to \"draw\", \"generate\", \"create an image\", \"make a video\", \"animate\", \"transcribe audio\", \"make music\", \"build a playable world\", \"apply a style\", or \"generate me as a superhero\"."
 ---
 
 # Sogni Creative Agent
@@ -85,6 +85,8 @@ When MiniMax H3 is selected for loose visual references and the creator has opte
 - One-click image-folder loop: `/sogni-creative-agent:loop-maker ./images`
 - One-click image-folder loop in Codex: `$sogni-creative-agent:loop-maker ./images`
 - Music (MiniMax Music 3 by default): `sogni-agent --music --duration 30 "ambient drone, 60 BPM, D minor"`
+- Speech (Qwen3-TTS or Fish Drama 3): `sogni-agent --speech --speech-mode drama3 -o ./line.wav "[sighs] Finally home. <whisper>Keep your voice down.</whisper>"`
+- Transcribe audio or video (Parakeet or Nemotron): `sogni-agent --transcribe ./interview.m4a --diarize --output-format srt -o ./interview.srt`
 - Hosted workflow: `sogni-agent --api-workflow storyboard-video --storyboard-frames 6 "9:16 bakery launch video"`
 - List inbound media the user sent (Telegram etc.): `sogni-agent --json --list-media`
 - Inspect the last render: `sogni-agent --last --json`
@@ -150,7 +152,7 @@ Pixal3D: `--image-to-3d original.png --mesh-faces 30000 -o object.glb`; add
 subject's own sides: the left view shows it facing screen-left).
 BiRefNet: `--remove-background original.png -o cutout.png`; add `--matte`
 for a soft mask. Both are promptless and preserve the original input bytes.
-Music: `--music` uses MiniMax Music 3 (`-m turbo` for ACE-Step); speech: `--speech --speech-mode voice|clone|design`.
+Music: `--music` uses MiniMax Music 3 (`-m turbo` for ACE-Step); speech: `--speech --speech-mode voice|clone|design|drama3` (Fish Drama 3 `drama3` supports inline `[direction]` tags and optional 1–30s `--voice-reference`); speech-to-text: `--transcribe <audio>` (`--transcribe-model parakeet|nemotron`, `--timestamps none|sentence|word`, `--diarize`, `--hotwords`, `--output-format txt|json|srt|vtt`).
 Read `../../references/models.md` for exact controls, studio voices, clone
 recordings, and Music 3 section tags before generating. Discover 3D with
 `--search-models pixal3d` or `--model-media model`. For explorable worlds,

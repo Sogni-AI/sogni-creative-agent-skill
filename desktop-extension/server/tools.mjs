@@ -14,6 +14,8 @@ const HARD_KILL_GRACE_MS = 60 * 1000;
 const DEFAULT_TOOL_TIMEOUT_SECONDS = {
   generate_video: 1800,
   generate_music: 600,
+  generate_speech: 600,
+  transcribe_audio: 600,
 };
 
 export function hardKillTimeoutMs(toolName, input) {
@@ -579,31 +581,34 @@ export const TOOLS = [
   {
     name: 'generate_speech',
     description:
-      'Speak text aloud in a preset, cloned or designed voice and return the audio. ' +
-      'The text is read exactly as written, so pass only the words to say and put delivery direction in voice_description. ' +
+      'Speak text aloud in a preset, cloned, designed or expressive Fish Drama 3 voice and return the audio. ' +
+      'Qwen3-TTS modes read the text literally (put delivery direction in voice_description); mode drama3 supports inline [direction] and <whisper>...</whisper> acting tags plus optional voice cloning. ' +
       'For singing or songs, use generate_music. Prefer output_path. ' + CHAT_ATTACHMENT_NOTE,
     inputSchema: {
       type: 'object',
       properties: {
-        text: str('The exact words to speak, up to 4096 characters; no stage directions or speaker labels'),
+        text: {
+          ...str('The exact words to speak: up to 4096 characters for voice, clone, or design, and up to 5000 characters for mode drama3; inline [direction] and <whisper>...</whisper> tags are supported only in mode drama3'),
+          maxLength: 5000,
+        },
         ...RENDER_OPTIONS,
         mode: {
           type: 'string',
-          enum: ['voice', 'clone', 'design'],
-          description: 'voice (default): a preset voice. clone: the voice in voice_reference. design: a new voice from voice_description',
+          enum: ['voice', 'clone', 'design', 'drama3'],
+          description: 'voice (default): a preset Qwen3-TTS voice. clone: the voice in voice_reference (3-30s). design: a new voice from voice_description. drama3: expressive Fish Drama 3 acting speech with inline [direction] tags and optional 1-30s voice_reference',
         },
         voice: {
           type: 'string',
           enum: ['serena', 'vivian', 'uncle_fu', 'ryan', 'aiden', 'ono_anna', 'sohee', 'eric', 'dylan'],
           description: 'Preset for mode voice (default serena). Female: serena, vivian, ono_anna, sohee. Male: uncle_fu, ryan, aiden, eric, dylan',
         },
-        voice_description: str('How the voice sounds and reads, e.g. "warm, unhurried, slightly amused"; required for design, optional for voice, not used by clone'),
-        voice_reference: str('Absolute path or URL of a 3-30 second recording of the voice to clone (required for clone)'),
-        voice_transcript: str('The words spoken in voice_reference (clone, optional)'),
-        creativity: num('Sampling temperature, 0.1-2'),
+        voice_description: str('How the voice sounds and reads, e.g. "warm, unhurried, slightly amused"; required for design, optional for voice, not used by clone or drama3'),
+        voice_reference: str('Absolute path or URL of a clean voice recording to clone: 3-30s required for clone, 1-30s optional for drama3'),
+        voice_transcript: str('The words spoken in voice_reference (optional: up to 1024 chars for clone, 2000 chars for drama3)'),
+        creativity: num('Qwen3-TTS delivery variation, 0.1-2 (omit for drama3)'),
         language: {
           type: 'string',
-          enum: ['auto', 'english', 'chinese', 'japanese', 'korean', 'german', 'french', 'russian', 'portuguese', 'spanish', 'italian'],
+          enum: ['auto', 'english', 'chinese', 'japanese', 'korean', 'german', 'french', 'russian', 'portuguese', 'spanish', 'italian', 'arabic'],
           description: 'Spoken language (default auto)',
         },
         output_path: str('Absolute audio file path to save; its extension must match audio_format (optional)'),
@@ -614,7 +619,14 @@ export const TOOLS = [
     },
     outputFields: ['output_path'],
     buildArgs(input) {
-      const text = required(input, 'text', 'the words to speak');
+      const text = String(required(input, 'text', 'the words to speak'));
+      const mode = typeof input.mode === 'string' && input.mode.trim()
+        ? input.mode.trim().toLowerCase()
+        : 'voice';
+      const maxChars = mode === 'drama3' ? 5000 : 4096;
+      if (text.trim().length > maxChars) {
+        throw new Error(`Speech scripts are limited to ${maxChars} characters; this one is ${text.trim().length}.`);
+      }
       const args = [...GEN_BASE, '--speech'];
       pushRenderOptions(args, input);
       push(args, '--speech-mode', input.mode);
@@ -622,12 +634,67 @@ export const TOOLS = [
       push(args, '--voice-description', input.voice_description);
       push(args, '--voice-reference', input.voice_reference);
       push(args, '--voice-transcript', input.voice_transcript);
-      push(args, '--speech-creativity', input.creativity);
+      if (input.mode !== 'drama3') push(args, '--speech-creativity', input.creativity);
       push(args, '--language', input.language);
       push(args, '-o', input.output_path);
       push(args, '--output-format', input.audio_format);
       push(args, '-t', input.timeout_seconds);
       args.push('--', String(text));
+      return args;
+    },
+  },
+  {
+    name: 'transcribe_audio',
+    description:
+      'Transcribe spoken audio from an audio or video file or URL into text, JSON segments, or SRT/VTT captions. ' +
+      'parakeet (default) transcribes 25 European languages up to 2 hours; nemotron transcribes 40 languages up to 1 hour with speaker diarization (diarize) and custom vocabulary hints (hotwords, prompt). ' +
+      'Pass output_path (.txt/.json/.srt/.vtt) to save locally. ' + CHAT_ATTACHMENT_NOTE,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        audio: str('Absolute path or URL of the audio or video recording to transcribe'),
+        ...RENDER_OPTIONS,
+        model: {
+          type: 'string',
+          enum: ['parakeet', 'nemotron'],
+          description: 'parakeet (default): fast 25-language STT up to 2h. nemotron: 40-language STT up to 1h with diarization and hotwords (auto-selected when diarize, hotwords or prompt is set)',
+        },
+        timestamps: {
+          type: 'string',
+          enum: ['none', 'sentence', 'word'],
+          description: 'Timestamp granularity (default sentence)',
+        },
+        diarize: {
+          type: 'boolean',
+          description: 'Label speakers (S01, S02, ...); supported by nemotron',
+        },
+        hotwords: str('Comma-separated names, brands or terms to bias recognition on nemotron, up to 1000 characters'),
+        prompt: str('Optional context or language hint for nemotron, up to 2000 characters'),
+        format: {
+          type: 'string',
+          enum: ['json', 'txt', 'srt', 'vtt'],
+          description: 'Transcript output format (default txt)',
+        },
+        output_path: str('Absolute path to save the transcript (.json/.txt/.srt/.vtt, optional)'),
+        timeout_seconds: num('Timeout override (default 600)'),
+      },
+      required: ['audio'],
+    },
+    outputFields: ['output_path'],
+    buildArgs(input) {
+      const audio = required(input, 'audio', 'a path or URL of the audio or video to transcribe');
+      const args = [...GEN_BASE, '--transcribe', String(audio)];
+      pushRenderOptions(args, input);
+      push(args, '--transcribe-model', input.model);
+      push(args, '--timestamps', input.timestamps);
+      if (input.diarize === true) args.push('--diarize');
+      push(args, '--hotwords', input.hotwords);
+      push(args, '--output-format', input.format);
+      push(args, '-o', input.output_path);
+      push(args, '-t', input.timeout_seconds);
+      if (input.prompt !== undefined && input.prompt !== null && input.prompt !== '') {
+        args.push('--', String(input.prompt));
+      }
       return args;
     },
   },

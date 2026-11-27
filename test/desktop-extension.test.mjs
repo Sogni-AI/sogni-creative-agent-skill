@@ -148,7 +148,7 @@ test('TOOLS exposes the expected v1 tool names', () => {
     'account_balance', 'edit_video', 'generate_image', 'generate_music',
     'generate_speech', 'generate_video', 'import_media', 'list_media', 'manage_memories',
     'manage_personas', 'photobooth', 'prompt_guide', 'sogni_doctor',
-    'upscale_image', 'upscale_video',
+    'transcribe_audio', 'upscale_image', 'upscale_video',
   ]);
   for (const t of TOOLS) {
     assert.equal(typeof t.description, 'string');
@@ -233,6 +233,28 @@ test('upscale_image, upscale_video and generate_speech map each argument to one 
     '--upscale-model', 'relayvsr', '--upscale-resolution', '2160', '-o', '/out.mp4', '-t', '2400',
   ]);
   const speech = getTool('generate_speech');
+  assert.equal(speech.inputSchema.properties.text.maxLength, 5000);
+  assert.deepEqual(speech.inputSchema.properties.mode.enum, ['voice', 'clone', 'design', 'drama3']);
+  assert.ok(speech.inputSchema.properties.language.enum.includes('arabic'));
+  assert.equal(speech.buildArgs({ text: 'a'.repeat(5000), mode: 'drama3' }).at(-1)?.length, 5000);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(5001), mode: 'drama3' }), /5000 characters/);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(4097), mode: 'voice' }), /4096 characters/);
+  assert.throws(() => speech.buildArgs({ text: 'a'.repeat(4097) }), /4096 characters/);
+  assert.deepEqual(Object.keys(speech.inputSchema.properties).sort(), [
+    'audio_format',
+    'creativity',
+    'language',
+    'mode',
+    'network',
+    'output_path',
+    'priority',
+    'text',
+    'timeout_seconds',
+    'voice',
+    'voice_description',
+    'voice_reference',
+    'voice_transcript',
+  ]);
   assert.deepEqual(speech.buildArgs({ text: 'Hello there.' }), [...base, '--speech', '--', 'Hello there.']);
   assert.deepEqual(speech.buildArgs({
     text: 'Hello there.', priority: true, mode: 'clone', voice: 'ryan', voice_description: 'calm and slow',
@@ -244,13 +266,49 @@ test('upscale_image, upscale_video and generate_speech map each argument to one 
     '--speech-creativity', '0.7', '--language', 'english', '-o', '/out.mp3', '--output-format', 'mp3', '-t', '900',
     '--', 'Hello there.',
   ]);
+  assert.deepEqual(speech.buildArgs({
+    text: '[sighs] Finally home. <whisper>Keep quiet.</whisper>',
+    mode: 'drama3',
+    voice_reference: '/ref.wav',
+    voice_transcript: 'Known words.',
+    creativity: 0.8,
+    language: 'arabic',
+    output_path: '/drama.wav',
+  }), [
+    ...base, '--speech', '--speech-mode', 'drama3',
+    '--voice-reference', '/ref.wav', '--voice-transcript', 'Known words.',
+    '--language', 'arabic', '-o', '/drama.wav',
+    '--', '[sighs] Finally home. <whisper>Keep quiet.</whisper>',
+  ]);
+  const transcribe = getTool('transcribe_audio');
+  assert.deepEqual(transcribe.buildArgs({ audio: '/in.m4a' }), [...base, '--transcribe', '/in.m4a']);
+  assert.deepEqual(transcribe.buildArgs({
+    audio: 'https://cdn.example/interview.mp3',
+    network: 'fast',
+    priority: true,
+    model: 'nemotron',
+    timestamps: 'word',
+    diarize: true,
+    hotwords: 'Sogni, Spark',
+    prompt: '--interview context',
+    format: 'srt',
+    output_path: '/out.srt',
+    timeout_seconds: 900,
+  }), [
+    ...base, '--transcribe', 'https://cdn.example/interview.mp3', '--network', 'fast', '--priority',
+    '--transcribe-model', 'nemotron', '--timestamps', 'word', '--diarize',
+    '--hotwords', 'Sogni, Spark', '--output-format', 'srt', '-o', '/out.srt', '-t', '900',
+    '--', '--interview context',
+  ]);
   for (const value of [null, '']) {
     assert.deepEqual(speech.buildArgs({ text: 'Hi.', mode: value, voice: value, voice_reference: value, output_path: value }), [...base, '--speech', '--', 'Hi.']);
     assert.deepEqual(getTool('upscale_video').buildArgs({ video: '/in.mp4', upscale_model: value, resolution: value }), [...base, '--upscale-video', '/in.mp4']);
+    assert.deepEqual(transcribe.buildArgs({ audio: '/in.wav', model: value, timestamps: value, hotwords: value, prompt: value, format: value, output_path: value }), [...base, '--transcribe', '/in.wav']);
   }
   assert.throws(() => getTool('upscale_image').buildArgs({}), /^Error: image is required/);
   assert.throws(() => getTool('upscale_video').buildArgs({ video: '' }), /^Error: video is required/);
   assert.throws(() => speech.buildArgs({ text: null }), /^Error: text is required/);
+  assert.throws(() => transcribe.buildArgs({ audio: '' }), /^Error: audio is required/);
 });
 
 test('generate_image builds quiet JSON argv with prompt last', () => {
@@ -410,6 +468,7 @@ const OUTPUT_CASES = [
   ['upscale_image', { image: '/in.png' }, 'output_path'],
   ['upscale_video', { video: '/in.mp4' }, 'output_path'],
   ['generate_speech', { text: 'Hello.' }, 'output_path'],
+  ['transcribe_audio', { audio: '/in.wav' }, 'output_path'],
 ];
 
 // buildArgs passes an output path through as given; the server checks it first
@@ -840,6 +899,9 @@ test('a prompt or media path that looks like an option reaches the real CLI as t
   for (const [name, args, prompt] of [
     ['generate_speech', { text: '--personality-clear' }, '--personality-clear'],
     ['generate_speech', { text: 'Hello.', mode: 'clone', voice_reference: '--personality-clear' }, 'Hello.'],
+    ['generate_speech', { text: 'Hello.', mode: 'clone', voice_reference: '/ref.wav', voice_transcript: '--personality-clear' }, 'Hello.'],
+    ['transcribe_audio', { audio: '--personality-clear' }, null],
+    ['transcribe_audio', { audio: '/in.wav', hotwords: '--personality-clear' }, null],
     ['upscale_image', { image: '--personality-clear' }, null],
     ['upscale_video', { video: '--personality-clear' }, null],
   ]) {
@@ -1078,6 +1140,7 @@ test('tools/call checks every output field before the CLI runs', async (t) => {
     ['upscale_image', { image: '/in.png' }, 'output_path'],
     ['upscale_video', { video: '/in.mp4' }, 'output_path'],
     ['generate_speech', { text: 'Hello.' }, 'output_path'],
+    ['transcribe_audio', { audio: '/in.wav' }, 'output_path'],
   ];
   for (const [name, input, field] of outputCalls) {
     for (const [path, pattern] of [['~/.zshrc', /must be inside one of these folders/], ['~/Movies/taken.mp4', /already exists/]]) {
@@ -1375,7 +1438,7 @@ test('tools/call upscale_image attaches its image inline; upscale_video and gene
   const upscaled = await client.request('tools/call', { name: 'upscale_image', arguments: { image: '/in.png' } });
   assert.deepEqual(upscaled.result.content.map((block) => block.type), ['image', 'text']);
   assert.ok(Buffer.from(upscaled.result.content[0].data, 'base64').equals(TINY_PNG));
-  for (const [name, args] of [['upscale_video', { video: '/in.mp4' }], ['generate_speech', { text: 'Hello.' }]]) {
+  for (const [name, args] of [['upscale_video', { video: '/in.mp4' }], ['generate_speech', { text: 'Hello.' }], ['transcribe_audio', { audio: '/in.wav' }]]) {
     const res = await client.request('tools/call', { name, arguments: args });
     assert.deepEqual(res.result.content.map((block) => block.type), ['text'], name);
   }
@@ -1477,7 +1540,7 @@ test('importMedia enforces per-chunk and total-size caps', async () => {
 });
 
 test('media-consuming tools warn about chat attachments and point at import_media', () => {
-  for (const name of ['generate_image', 'generate_video', 'photobooth', 'manage_personas', 'upscale_image', 'upscale_video', 'generate_speech']) {
+  for (const name of ['generate_image', 'generate_video', 'photobooth', 'manage_personas', 'upscale_image', 'upscale_video', 'generate_speech', 'transcribe_audio']) {
     const { description } = getTool(name);
     assert.match(description, /chat/i, `${name} should mention chat attachments`);
     assert.match(description, /import_media/, `${name} should point at import_media`);
@@ -1518,7 +1581,7 @@ test('the safety kill outlasts the CLI wait for a render on Relaxed', async () =
   const { hardKillTimeoutMs } = await import('../desktop-extension/server/tools.mjs');
   // The CLI waits at least 30 minutes on Relaxed, then reports the project id.
   // A kill before that would lose the id, so every render tool has to allow more.
-  for (const name of ['generate_image', 'generate_video', 'generate_music', 'photobooth', 'upscale_image', 'upscale_video', 'generate_speech']) {
+  for (const name of ['generate_image', 'generate_video', 'generate_music', 'photobooth', 'upscale_image', 'upscale_video', 'generate_speech', 'transcribe_audio']) {
     assert.ok(hardKillTimeoutMs(name, {}) > 30 * 60 * 1000, `${name} would be killed first`);
   }
   // A longer explicit wait still gets a margin past it.

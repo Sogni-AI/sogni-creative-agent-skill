@@ -1,6 +1,6 @@
 ---
 name: sogni-creative-agent-skill
-description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS speech, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, create music or lyrics, build a media workflow, build a playable world, apply a saved identity, or refine an earlier Sogni result."
+description: "Generate and edit images, create Pixal3D 3D models, remove backgrounds with BiRefNet, synthesize Qwen3-TTS & Fish Drama 3 speech, transcribe audio with Parakeet & Nemotron, upscale images, create video and music, animate image folders into seamless reels, and manage reusable personas with Sogni AI. Use when a Hermes user asks to draw, render, upscale, edit or restyle an image, animate an image, make a video, transcribe audio or captions, create music or lyrics, build a media workflow, build a playable world, apply a saved identity, or refine an earlier Sogni result."
 license: MIT
 metadata:
   version: "3.75.1"
@@ -107,9 +107,11 @@ sogni-agent-hermes --image-to-3d ./object.png --mesh-faces 30000 -o ./object.glb
 sogni-agent-hermes --image-to-3d ./front.png --left-view ./left.png --back-view ./back.png --right-view ./right.png -o ./object.glb
 sogni-agent-hermes --remove-background ./source.png -o ./cutout.png
 
-# MiniMax Music 3 (default music model) and Qwen3-TTS (read models.md for lyrics and voice controls)
+# MiniMax Music 3 (default music model), Qwen3-TTS / Fish Drama 3 speech, and Parakeet / Nemotron transcription
 sogni-agent-hermes --music --duration 30 -o ./score.mp3 "instrumental ambient score, 70 BPM, E minor"
 sogni-agent-hermes --speech --speech-voice ryan -o ./speech.wav "Welcome to the story."
+sogni-agent-hermes --speech --speech-mode drama3 -o ./drama.wav "[sighs] Finally home. <whisper>Keep your voice down.</whisper>"
+sogni-agent-hermes --transcribe ./interview.m4a --diarize --output-format srt -o ./interview.srt
 
 # Generate or edit an image
 sogni-agent-hermes -o ./image.png "cinematic moonlit mountain lake"
@@ -222,9 +224,10 @@ and limits; preserve the user's requested model and resolution.
 Use `--image-to-3d` for Pixal3D (add `--left-view`, `--back-view` and/or
 `--right-view` for multi-view; views are named by the subject's own sides, so
 the left view shows the subject facing screen-left), `--remove-background` for BiRefNet (add
-`--matte` for a soft mask), `--music` for MiniMax Music 3 (`-m turbo` for ACE-Step), and
-`--speech --speech-mode voice|clone|design` for Qwen3-TTS. Read the model guide
-before these modes for exact scripts, studio voices, 3–30s clone references,
+`--matte` for a soft mask), `--music` for MiniMax Music 3 (`-m turbo` for ACE-Step),
+`--speech --speech-mode voice|clone|design|drama3` for Qwen3-TTS and Fish Drama 3, and
+`--transcribe <audio>` (`--transcribe-model parakeet|nemotron`, `--timestamps`, `--diarize`, `--hotwords`, `--output-format txt|json|srt|vtt`) for speech-to-text. Read the model guide
+before these modes for exact scripts, studio voices, clone references, transcription engines,
 and Music 3 section tags. Discover 3D with `--search-models pixal3d` or
 `--model-media model`.
 

@@ -58,7 +58,8 @@ selected network are returned. Discovery does not require an API key.
 
 Use each model's dedicated input contract: `--image-to-3d` for Pixal3D,
 `--remove-background` for BiRefNet, `--music` for MiniMax Music 3 (the default
-music model; `-m turbo` for ACE-Step), and `--speech` for Qwen3-TTS. A catalog ID alone does not supply its required
+music model; `-m turbo` for ACE-Step), `--speech` for Qwen3-TTS and Fish Drama 3,
+and `--transcribe` for Parakeet and Nemotron speech-to-text. A catalog ID alone does not supply its required
 inputs. Read the mode-specific commands and controls below.
 
 `--list-api-models` is different: it lists Sogni Intelligence language models
@@ -593,14 +594,16 @@ sogni-agent --music -m turbo --duration 420 --bpm 128 --keyscale "C major" -o dr
 
 ## Speech models
 
-Qwen3-TTS is available through direct `--speech`, hosted `generate_speech`,
-and SDK audio projects. Speech reads the exact script; it does not use music
+Qwen3-TTS and Fish Drama 3 are available through direct `--speech`, hosted `generate_speech`,
+and SDK audio projects. Speech reads the script; it does not use music
 samplers, steps, duration, or lyrics controls.
 
 ```bash
 sogni-agent --speech --speech-voice ryan -o narration.wav "Welcome to the story."
 sogni-agent --speech --speech-mode clone --voice-reference voice.wav --voice-transcript "The known words in the recording." -o clone.wav "New words in the same voice."
 sogni-agent --speech --speech-mode design --voice-description "A warm, low-pitched narrator with a gentle Scottish accent" -o designed.wav "The journey begins."
+sogni-agent --speech --speech-mode drama3 -o drama.wav "[sighs] Finally home. <whisper>Do not wake them.</whisper>"
+sogni-agent --speech -m drama3 --voice-reference voice.wav --voice-transcript "Known reference words." -o drama-clone.wav "[warmly] Welcome back."
 ```
 
 **A designed voice is a new person on every call.** `design` invents a voice
@@ -618,12 +621,15 @@ Default mode is `voice`, default speaker `serena`, format WAV, language `auto`.
 `--speech-voice` accepts `serena`, `vivian`, `uncle_fu`, `ryan`, `aiden`,
 `ono_anna`, `sohee`, `eric`, or `dylan`. It is only valid in `voice` mode.
 `--voice-description` optionally directs a studio voice and is required for
-`design`; clone mode instead requires `--voice-reference` (local path or URL).
-Install `ffprobe` to check clone recordings; the CLI accepts 3–30 seconds and
-preserves the original recording. `--voice-transcript` is clone-only, up to
-1024 characters. `--language` takes `auto`, `english`, `chinese`, `japanese`,
-`korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, or `italian`.
-Optional `--speech-creativity` accepts 0.1–2. Use `--output-format wav|mp3|flac`
+`design`; `clone` mode requires `--voice-reference` (3–30 seconds, local path or URL),
+while `drama3` (`fish_drama_3_nvfp4`, also selectable via `-m drama3` or `-m fish_drama_3_nvfp4`)
+accepts an optional 1–30 second `--voice-reference` for zero-shot voice cloning.
+Install `ffprobe` to check reference recordings; the CLI preserves the original recording.
+`--voice-transcript` is up to 1024 characters on `clone` and up to 2000 characters on `drama3`
+(requires `--voice-reference`). `--language` takes `auto`, `english`, `chinese`, `japanese`,
+`korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, `italian`, or `arabic`.
+Optional `--speech-creativity` accepts 0.1–2 for Qwen3-TTS (`voice`, `clone`, `design`);
+omit `--speech-creativity` on `drama3`. Use `--output-format wav|mp3|flac`
 and a matching filename extension. `-n` saves each requested audio result.
 
 | Model ID | Hosted `model` | Input |
@@ -631,14 +637,33 @@ and a matching filename extension. `-n` saves each requested audio result.
 | `qwen3_tts_1.7b_custom_voice_bf16` | `voice` | Exact script, studio `voice`, optional `voiceDescription` |
 | `qwen3_tts_1.7b_voice_clone_bf16` | `clone` | Exact script and `voiceSourceIndex`; include known `voiceTranscript` |
 | `qwen3_tts_1.7b_voice_design_bf16` | `design` | Exact script and required `voiceDescription` |
+| `fish_drama_3_nvfp4` | `drama3` | Expressive 44.1 kHz acting speech with inline `[direction]` and `<whisper>...</whisper>` tags in `prompt`; optional 1–30s `voiceSourceIndex`/`voice_source_url` and `voiceTranscript` (up to 2000 chars); omit `creativity` |
 
-`prompt` contains only the words to speak (up to 4096 characters); put delivery
-and speaker descriptions in `voiceDescription` (up to 512 characters).
-Clone mode uses a clean 3–30s recording, not written voice direction. Its known
+For Qwen3-TTS (`voice`, `clone`, `design`), `prompt` contains only the words to speak (up to 4096 characters) — do not place bracketed stage directions in `prompt`, where Qwen3-TTS reads them aloud; put delivery and speaker descriptions in `voiceDescription` (up to 512 characters).
+For Fish Drama 3 (`drama3`), place inline acting and vocal cues such as `[sighs]`, `[laughs]`, `[warmly]`, or `<whisper>...</whisper>` directly inside `prompt`, and do not send `voiceDescription` or `creativity`.
+Clone mode uses a clean 3–30s recording (`1–30s` when cloning with `drama3`). Its known
 reference transcript improves conditioning; do not invent one. Evaluate voice
 identity and accent by listening, not by automatic transcription accuracy.
 Read [hosted-api.md](./hosted-api.md) for execution and
 [interactive-worlds.md](./interactive-worlds.md) for recurring-character audio.
+
+## Speech-to-text (transcription) models
+
+Parakeet TDT 0.6B v3 and NVIDIA Nemotron 3.5 Transcribe 30B run on Supernet audio workers through direct `--transcribe`, hosted `transcribe_audio`, and SDK audio projects.
+
+```bash
+sogni-agent --transcribe ./clip.wav
+sogni-agent --transcribe ./clip.mp4 --output-format srt -o ./captions.srt
+sogni-agent --transcribe ./meeting.m4a --diarize --hotwords "Sogni, Supernet, Spark" -o ./meeting.txt
+sogni-agent --transcribe ./podcast.mp3 --transcribe-model nemotron --timestamps word --output-format json -o ./podcast.json "Technical interview about decentralized GPUs"
+```
+
+| Model ID | Selector (`--transcribe-model` / hosted `model`) | Capabilities |
+|----------|--------------------------------------------------|--------------|
+| `parakeet_tdt_0.6b_v3_bf16` | `parakeet` (default) | Fast 25-language European speech-to-text up to 2 hours (`7200s`), `none` / `sentence` / `word` timestamps |
+| `nemotron_3.5_transcribe_30b_a4b_nvfp4` | `nemotron` | 40-language multilingual speech-to-text up to 1 hour (`3600s`), speaker diarization (`--diarize` -> `S01`, `S02`, ...), custom vocabulary `--hotwords` (up to 1000 chars), and optional context prompt (up to 2000 chars) |
+
+When `--transcribe-model` (or `-m`) is omitted and `--diarize`, `--hotwords`, or a context prompt is supplied, the CLI and hosted `transcribe_audio` tool automatically select `nemotron`. `--timestamps` accepts `none`, `sentence` (default), or `word`. `--output-format` formats the worker's structured JSON transcript locally as `txt` (default), `json`, `srt`, or `vtt` (also inferred from `-o`'s `.txt`/`.json`/`.srt`/`.vtt` extension). `--quote --transcribe <audio>` probes the recording's real duration with `ffprobe` and prices those concrete audio seconds.
 
 ### When a cloned line sounds flat
 
@@ -761,6 +786,7 @@ here.
 | `seedance2-mini-uncensored`, `seedance2-mini-uncensored-t2v`, `seedance-mini-uncensored`, `seedance-mini-spicy` | `seedance-2-0-mini-uncensored` (Seedance 2.0 Mini Uncensored; never `seedance-2-0-mini`) |
 | `seedance2-fast`, `seedance2-fast-t2v` | `seedance-2-0-fast` |
 | `seedance2-5`, `seedance2-5-t2v`, `seedance2-5-ia2v`, `seedance2-5-v2v` | `seedance-2-5` (suffix picks the workflow) |
+| `seedance2-5-flash`, `seedance2-5-flash-t2v`, `seedance2-5-flash-ia2v`, `seedance2-5-flash-v2v` | `seedance-2-5-flash` (suffix picks the workflow) |
 | `seedance2-5-uncensored`, `seedance2-5-uncensored-t2v`, `seedance2-5-uncensored-ia2v`, `seedance2-5-uncensored-v2v`, `seedance-uncensored`, `seedance-spicy` | `seedance-2-5-uncensored` (Seedance 2.5 Uncensored; never `seedance-2-5`) |
 | `seedance2-5-flash-uncensored`, `seedance2-5-flash-uncensored-t2v`, `seedance2-5-flash-uncensored-ia2v`, `seedance2-5-flash-uncensored-v2v` | `seedance-2-5-flash-uncensored` (Seedance 2.5 Flash Uncensored; never `seedance-2-5-flash`) |
 
@@ -1613,7 +1639,8 @@ model recommendations.
 | Songs and instrumentals (default) | `minimax_music3` (`--music`, or hosted `generate_music`) |
 | Quick, cheap music draft, exact BPM/key, or over 300 s | `ace_step_1.5_xl_turbo` (`--music-model turbo`) |
 | ACE-Step with stronger lyric handling | `ace_step_1.5_xl_sft` (`--music-model sft`) |
-| Spoken audio, voice cloning, or voice design | `--speech --speech-mode voice/clone/design` or hosted `generate_speech` |
+| Spoken audio, voice cloning, voice design, or acting speech | `--speech --speech-mode voice/clone/design/drama3` or hosted `generate_speech` |
+| Transcribe spoken audio or video (text, JSON, SRT, VTT, diarization) | `--transcribe audio.m4a` (`--transcribe-model parakeet/nemotron`) or hosted `transcribe_audio` |
 | Text-to-video with native dialogue/audio | `ltx25` |
 | Image-to-video from one start frame (default) | `wan_v2.2-14b-fp8_i2v_lightx2v` |
 | Animate two images together (first frame → last frame) | `ltx25-i2v` with `--ref A --ref-end B` (FLF template, no transition LoRA) |

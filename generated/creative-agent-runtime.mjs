@@ -652,6 +652,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
     },
     {
+        "recipeId": "transcribe_audio.user_input_incomplete",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "errorCode": "USER_INPUT_INCOMPLETE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I need more details before I can run {{toolName}}. {{missingDetail}}"
+    },
+    {
         "recipeId": "generate_image.cost_limit_exceeded",
         "version": "1.0.0",
         "toolName": "generate_image",
@@ -868,6 +877,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
     },
     {
+        "recipeId": "transcribe_audio.cost_limit_exceeded",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "errorCode": "COST_LIMIT_EXCEEDED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "You have hit the credit limit for this turn. Buy Spark Packs to continue: https://docs.sogni.ai/pricing/#spark-packs"
+    },
+    {
         "recipeId": "generate_image.asset_not_found",
         "version": "1.0.0",
         "toolName": "generate_image",
@@ -1078,6 +1096,15 @@ const REPAIR_RECIPES = [
         "recipeId": "dance_montage.asset_not_found",
         "version": "1.0.0",
         "toolName": "dance_montage",
+        "errorCode": "ASSET_NOT_FOUND",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "I cannot find the asset that {{toolName}} needs. {{message}} Which uploaded or generated asset did you want?"
+    },
+    {
+        "recipeId": "transcribe_audio.asset_not_found",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
         "errorCode": "ASSET_NOT_FOUND",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1327,6 +1354,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
     },
     {
+        "recipeId": "transcribe_audio.workflow_validation_failed",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "errorCode": "WORKFLOW_VALIDATION_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} could not run: {{message}}"
+    },
+    {
         "recipeId": "generate_image.parameter_invalid",
         "version": "1.0.0",
         "toolName": "generate_image",
@@ -1519,6 +1555,15 @@ const REPAIR_RECIPES = [
         "recipeId": "dance_montage.parameter_invalid",
         "version": "1.0.0",
         "toolName": "dance_montage",
+        "errorCode": "PARAMETER_INVALID",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} rejected the arguments: {{message}}"
+    },
+    {
+        "recipeId": "transcribe_audio.parameter_invalid",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
         "errorCode": "PARAMETER_INVALID",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1726,6 +1771,15 @@ const REPAIR_RECIPES = [
         "recipeId": "dance_montage.gpu_worker_failed",
         "version": "1.0.0",
         "toolName": "dance_montage",
+        "errorCode": "GPU_WORKER_FAILED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} worker failed. {{message}} Want me to try again or change the request?"
+    },
+    {
+        "recipeId": "transcribe_audio.gpu_worker_failed",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
         "errorCode": "GPU_WORKER_FAILED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -1948,6 +2002,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
     },
     {
+        "recipeId": "transcribe_audio.model_unavailable",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "errorCode": "MODEL_UNAVAILABLE",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The model {{toolName}} wanted is offline. {{message}} Pick a different model or try again later."
+    },
+    {
         "recipeId": "generate_image.permission_required",
         "version": "1.0.0",
         "toolName": "generate_image",
@@ -2158,6 +2221,15 @@ const REPAIR_RECIPES = [
         "recipeId": "dance_montage.permission_required",
         "version": "1.0.0",
         "toolName": "dance_montage",
+        "errorCode": "PERMISSION_REQUIRED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} needs permission you have not granted yet. {{message}}"
+    },
+    {
+        "recipeId": "transcribe_audio.permission_required",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
         "errorCode": "PERMISSION_REQUIRED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -2490,6 +2562,15 @@ const REPAIR_RECIPES = [
         "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
     },
     {
+        "recipeId": "transcribe_audio.provider_timeout",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "errorCode": "PROVIDER_TIMEOUT",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "{{toolName}} timed out. {{message}} Want me to retry, or simplify the request?"
+    },
+    {
         "recipeId": "generate_image.user_cancelled",
         "version": "1.0.0",
         "toolName": "generate_image",
@@ -2700,6 +2781,15 @@ const REPAIR_RECIPES = [
         "recipeId": "dance_montage.user_cancelled",
         "version": "1.0.0",
         "toolName": "dance_montage",
+        "errorCode": "USER_CANCELLED",
+        "mode": "stopAndAsk",
+        "maxRetries": 0,
+        "repairNoteTemplate": "The {{toolName}} run was cancelled by the user. I will stop here unless you ask me to try again."
+    },
+    {
+        "recipeId": "transcribe_audio.user_cancelled",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
         "errorCode": "USER_CANCELLED",
         "mode": "stopAndAsk",
         "maxRetries": 0,
@@ -2923,14 +3013,14 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "add_subtitles_v1",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "toolName": "add_subtitles",
-        "baseDescription": "add_subtitles burns caller-supplied subtitles, captions, lyrics, or on-screen dialogue into\nan existing video. Use this when the user provides cue text/timing, pastes SRT/VTT, or asks\nto add known caption lines to a generated or uploaded video.\n\nDo not use auto_transcribe. Speech-to-text is not enabled; when the user has not supplied\nsubtitle text or timing, ask for the cue text/timing instead of calling this tool.\n\nException: if the user explicitly authorizes invented caption copy with language like\n\"make them up\", \"write captions\", \"invent subtitles\", or \"add funny captions\", create a few\nshort generic cue lines yourself and call add_subtitles. Do not ask for exact wording when\nthe user has asked you to author the captions.\n\nSplit subtitles into multiple short cues. Do not burn one paragraph across the whole clip.\nUse overlay_video instead for static title cards, labels, logos, watermarks, or non-timed text.",
+        "baseDescription": "add_subtitles burns subtitles, captions, lyrics, or on-screen dialogue into an existing\nvideo. Use this when the user provides cue text/timing, pastes SRT/VTT, asks to caption the\nspoken audio in a generated or uploaded video, or asks to add caption lines.\n\nWhen the user wants subtitles for the spoken audio in the video and has not supplied cue\ntext or SRT/VTT, set auto_transcribe=true so speech-to-text transcribes the audio track\nautomatically with word/segment timings and burns paced subtitle cues.\n\nIf the user explicitly asks you to write, invent, improvise, or make up captions/subtitles\n(\"make them up\", \"write captions\", \"invent subtitles\", \"add funny captions\"), create a few\nshort cue lines yourself and pass cues instead of auto_transcribe. Do not ask for exact\nwording when the user asked you to author the captions.\n\nSplit caller-authored subtitles into multiple short cues (1.5-4 seconds each). Do not burn\none paragraph across the whole clip. Use overlay_video instead for static title cards,\nlabels, logos, watermarks, or non-timed text.",
         "parameterDocs": {
             "sourceVideoIndex": "Non-negative generated video index or negative uploaded video index. Omit/default to the latest relevant video.",
             "cues": "Multiple short cues with startSeconds, endSeconds, and text. Prefer 1.5-4 seconds per cue.",
-            "srt": "Full SRT/VTT string. Provide either srt or cues, not both.",
-            "auto_transcribe": "Do not set. Ask the user for subtitle text/timing until STT is available."
+            "srt": "Full SRT/VTT string. Provide cues, srt, or auto_transcribe=true.",
+            "auto_transcribe": "Set true when cues and srt are omitted to automatically transcribe spoken speech in the video with word/segment timings."
         }
     },
     {
@@ -2971,14 +3061,38 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "generate_speech_v1",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "toolName": "generate_speech",
-        "baseDescription": "generate_speech reads written words aloud. It is text-to-speech, not music: use\ngenerate_music for songs, instrumentals and jingles.\n\nTHE PROMPT IS THE SCRIPT. Unlike every image and video tool, prompt is not a description\nof the output — it is the literal text to be spoken, character for character. Writing \"a\ncalm woman reading the news\" produces a voice saying those seven words. Put the delivery in\nvoiceDescription and the actual copy in prompt.\n\nWRITE THE SCRIPT WHEN THE USER DOES NOT. \"Read me a haiku about rain\", \"record a podcast\nintro\" and \"say something reassuring\" are requests for words you compose and then speak.\nCompose the line and pass it as prompt. Reach for compose_script only for a long or\nstructured piece; a sentence or two is yours to write.\n\nPICK THE MODEL FROM WHAT THE USER GAVE YOU. A voice clip uploaded with \"make it sound like\nme\" is model=\"clone\" with voiceSourceIndex pointing at that upload. A saved Persona's voice is\na clone source too: when the user asks for that persona's own voice, call resolve_personas and\nuse model=\"clone\" with voiceSourceIndex set to the full voice recording index it reports. A\ndescribed speaker who does not exist (\"an old lighthouse keeper\") is model=\"design\" with\nvoiceDescription. Anything else is model=\"voice\" — choose a voice from the roster and, if the\nuser described a mood or a delivery, put that in voiceDescription too.\n\nCLONING QUALITY. Set voiceTranscript whenever the words in the uploaded clip are known: it\nis the difference between a close clone and a loose one. Leave it out for a persona recording:\nthe persona's saved transcript is supplied automatically. Tell the user if their reference is\nshorter than three seconds, has music under it, or has two people talking — those are the\nthree reasons a clone comes back sounding wrong.\n\nPUNCTUATION IS PROSODY. Keep full stops, commas and question marks; they are the only pause\nand intonation control there is. Spell out numbers, dates and abbreviations the way they\nshould be read when the written form is ambiguous.\n\nTo put speech over video, generate it here and then call sound_to_video with the result.\nDo not use animate_photo or generate_video to \"say\" a line of provided text.",
+        "baseDescription": "generate_speech reads written words aloud. It is text-to-speech, not music: use\ngenerate_music for songs, instrumentals and jingles.\n\nTHE PROMPT IS THE SCRIPT. Unlike every image and video tool, prompt is not a description\nof the output — it is the literal text to be spoken, character for character. Writing \"a\ncalm woman reading the news\" produces a voice saying those seven words. Put the delivery in\nvoiceDescription (for voice/design) or inline acting tags (for drama3) and the actual copy in prompt.\n\nWRITE THE SCRIPT WHEN THE USER DOES NOT. \"Read me a haiku about rain\", \"record a podcast\nintro\" and \"say something reassuring\" are requests for words you compose and then speak.\nCompose the line and pass it as prompt. Reach for compose_script only for a long or\nstructured piece; a sentence or two is yours to write.\n\nPICK THE MODEL FROM WHAT THE USER GAVE YOU. When the user names Fish Drama 3 or asks for\nexpressive acting speech with inline vocal cues ([sighs], [laughs], [warmly], [gasps],\n<whisper>...</whisper>), use model=\"drama3\" (with optional zero-shot voice cloning via\nvoiceSourceIndex / voice_source_url). A voice clip uploaded with \"make it sound like\nme\" is model=\"clone\" with voiceSourceIndex pointing at that upload. A saved Persona's voice is\na clone source too: when the user asks for that persona's own voice, call resolve_personas and\nuse model=\"clone\" with voiceSourceIndex set to the full voice recording index it reports. A\ndescribed speaker who does not exist (\"an old lighthouse keeper\") is model=\"design\" with\nvoiceDescription. Anything else is model=\"voice\" — choose a voice from the roster and, if the\nuser described a mood or a delivery, put that in voiceDescription too.\n\nCLONING QUALITY. Set voiceTranscript whenever the words in the uploaded clip are known: it\nis the difference between a close clone and a loose one (up to 1024 chars on clone, 2000 chars\non drama3). Leave it out for a persona recording:\nthe persona's saved transcript is supplied automatically. Tell the user if their reference is\ntoo short, has music under it, or has two people talking — those are the\nthree reasons a clone comes back sounding wrong.\n\nPUNCTUATION IS PROSODY. Keep full stops, commas and question marks; they control pauses\nand intonation. Spell out numbers, dates and abbreviations the way they\nshould be read when the written form is ambiguous.\n\nTo put speech over video, generate it here and then call sound_to_video with the result.\nDo not use animate_photo or generate_video to \"say\" a line of provided text.",
         "parameterDocs": {
-            "prompt": "The literal words to speak, verbatim. Not a description of the audio.",
-            "voiceDescription": "Delivery direction for model=\"voice\"; the speaker to invent for model=\"design\". Never sent with model=\"clone\".",
-            "voiceSourceIndex": "Which audio holds the voice to clone, same numbering as other tools use for audio: -1 is the first upload, -2 the second, and 0-based non-negative indices address audio generated earlier. A resolved persona's full voice recording uses the index resolve_personas reports. Required for model=\"clone\".",
-            "voiceTranscript": "What the uploaded clip says. Optional, but it makes the clone markedly closer to the source. Omit it for a persona voice recording; its saved transcript is filled in automatically."
+            "prompt": "The literal words to speak, verbatim (up to 4096 chars on voice/clone/design, up to 5000 chars on drama3). With model=\"drama3\", inline [direction] and <whisper>...</whisper> acting tags may be embedded directly in prompt.",
+            "model": "Speech engine selector: \"voice\" (default studio voices), \"clone\" (Qwen3-TTS voice clone), \"design\" (invented voice from voiceDescription), or \"drama3\" (Fish Drama 3 expressive acting voice with inline [direction] tags and optional voice cloning).",
+            "voice": "Preset studio voice for model=\"voice\" only (default serena).",
+            "voiceDescription": "Delivery direction for model=\"voice\"; the speaker to invent for model=\"design\". Never sent with model=\"clone\" or model=\"drama3\".",
+            "voiceSourceIndex": "Which audio holds the voice to clone, same numbering as other tools use for audio: -1 is the first upload, -2 the second, and 0-based non-negative indices address audio generated earlier. A resolved persona's full voice recording uses the index resolve_personas reports. Required for model=\"clone\" and optional for model=\"drama3\".",
+            "voice_source_url": "REST alternative to voiceSourceIndex for clone or optional drama3 reference audio.",
+            "voiceTranscript": "What the uploaded clip says. Optional, but it makes the clone markedly closer to the source (up to 1024 chars on clone, 2000 chars on drama3). Omit it for a persona voice recording; its saved transcript is filled in automatically.",
+            "language": "Script language or \"auto\" (default). Supports English, Chinese, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian, and Arabic.",
+            "creativity": "Qwen3-TTS (voice, clone, design) variation from 0.1 to 2; default 0.9. Omit on model=\"drama3\".",
+            "outputFormat": "Audio file format: wav (default), mp3, or flac.",
+            "seed": "Optional integer seed for reproducible speech takes.",
+            "numberOfVariations": "Number of takes (1-16, default 1)."
+        }
+    },
+    {
+        "contractId": "transcribe_audio_v1",
+        "version": "1.0.0",
+        "toolName": "transcribe_audio",
+        "baseDescription": "transcribe_audio converts spoken audio from an uploaded or generated audio/video clip into\nstructured text, sentence or word timestamps, speaker-diarized turns, or SRT/VTT subtitle text.\n\nUse transcribe_audio whenever the user asks what is said in an audio or video clip, wants a\nverbatim transcript, needs speaker labels (who spoke when), or asks for SRT/VTT/plain-text\ncaptions without burning them onto video pixels. analyze_video inspects visual frames only and\ndoes not transcribe speech — pair or prefer transcribe_audio when spoken dialogue matters.\n\nENGINE SELECTION:\n- \"parakeet\" (default): fast 25-language European speech-to-text up to 2 hours with sentence\n  and word timestamps. Best for single-speaker European-language recordings and quick captions.\n- \"nemotron\": 40-language NVIDIA Nemotron 3.5 30B transcription up to 1 hour with speaker\n  diarization (diarize=true -> S01, S02, ...), custom vocabulary hints (hotwords), and context\n  prompting (prompt). Choose \"nemotron\" for multi-speaker conversations, non-European languages\n  (including Asian and Arabic languages), or domain-specific terminology.\n\nTo burn spoken subtitles directly into a video in one step, you can either call add_subtitles\nwith auto_transcribe=true or run transcribe_audio first when the user wants to review/edit the\ntranscript or use speaker diarization before burning.",
+        "parameterDocs": {
+            "model": "Choose \"parakeet\" (default, fast 25-language European STT up to 2h) or \"nemotron\" (40-language multilingual STT up to 1h with diarization and hotwords).",
+            "audioSourceIndex": "Negative uploaded audio/video index (-1 = first upload) or 0-based generated audio index. Omit to default to the primary upload or latest audio.",
+            "audio_source_url": "REST alternative to audioSourceIndex: retrievable HTTPS URL or inline audio data URI.",
+            "timestamps": "Timestamp granularity: \"sentence\" (default), \"word\" (word-level timings), or \"none\".",
+            "diarize": "Set true for multi-speaker labels (S01, S02, ...). Supported by model=\"nemotron\" (auto-selected if model is omitted).",
+            "hotwords": "Comma-separated names, brands, or technical terms to bias recognition on model=\"nemotron\" (max 1000 chars).",
+            "prompt": "Optional context or language hint for model=\"nemotron\" (max 2000 chars).",
+            "responseFormat": "Output format: \"json\" (default structured segments), \"text\", \"srt\", or \"vtt\"."
         }
     },
     {
@@ -2995,9 +3109,9 @@ const PROMPT_CONTRACTS = [
     },
     {
         "contractId": "analyze_video_v1",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "toolName": "analyze_video",
-        "baseDescription": "analyze_video uses sampled frames to answer questions about an uploaded or generated video:\nsummary, timeline, visual scene description, action breakdown, or visible text.\n\nUse only when the user asks to inspect or understand a video. Do not call it as automatic\nverification after generation, and do not use it before stitch_video when the requested\ngeneration pipeline should continue.\n\nThis is visual sampled-frame analysis only. It does not transcribe audio and does not inspect\nevery frame.",
+        "baseDescription": "analyze_video uses sampled frames to answer questions about an uploaded or generated video:\nsummary, timeline, visual scene description, action breakdown, or visible text.\n\nUse only when the user asks to inspect or understand a video visually. Do not call it as automatic\nverification after generation, and do not use it before stitch_video when the requested\ngeneration pipeline should continue.\n\nThis is visual sampled-frame analysis only. It does not transcribe audio and does not inspect\nevery frame — use transcribe_audio when the user asks what is spoken in the video, wants a\ntranscript, or needs speaker diarization.",
         "parameterDocs": {
             "query": "Specific question/request about the video. State whether summary, timeline, OCR, scene, or action detail is needed.",
             "analysisType": "Pick summary, timeline, scene, action, ocr, or general based on the user request.",

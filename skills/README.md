@@ -25,7 +25,7 @@ Available to every per-skill consumer. Sogni-hosted chat loads all capabilities 
 | [`video_generation`](./video_generation.md) | `generate_video` |
 | [`video_editing`](./video_editing.md) | `animate_photo`, `sound_to_video`, `video_to_video`, `upscale_video`, `stitch_video`, `orbit_video`, `dance_montage`, `extend_video`, `replace_video_segment`, `overlay_video`, `add_subtitles` |
 | [`music_generation`](./music_generation.md) | `generate_music` |
-| [`media_analysis`](./media_analysis.md) | `analyze_image`, `analyze_video`, `extract_metadata` |
+| [`media_analysis`](./media_analysis.md) | `analyze_image`, `analyze_video`, `transcribe_audio`, `extract_metadata` |
 | [`persona_management`](./persona_management.md) | `resolve_personas`, `manage_memory` |
 | [`app_settings`](./app_settings.md) | `set_content_filter` |
 | [`composition_planning`](./composition_planning.md) | `enhance_prompt`, `compose_lyrics`, `compose_instrumental`, `compose_script`, `compose_workflow`, `compose_workflow_template` |

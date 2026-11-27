@@ -30,8 +30,9 @@ import {
 } from './attribution.mjs';
 import { assertSafeUrl, fetchSafeUrl, readResponseBody } from './ssrf-guard.mjs';
 import {
-  MESH_FLAGS, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS, SPEECH_REFERENCE_SECONDS,
-  prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, utilityResultMetadata, validateGlb
+  MESH_FLAGS, PIXAL3D_MODEL_ID, PIXAL3D_MULTIVIEW_MODEL_ID, PIXAL3D_VIEW_FLAGS, SPEECH_VALUE_FLAGS, MUSIC3_MODEL_ID, MUSIC3_DEFAULTS,
+  SPEECH_MODELS, SPEECH_REFERENCE_SECONDS, TRANSCRIPTION_OUTPUT_FORMATS, validateTranscriptionRequest,
+  prepareMediaUtilityOptions, imageUtilityConfig, speechConfig, transcriptionConfig, formatTranscriptResult, utilityResultMetadata, validateGlb
 } from './media-utilities.mjs';
 import { SAM3_VIDEO_MODEL_ID, videoSegmentationConfig } from './sam-video-segmentation.mjs';
 import {
@@ -423,7 +424,7 @@ function assertSelfContainedMediaFormat(formatName, filePath, label) {
  * { ffprobePath, result, probe }: `probe` is the parsed JSON, or null when
  * ffprobe failed or printed none; `result` is runCommand's.
  */
-async function probeMediaFile(filePath, { label = filePath, entries = [], args = [] } = {}) {
+async function probeMediaFile(filePath, { label = filePath, entries = [], args = [], protocolWhitelist = 'file,pipe' } = {}) {
   const ffprobePath = sanitizePath(getEnv('FFPROBE_PATH') || 'ffprobe', 'FFPROBE_PATH');
   const result = await runCommand(ffprobePath, [
     '-v', 'error',
@@ -431,7 +432,7 @@ async function probeMediaFile(filePath, { label = filePath, entries = [], args =
     ...entries.flatMap((entry) => ['-show_entries', entry]),
     '-show_entries', 'format=format_name',
     '-of', 'json',
-    ...MEDIA_INPUT_PROTOCOL_ARGS,
+    '-protocol_whitelist', protocolWhitelist,
     filePath,
   ], { captureOutput: true });
   let probe = null;
@@ -2861,7 +2862,7 @@ function nextSemanticWorkloadAttribution(options = {}) {
 function withBillingMode(config, attributionOptions = {}) {
   return {
     ...config,
-    ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.imageTo3d && options.embedPromptMetadata !== undefined
+    ...(!options.video && !options.upscaleVideo && !options.segmentVideo && !options.music && !options.speech && !options.transcribe && !options.imageTo3d && options.embedPromptMetadata !== undefined
       ? { embedPromptMetadata: options.embedPromptMetadata } : {}),
     ...(options.billingMode ? { billingMode: options.billingMode } : {}),
     ...(options.priorityMode ? { priorityMode: true, billingMode: 'subscription' } : {}),
@@ -4359,6 +4360,12 @@ const options = {
   voiceReference: null,
   voiceTranscript: null,
   speechCreativity: null,
+  transcribe: null,
+  transcribeModel: null,
+  transcribeEngine: null,
+  timestamps: null,
+  diarize: false,
+  hotwords: null,
   imageTo3d: null,
   pixal3dViews: {},
   removeBackground: null,
@@ -4653,7 +4660,12 @@ const cliSet = {
   apiNegativePrompt: false,
   apiGenerateAudio: false,
   apiExpandPrompt: false,
-  storyboardFrames: false
+  storyboardFrames: false,
+  transcribe: false,
+  transcribeModel: false,
+  timestamps: false,
+  diarize: false,
+  hotwords: false
 };
 
 // Parse CLI args
@@ -5081,6 +5093,21 @@ for (let i = 0; i < args.length; i++) {
     options[key] = key === 'voiceReference' ? expandHomePath(value) : value;
   } else if (arg === '--speech-creativity') {
     options.speechCreativity = parseNumberValue(requireFlagValue(args, i++, arg), arg);
+  } else if (arg === '--transcribe') {
+    options.transcribe = expandHomePath(requireFlagValue(args, i++, arg));
+    cliSet.transcribe = true;
+  } else if (arg === '--transcribe-model') {
+    options.transcribeModel = requireFlagValue(args, i++, arg);
+    cliSet.transcribeModel = true;
+  } else if (arg === '--timestamps') {
+    options.timestamps = requireFlagValue(args, i++, arg).trim().toLowerCase();
+    cliSet.timestamps = true;
+  } else if (arg === '--diarize') {
+    options.diarize = true;
+    cliSet.diarize = true;
+  } else if (arg === '--hotwords') {
+    options.hotwords = requireFlagValue(args, i++, arg);
+    cliSet.hotwords = true;
   } else if (arg === '--segment-video') {
     options.segmentVideo = expandHomePath(requireFlagValue(args, i++, arg));
   } else if (arg === '--segment-frame' || arg === '--segment-object') {
@@ -5869,12 +5896,21 @@ Photobooth (Face Transfer):
 
 Speech Options:
   --speech              Read the exact prompt as speech; output WAV by default
-  --speech-mode <mode>   voice (default), clone, or design
+  --speech-mode <mode>   voice (default), clone, design, or drama3 (Fish Drama 3; also -m drama3)
   --speech-voice <id>    serena (default), vivian, uncle_fu, ryan, aiden, ono_anna, sohee, eric, dylan
-  --voice-description <text>  Optional delivery direction; required for design
-  --voice-reference <audio>   Required 3–30 second recording for clone (needs ffprobe)
-  --voice-transcript <text>   Optional transcript of clone reference
-  --speech-creativity <n>     Speech temperature 0.1–2; --language auto or language name
+  --voice-description <text>  Optional delivery direction for voice; required for design
+  --voice-reference <audio>   Reference recording (needs ffprobe): 3–30s required for clone, 1–30s optional for drama3
+  --voice-transcript <text>   Optional transcript of reference (<=1024 chars clone, <=2000 chars drama3)
+  --speech-creativity <n>     Qwen3-TTS delivery variation 0.1–2 (omitted on drama3); --language auto or language name
+
+Transcription Options:
+  --transcribe <audio>        Transcribe speech from an audio or video file/URL
+  --transcribe-model <model>  parakeet (default, fast 25-language STT) or nemotron (40-language STT;
+                              auto-selected when --diarize, --hotwords, or a prompt hint is passed)
+  --timestamps <granularity>  none|sentence (default)|word
+  --diarize                   Speaker diarization labels (S01, S02, ...; selects nemotron)
+  --hotwords <terms>          Comma-separated vocabulary hints up to 1000 chars (selects nemotron)
+  --output-format <f>         Transcript format for --transcribe: txt (default)|json|srt|vtt
 
 Music Options:
   --music               Generate music/audio instead of image
@@ -6358,6 +6394,9 @@ Examples:
   }
 }
 
+if (options.transcribe && typeof options.outputFormat === 'string' && options.outputFormat.trim().toLowerCase() === 'text') {
+  options.outputFormat = 'txt';
+}
 try { prepareMediaUtilityOptions(options, cliSet); }
 catch (error) { fatalCliError(error.message, { code: 'INVALID_ARGUMENT' }); }
 
@@ -6687,7 +6726,7 @@ if (options.multiAngle) {
   }
 }
 
-if (!options.video && !options.music && options.model) {
+if (!options.video && !options.music && !options.speech && !options.transcribe && options.model) {
   options.model = normalizeSeedreamModelAlias(normalizeGptImageModelAlias(options.model));
 }
 if (options.outputFormat) {
@@ -6695,6 +6734,14 @@ if (options.outputFormat) {
   options.outputFormat = normalized === 'jpeg' ? 'jpg' : normalized;
   if (options.imageTo3d) {
     // GLB is a model artifact, not an SDK image outputFormat.
+  } else if (options.transcribe) {
+    if (options.outputFormat === 'text') options.outputFormat = 'txt';
+    if (!TRANSCRIPTION_OUTPUT_FORMATS.includes(options.outputFormat)) {
+      fatalCliError('Transcription output format must be "json", "txt", "srt", or "vtt".', {
+        code: 'INVALID_ARGUMENT',
+        details: { outputFormat: options.outputFormat }
+      });
+    }
   } else if (options.music || options.speech) {
     if (!MUSIC_OUTPUT_FORMATS.has(options.outputFormat)) {
       fatalCliError(`${options.speech ? 'Speech' : 'Music'} output format must be "mp3", "flac", or "wav".`, {
@@ -7192,7 +7239,7 @@ if (options.music) {
   if (!cliSet.timeout && !timeoutFromConfig && options.timeout === 30000) {
     options.timeout = 600000;
   }
-} else if (options.speech || options.imageTo3d || options.removeBackground) {
+} else if (options.speech || options.transcribe || options.imageTo3d || options.removeBackground) {
   if (!cliSet.timeout && !timeoutFromConfig) options.timeout = 600000;
 } else if (options.video) {
   if (!options.model) {
@@ -7573,6 +7620,7 @@ const commandUsesGenerationSeed = !options.apiChat &&
   !options.remixAudio &&
   !options.upscaleImage &&
   !options.upscaleVideo &&
+  !options.transcribe &&
   !options.segmentImage && !options.segmentVideo && !options.imageTo3d && !options.removeBackground &&
   !options.listMedia &&
   !options.memoryAction &&
@@ -7620,7 +7668,7 @@ if (!options.loraCatalogAction && (options.loraCatalogModel || options.loraCatal
     code: 'INVALID_ARGUMENT'
   });
 }
-if (options.personalLoraAction && (options.prompt || options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.apiChat || options.apiWorkflowAction || options.loraCatalogAction || options.loras.length)) {
+if (options.personalLoraAction && (options.prompt || options.video || options.music || options.speech || options.transcribe || options.imageTo3d || options.removeBackground || options.apiChat || options.apiWorkflowAction || options.loraCatalogAction || options.loras.length)) {
   fatalCliError('Run personal LoRA management separately from generation or catalog discovery.', { code: 'INVALID_ARGUMENT' });
 }
 if (options.personalLoraAction === 'import' && (!options.personalLoraName || !options.personalLoraModel || !options.personalLoraRightsConfirmed)) {
@@ -7648,7 +7696,7 @@ const wan3HasMediaInput = isWan3ModelLocal(options.model) && Boolean(
   || options.wan3ReferenceFileUrl
   || options.wan3ReferenceLinkUrl
 );
-if (!options.prompt && !options.projectLookup && !options.seedanceFinalize && !wan3HasMediaInput && !options.segmentImage && !options.segmentVideo && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
+if (!options.prompt && !options.transcribe && !options.projectLookup && !options.seedanceFinalize && !wan3HasMediaInput && !options.segmentImage && !options.segmentVideo && !options.imageTo3d && !options.removeBackground && !options.upscaleImage && !options.upscaleVideo && !options.apiChat && !apiWorkflowUtilityAction && !apiWorkflowStartAction && !apiModelUtilityAction && !liveModelUtilityAction && !loraCatalogUtilityAction && !apiReplayUtilityAction && !contractUtilityAction && !storyboardPlanUtilityAction && !options.estimateVideoCost && !options.multiAngle && !options.showBalance && !options.showVersion && !options.doctor && !options.extractLastFrame && !options.extractFirstFrame && !options.extractFrameAt && !options.trimVideo && !options.verifyVideo && !options.concatVideos && !options.sourceReelDir && !options.remixAudio && !options.listMedia && !options.memoryAction && !options.personalityAction && !personaUtilityAction) {
   fatalCliError('No prompt provided. Use --help for usage.', { code: 'INVALID_ARGUMENT' });
 }
 
@@ -9592,6 +9640,7 @@ function getApiModeMediaReferences() {
     if (value) refs.push({ flag: '--ref-audio', value, kind: 'audio' });
   }
   if (options.referenceAudioIdentity) refs.push({ flag: '--reference-audio-identity', value: options.referenceAudioIdentity, kind: 'audio' });
+  if (options.voiceReference) refs.push({ flag: '--voice-reference', value: options.voiceReference, kind: 'audio' });
   if (options.refVideo) refs.push({ flag: '--ref-video', value: options.refVideo, kind: 'video' });
   for (const value of options.refVideos || []) {
     if (value) refs.push({ flag: '--ref-video', value, kind: 'video' });
@@ -9652,7 +9701,9 @@ function localApiMediaReferenceFile(ref) {
     err.code = 'INVALID_MEDIA_REFERENCE';
     throw err;
   }
-  const maxBytes = apiMediaReferenceMaxBytes();
+  const maxBytes = ref.flag === '--voice-reference'
+    ? Math.min(apiMediaReferenceMaxBytes(), DEFAULT_VOICE_REFERENCE_MAX_BYTES)
+    : apiMediaReferenceMaxBytes();
   if (stat.size > maxBytes) {
     const err = new Error(`${ref.flag} media reference is ${stat.size} bytes, above the ${maxBytes} byte API upload limit.`);
     err.code = 'MEDIA_REFERENCE_TOO_LARGE';
@@ -9755,7 +9806,9 @@ function decodeInlineApiMediaReference(ref) {
     err.code = 'INVALID_MEDIA_REFERENCE';
     throw err;
   }
-  const maxBytes = apiMediaReferenceMaxBytes();
+  const maxBytes = ref.flag === '--voice-reference'
+    ? Math.min(apiMediaReferenceMaxBytes(), DEFAULT_VOICE_REFERENCE_MAX_BYTES)
+    : apiMediaReferenceMaxBytes();
   if (buffer.length > maxBytes) {
     const err = new Error(`${ref.flag} media reference is ${buffer.length} bytes, above the ${maxBytes} byte API upload limit.`);
     err.code = 'MEDIA_REFERENCE_TOO_LARGE';
@@ -11981,7 +12034,11 @@ function applyPersonaAndVoiceReferences() {
 // through a proxy from the environment goes through that proxy. The server has
 // DEFAULT_HTTP_TIMEOUT_MS to answer; the body must then keep arriving (the
 // result-download stall limit) and stay within mediaDownloadMaxBytes().
-async function fetchRemoteMedia(url) {
+const DEFAULT_STT_MEDIA_MAX_BYTES = 256 * 1024 * 1024;
+const DEFAULT_VOICE_REFERENCE_MAX_BYTES = 25 * 1024 * 1024;
+const PLAYLIST_MEDIA_EXTENSIONS = new Set(['.m3u8', '.m3u', '.pls', '.xspf', '.asx', '.sdp']);
+
+async function fetchRemoteMedia(url, { maxBytes: maxBytesCeiling } = {}) {
   let host = 'the media server';
   try { host = new URL(url).host; } catch { /* keep the generic name */ }
   const controller = new AbortController();
@@ -12003,7 +12060,12 @@ async function fetchRemoteMedia(url) {
     err.details = { url, status: response.status, statusText: response.statusText };
     throw err;
   }
-  const maxBytes = mediaDownloadMaxBytes();
+  const configuredMaxBytes = mediaDownloadMaxBytes();
+  const maxBytes = getEnv('SOGNI_MEDIA_DOWNLOAD_MAX_BYTES')
+    ? configuredMaxBytes
+    : (Number.isFinite(maxBytesCeiling) && maxBytesCeiling > 0
+      ? Math.min(configuredMaxBytes, maxBytesCeiling)
+      : configuredMaxBytes);
   const { stallMs } = mediaDownloadTiming();
   try {
     const buffer = await readResponseBody(response, { maxBytes, stallMs });
@@ -12027,10 +12089,29 @@ async function fetchRemoteMedia(url) {
   }
 }
 
-// Fetch image as buffer
-async function fetchMediaBuffer(pathOrUrl) {
+// Fetch image/audio/video as buffer
+async function fetchMediaBuffer(pathOrUrl, fetchOptions = {}) {
   if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-    return (await fetchRemoteMedia(pathOrUrl)).buffer;
+    return (await fetchRemoteMedia(pathOrUrl, fetchOptions)).buffer;
+  }
+  let stat;
+  try {
+    stat = statSync(pathOrUrl);
+  } catch (e) {
+    const err = new Error(`Failed to read media file: ${pathOrUrl}`);
+    err.code = 'MISSING_FILE';
+    err.hint = 'Check the path or use a URL.';
+    err.details = { path: pathOrUrl, cause: e?.message || String(e) };
+    throw err;
+  }
+  const maxBytes = fetchOptions?.maxBytes;
+  if (Number.isFinite(maxBytes) && maxBytes > 0 && stat.size > maxBytes) {
+    const err = new Error(
+      `The media file "${pathOrUrl}" is ${stat.size} bytes, exceeding the ${maxBytes}-byte (${Math.round(maxBytes / (1024 * 1024))} MiB) limit.`
+    );
+    err.code = 'MEDIA_FILE_TOO_LARGE';
+    err.details = { path: pathOrUrl, sizeBytes: stat.size, maxBytes };
+    throw err;
   }
   try {
     return readFileSync(pathOrUrl);
@@ -12094,9 +12175,11 @@ async function prepareReferenceAudioIdentityMedia(pathOrUrl) {
   return fetchMediaBlob(pathOrUrl, 'audio/mp4');
 }
 
-function mediaTempInputPath(tempDir, sourceLabel, fallbackExt) {
+function mediaTempInputPath(tempDir, sourceLabel, fallbackExt = '.media') {
   const cleanExt = extname(String(sourceLabel || '').split('?')[0]).toLowerCase();
-  const ext = /^[.][a-z0-9]{1,8}$/i.test(cleanExt) ? cleanExt : fallbackExt;
+  const ext = /^[.][a-z0-9]{1,8}$/i.test(cleanExt) && !PLAYLIST_MEDIA_EXTENSIONS.has(cleanExt)
+    ? cleanExt
+    : (fallbackExt || '.media');
   return join(tempDir, `input${ext}`);
 }
 
@@ -12213,29 +12296,88 @@ function withMediaExtension(filename, extension) {
   return `${base || 'reference'}${cleanExtension}`;
 }
 
-// The media duration ffprobe reports in seconds, or undefined when it reports none.
-async function probeMediaDurationSeconds(filePath, label) {
-  const { result, probe } = await probeMediaFile(filePath, { label, entries: ['format=duration'] });
-  if (result.error || result.status !== 0) return undefined;
-  const raw = probe?.format?.duration;
-  const parsed = raw === undefined || raw === null || raw === '' ? Number.NaN : Number(raw);
+function parseFfprobeSeconds(value) {
+  if (value === undefined || value === null || value === '' || value === 'N/A') return undefined;
+  const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-async function probeLocalMediaDurationSeconds(pathOrUrl) {
-  if (isHttpUrl(pathOrUrl)) return undefined;
-  return probeMediaDurationSeconds(pathOrUrl, pathOrUrl);
+// The media duration ffprobe reports in seconds, or undefined when it reports none.
+async function probeMediaDurationSeconds(filePath, label, { requireAudio = false } = {}) {
+  const { result, probe } = await probeMediaFile(filePath, {
+    label,
+    entries: ['stream=codec_type,duration:format=duration'],
+    protocolWhitelist: 'file',
+  });
+  if (result.error || result.status !== 0) return undefined;
+
+  const streams = Array.isArray(probe?.streams) ? probe.streams : [];
+  const audioStreams = streams.filter((stream) => stream?.codec_type === 'audio');
+  if (requireAudio && audioStreams.length === 0) {
+    const err = new Error(`"${label}" does not contain an audio track.`);
+    err.code = 'INVALID_ARGUMENT';
+    err.hint = 'Supply an audio recording or a video file that contains an audio stream.';
+    throw err;
+  }
+
+  const relevantStreams = audioStreams.length > 0 ? audioStreams : streams;
+  let streamDuration;
+  for (const stream of relevantStreams) {
+    const sec = parseFfprobeSeconds(stream?.duration);
+    if (sec !== undefined && (streamDuration === undefined || sec > streamDuration)) {
+      streamDuration = sec;
+    }
+  }
+  const formatDuration = parseFfprobeSeconds(probe?.format?.duration);
+  const directDuration = streamDuration ?? formatDuration;
+  if (directDuration !== undefined) return directDuration;
+
+  if (audioStreams.length > 0 || !requireAudio) {
+    const packetSelectArgs = audioStreams.length > 0 ? ['-select_streams', 'a:0'] : [];
+    const packetProbe = await probeMediaFile(filePath, {
+      label,
+      args: packetSelectArgs,
+      entries: ['packet=pts_time,duration_time'],
+      protocolWhitelist: 'file',
+    });
+    if (
+      !packetProbe.result.error &&
+      packetProbe.result.status === 0 &&
+      Array.isArray(packetProbe.probe?.packets)
+    ) {
+      let minStart = Infinity;
+      let maxEnd = -Infinity;
+      for (const packet of packetProbe.probe.packets) {
+        const pts = parseFfprobeSeconds(packet?.pts_time);
+        if (pts === undefined) continue;
+        const dur = parseFfprobeSeconds(packet?.duration_time) ?? 0;
+        if (pts < minStart) minStart = pts;
+        if (pts + dur > maxEnd) maxEnd = pts + dur;
+      }
+      if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd >= minStart) {
+        return maxEnd - minStart;
+      }
+    }
+  }
+
+  return undefined;
 }
 
-async function probeMediaBufferDurationSeconds(buffer, filename) {
+async function probeLocalMediaDurationSeconds(pathOrUrl, probeOptions = {}) {
+  if (isHttpUrl(pathOrUrl)) return undefined;
+  return probeMediaDurationSeconds(pathOrUrl, pathOrUrl, probeOptions);
+}
+
+async function probeMediaBufferDurationSeconds(buffer, filename, probeOptions = {}) {
   const tempDir = createTrackedTempDir('sogni-wan3-probe-');
   const inputPath = mediaTempInputPath(tempDir, filename, '.media');
   try {
     writeFileSync(inputPath, Buffer.from(buffer));
-    return await probeMediaDurationSeconds(inputPath, filename);
+    return await probeMediaDurationSeconds(inputPath, filename, probeOptions);
   } finally {
     try { if (existsSync(inputPath)) unlinkSync(inputPath); } catch {}
     try { rmdirSync(tempDir); } catch {}
+    TRACKED_TEMP_DIRS.delete(tempDir);
   }
 }
 
@@ -15722,29 +15864,60 @@ async function quoteVideoConfig(client, config) {
 async function quoteAudioConfig(client, config) {
   const tokenType = config.tokenType || 'spark';
   if (config.network === 'relaxed') {
-    // Sogni quotes music and speech at Fast prices only.
-    throw quoteUnavailableError('Sogni quotes music and speech on the Fast network only.', {
+    // Sogni quotes music, speech, and transcription at Fast prices only.
+    throw quoteUnavailableError('Sogni quotes music, speech, and transcription on the Fast network only.', {
       hint: 'Quote with --network fast, or render on Relaxed without --quote.'
     });
   }
-  const steps = await pricedSteps(client, config.modelId, config.steps);
+  const steps = options.transcribe
+    ? 1
+    : ((await pricedSteps(client, config.modelId, config.steps)) || (options.speech ? 1 : null));
   if (!steps) {
     throw quoteUnavailableError(`Sogni has no quote for ${config.modelId}: its default step count is unknown.`);
   }
   const count = config.numberOfMedia || 1;
+  if (options.transcribe) {
+    const socket = sdkClientOf(client)?.apiClient?.socket;
+    if (typeof socket?.get !== 'function') throw quoteUnavailableError('This Sogni SDK cannot quote transcription.');
+    const duration = config.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw quoteUnavailableError('Sogni needs a valid audio duration to quote transcription.');
+    }
+    const path = '/api/v1/job-audio/estimate/'
+      + [tokenType, config.modelId, duration, steps, count].map((part) => encodeURIComponent(part)).join('/');
+    const response = await socket.get(path, {
+      ...(config.network ? { network: config.network } : {}),
+      ...(config.billingMode ? { billingMode: config.billingMode } : {}),
+      ...(config.priorityMode !== undefined ? { priorityMode: config.priorityMode } : {})
+    });
+    const project = response?.quote?.project;
+    if (!project) throw quoteUnavailableError('Sogni returned no price for this transcription request.');
+    return {
+      estimate: {
+        spark: project.costInSpark,
+        sogni: project.costInSogni,
+        usd: project.costInUSD,
+        estimatedRenderSeconds: response.benchmark?.estimatedRenderTimeSec,
+        estimatedTotalSeconds: response.benchmark?.estimatedTotalTimeSec,
+        dailyFairUsePct: response.dailyFairUse?.pct
+      },
+      settings: { duration, count }
+    };
+  }
   if (options.speech) {
     // Speech is priced per character of script. The SDK's audio estimate has
     // no field for the script length, so the socket's estimate route is read
     // directly with the same parameters the SDK sends.
     const socket = sdkClientOf(client)?.apiClient?.socket;
     if (typeof socket?.get !== 'function') throw quoteUnavailableError('This Sogni SDK cannot quote speech.');
-    const characters = String(config.positivePrompt || '').length;
+    const characters = Math.max(1, String(config.positivePrompt || '').trim().length);
     const path = '/api/v1/job-audio/estimate/'
       + [tokenType, config.modelId, 30, steps, count].map((part) => encodeURIComponent(part)).join('/');
     const response = await socket.get(path, {
       characters,
       ...(config.network ? { network: config.network } : {}),
-      ...(config.billingMode ? { billingMode: config.billingMode } : {})
+      ...(config.billingMode ? { billingMode: config.billingMode } : {}),
+      ...(config.priorityMode !== undefined ? { priorityMode: config.priorityMode } : {})
     });
     const project = response?.quote?.project;
     if (!project) throw quoteUnavailableError('Sogni returned no price for this speech request.');
@@ -16238,7 +16411,10 @@ async function main() {
               const url = await buildSafeApiUrl(path);
               const response = await fetch(url, { headers: apiRequestHeaders(apiKey), redirect: 'error', signal: AbortSignal.timeout(DEFAULT_HTTP_TIMEOUT_MS) });
               if (!response.ok) throw new Error(`Could not download an original persona reference (HTTP ${response.status}).`);
-              return Buffer.from(await response.arrayBuffer());
+              return await readResponseBody(response, {
+                maxBytes: API_MEDIA_REFERENCE_UPLOAD_MAX_BYTES,
+                stallMs: mediaDownloadTiming().stallMs,
+              });
             },
           });
           savePersonasIndex([...loadPersonas(), persona]);
@@ -16802,7 +16978,7 @@ async function main() {
         const jobData = data.job?.data || {};
         const withheld = data.job?.isWithheld === true;
         results.push({
-          resultUrl: withheld ? null : data.resultUrl || ((options.music || options.speech) ? data.audioUrl : (options.video || options.upscaleVideo || options.segmentVideo) ? data.videoUrl : data.imageUrl),
+          resultUrl: withheld ? null : data.resultUrl || ((options.music || options.speech || options.transcribe) ? data.audioUrl : (options.video || options.upscaleVideo || options.segmentVideo) ? data.videoUrl : data.imageUrl),
           lastFrameUrl: withheld ? null : data.lastFrameUrl || data.job?.lastFrameUrl || jobData.lastFrameUrl,
           seed: jobData.seed,
           jobIndex: data.jobIndex,
@@ -16813,7 +16989,7 @@ async function main() {
           ...(withheld ? { urlUnavailable: 'sensitiveContent' } : {})
         });
         completedJobs++;
-        log(`${options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
+        log(`${options.transcribe ? 'Transcription' : options.speech ? 'Speech' : options.imageTo3d ? '3D model' : options.music ? 'Music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'Video' : 'Image'} ${completedJobs}/${options.count} ${withheld ? 'withheld by the Sensitive Content Filter' : 'completed'}`);
         
         if (completedJobs >= options.count) {
           projectWait.stop();
@@ -16844,7 +17020,7 @@ async function main() {
       });
       
       // Progress for longer-running media jobs.
-      if (options.video || options.music || options.speech || options.imageTo3d || options.removeBackground || options.upscaleVideo || options.segmentVideo) {
+      if (options.video || options.music || options.speech || options.transcribe || options.imageTo3d || options.removeBackground || options.upscaleVideo || options.segmentVideo) {
         client.on(ClientEvent.PROJECT_PROGRESS, (data) => {
           if (data.percentage && data.percentage > 0) {
             log(`Progress: ${Math.round(data.percentage)}%`);
@@ -17658,14 +17834,47 @@ async function main() {
       log(`Generating speech (${options.speechMode}) with ${options.model}...`);
       let referenceAudio;
       if (options.voiceReference) {
-        referenceAudio = await fetchMediaBuffer(options.voiceReference);
-        const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.voiceReference);
+        referenceAudio = await fetchMediaBuffer(options.voiceReference, {
+          maxBytes: DEFAULT_VOICE_REFERENCE_MAX_BYTES
+        });
+        const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.voiceReference, {
+          requireAudio: true
+        });
         if (!Number.isFinite(seconds)) throw new Error('Cannot read voice reference duration. Install ffprobe and supply a valid audio recording.');
-        if (seconds < SPEECH_REFERENCE_SECONDS.min || seconds > SPEECH_REFERENCE_SECONDS.max) {
-          throw new Error('Voice cloning requires a 3–30 second reference recording.');
+        const refBounds = SPEECH_MODELS[options.speechMode]?.referenceSeconds || SPEECH_REFERENCE_SECONDS;
+        if (seconds < refBounds.min || seconds > refBounds.max) {
+          throw new Error(`Voice cloning requires a ${refBounds.min}–${refBounds.max} second reference recording.`);
         }
       }
       const result = trackProjectResult(await client.createAudioProject(withBillingMode(speechConfig(options, referenceAudio))));
+      if (result?.error || result?.message) throw buildProjectResultError(result);
+    } else if (options.transcribe) {
+      log(`Transcribing audio (${options.transcribeEngine}) with ${options.model}...`);
+      const referenceAudio = await fetchMediaBuffer(options.transcribe, { maxBytes: DEFAULT_STT_MEDIA_MAX_BYTES });
+      const seconds = await probeMediaBufferDurationSeconds(referenceAudio, options.transcribe, {
+        requireAudio: true
+      });
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        throw new Error('Cannot read input audio duration. Install ffprobe and supply a valid audio or video recording.');
+      }
+      const durationError = validateTranscriptionRequest({
+        engine: options.transcribeEngine,
+        hasAudio: true,
+        durationSec: seconds,
+        timestamps: options.timestamps,
+        diarize: options.diarize,
+        hotwords: options.hotwords || undefined,
+        prompt: options.prompt || undefined
+      });
+      if (durationError) {
+        const err = new Error(durationError);
+        err.code = 'INVALID_ARGUMENT';
+        throw err;
+      }
+      options._transcribeDuration = seconds;
+      const result = trackProjectResult(
+        await client.createAudioProject(withBillingMode(transcriptionConfig(options, referenceAudio, seconds)))
+      );
       if (result?.error || result?.message) throw buildProjectResultError(result);
     } else if (options.imageTo3d || options.removeBackground) {
       const orbitViews = Object.entries(options.pixal3dViews);
@@ -18002,18 +18211,20 @@ async function main() {
       if (urls.length === 0 && withheldCount > 0) throw sensitiveContentWithheldError(results.length);
       const firstResult = results[0];
       
+      const renderType = options.transcribe ? 'transcription' : options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : 'image';
+      const omitCanvasSize = Boolean(options.music || options.speech || options.transcribe || options.imageTo3d);
       // Save last render info
       const seeds = results.map(r => r.seed ?? options.seed);
       const renderInfo = {
         timestamp: new Date().toISOString(),
-        type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : 'image',
+        type: renderType,
         prompt: options.prompt,
         model: options.model,
-        width: (options.music || options.speech || options.imageTo3d) ? null : options.width,
-        height: (options.music || options.speech || options.imageTo3d) ? null : options.height,
-        seed: firstResult.seed ?? options.seed,
+        width: omitCanvasSize ? null : options.width,
+        height: omitCanvasSize ? null : options.height,
+        seed: options.transcribe ? null : (firstResult.seed ?? options.seed),
         seedStrategy: options.seedStrategy || null,
-        seeds,
+        seeds: options.transcribe ? [] : seeds,
         projectId: firstResult.projectId,
         urls: urls,
         results: results.map(({ resultUrl, seed, jobIndex, nsfwDetected, nsfwSources, urlUnavailable, jobId, seedanceDraft, seedanceDraftExpiresAt, seedanceDraftJobId }) => ({
@@ -18122,9 +18333,50 @@ async function main() {
       }
       Object.assign(renderInfo, utilityResultMetadata(options));
       const localPaths = [];
+      let transcriptResult = null;
+
+      if (options.transcribe && urls[0]) {
+        const tempDir = createTrackedTempDir('sogni-stt-');
+        const tempTranscriptPath = join(tempDir, 'transcript.json');
+        let rawTranscript;
+        try {
+          await downloadUrlToFile(urls[0], tempTranscriptPath, {
+            projectId: firstResult.projectId,
+            retryOutput: options.output,
+            label: 'transcript'
+          });
+          try {
+            rawTranscript = JSON.parse(readFileSync(tempTranscriptPath, 'utf8'));
+          } catch {
+            throw new Error('Transcription worker returned an invalid JSON transcript.');
+          }
+        } finally {
+          try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+          TRACKED_TEMP_DIRS.delete(tempDir);
+        }
+        transcriptResult = formatTranscriptResult(rawTranscript, options.outputFormat, options.model);
+        renderInfo.text = transcriptResult.transcript.text;
+        renderInfo.language = transcriptResult.transcript.language ?? null;
+        renderInfo.diarized = transcriptResult.transcript.diarized;
+        renderInfo.duration = transcriptResult.transcript.duration || options._transcribeDuration;
+        if (options.output) {
+          const dir = dirname(options.output);
+          try {
+            if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
+            const body = transcriptResult.formatted.endsWith('\n') || transcriptResult.formatted === ''
+              ? transcriptResult.formatted
+              : `${transcriptResult.formatted}\n`;
+            writeFileSync(options.output, body, 'utf8');
+          } catch (e) {
+            throw outputWriteError(e, options.output, 'transcript');
+          }
+          localPaths.push(options.output);
+          log(`Saved transcript to ${options.output}`);
+        }
+      }
 
       // Save to file if requested
-      if (options.output && urls[0]) {
+      if (!options.transcribe && options.output && urls[0]) {
         const dir = dirname(options.output);
         if (dir && dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true });
 
@@ -18255,7 +18507,7 @@ async function main() {
         }
       }
       
-      if (options.output && urls[0]) localPaths.push(options.output);
+      if (!options.transcribe && options.output && urls[0]) localPaths.push(options.output);
       if (options.output && (options.speech || options.music)) {
         for (let index = 1; index < urls.length; index++) {
           const extension = extname(options.output);
@@ -18286,20 +18538,28 @@ async function main() {
       if (options.json) {
         const output = {
           success: true,
-          type: options.speech ? 'speech' : options.imageTo3d ? 'model' : options.music ? 'music' : (options.video || options.upscaleVideo || options.segmentVideo) ? 'video' : 'image',
+          type: renderType,
           prompt: options.prompt,
           model: options.model,
-          width: (options.music || options.speech || options.imageTo3d) ? null : options.width,
-          height: (options.music || options.speech || options.imageTo3d) ? null : options.height,
-          seed: firstResult.seed ?? options.seed,
+          width: omitCanvasSize ? null : options.width,
+          height: omitCanvasSize ? null : options.height,
+          seed: options.transcribe ? null : (firstResult.seed ?? options.seed),
           seedStrategy: options.seedStrategy || null,
-          seeds,
+          seeds: options.transcribe ? [] : seeds,
           urls: urls,
           results: renderInfo.results,
           localPath: options.output || null,
           tokenType: options.tokenType || 'spark'
         };
         Object.assign(output, utilityResultMetadata(options));
+        if (transcriptResult) {
+          output.text = transcriptResult.transcript.text;
+          output.formatted = transcriptResult.formatted;
+          output.transcript = transcriptResult.transcript;
+          output.language = transcriptResult.transcript.language ?? null;
+          output.diarized = transcriptResult.transcript.diarized;
+          output.duration = transcriptResult.transcript.duration || options._transcribeDuration;
+        }
         if (localPaths.length) output.localPaths = localPaths;
         if (options.outputFormat) {
           output.outputFormat = options.outputFormat;
@@ -18427,7 +18687,11 @@ async function main() {
         if (receipt) Object.assign(output, receipt);
         console.log(JSON.stringify(output));
       } else {
-        urls.forEach(url => console.log(url));
+        if (transcriptResult) {
+          console.log(transcriptResult.formatted);
+        } else {
+          urls.forEach(url => console.log(url));
+        }
         if (receipt) console.log(describeCharge(receipt));
         if (withheldCount > 0) console.log(`${withheldCount} of ${results.length} results withheld by the Sensitive Content Filter`);
         if (options.returnLastFrame) {

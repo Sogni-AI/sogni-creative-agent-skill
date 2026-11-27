@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { QUALITY_TIERS } from '../generated/creative-agent-runtime.mjs';
 import { VIDEO_MODEL_ALIASES } from '@sogni-ai/sogni-intelligence-client/public-skill-runtime';
-import { MusicModel, SPEECH_MODEL_IDS } from '@sogni-ai/sogni-intelligence-client/media';
+import { MusicModel, SPEECH_MODEL_IDS, TRANSCRIPTION_MODEL_IDS } from '@sogni-ai/sogni-intelligence-client/media';
 import { MINIMAX_H3_KEYFRAMES_DESCRIPTION } from '@sogni-ai/sogni-intelligence-client/tools';
 import { MESH_FLAGS, SPEECH_VALUE_FLAGS } from '../media-utilities.mjs';
 import { checkVersionSync } from '../scripts/check-version-sync.mjs';
@@ -271,9 +271,9 @@ test('every runtime video model alias is documented in references/models.md', ()
     `references/models.md never mentions these CLI video selectors the runtime resolves:\n${missing.join('\n')}`);
 });
 
-test('model guidance covers every published music and speech model', () => {
+test('model guidance covers every published music, speech, and transcription model', () => {
   const models = read('references/models.md');
-  const ids = [...Object.values(MusicModel), ...SPEECH_MODEL_IDS];
+  const ids = [...Object.values(MusicModel), ...SPEECH_MODEL_IDS, ...TRANSCRIPTION_MODEL_IDS];
   assert.deepEqual(ids.filter(id => !models.includes(id)), [],
     'Published audio models need documented execution routes, including hosted-only routes.');
 });

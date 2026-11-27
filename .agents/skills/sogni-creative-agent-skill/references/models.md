@@ -265,9 +265,10 @@ Seedream uses filtered 5.5 (`seedream-5-5`). Seedream 5.0 Pro uses `seedream-5-0
 “Seedream 5.5 Standard” and “Seedream 5.5 Filtered” select filtered 5.5.
 “Seedream 5.5” selects 5.5 Uncensored. “Seedream Uncensored” selects 5.0 Pro Uncensored.
 
-At the same dimensions as their Uncensored twins, filtered 5.5 costs 5.6, 9.8 or
-22.12 Spark per output plus 2.24 per reference. Filtered 5.0 Pro costs 12.6 or
-25.2 Spark plus 0.84 per reference after the first. These prices precede any
+Filtered 5.5 costs 5.6 Spark per output through 2,601,123 pixels, 9.8 through
+4,624,220 pixels and 22.12 above that. Add 2.24 per reference. Filtered 5.0 Pro
+costs 12.6 through 2,610,000 pixels and 25.2 above that. Its first reference is
+included and each additional reference costs 0.84. These prices precede the
 Unlimited member discount.
 
 ```bash
@@ -292,7 +293,7 @@ render takes about 35-95 seconds.
   5 Pro Spicy".
 - **When to use**: only when the user asks for Seedream 5.0 Pro Uncensored or for
   uncensored Seedream output; never in place of another image model.
-- **Price**: 13.5 Spark per image up to 2,359,296 pixels (1536x1536) and 27
+- **Price**: 13.5 Spark per image up to 2,610,000 pixels and 27
   Spark per larger image, plus 0.9 Spark for each context image after the
   first. Premium Spark only; Sogni Unlimited does not cover it.
 - **Likeness and consent agreement**: it shares the one-time likeness and

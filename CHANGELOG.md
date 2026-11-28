@@ -1,3 +1,9 @@
+## [3.76.0] - 2026-11-28
+
+- Select `seedream-5-5` (Seedream 5.5 Standard; also "Seedream" and "Seedream 5.5 Filtered") or `seedream-5-0-pro` (Seedream 5.0 Pro) to generate images or edit from 1-10 references with the content filter on and no likeness agreement. Both Seedream 5.5 models now render up to 3840x2160 (8,294,400 pixels) with eight 4K presets.
+- "Seedream 5.5" and "Seedream Uncensored" still select the Uncensored models.
+- Use Sogni SDK 5.91.0 and intelligence-client 4.38.0.
+
 ## [3.75.1] - 2026-11-27
 
 - Completed render downloads now use the same remote URL checks, proxy handling, and retry behavior as reference media downloads, and persona folders stay isolated even when a name contains only punctuation or symbols.
